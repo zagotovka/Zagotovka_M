@@ -1,0 +1,25 @@
+{
+  "lang": "ru",
+  "pwms": [
+    {
+      "topin": 5,
+      "id": 4,
+      "pins": "PA6",
+      "on": 0,
+      "dvalue": 21,
+      "ponr": 1,
+      "info": "",
+      "onoff": 0
+    },
+    {
+      "topin": 5,
+      "id": 7,
+      "pins": "PB1",
+      "on": 0,
+      "dvalue": 25,
+      "ponr": 0,
+      "info": "",
+      "onoff": 0
+    }
+  ]
+}

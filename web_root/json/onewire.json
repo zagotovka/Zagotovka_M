@@ -1,0 +1,44 @@
+{
+  "lang": "ru",
+  "pins": [
+    {
+      "id": 22,
+      "pin": "PC3",
+      "typsensr": 1,
+      "numsens": 3,
+      "onoff": 1,
+      "sensors": [
+        {
+          "s_number": "28008E5F50500458",
+          "t": 22.125,
+          "valid": true,
+          "ut": 11,
+          "lt": 22,
+          "action_ut": "33",
+          "action_lt": "44",
+          "info": "Test-458"
+        },
+        {
+          "s_number": "2800291750500598",
+          "t": 22.25,
+          "valid": true,
+          "ut": 55,
+          "lt": 66,
+          "action_ut": "77",
+          "action_lt": "88",
+          "info": "Test-598"
+        },
+        {
+          "s_number": "2800655550500655",
+          "t": 22.3125,
+          "valid": true,
+          "ut": 11,
+          "lt": 22,
+          "action_ut": "33",
+          "action_lt": "44",
+          "info": "Test-655"
+        }
+      ]
+    }
+  ]
+}

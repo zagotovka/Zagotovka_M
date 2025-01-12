@@ -1,0 +1,177 @@
+/* Стили для компонента MyPolzunok */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+  vertical-align: middle;
+  margin-left: 10px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.4s;
+  border-radius: 34px;
+}
+
+.slider:before {
+  position: absolute;
+  content: '';
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #2196f3;
+}
+
+input:checked + .slider:before {
+  transform: translateX(26px);
+}
+
+.switch-status {
+  margin-left: 10px;
+  vertical-align: middle;
+}
+
+/* Стили для компонента ModalSwitch */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-content {
+  background-color: white;
+  padding: 20px;
+  border-radius: 5px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  max-width: 500px;
+  width: 100%;
+  position: relative;
+  z-index: 10000;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #a5a5a5;
+  padding: 15px 20px;
+  border-bottom: 1px solid #ddd;
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
+}
+
+.modal-body {
+  margin-bottom: 15px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  color: #1100f7;
+}
+
+.close-button:hover {
+  color: red;
+}
+
+.app-container {
+  position: relative;
+}
+
+.content-container {
+  transition: filter 0.3s ease;
+}
+
+.content-container.blurred {
+  filter: blur(3px);
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 9999;
+  background-color: #ffcc00; /* Пример цвета фона */
+  padding: 10px;
+  border-radius: 5px;
+  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+  max-width: 300px;
+  word-wrap: break-word;
+}
+
+table,
+th,
+td {
+  border: 1px solid black; /* временный стиль для отладки */
+  visibility: visible; /* убедитесь, что элементы видимы */
+}
+
+.cron-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cron-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+.cron-expression {
+  width: 50px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/********************* OneWire page ***************************/
+.action-column {
+  width: 340px; /* Измените это значение, чтобы настроить ширину второго столбца */
+}
+/********************* Settings page ***************************/
+.settings-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.settings-table > div {
+  border: 1px solid black;
+}
+
+.settings-table > div > div {
+  border: 1px solid black;
+  padding: 8px;
+}

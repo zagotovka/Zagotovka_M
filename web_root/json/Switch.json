@@ -1,0 +1,32 @@
+{
+  "lang": "ru",
+  "switches": [
+    {
+      "topin": 3,
+      "id": 14,
+      "pins": "PB9",
+      "ptype": 1,
+      "pinact": {},
+      "info": "Test1",
+      "onoff": 0
+    },
+    {
+      "topin": 3,
+      "id": 27,
+      "pins": "PC10",
+      "ptype": 2,
+      "pinact": {},
+      "info": "Test2",
+      "onoff": 0
+    },
+    {
+      "topin": 3,
+      "id": 29,
+      "pins": "PC12",
+      "ptype": 2,
+      "pinact": {},
+      "info": "Test3",
+      "onoff": 0
+    }
+  ]
+}

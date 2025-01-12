@@ -1,0 +1,17 @@
+{
+  "lang": "ru",
+  "buttons": [
+    {
+      "topin": 1,
+      "id": 30,
+      "pins": "PC13",
+      "ptype": 0,
+      "sclick": "",
+      "dclick": "",
+      "lpress": "",
+      "pinact": {},
+      "info": "",
+      "onoff": 0
+    }
+  ]
+}

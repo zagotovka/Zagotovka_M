@@ -1,0 +1,19 @@
+{
+  "topin": 4,
+  "id": 4,
+  "pins": "PA5",
+  "ptype": 0,
+  "pwm": 0,
+  "on": 0,
+  "istate": 0,
+  "dvalue": 0,
+  "ponr": 0,
+  "numdevices": 0,
+  "uppert": 0,
+  "textupt": "",
+  "lowert": 0,
+  "textlowt": "",
+  "sensor": 0,
+  "info": "",
+  "onoff": 0
+}

@@ -1,0 +1,718 @@
+{
+  "lang": "ru",
+  "sim800l": 1,
+  "data": [
+    {
+      "id": 0,
+      "pins": "PA0",
+      "topin": 8,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 1,
+      "pins": "PA3",
+      "topin": 9,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 2,
+      "pins": "PA4",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 3,
+      "pins": "PA5",
+      "topin": 4,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 4,
+      "pins": "PA6",
+      "topin": 5,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 5,
+      "pins": "PA15",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 6,
+      "pins": "PB0",
+      "topin": 2,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 7,
+      "pins": "PB1",
+      "topin": 5,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 8,
+      "pins": "PB2",
+      "topin": 2,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 9,
+      "pins": "PB4",
+      "topin": 1,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 10,
+      "pins": "PB5",
+      "topin": 1,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 11,
+      "pins": "PB6",
+      "topin": 7,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 1
+    },
+    {
+      "id": 12,
+      "pins": "PB7",
+      "topin": 2,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 13,
+      "pins": "PB8",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 14,
+      "pins": "PB9",
+      "topin": 3,
+      "pwm": 0,
+      "i2cdata": 1,
+      "i2cclok": 0
+    },
+    {
+      "id": 15,
+      "pins": "PB10",
+      "topin": 5,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 16,
+      "pins": "PB11",
+      "topin": 4,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 17,
+      "pins": "PB12",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 18,
+      "pins": "PB14",
+      "topin": 2,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 19,
+      "pins": "PB15",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 20,
+      "pins": "PC0",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 21,
+      "pins": "PC2",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 22,
+      "pins": "PC3",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 23,
+      "pins": "PC6",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 24,
+      "pins": "PC7",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 25,
+      "pins": "PC8",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 26,
+      "pins": "PC9",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 27,
+      "pins": "PC10",
+      "topin": 3,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 28,
+      "pins": "PC11",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 29,
+      "pins": "PC12",
+      "topin": 3,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 30,
+      "pins": "PC13",
+      "topin": 1,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 31,
+      "pins": "PD0",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 32,
+      "pins": "PD1",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 33,
+      "pins": "PD2",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 34,
+      "pins": "PD3",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 35,
+      "pins": "PD4",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 36,
+      "pins": "PD5",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 37,
+      "pins": "PD6",
+      "topin": 8,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 38,
+      "pins": "PD7",
+      "topin": 9,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 39,
+      "pins": "PD10",
+      "topin": 4,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 40,
+      "pins": "PD11",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 41,
+      "pins": "PD12",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 42,
+      "pins": "PD13",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 43,
+      "pins": "PD14",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 44,
+      "pins": "PD15",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 45,
+      "pins": "PE0",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 46,
+      "pins": "PE1",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 47,
+      "pins": "PE2",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 48,
+      "pins": "PE3",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 49,
+      "pins": "PE4",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 50,
+      "pins": "PE5",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 51,
+      "pins": "PE6",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 52,
+      "pins": "PE7",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 53,
+      "pins": "PE8",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 54,
+      "pins": "PE9",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 55,
+      "pins": "PE10",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 56,
+      "pins": "PE11",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 57,
+      "pins": "PE12",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 58,
+      "pins": "PE13",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 59,
+      "pins": "PE14",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 60,
+      "pins": "PE15",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 61,
+      "pins": "PF0",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 1,
+      "i2cclok": 0
+    },
+    {
+      "id": 62,
+      "pins": "PF1",
+      "topin": 7,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 1
+    },
+    {
+      "id": 63,
+      "pins": "PF2",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 64,
+      "pins": "PF3",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 65,
+      "pins": "PF4",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 66,
+      "pins": "PF5",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 67,
+      "pins": "PF6",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 68,
+      "pins": "PF7",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 69,
+      "pins": "PF8",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 70,
+      "pins": "PF9",
+      "topin": 0,
+      "pwm": 1,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 71,
+      "pins": "PF10",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 72,
+      "pins": "PF11",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 73,
+      "pins": "PF12",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 74,
+      "pins": "PF13",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 75,
+      "pins": "PF14",
+      "topin": 7,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 1
+    },
+    {
+      "id": 76,
+      "pins": "PF15",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 1,
+      "i2cclok": 0
+    },
+    {
+      "id": 77,
+      "pins": "PG0",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 78,
+      "pins": "PG1",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 79,
+      "pins": "PG2",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 80,
+      "pins": "PG3",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 81,
+      "pins": "PG4",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 82,
+      "pins": "PG5",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 83,
+      "pins": "PG8",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 84,
+      "pins": "PG9",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 85,
+      "pins": "PG10",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 86,
+      "pins": "PG12",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 87,
+      "pins": "PG14",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    },
+    {
+      "id": 88,
+      "pins": "PG15",
+      "topin": 0,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0
+    }
+  ]
+}

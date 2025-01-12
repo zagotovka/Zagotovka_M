@@ -1,0 +1,28 @@
+{
+  "lang": "ru",
+  "pins": [
+    {
+      "id": 22,
+      "pin": "PC3",
+      "typsensr": 2,
+      "numsens": 1,
+      "onoff": 1,
+      "sensors": [
+        {
+          "s_number": "DHT22",
+          "t": 0,
+          "humidity": 0,
+          "ut": 0,
+          "lt": 0,
+          "action_ut": "",
+          "action_lt": "",
+          "upphumid": 0,
+          "humlolim": 0,
+          "actuphum": "",
+          "actlowhum": "",
+          "info": ""
+        }
+      ]
+    }
+  ]
+}

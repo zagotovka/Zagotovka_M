@@ -1,0 +1,32 @@
+{
+  "lang": "en",
+  "relays": [
+    {
+      "topin": 2,
+      "id": 6,
+      "pins": "PB0",
+      "on": 0,
+      "ponr": 0,
+      "info": "",
+      "onoff": 1
+    },
+    {
+      "topin": 2,
+      "id": 12,
+      "pins": "PB7",
+      "on": 0,
+      "ponr": 0,
+      "info": "",
+      "onoff": 1
+    },
+    {
+      "topin": 2,
+      "id": 18,
+      "pins": "PB14",
+      "on": 1,
+      "ponr": 4,
+      "info": "Test",
+      "onoff": 1
+    }
+  ]
+}

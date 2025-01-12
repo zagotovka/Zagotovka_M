@@ -1,0 +1,61 @@
+[
+  {
+    "id": "2",
+    "pins": "A5",
+    "sensor": 1,
+    "numdevices": 10,
+    "info": "DS18B20 sensors",
+    "sensors": [
+      {
+        "s_number": "28FF12345678",
+        "t": 22.5,
+        "ut": 30,
+        "lt": 10,
+        "action_ut": "12:0",
+        "action_lt": "12:1",
+        "info": "Living room"
+      },
+      {
+        "s_number": "28FF87654321",
+        "t": 20.7,
+        "ut": 35,
+        "lt": 15,
+        "action_ut": "15:0",
+        "action_lt": "15:1,17:2",
+        "info": "Bedroom"
+      },
+      {
+        "s_number": "28FFABCDEF01",
+        "t": 18.3,
+        "ut": 40,
+        "lt": 20,
+        "action_ut": "18:2",
+        "action_lt": "18:2",
+        "info": "Kitchen"
+      }
+    ]
+  },
+  {
+    "id": "2",
+    "pins": "A5",
+    "sensor": 2,
+    "numdevices": 1,
+    "info": "DHT22 sensor",
+    "sensors": [
+      {
+        "s_number": "DHT22",
+        "t": 25.5,
+        "humidity": 48,
+        "ut": 30,
+        "lt": 20,
+        "action_ut": "12:0",
+        "action_lt": "12:1",
+        "upphumid": 70,
+        "humlolim": 30,
+        "actuphum": "18:0",
+        "actlowhum": "18:1",
+        "info": "Living room DHT22"
+      }
+    ]
+  }
+]

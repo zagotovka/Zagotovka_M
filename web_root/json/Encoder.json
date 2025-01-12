@@ -1,0 +1,29 @@
+{
+  "lang": "ru",
+  "encoders": [
+    {
+      "topin": 8,
+      "id": 0,
+      "pins": "PA0",
+      "encoderb": 2,
+      "encdrbpin": "PA4",
+      "dvalue": 21,
+      "ponr": 1,
+      "pinact": { "PA6": 4 },
+      "info": "",
+      "onoff": 1
+    },
+    {
+      "topin": 8,
+      "id": 3,
+      "pins": "PA5",
+      "encoderb": 5,
+      "encdrbpin": "PA15",
+      "dvalue": 25,
+      "ponr": 0,
+      "pinact": { "PB1": 7 },
+      "info": "",
+      "onoff": 0
+    }
+  ]
+}
