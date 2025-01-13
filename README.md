@@ -85,10 +85,9 @@ d. <a href="https://easyeda.com/editor#id=|125ff34d97324d308c97b01793449de7|1bc6
 19. [<img src="icons/16.png" width="100">](https://aliexpress.ru/wholesale?SearchText=TTP223&g=y&page=1) TTP223
 20. [<img src="icons/18.png" width="100">](https://aliexpress.ru/wholesale?SearchText=%D0%9A%D0%B0%D0%B1%D0%B5%D0%BB%D1%8C+Dupont+Line+%D0%B4%D0%BB%D1%8F+Arduino&g=y&page=1) Arduino провода
 
-## Скачать прошивку
-Для скачивания прошивки перейдите по следующей ссылке: [Скачать прошивку](https://github.com/zagotovka/Zagotovka_M/raw/a9a64153c45503f63c589a556d683888a26ad396/Proshivka/Zagotovka_M.bin)
+## [Скачать прошивку](https://github.com/zagotovka/Zagotovka_M/raw/main/Proshivka/Zagotovka_M.bin)
 
-## Веб-интерфейс видео-инструкция.
+## Видеогид по интерфейсу.
 
 ### Как пользоваться страницей "Кнопки" <a href="https://youtu.be/pMmqkwCnVaM"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>
 ### Как пользоваться страницей "Выключатели" <a href="https://youtu.be/C74IQA4-2aI"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>
