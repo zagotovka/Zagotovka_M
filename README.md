@@ -13,7 +13,7 @@ SPDX-License-Identifier: GPL-2.0-only or commercial
 This software is experimental and a work in progress. Under no circumstances should these files be used in relation to any critical system(s). Use of these files is at your own risk. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## Информация для разработчиков фронтенда
-Все необходимое находится в папке "web_root". [перейти в web_root](https://github.com/ZergOfSwarm/Zagotovka_M/tree/main/web_root)
+Все необходимое находится в папке "web_root". [перейти в web_root](https://github.com/zagotovka/Zagotovka_M/tree/main/web_root)
 Для установки и запуска веб-интерфейса с Vite (Debian):
 ```bash
 sudo apt update
@@ -35,11 +35,11 @@ npm run start
 Для данного проекта схема, которая использует распределительные коробки, не подходит!
 
 <p float="left">
-  <a href="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/provoda_OLD.png" target="_blank">
-    <img src="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/provoda_OLD.png" alt="provoda_OLD" width="200" />
+  <a href="/icons/provoda_OLD.png" target="_blank">
+    <img src="/icons/provoda_OLD.png" alt="provoda_OLD" width="200" />
   </a>
-  <a href="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/OLD_sxema.png" target="_blank">
-    <img src="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/OLD_sxema.png" alt="OLD_sxema" width="200" />
+  <a href="/icons/OLD_sxema.png" target="_blank">
+    <img src="/icons/OLD_sxema.png" alt="OLD_sxema" width="200" />
   </a>
 </p>
 
@@ -47,11 +47,11 @@ npm run start
 От каждой точки (розетки, выключателя, потолочной лампы и т.п.) до электрощитка!
 
 <p float="left">
-<a href="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/provoda_NEW.png" target="_blank">
-  <img src="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/provoda_NEW.png" alt="Image" width="200" />
+<a href="/icons/provoda_NEW.png" target="_blank">
+  <img src="/icons/provoda_NEW.png" alt="Image" width="200" />
 </a>
-<a href="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/New_sxema.png" target="_blank">
-    <img src="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/New_sxema.png" alt="New_sxema" width="200" />
+<a href="/icons/New_sxema.png" target="_blank">
+    <img src="/icons/New_sxema.png" alt="New_sxema" width="200" />
   </a>
 </p>
 
@@ -69,7 +69,6 @@ npm run start
 11. [<img src="icons/11.png" width="100">](https://aliexpress.ru/wholesale?SearchText=DC-DC+Buck+Converter+4.5V-16V+9V+12V+to+5V+3.3V+Step-down+Power+Voltage+Regulator+Module+Efficiency+98%25&g=y&page=1) DC DC преобразователь
 12. [<img src="icons/19.png" width="100"><img src="icons/20.png" width="100">](https://aliexpress.ru/wholesale?SearchText=%D0%A2%D0%B2%D0%B5%D1%80%D0%B4%D0%BE%D1%82%D0%B5%D0%BB%D1%8C%D0%BD%D1%8B%D0%B9+%D1%80%D0%B5%D0%BB%D0%B5%D0%B9%D0%BD%D1%8B%D0%B9+%D0%BC%D0%BE%D0%B4%D1%83%D0%BB%D1%8C&g=y&page=1) Твердотельный релейный модуль
 13. [<img src="icons/21.png" width="100">](https://aliexpress.ru/wholesale?SearchText=2.54mm+Double+Row+Straight+Female+2-40P&g=y&page=1) Двухрядный прямой гнездовой разъем
-14. [<img src="icons/17.png" width="100">](https://aliexpress.ru/wholesale?SearchText=80+Pin+2x40+2.54+&g=y&page=1) Разъем двухрядный
 ## Gerber файлы:
 a. <a href="https://easyeda.com/editor#id=|e6a461cf7da546748c711f5ae1138cd7|2ffd4d2211de4b4ba91e1188545134c2" target="_blank">Zagotovka</a>  
 b. <a href="https://easyeda.com/editor#id=|23ee55cfd3e24ca19753cbba7066c13f|d1e252ee42ab4fbfb84c61a65fa2982f" target="_blank">Zagotovka-CN11</a>  
@@ -86,28 +85,20 @@ d. <a href="https://easyeda.com/editor#id=|125ff34d97324d308c97b01793449de7|1bc6
 19. [<img src="icons/16.png" width="100">](https://aliexpress.ru/wholesale?SearchText=TTP223&g=y&page=1) TTP223
 20. [<img src="icons/18.png" width="100">](https://aliexpress.ru/wholesale?SearchText=%D0%9A%D0%B0%D0%B1%D0%B5%D0%BB%D1%8C+Dupont+Line+%D0%B4%D0%BB%D1%8F+Arduino&g=y&page=1) Arduino провода
 
-
-
 ## Скачать прошивку
-Для скачивания прошивки перейдите по следующей ссылке: [Скачать прошивку](https://github.com/ZergOfSwarm/Zagotovka_M/raw/a9a64153c45503f63c589a556d683888a26ad396/Proshivka/Zagotovka_M.bin)
+Для скачивания прошивки перейдите по следующей ссылке: [Скачать прошивку](https://github.com/zagotovka/Zagotovka_M/raw/a9a64153c45503f63c589a556d683888a26ad396/Proshivka/Zagotovka_M.bin)
 
-## Видео-инструкция по использованию
+## Веб-интерфейс видео-инструкция.
 
-### Первый запуск и как пользоваться страницей "Выключатели".
-Видео: [<img src="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/icons8-youtube-48.png" width="24" align="texttop" />](https://youtu.be/C74IQA4-2aI)
-### Как пользоваться страницей "Кнопки".
-Видео: [<img src="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/icons8-youtube-48.png" width="24" align="texttop" />](https://youtu.be/pMmqkwCnVaM)
-### Как пользоваться страницей "Энкодеры" (в процессе разработки).
-Видео: [<img src="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/icons8-youtube-48.png" width="24" align="texttop" />](https://youtu.be/mRENaW0x7i8)
-### Как пользоваться страницей "Таймеры".
-Видео: [<img src="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/icons8-youtube-48.png" width="24" align="texttop" />](https://youtu.be/D46q2Zr3Hhk)
-### Как пользоваться страницей "OneWire".
-Видео: [<img src="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/icons8-youtube-48.png" width="24" align="texttop" />](https://youtu.be/FTfkruXgUT0)
-### Как пользоваться страницей "Безопасность".
-Видео: [<img src="https://github.com/ZergOfSwarm/Zagotovka_M/blob/main/icons/icons8-youtube-48.png" width="24" align="texttop" />](https://youtu.be/N9od6Ji41jU)
-
+### Как пользоваться страницей "Кнопки" <a href="https://youtu.be/pMmqkwCnVaM"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>
+### Как пользоваться страницей "Выключатели" <a href="https://youtu.be/C74IQA4-2aI"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>
+### Как пользоваться страницей "Энкодеры" (в процессе разработки) <a href="https://youtu.be/mRENaW0x7i8"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>
+### Как пользоваться страницей "Таймеры" <a href="https://youtu.be/D46q2Zr3Hhk"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>
+### Как пользоваться страницей "OneWire" <a href="https://youtu.be/FTfkruXgUT0"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>
+### Как пользоваться страницей "Безопасность" <a href="https://youtu.be/N9od6Ji41jU"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>
 
 <details>
+
 <summary>Система версионирования</summary>
 
 <small>
