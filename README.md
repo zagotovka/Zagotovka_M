@@ -87,7 +87,7 @@ d. <a href="https://easyeda.com/editor#id=|125ff34d97324d308c97b01793449de7|1bc6
 
 ### Сборка и подключение. <a href="https://youtu.be/pC_yM8pkI2E"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/a8009334679421896801776771c7fa10/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
 
-## [Скачать прошивку](https://github.com/zagotovka/Zagotovka_M/raw/main/Proshivka/Zagotovka_M.bin) и как прошить stm32? <a href="https://youtu.be/C74IQA4-2aI"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/2d1cbc007f3da4553a70387ba9ce4421/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
+## [Скачать прошивку](https://github.com/zagotovka/Zagotovka_M/raw/main/Proshivka/Zagotovka_M.bin) и как прошить stm32? <a href="https://youtu.be/C4c-W71eqqY"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/55e08612c6f4ec527f6d10fa24ae89fb/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
 
 ## Видеогид по интерфейсу.
 
