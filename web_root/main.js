@@ -1462,13 +1462,13 @@ function TabSwitch({}) {
               <tr>
                 <td class="border px-4 py-2">Swarm/switch/id=27/onoff=1</td>
                 <td class="border px-4 py-2">
-                  Данная MQTT команда ВКЛючит выключатель с id = 27. Где "Swarm" это Ваш 'RX topic'.
+                  Данная MQTT команда ВКЛючит выключатель с id = 27. Где "Swarm" это Ваш 'TX topic'.
                 </td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">Swarm/switch/id=27/onoff=0</td>
                 <td class="border px-4 py-2">
-                  Данная MQTT команда ОТКлючит выключатель с id = 27. Где "Swarm" это Ваш 'RX topic'.
+                  Данная MQTT команда ОТКлючит выключатель с id = 27. Где "Swarm" это Ваш 'TX topic'.
                 </td>
               </tr>
             </tbody>
@@ -1489,7 +1489,7 @@ function TabSwitch({}) {
                 <td class="border px-4 py-2">Swarm/switch/</td>
                 <td class="border px-4 py-2">
                   Данная страница отслеживает изменения выключателей и автоматически отправляет каждое изменение по MQTT на топик: Swarm/switch/.
-                  Где "Swarm" это Ваш 'RX topic'.
+                  Где "Swarm" это Ваш 'TX topic'.
                 </td>
               </tr>
             </tbody>
@@ -2093,7 +2093,7 @@ const TabButton = () => {
                   Swarm/button/id=30/single_click
                 </td>
                 <td class="border px-4 py-2">
-                  Данная MQTT команда выполнит команду, прописанную в 'SINGLE CLICK' c id = 30. Где "Swarm" это Ваш 'RX topic'.
+                  Данная MQTT команда выполнит команду, прописанную в 'SINGLE CLICK' c id = 30. Где "Swarm" это Ваш 'TX topic'.
                 </td>
               </tr>
               <tr>
@@ -2101,13 +2101,13 @@ const TabButton = () => {
                   Swarm/button/id=30/double_click
                 </td>
                 <td class="border px-4 py-2">
-                  Данная MQTT команда выполнит команду, прописанную в 'DOUBLE CLICK' c id = 30. Где "Swarm" это Ваш 'RX topic'.
+                  Данная MQTT команда выполнит команду, прописанную в 'DOUBLE CLICK' c id = 30. Где "Swarm" это Ваш 'TX topic'.
                 </td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">Swarm/button/id=30/long_press</td>
                 <td class="border px-4 py-2">
-                  Данная MQTT команда выполнит команду, прописанную в 'LONG PRESS' c id = 30. Где "Swarm" это Ваш 'RX topic'.
+                  Данная MQTT команда выполнит команду, прописанную в 'LONG PRESS' c id = 30. Где "Swarm" это Ваш 'TX topic'.
                 </td>
               </tr>
             </tbody>
@@ -2127,7 +2127,7 @@ const TabButton = () => {
                 <td class="border px-4 py-2">Swarm/button/</td>
                 <td class="border px-4 py-2">
                   Данная страница отслеживает изменения кнопок и автоматически отправляет каждое изменение по MQTT на топик: Swarm/button/.
-                  Где "Swarm" это Ваш 'RX topic'.
+                  Где "Swarm" это Ваш 'TX topic'.
                 </td>
               </tr>
             </tbody>
@@ -3171,7 +3171,7 @@ function TabEncoder({}) {
                 <td class="border px-4 py-2">Swarm/pwm/id=4/dvalue=25</td>
                 <td class="border px-4 py-2">
                   Данная MQTT команда установит значение диммера в 25 едениц с
-                  id = 4. Где "Swarm" это Ваш 'RX topic'.
+                  id = 4. Где "Swarm" это Ваш 'TX topic'.
                 </td>
               </tr>
             </tbody>
@@ -3868,7 +3868,7 @@ function TabCron({}) {
               <td class="border px-4 py-2">Swarm/timer/</td>
               <td class="border px-4 py-2">
                 Данная страница отслеживает изменения кнопок и автоматически отправляет каждое изменение по MQTT на топик: Swarm/timer/.
-                Где "Swarm" это Ваш 'RX topic'.
+                Где "Swarm" это Ваш 'TX topic'.
               </td>
             </tr>
           </tbody>
@@ -4908,19 +4908,61 @@ function ModalEditSensor({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const validateNumericInput = (value, min, max) => {
+    if (value === '' || value === '-') return value;
+    
+    // Заменяем запятую на точку
+    const normalizedValue = value.replace(',', '.');
+    
+    // Проверяем, является ли значение числом
+    if (!/^-?\d*\.?\d*$/.test(normalizedValue)) return null;
+    
+    const numValue = parseFloat(normalizedValue);
+    if (isNaN(numValue)) return null;
+    if (numValue < min || numValue > max) return null;
+    
+    return normalizedValue;
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prevData) => ({
-      ...prevData,
-      [name]: ['ut', 'lt', 'upphumid', 'humlolim'].includes(name)
-        ? parseFloat(value)
-        : value
-    }));
+    
+    if (['ut', 'lt'].includes(name)) {
+      const validValue = validateNumericInput(value, -55, 125);
+      if (validValue !== null) {
+        setFormData(prev => ({ ...prev, [name]: validValue }));
+      }
+    } else if (['upphumid', 'humlolim'].includes(name)) {
+      const validValue = validateNumericInput(value, 0, 100);
+      if (validValue !== null) {
+        setFormData(prev => ({ ...prev, [name]: validValue }));
+      }
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
+  };
+
+  const parseNumericValues = (data) => {
+    const numericFields = ['ut', 'lt', 'upphumid', 'humlolim'];
+    const parsedData = { ...data };
+    
+    numericFields.forEach(field => {
+      if (parsedData[field] === '' || parsedData[field] === '-') {
+        parsedData[field] = 0;
+      } else {
+        parsedData[field] = parseFloat(parsedData[field].toString().replace(',', '.'));
+      }
+    });
+    
+    return parsedData;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
+    
+    const parsedFormData = parseNumericValues(formData);
+    
     try {
       const response = await fetch('/api/sensor/set', {
         method: 'POST',
@@ -4931,28 +4973,19 @@ function ModalEditSensor({
           id: oneWireId,
           pins: pins,
           sensorNumber: typsensor.s_number,
-          ut: formData.ut,
-          lt: formData.lt,
-          action_ut: formData.action_ut,
-          action_lt: formData.action_lt,
-          upphumid: formData.upphumid,
-          humlolim: formData.humlolim,
-          actuphum: formData.actuphum,
-          actlowhum: formData.actlowhum,
-          info: formData.info,
+          ...parsedFormData,
           s_number: typsensor.s_number,
-          t: typsensor.t,
-          humidity: formData.humidity
+          t: typsensor.t
         })
       });
 
       if (!response.ok) {
         throw new Error('Network response was not ok');
       }
-      //console.log('Updated Sensor Data:', {oneWireId,pins,...formData,s_number: typsensor.s_number,t: typsensor.t});
+      
       onUpdate({
         ...typsensor,
-        ...formData,
+        ...parsedFormData,
         oneWireId,
         pins,
         s_number: typsensor.s_number,
@@ -4960,7 +4993,7 @@ function ModalEditSensor({
       });
       onClose();
     } catch (error) {
-      //console.error('Error updating Sensor:', error);
+      // console.error('Error updating Sensor:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -5000,29 +5033,25 @@ function ModalEditSensor({
                   <td class="p-2 font-bold">Upper Temperature</td>
                   <td class="p-2">
                     <input
-                      type="number"
+                      type="text"
                       name="ut"
                       value=${formData.ut}
                       oninput=${handleChange}
                       class="border rounded p-2 w-full"
-                      min="-55"
-                      max="125"
-                      step="0.1"
+                      placeholder="-55 to 125"
                     />
                   </td>
                 </tr>
-                <tr class="bg-white">
+                  <tr class="bg-white">
                   <td class="p-2 font-bold">Lower Temperature</td>
                   <td class="p-2">
                     <input
-                      type="number"
+                      type="text"
                       name="lt"
                       value=${formData.lt}
                       oninput=${handleChange}
                       class="border rounded p-2 w-full"
-                      min="-55"
-                      max="125"
-                      step="0.1"
+                      placeholder="-55 to 125"
                     />
                   </td>
                 </tr>
@@ -5058,14 +5087,12 @@ function ModalEditSensor({
                         <td class="p-2 font-bold">Humidity upper limit</td>
                         <td class="p-2">
                           <input
-                            type="number"
+                            type="text"
                             name="upphumid"
                             value=${formData.upphumid}
                             oninput=${handleChange}
                             class="border rounded p-2 w-full"
-                            min="0"
-                            max="100"
-                            step="0.1"
+                            placeholder="0 to 100"
                           />
                         </td>
                       </tr>
@@ -5073,14 +5100,12 @@ function ModalEditSensor({
                         <td class="p-2 font-bold">Humidity lower limit</td>
                         <td class="p-2">
                           <input
-                            type="number"
+                            type="text"
                             name="humlolim"
                             value=${formData.humlolim}
                             oninput=${handleChange}
                             class="border rounded p-2 w-full"
-                            min="0"
-                            max="100"
-                            step="0.1"
+                           placeholder="0 to 100"
                           />
                         </td>
                       </tr>
@@ -5642,76 +5667,74 @@ const TabSecurity = () => {
   // Help content for SIM800L
   const helpContentSim800L = {
     ru: html`
-      <div class="space-y-6">
-        <div>
-          <h2>
-            SIM800L - модуль для удаленного взаимодействия с "Заготовкой" в
-            отсутствии интернета:
+      <div className="space-y-6 max-w-2xl mx-auto p-4">
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-semibold mb-4 text-blue-600">
+            Модуль SIM800L📱
           </h2>
-          <ul>
-            <li>
-              Принимает звонки на указанный номер в таблице "Mobile phone"
-            </li>
-            <li>Отправляет SMS-отчеты</li>
-            <li>
-              Ползунок 'OnOFF' является основным переключателем для всей системы
-              SMS-уведомлений
-            </li>
-          </ul>
-          <p>
-            <strong>Если ползунок 'OnOFF' включен:</strong> SMS-уведомления
-            работают согласно настройкам в таблице 'Security Pins'.
+          <p className="text-gray-600 mb-4">
+            Модуль позволяет управлять "Заготовкой" при помощи мобильной связи - интернет не нужен!
           </p>
-          <p>
-            <strong>Если ползунок 'OnOFF' отключен:</strong> Все SMS-уведомления
-            отключаются. Настройки в таблице 'Security Pins' игнорируются.
-          </p>
-          <div class="text-red-500 font-bold">
-            <h3>Важно для запуска:</h3>
-            <ul>
-              <li>Вставьте SIM-карту в SIM800L</li>
-              <li>
-                Включить SIM800L раньше STM32, чтобы модуль успел
-                инициализироваться!
-              </li>
+          <div className="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 className="font-medium mb-2">Возможности модуля:</h3>
+            <ul className="space-y-2 list-disc pl-5">
+              <li>Принимает звонки на номер телефона (указывается в разделе "Mobile phone")</li>
+              <li>Держит вас в курсе происходящего при помощи SMS-уведомлений</li>
+              <li>Включается и отключается при помощи ползунка 'OnOFF'</li>
+            </ul>
+          </div>
+          <div className="space-y-4">
+            <div className="p-3 bg-green-50 rounded">
+              <p className="font-medium">✅ Когда ползунок 'OnOFF' ВКЛючен:</p>
+              <p>SMS-уведомления работают по вашим настройкам из таблицы 'Security Pins'</p>
+            </div>
+            <div className="p-3 bg-gray-50 rounded">
+              <p className="font-medium">⭕ Когда ползунок 'OnOFF' ОТКлючен:</p>
+              <p>Все SMS-уведомления отключены, настройки из таблицы 'Security Pins' не учитываются</p>
+            </div>
+          </div>
+          <div className="mt-6 bg-red-50 p-4 rounded-lg">
+            <h3 className="text-red-600 font-semibold mb-2">📍 ВАЖНО!</h3>
+            <ul className="space-y-2 list-disc pl-5 text-red-700">
+              <li>Установить SIM-карту в модуль SIM800L</li>
+              <li>Включить SIM800L → Дождаться подключения к GSM → Включить STM32</li>
             </ul>
           </div>
         </div>
       </div>
     `,
     en: html`
-      <div class="space-y-6">
-        <div>
-          <h2>
-            SIM800L - module for remote interaction with "Template" without
-            internet:
+      <div className="space-y-6 max-w-2xl mx-auto p-4">
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-semibold mb-4 text-blue-600">
+            SIM800L Module📱
           </h2>
-          <ul>
-            <li>
-              Accepts calls to the specified number in the "Mobile phone" table
-            </li>
-            <li>Sends SMS reports</li>
-            <li>
-              The 'OnOFF' slider is the main switch for the entire SMS
-              notification system
-            </li>
-          </ul>
-          <p>
-            <strong>If the 'OnOFF' slider is on:</strong> SMS notifications work
-            according to the settings in the 'Security Pins' table.
+          <p className="text-gray-600 mb-4">
+            The module controls your "Template" using mobile network - no internet required!
           </p>
-          <p>
-            <strong>If the 'OnOFF' slider is off:</strong> All SMS notifications
-            are disabled. Settings in the 'Security Pins' table are ignored.
-          </p>
-          <div class="text-red-500 font-bold">
-            <h3>Important for launch:</h3>
-            <ul>
-              <li>Insert SIM card into SIM800L</li>
-              <li>
-                Turn on SIM800L 15 seconds before STM32 to allow the module to
-                initialize
-              </li>
+          <div className="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 className="font-medium mb-2">Module capabilities:</h3>
+            <ul className="space-y-2 list-disc pl-5">
+              <li>Receives calls to the phone number (specified in the "Mobile phone" section)</li>
+              <li>Keeps you updated using SMS notifications</li>
+              <li>Turns ON and OFF using the 'OnOFF' slider</li>
+            </ul>
+          </div>
+          <div className="space-y-4">
+            <div className="p-3 bg-green-50 rounded">
+              <p className="font-medium">✅ When 'OnOFF' slider is ON:</p>
+              <p>SMS notifications work according to your settings in the 'Security Pins' table</p>
+            </div>
+            <div className="p-3 bg-gray-50 rounded">
+              <p className="font-medium">⭕ When 'OnOFF' slider is OFF:</p>
+              <p>All SMS notifications are disabled, settings in the 'Security Pins' table are ignored</p>
+            </div>
+          </div>
+          <div className="mt-6 bg-red-50 p-4 rounded-lg">
+            <h3 className="text-red-600 font-semibold mb-2">📍 IMPORTANT!</h3>
+            <ul className="space-y-2 list-disc pl-5 text-red-700">
+              <li>Insert SIM card into the SIM800L module</li>
+              <li>Turn ON SIM800L → Wait for GSM connection → Turn ON STM32</li>
             </ul>
           </div>
         </div>
@@ -5719,96 +5742,126 @@ const TabSecurity = () => {
     `
   };
 
-  // Help content for Security
   const helpContentSecurity = {
     ru: html`
-      <div class="mytext space-y-6">
-        <div>
-          <pre class="text-xl font-bold mb-2">
-            Нормально открытый геркон / Normal open</pre
-          >
-          <pre class="mb-4">
-            В отсутствие магнитного поля контакты разомкнуты.
-            При поднесении магнита контакты замыкаются.
-            Подключение: один вывод к пину STM32, второй к <span class="text-red-500 font-bold">+3.3v</span>.
-          </pre>
-          <pre class="text-xl font-bold mb-2">
-            Нормально закрытый геркон / Normal close</pre
-          >
-          <pre class="mb-4">
-            В отсутствие магнитного поля контакты замкнуты.
-            При поднесении магнита контакты размыкаются.
-            Подключение: один вывод к пину STM32, второй к <span class="text-red-500 font-bold">+3.3v</span>.
-          </pre>
-          <pre class="text-xl font-bold mb-2">Датчики движения PIR</pre>
-          <pre class="mb-4">
-            В состоянии покоя выход/out LOW (логический 0)
-            При обнаружении движения выход/out переходит в HIGH (логическая 1 т.е. максимум <span class="text-red-500 font-bold">+3.3v</span>).
-          </pre>
-
-          <pre class="text-xl font-bold mb-2">
-Если в столбце "Send SMS" значение 'YES':</pre
-          >
-          <pre class="mb-4">
-            SMS уведомление будет отправлено.
-          </pre
-          >
-          <pre class="text-xl font-bold mb-2">
-Если в столбце "Send SMS" значение 'NO':</pre
-          >
-          <pre class="mb-4">
-            SMS уведомление не будет отправлено.
-          </pre
-          >
-          <pre class="mb-4">
-          Действие, указанное в столбце 'Action', будет выполнено в любом случае
-    	    Выполнение действия не зависит от значения в столбце "Send SMS"
-           </pre
-          >
+      <div className="space-y-6 max-w-2xl mx-auto p-4">
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-semibold mb-4 text-blue-600">
+            Подключение датчиков 🔌
+          </h2>
+  
+          <div className="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 className="font-medium mb-3">Нормально открытый геркон <span className="text-blue-500 font-bold">(Normal open)</span></h3>
+            <ul className="space-y-2">
+              <li>• Контакты разомкнуты без магнитного поля</li>
+              <li>• Контакты замыкаются при поднесении магнита</li>
+              <li>• Подключение: один провод к пину STM32, второй к <span className="text-red-500 font-bold">+3.3V</span></li>
+            </ul>
+          </div>
+  
+          <div className="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 className="font-medium mb-3">Нормально закрытый геркон <span className="text-blue-500 font-bold">(Normal close)</span></h3>
+            <ul className="space-y-2">
+              <li>• Контакты замкнуты без магнитного поля</li>
+              <li>• Контакты размыкаются при поднесении магнита</li>
+              <li>• Подключение: один провод к пину STM32, второй к <span className="text-red-500 font-bold">+3.3V</span></li>
+            </ul>
+          </div>
+  
+          <div className="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 className="font-medium mb-3">Датчики движения <span className="text-blue-500 font-bold">(PIR)</span></h3>
+            <ul className="space-y-2">
+              <li>• В покое: выход LOW (логический 0)</li>
+              <li>• При движении: выход HIGH (логическая 1, максимум <span className="text-red-500 font-bold">+3.3V</span>)</li>
+            </ul>
+          </div>
+  
+          <div className="mt-6">
+            <h2 className="text-lg font-semibold mb-4 text-blue-600">
+              Настройка SMS-уведомлений 📱
+            </h2>
+            
+            <div className="space-y-4">
+              <div className="p-3 bg-green-50 rounded">
+                <p className="font-medium">✅ Значение <span className="text-blue-500 font-bold">'YES'</span> в столбце "Send SMS" таблицы 'Security Pins':</p>
+                <p>SMS-уведомление будет отправлено</p>
+              </div>
+              
+              <div className="p-3 bg-gray-50 rounded">
+                <p className="font-medium">⭕ Значение <span className="text-blue-500 font-bold">'NO'</span> в столбце "Send SMS" таблицы 'Security Pins':</p>
+                <p>SMS-уведомление не будет отправлено</p>
+              </div>
+            </div>
+  
+            <div className="mt-4 bg-yellow-50 p-4 rounded-lg">
+              <h3 className="font-medium mb-2">📍 Примечание:</h3>
+              <ul className="space-y-2">
+                <li>• Действия в столбце 'Action' зависят от ползунка 'OnOff' выбранного пина, и не зависят от настройки "Send SMS"!</li>
+                <li>• Данная страница отслеживает изменения сенсоров и автоматически отправляет каждое изменение по MQTT на топик: <span className="text-blue-500 font-bold">Swarm/security/ </span> Где "Swarm" это Ваш 'TX topic' на странице Settings.</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     `,
     en: html`
-      <div class="mytext space-y-6">
-        <div>
-          <pre class="text-xl font-bold mb-2">
-Normally open reed switch / Normal open</pre
-          >
-          <pre class="mb-4">
-In the absence of a magnetic field, the contacts are open.
-When a magnet is brought near, the contacts close.
-Connection: one lead to the STM32 pin, the other to <span class="text-red-500 font-bold">+3.3v</span>.
-    </pre>
-
-          <pre class="text-xl font-bold mb-2">
-Normally closed reed switch / Normal close</pre
-          >
-          <pre class="mb-4">
-In the absence of a magnetic field, the contacts are closed.
-When a magnet is brought near, the contacts open.
-Connection: one lead to the STM32 pin, the other to <span class="text-red-500 font-bold">+3.3v</span>.
-    </pre>
-
-          <pre class="text-xl font-bold mb-2">PIR Motion Sensors</pre>
-          <pre class="mb-4">
-In the idle state, the output is LOW (logical 0)
-When motion is detected, the output switches to HIGH (logical 1, i.e., maximum <span class="text-red-500 font-bold">+3.3v</span>).
-    </pre>
-
-          <pre class="text-xl font-bold mb-2">
-If the "Send SMS" column value is 'YES':</pre
-          >
-          <pre class="mb-4">An SMS notification will be sent.</pre>
-
-          <pre class="text-xl font-bold mb-2">
-If the "Send SMS" column value is 'NO':</pre
-          >
-          <pre class="mb-4">An SMS notification will not be sent.</pre>
-
-          <pre class="mb-4">
-The action specified in the 'Action' column will be performed in any case
-The execution of the action does not depend on the value in the "Send SMS" column
-    </pre>
+      <div className="space-y-6 max-w-2xl mx-auto p-4">
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-semibold mb-4 text-blue-600">
+            Sensor Connection 🔌
+          </h2>
+  
+          <div className="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 className="font-medium mb-3">Normally Open Reed Switch <span className="text-blue-500 font-bold">(Normal open)</span></h3>
+            <ul className="space-y-2">
+              <li>• Contacts are open without magnetic field</li>
+              <li>• Contacts close when magnet is nearby</li>
+              <li>• Connection: one wire to STM32 pin, another to <span className="text-red-500 font-bold">+3.3V</span></li>
+            </ul>
+          </div>
+  
+          <div className="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 className="font-medium mb-3">Normally Closed Reed Switch <span className="text-blue-500 font-bold">(Normal close)</span></h3>
+            <ul className="space-y-2">
+              <li>• Contacts are closed without magnetic field</li>
+              <li>• Contacts open when magnet is nearby</li>
+              <li>• Connection: one wire to STM32 pin, another to <span className="text-red-500 font-bold">+3.3V</span></li>
+            </ul>
+          </div>
+  
+          <div className="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 className="font-medium mb-3">Motion Sensors <span className="text-blue-500 font-bold">(PIR)</span></h3>
+            <ul className="space-y-2">
+              <li>• At rest: output LOW (logical 0)</li>
+              <li>• When motion detected: output HIGH (logical 1, maximum <span className="text-red-500 font-bold">+3.3V</span>)</li>
+            </ul>
+          </div>
+  
+          <div className="mt-6">
+            <h2 className="text-lg font-semibold mb-4 text-blue-600">
+              SMS Notification Settings 📱
+            </h2>
+            
+            <div className="space-y-4">
+              <div className="p-3 bg-green-50 rounded">
+                <p className="font-medium">✅ Value <span className="text-blue-500 font-bold">'YES'</span> in "Send SMS" column of 'Security Pins' table:</p>
+                <p>SMS notification will be sent</p>
+              </div>
+              
+              <div className="p-3 bg-gray-50 rounded">
+                <p className="font-medium">⭕ Value <span className="text-blue-500 font-bold">'NO'</span> in "Send SMS" column of 'Security Pins' table:</p>
+                <p>SMS notification will not be sent</p>
+              </div>
+            </div>
+  
+            <div className="mt-4 bg-yellow-50 p-4 rounded-lg">
+              <h3 className="font-medium mb-2">📍 Note:</h3>
+              <ul className="space-y-2">
+                <li>• Actions in the 'Action' column depend on the 'OnOff' slider of the selected pin, and do not depend on the "Send SMS" setting!</li>
+                <li>• This page monitors sensor changes and automatically sends each change via MQTT to the topic: <span className="text-blue-500 font-bold">Swarm/security/ </span> Where "Swarm" is your 'TX topic' on the Settings page.</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     `

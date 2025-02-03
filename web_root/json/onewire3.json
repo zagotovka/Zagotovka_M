@@ -1,17 +1,18 @@
 {
   "id": 22,
   "pins": "PC3",
-  "sensorNumber": "28008E5F50500458",
-  "ut": 11,
-  "lt": 22,
-  "action_ut": "33",
-  "action_lt": "44",
+  "sensorNumber": "2800291750500598",
+  "ut": 22.3,
+  "lt": 11.4,
+  "action_ut": "6:1,12:1,18:1",
+  "action_lt": "6:0,12:0",
   "upphumid": 0,
   "humlolim": 0,
   "actuphum": "",
   "actlowhum": "",
-  "info": "Test-458",
-  "s_number": "28008E5F50500458",
-  "t": 22.125,
-  "humidity": 0
+  "info": "Test-598",
+  "onoff": 0,
+  "humidity": 0,
+  "s_number": "2800291750500598",
+  "t": 22.06
 }

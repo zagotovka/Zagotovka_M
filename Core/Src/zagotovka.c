@@ -1724,7 +1724,7 @@ bool parse_sensor_json(const char *json_string) {
         return false;
     }
 
-    printf("Searching for sensor with address: %s\n", sensorNumber->valuestring);
+//    printf("Searching for sensor with address: %s\n", sensorNumber->valuestring);
 
     if (strcmp(sensorNumber->valuestring, "DHT22") == 0) {
         // Обработка DHT22 датчиков
@@ -2198,18 +2198,18 @@ void execute_actions(const char* actions, const char* event_type, const char* cu
 }
 
 void Check_SunriseSunset_Actions() {
-    printf("DEBUG: Input timez: %02d:%02d:%02d\n", timez->tm_hour, timez->tm_min, timez->tm_sec);
+//    printf("DEBUG: Input timez: %02d:%02d:%02d\n", timez->tm_hour, timez->tm_min, timez->tm_sec);
     time_t curtime = mktime(timez);
     time_t srisetime = parse_time(SetSettings.sunrise);
     time_t ssettime = parse_time(SetSettings.sunset);
     char timestr[9];
     strftime(timestr, sizeof(timestr), "%H:%M:%S", timez);
-    printf("Current time: %s\n", timestr);
+//    printf("Current time: %s\n", timestr);
     // Сброс флагов в начале нового дня
     if (curtime - lastchk >= 86400) { // 86400 seconds in a day
         srise_ok = false;
         sset_ok = false;
-        printf("DEBUG: Reset daily flags\n");
+//        printf("DEBUG: Reset daily flags\n");
     }
     lastchk = curtime;
     if (SetSettings.onsunrise && !srise_ok) {
@@ -2220,17 +2220,17 @@ void Check_SunriseSunset_Actions() {
             time_t tgttime = srisetime + offset;
             char tgtstr[9];
             strftime(tgtstr, sizeof(tgtstr), "%H:%M:%S", localtime(&tgttime));
-            printf("SUNRISE + offset: %s to execute actions: %s\n", tgtstr, acts);
+//            printf("SUNRISE + offset: %s to execute actions: %s\n", tgtstr, acts);
             if (curtime >= tgttime && curtime - tgttime < 300) {
                 execute_actions(acts, "Sunrise", timestr);
                 srise_ok = true;
-                printf("DEBUG: Executed sunrise actions\n");
+                printf("DEBUG: Executed sunrise actions \r\n");
             }
         } else {
-            printf("Invalid sunrise settings\n");
+            printf("Invalid sunrise settings \r\n");
         }
     } else if (!SetSettings.onsunrise) {
-        printf("DEBUG: Sunrise actions are disabled\n");
+        printf("DEBUG: Sunrise actions are disabled \r\n");
     }
     if (SetSettings.onsunset && !sset_ok) {
         char offstr[20], acts[100];
@@ -2240,17 +2240,17 @@ void Check_SunriseSunset_Actions() {
             time_t tgttime = ssettime + offset;
             char tgtstr[9];
             strftime(tgtstr, sizeof(tgtstr), "%H:%M:%S", localtime(&tgttime));
-            printf("SUNSET + offset: %s to execute actions: %s\n", tgtstr, acts);
+//            printf("SUNSET + offset: %s to execute actions: %s\n", tgtstr, acts);
             if (curtime >= tgttime && curtime - tgttime < 300) {
                 execute_actions(acts, "Sunset", timestr);
                 sset_ok = true;
-                printf("DEBUG: Executed sunset actions\n");
+                printf("DEBUG: Executed sunset actions \r\n");
             }
         } else {
-            printf("Invalid sunset settings\n");
+            printf("Invalid sunset settings \r\n");
         }
     } else if (!SetSettings.onsunset) {
-        printf("DEBUG: Sunset actions are disabled\n");
+        printf("DEBUG: Sunset actions are disabled \r\n");
     }
 }
 void processPins(uint8_t i, uint8_t action) { // TODO Будет время откажись от этой логики и от process_actions() в пользу action_handler()!!!

@@ -99,8 +99,8 @@ time_t cronetime;
 time_t cronetime_old;
 time_t moontime = (time_t)-1;
 int year;
-int month;
-int day;
+uint8_t month;// 1-12
+uint8_t day; // 1-31
 char str[40] = { 0 };
 /* USER CODE END PM */
 
@@ -338,20 +338,21 @@ static void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 	switch (ev) {
 		case MG_EV_OPEN:
 			MG_INFO(("%lu CREATED", c->id));
-//			printf("Connection created: %lu\n", c->id);
+//			printf("+++Connection created: %lu\r\n", c->id);
 			break;
 		case MG_EV_ERROR:
 			MG_ERROR(("%lu ERROR %s", c->id, (char *) ev_data));
-//			printf("Error occurred: %lu ERROR %s\n", c->id, (char *) ev_data);
+//			printf("+++Connection error: %lu ERROR %s\r\n", c->id, (char *) ev_data);
+			s_conn = NULL;
 			break;
 		case MG_EV_CONNECT:
-//			printf("Connection attempt: %lu\n", c->id);
+//			printf("+++Connection attempt: %lu\r\n", c->id);
 			if (mg_url_is_ssl(get_mqtt_url())) {
 //				printf("SSL connection required\n");
 			}
 			break;
 		case MG_EV_MQTT_OPEN:
-//			printf("MQTT connection opened: %lu\n", c->id);
+//			printf("+++MQTT connection opened: %lu\r\n", c->id);
 			struct mg_str subt = mg_str(SetSettings.rxmqttop);
 			struct mg_str pubt = mg_str(SetSettings.txmqttop);
 			struct mg_str data = mg_str("Hello, this is a greeting from STM32 by mqtt!");
@@ -363,7 +364,7 @@ static void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			sub_opts.topic = subt;
 			sub_opts.qos = s_qos;
 			mg_mqtt_sub(c, &sub_opts);
-			printf("Subscribed topic - %.*s\n", (int) subt.len, subt.buf);
+//			printf("Subscribed topic - %.*s\r\n", (int) subt.len, subt.buf);
 
 			// Публикация
 			struct mg_mqtt_opts pub_opts;
@@ -373,7 +374,7 @@ static void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			pub_opts.qos = s_qos;
 			pub_opts.retain = false;
 			mg_mqtt_pub(c, &pub_opts);
-			printf("Publishing to topic - %.*s\n", (int) pubt.len, pubt.buf);
+//			printf("Publishing to topic - %.*s\r\n", (int) pubt.len, pubt.buf);
 			break;
 		case MG_EV_MQTT_CMD:
 			{
@@ -432,7 +433,7 @@ static void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			break;
 		case MG_EV_CLOSE:
 			MG_INFO(("%lu CLOSED", c->id));
-//			printf("Connection closed: %lu\n", c->id);
+//			printf("+++Connection closed: %lu\r\n", c->id);
 			s_conn = NULL;
 			break;
 		case MG_EV_POLL:
@@ -453,7 +454,7 @@ static void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 //			printf("Data sent: %" PRIuPTR " bytes\n", c->send.len);
 			break;
 		case MG_EV_RESOLVE:
-			printf("DNS resolution completed\n");
+//			printf("DNS resolution completed\n");
 			break;
 		default:
 //			printf("Unhandled event: %d\n", ev);
@@ -1635,7 +1636,7 @@ static void init_sim800l_module(void) {
 			            uint8_t pin_id = atoi(pin_number);
 			            uint8_t current_state = read_button_level(pin_id);
 					if (PinsConf[pin_id].topin == 10) { // Если SECURITY
-						dst += sprintf(dst, "SEC-TY:%s:%s:%s", // SEC-TY:0:OFF:TEST-security TODO
+						dst += sprintf(dst, "SEC-TY:%s:%s:%s", // SEC-TY:0:OFF:TEST-security
 							pin_number,
 							PinsConf[pin_id].onoff == 1 ? "ON" : "OFF", // PinsConf[pin_id].send_sms,
 							PinsConf[pin_id].info);
@@ -1989,8 +1990,9 @@ void StartOutputTask(void *argument)
 * @retval None
 */
 /* USER CODE END Header_StartCronTask */
-void StartCronTask(void *argument) {
-	/* USER CODE BEGIN StartCronTask */
+void StartCronTask(void *argument)
+{
+  /* USER CODE BEGIN StartCronTask */
 	ulTaskNotifyTake(0, portMAX_DELAY);
 	init_offline_time();
 	static lwdtc_cron_ctx_t cron_ctxs[MAXSIZE];
@@ -2037,9 +2039,6 @@ void StartCronTask(void *argument) {
 							timez->tm_min, timez->tm_sec);
 				}
 				taskEXIT_CRITICAL();
-				year = timez->tm_year + 1900;  // Эти переменные не удаляй!
-				month = timez->tm_mon + 1;     // они нужны для
-				day = timez->tm_mday;          // задачи ServiceTask!
 				t_printd = 1;
 			}
 
@@ -2047,6 +2046,14 @@ void StartCronTask(void *argument) {
 				cronetime_old = cronetime;
 				timez = localtime(&cronetime);
 				timez->tm_mon += 1;
+
+				// Эти переменные нужны для задачи ServiceTask!
+			    if (timez->tm_mday != day) {  // Если текущий день отличается от сохраненного
+			        year = timez->tm_year + 1900;
+			        month = timez->tm_mon; // Не добавляем 1, так как уже сделано выше
+			        day = timez->tm_mday;
+			    }
+
 //				printf("CronTask: today's date: %02d.%02d.%d\n", day, month, year);
 				// Обработка задач с фиксированным временем
 				i = 0;
@@ -2072,7 +2079,7 @@ void StartCronTask(void *argument) {
 		}
 		osDelay(1);
 	}
-	/* USER CODE END StartCronTask */
+  /* USER CODE END StartCronTask */
 }
 
 /* USER CODE BEGIN Header_StartInputTask */
@@ -2599,17 +2606,15 @@ void StartDht22Task(void *argument)
 * @retval None
 */
 /* USER CODE END Header_StartServiceTask */
-void StartServiceTask(void *argument) {
-	/* USER CODE BEGIN StartServiceTask */
+void StartServiceTask(void *argument)
+{
+  /* USER CODE BEGIN StartServiceTask */
 	ulTaskNotifyTake(0, portMAX_DELAY);
-	uint32_t now = 0;
-	uint32_t oldchk = 0;
 //	static uint8_t moonflag = 0; // Счетчик
 	static uint8_t prevday = 0; // Для отслеживания смены дня
 	static uint8_t prevmin = 0xFF; // Для отслеживания смены минуты
 //	DateTime nextfullmoon; // Declare nextFullMoon outside the loop
 	DateTime nextfullmnlcl; // Local time version of nextFullMoon
-	/**********************************************************************/
 	double degToRad(double degree) {
 		return (degree * PI / 180);
 	}
@@ -2618,7 +2623,7 @@ void StartServiceTask(void *argument) {
 		return (radian * 180 / PI);
 	}
 	// Calculate the day of the year
-	int dayOfYear(int year, int month, int day) {
+	int dayOfYear(int year, uint8_t month, uint8_t day) {
 		int N1 = floor(275 * month / 9);
 		int N2 = floor((month + 9) / 12);
 		int N3 = (1 + floor((year - 4 * floor(year / 4) + 2) / 3));
@@ -2698,15 +2703,12 @@ void StartServiceTask(void *argument) {
 //			printf("Day light: %s\n", SetSettings.dlength);
 		}
 	}
-	/**********************************************************************/
 	/* Infinite loop */
 	for (;;) {
 		if (day != prevday) {
-//           moonflag = 0;
 			prevday = day;
 			// Calculate after system reboot
 			printResults();
-
 			if (year != 0000) { // Ensure year is set
 				calculateMoonPhase( (DateTime ) { year, month, day, timez->tm_hour, timez->tm_min, timez->tm_sec }, &nextfullmnlcl);
 				nextfullmnlcl.hour += SetSettings.timezone; // Adjust for timezone
@@ -2721,22 +2723,16 @@ void StartServiceTask(void *argument) {
 					printf("ERROR: len > setsettings.fullmoon! \n");
 				}
 			}
-
 			if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
-				if (now - oldchk >= 1000) {
-					Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" after system reboot
-					oldchk = HAL_GetTick();
-				}
+				Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" after system reboot
 			}
 		}
-
 		if (timez->tm_min != prevmin) { // Проверка раз в минуту
 			prevmin = timez->tm_min;
 			if (timez->tm_hour == 0 && timez->tm_min == 1 && year != 0000) {
 //          if (moonflag < 3) { // Для уверенности 3 раза!
 				if (year != 0000) { // Ensure year is set
-					calculateMoonPhase(
-							(DateTime ) { year, month, day, timez->tm_hour, timez->tm_min, timez->tm_sec }, &nextfullmnlcl);
+					calculateMoonPhase((DateTime ) { year, month, day, timez->tm_hour, timez->tm_min, timez->tm_sec }, &nextfullmnlcl);
 					nextfullmnlcl.hour += SetSettings.timezone; // Adjust for timezone
 					if (nextfullmnlcl.hour >= 24) {
 						nextfullmnlcl.hour -= 24;
@@ -2749,22 +2745,14 @@ void StartServiceTask(void *argument) {
 						printf("ERROR: len > setsettings.fullmoon! \n");
 					}
 				}
-//             moonflag++;
-//         }
 			}
 			if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
-				if (now - oldchk >= 1000) {
-					Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset"
-					oldchk = HAL_GetTick();
-				}
+				Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" один раз в минуту.
 			}
 		}
-//		if (sumowpin != 0) {
-//			check_sensors_limits();
-//		}
 		osDelay(500);
 	}
-	/* USER CODE END StartServiceTask */
+  /* USER CODE END StartServiceTask */
 }
 
 /* USER CODE BEGIN Header_StartSIM800LTask */
