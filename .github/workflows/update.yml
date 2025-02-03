@@ -1,0 +1,32 @@
+name: Create new release on 'Zagotovka_M.bin' update
+
+permissions:
+  contents: write
+  discussions: write
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Proshivka/Zagotovka_M.bin'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Release ${{ github.run_number }}
+          body: New release Zagotovka_M.bin ${{ github.event.head_commit.timestamp }}
+          draft: false
+          prerelease: false
+          files: Proshivka/Zagotovka_M.bin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
