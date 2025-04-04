@@ -353,7 +353,7 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic, const char
     pub_opts.message = mg_str(msg);
     pub_opts.qos = s_qos;
     pub_opts.retain = false;
-    pub_opts.keepalive = 65535;  // Макс. значение для uint16_t (~18ч и 12м)
+    pub_opts.keepalive = 20;  // Макс. значение для uint16_t (~18ч и 12м)
     pub_opts.clean = true;// Брокер не сохраняет состояние сессии, и клиент начинает "с чистого листа" при каждом подключении!
     mg_mqtt_pub(conn, &pub_opts);
     MG_INFO(("%lu PUBLISHED %s -> %.*s", conn->id, msg, (int) pub_opts.topic.len, pub_opts.topic.buf));
