@@ -29,6 +29,7 @@ void SetOneWireConfig();
 #define TIMEZONE 0
 #define CHECK_IP 1
 #define CHECK_MQTT 0
+#define CHECK_USEHTTPS 0
 //#define IP_ADDR0 192
 //#define IP_ADDR1 168
 //#define IP_ADDR2 18

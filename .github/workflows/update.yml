@@ -7,7 +7,7 @@ permissions:
 on:
   push:
     branches:
-      - main
+      - test  # Изменил нужную ветку!
     paths:
       - 'Proshivka/Zagotovka_M.bin'
 
@@ -18,12 +18,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Get latest version from README
+        id: get_version
+        run: |
+          # Точный поиск версии в таблице
+          VERSION=$(awk '/\| Версия \| Дата/{flag=1; next} /\|$/{flag=0} flag && /\| [0-9]+\.[0-9]+\.[0-9]+/{print $2}' README.md | sort -V | tail -n 1)
+          echo "Extracted version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ github.run_number }}
-          name: Release ${{ github.run_number }}
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: Release ${{ steps.get_version.outputs.version }}
           body: New release Zagotovka_M.bin ${{ github.event.head_commit.timestamp }}
           draft: false
           prerelease: false

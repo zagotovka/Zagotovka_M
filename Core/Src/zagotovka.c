@@ -68,6 +68,27 @@ uint32_t pMillis, cMillis;
 //    return pin_name;
 //}
 
+void log_headers(const char *headers) {
+    if (headers == NULL || strlen(headers) == 0) {
+        MG_INFO(("  No headers"));
+        return;
+    }
+
+    // Разбиваем строку на отдельные заголовки по "\r\n"
+    char *header_copy = strdup(headers);  // Копируем строку для безопасной обработки
+    if (header_copy == NULL) {
+        MG_INFO(("  Failed to allocate memory for header copy"));
+        return;
+    }
+
+    char *line = strtok(header_copy, "\r\n");
+    while (line != NULL) {
+        MG_INFO(("  %s", line));
+        line = strtok(NULL, "\r\n");
+    }
+    free(header_copy);
+}
+
 /*********************** End delay_us() **************************/
 extern uint64_t s_boot_timestamp;
 char jsonbuf[BUFFER_SIZE];
@@ -85,6 +106,118 @@ char s_pub_topic[30] = {0};  // Public topic
 int s_qos = 1;
 extern int32_t onoffid;// Для parse_onoff_json().
 struct mg_connection *s_conn = NULL;
+
+/*
+json_decode_string()
+    Проверяет входные параметры на корректность.
+    Экранированные символы (\n, \r, \t, \", \\) преобразуются в соответствующие реальные символы.
+    Символы новой строки (\n) добавляются только для строк заголовков и футеров (-----BEGIN...----- и -----END...-----),
+    чтобы сохранить читаемость PEM-формата. Для остальных данных символы новой строки игнорируются,
+    чтобы данные соответствовали "сжатому" формату TLS_CERT и TLS_KEY.
+    Пропускает начальные и конечные кавычки.
+    Возвращает true, если декодирование прошло успешно, и false в случае ошибки.
+ */
+bool json_decode_string(const char *json_str, char *output, size_t output_size) {
+    if (json_str == NULL || output == NULL || output_size == 0) {
+        return false;
+    }
+
+    size_t out_pos = 0;
+    size_t i = 0;
+    size_t len = strlen(json_str);
+    bool in_quotes = false;
+    bool is_begin_line = false;  // Флаг для определения начала строки с "-----BEGIN"
+    bool is_end_line = false;    // Флаг для определения начала строки с "-----END"
+
+    // Пропуск начальных кавычек, если они есть
+    if (len > 0 && json_str[0] == '"') {
+        i++;
+        in_quotes = true;
+    }
+
+    while (i < len && out_pos < output_size - 1) {
+        // Определяем начало строк BEGIN и END
+        if (i + 10 <= len && strncmp(&json_str[i], "-----BEGIN", 10) == 0) {
+            is_begin_line = true;
+            is_end_line = false;
+        } else if (i + 8 <= len && strncmp(&json_str[i], "-----END", 8) == 0) {
+            is_end_line = true;
+            is_begin_line = false;
+        }
+
+        // Обработка экранированных символов
+        if (json_str[i] == '\\') {
+            i++;
+            if (i < len) {
+                switch (json_str[i]) {
+                    case 'n':
+                        // Добавляем перевод строки только после заголовка и перед футером
+                        if (is_begin_line && out_pos > 0 && output[out_pos-1] == '-') {
+                            output[out_pos++] = '\n';
+                        } else if (is_end_line && out_pos > 0) {
+                            output[out_pos++] = '\n';
+                        }
+                        // В остальных случаях игнорируем символ новой строки
+                        break;
+                    case 'r':
+                        // Игнорируем \r
+                        break;
+                    case 't':
+                        output[out_pos++] = '\t';
+                        break;
+                    case '"':
+                        output[out_pos++] = '"';
+                        break;
+                    case '\\':
+                        output[out_pos++] = '\\';
+                        break;
+                    default:
+                        output[out_pos++] = json_str[i];
+                        break;
+                }
+                i++;
+            }
+            continue;
+        }
+
+        // Пропуск кавычек, если они не экранированы
+        if (json_str[i] == '"') {
+            in_quotes = !in_quotes;
+            i++;
+            continue;
+        }
+
+        // Пропуск пробелов и символов форматирования вне кавычек
+        if (!in_quotes && (json_str[i] == ' ' || json_str[i] == '\n' || json_str[i] == '\r' || json_str[i] == '\t')) {
+            i++;
+            continue;
+        }
+
+        // Копируем обычный символ
+        output[out_pos++] = json_str[i];
+        i++;
+
+        // Сбрасываем флаги после обработки строк BEGIN и END
+        if (is_begin_line && out_pos > 0 && output[out_pos-1] == '-') {
+            is_begin_line = false;
+        } else if (is_end_line && out_pos > 0 && output[out_pos-1] == '-') {
+            is_end_line = false;
+        }
+    }
+
+    // Завершаем строку нулем
+    output[out_pos] = '\0';
+
+    // Проверяем, что вся строка была обработана корректно
+    if (in_quotes) {
+        printf("Error: Unterminated JSON string\n");
+        return false;
+    }
+
+    return true;
+}
+
+
 char* get_mqtt_url(void)
 {
     return s_url;
@@ -129,20 +262,30 @@ void gen_select_json(const struct dbPinsInfo *pins_info,
 //    printf("Generated SELECT json:\n%s\n", buffer);
 }
 void handle_select_get(struct mg_connection *c) {
-  gen_select_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
-  mg_http_reply(c, 200, s_json_header, "%s\n", jsonbuf);
+    gen_select_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 void handle_select_set(struct mg_connection *c, struct mg_http_message *hm) {
- if (hm->body.len > 0) {
-//	printf("We got a select JSON: %.*s\n", (int) hm->body.len, hm->body.buf);
-    parse_select_json(hm->body.buf, PinsConf, NUMPIN);
-	char response[256];// Формируем корректный JSON-ответ
-	snprintf(response, sizeof(response),"{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",(unsigned long)hm->body.len);
-	//printf("Sending response: %s\n", response);//чтобы увидеть, какой именно ответ формируется перед отправкой клиенту:
-	mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", response);// Отправляем ответ клиенту
-  } else {// Обработка пустого тела запроса
-	mg_http_reply(c, 400, "Content-Type: application/json\r\n","{\"status\":false,\"message\":\"Empty request body\"}");
-  }
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+
+    if (hm->body.len > 0) {
+        parse_select_json(hm->body.buf, PinsConf, NUMPIN);
+        char response[256];
+        snprintf(response, sizeof(response),
+                 "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
+                 (unsigned long)hm->body.len);
+
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 200, extra_headers, "%s", response);
+    } else {
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 400, extra_headers, "{\"status\":false,\"message\":\"Empty request body\"}");
+    }
 }
 void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf, uint8_t num_pins) {
     cJSON *json = cJSON_Parse(json_string);
@@ -231,16 +374,24 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf, int 
     cJSON_Delete(json);
 }
 void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
- if (hm->body.len > 0) {
-printf("We got a ONOFF JSON: %.*s\n", (int) hm->body.len, hm->body.buf);
-parse_onoff_json(hm->body.buf, PinsConf, NUMPIN);
-char response[256];// Формируем корректный JSON-ответ
-snprintf(response, sizeof(response),"{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",(unsigned long)hm->body.len);
-//printf("Sending response: %s\n", response);//чтобы увидеть, какой именно ответ формируется перед отправкой клиенту:
-mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", response);// Отправляем ответ клиенту
-  } else {// Обработка пустого тела запроса
-mg_http_reply(c, 400, "Content-Type: application/json\r\n","{\"status\":false,\"message\":\"Empty request body\"}");
-  }
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+
+    if (hm->body.len > 0) {
+        printf("We got a ONOFF JSON: %.*s\n", (int) hm->body.len, hm->body.buf);
+        parse_onoff_json(hm->body.buf, PinsConf, NUMPIN);
+        char response[256];
+        snprintf(response, sizeof(response),
+                 "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
+                 (unsigned long)hm->body.len);
+
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 200, extra_headers, "%s", response);
+    } else {
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 400, extra_headers, "{\"status\":false,\"message\":\"Empty request body\"}");
+    }
 }
 
 void gen_pintopin_json(struct dbPinToPin *PinsLinks, char *buffer, int buffer_size) {
@@ -276,13 +427,19 @@ void gen_pintopin_json(struct dbPinToPin *PinsLinks, char *buffer, int buffer_si
 //	printf("Generated pintopin JSON:\n%s\n", buffer);
 }
 void handle_pintopin_get(struct mg_connection *c) {
-	gen_pintopin_json(PinsLinks, jsonbuf, BUFFER_SIZE);
-  mg_http_reply(c, 200, s_json_header, "%s\n", jsonbuf);
+    gen_pintopin_json(PinsLinks, jsonbuf, BUFFER_SIZE);
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 
 void handle_switch_get(struct mg_connection *c) {
-	gen_switch_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
-  mg_http_reply(c, 200, s_json_header, "%s\n", jsonbuf);
+    gen_switch_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm) {
  if (hm->body.len > 0) {
@@ -468,20 +625,30 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf, const struct dbP
 }
 /*******************************************************************************************************************/
 void handle_button_get(struct mg_connection *c) {
-	gen_button_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
-  mg_http_reply(c, 200, s_json_header, "%s\n", jsonbuf);
+    gen_button_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
- if (hm->body.len > 0) {
-//	printf("We got a button JSON: %.*s\n", (int) hm->body.len, hm->body.buf);
-	parse_button_json(hm->body.buf, PinsConf, PinsInfo, NUMPIN);
-	char response[256];// Формируем корректный JSON-ответ
-	snprintf(response, sizeof(response),"{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",(unsigned long)hm->body.len);
-	//printf("Sending response: %s\n", response);//чтобы увидеть, какой именно ответ формируется перед отправкой клиенту:
-	mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", response);// Отправляем ответ клиенту
-  } else {// Обработка пустого тела запроса
-	mg_http_reply(c, 400, "Content-Type: application/json\r\n","{\"status\":false,\"message\":\"Empty request body\"}");
-  }
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+
+    if (hm->body.len > 0) {
+        parse_button_json(hm->body.buf, PinsConf, PinsInfo, NUMPIN);
+        char response[256];
+        snprintf(response, sizeof(response),
+                 "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
+                 (unsigned long)hm->body.len);
+
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 200, extra_headers, "%s", response);
+    } else {
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 400, extra_headers, "{\"status\":false,\"message\":\"Empty request body\"}");
+    }
 }
 void gen_button_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pins_conf, int num_pins, char *buffer,
         int buffer_size) {
@@ -652,20 +819,30 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf, const struct dbP
 }
 
 void handle_encoder_get(struct mg_connection *c) {
-	gen_encoder_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE, PinsLinks, NUMPINLINKS);
-  mg_http_reply(c, 200, s_json_header, "%s\n", jsonbuf);
+    gen_encoder_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE, PinsLinks, NUMPINLINKS);
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm) {
- if (hm->body.len > 0) {
-//	printf("We got a encoder JSON: %.*s\n", (int) hm->body.len, hm->body.buf);
-	parse_encoder_json(hm->body.buf, PinsConf, PinsLinks, PinsInfo, NUMPIN);
-	char response[256];// Формируем корректный JSON-ответ
-	snprintf(response, sizeof(response),"{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",(unsigned long)hm->body.len);
-	//printf("Sending response: %s\n", response);//чтобы увидеть, какой именно ответ формируется перед отправкой клиенту:
-	mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", response);// Отправляем ответ клиенту
-  } else {// Обработка пустого тела запроса
-	mg_http_reply(c, 400, "Content-Type: application/json\r\n","{\"status\":false,\"message\":\"Empty request body\"}");
-  }
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+
+    if (hm->body.len > 0) {
+        parse_encoder_json(hm->body.buf, PinsConf, PinsLinks, PinsInfo, NUMPIN);
+        char response[256];
+        snprintf(response, sizeof(response),
+                 "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
+                 (unsigned long)hm->body.len);
+
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 200, extra_headers, "%s", response);
+    } else {
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 400, extra_headers, "{\"status\":false,\"message\":\"Empty request body\"}");
+    }
 }
 void gen_encoder_json(const struct dbPinsInfo *pins_info, const struct dbPinsConf *pins_conf, uint8_t num_pins, char *buffer, int buffer_size, const struct dbPinToPin *PinsLinks, int num_pin_links) {
     int offset = 0;
@@ -871,20 +1048,30 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf, struct db
 }
 
 void handle_timers_get(struct mg_connection *c) {
-	gen_timer_json(dbCrontxt, MAXSIZE, jsonbuf, BUFFER_SIZE);
-  mg_http_reply(c, 200, s_json_header, "%s\n", jsonbuf);
+    gen_timer_json(dbCrontxt, MAXSIZE, jsonbuf, BUFFER_SIZE);
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm) {
- if (hm->body.len > 0) {
-//	printf("We got a cron JSON: %.*s\n", (int) hm->body.len, hm->body.buf);
-	char response[256];// Формируем корректный JSON-ответ
-	parse_timers_json(hm->body.buf, dbCrontxt, MAXSIZE);
-	snprintf(response, sizeof(response),"{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",(unsigned long)hm->body.len);
-	//printf("Sending response: %s\n", response);//чтобы увидеть, какой именно ответ формируется перед отправкой клиенту:
-	mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", response);// Отправляем ответ клиенту
-  } else {// Обработка пустого тела запроса
-	mg_http_reply(c, 400, "Content-Type: application/json\r\n","{\"status\":false,\"message\":\"Empty request body\"}");
-  }
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+
+    if (hm->body.len > 0) {
+        char response[256];
+        parse_timers_json(hm->body.buf, dbCrontxt, MAXSIZE);
+        snprintf(response, sizeof(response),
+                 "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
+                 (unsigned long)hm->body.len);
+
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 200, extra_headers, "%s", response);
+    } else {
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 400, extra_headers, "{\"status\":false,\"message\":\"Empty request body\"}");
+    }
 }
 
 void parse_numline_json(char* json_string, struct dbSettings* SetSettings) {
@@ -917,17 +1104,24 @@ void parse_numline_json(char* json_string, struct dbSettings* SetSettings) {
     usbnum = 2;
     xQueueSend(usbQueueHandle, &usbnum, 0);
 }
-void handle_numline_set(struct mg_connection *c, struct mg_http_message *hm){
- if (hm->body.len > 0) {
-//	printf("We got a cron JSON: %.*s\n", (int) hm->body.len, hm->body.buf);
-	char response[256];// Формируем корректный JSON-ответ
-	parse_numline_json(hm->body.buf, &SetSettings);
-	snprintf(response, sizeof(response),"{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",(unsigned long)hm->body.len);
-	//printf("Sending response: %s\n", response);//чтобы увидеть, какой именно ответ формируется перед отправкой клиенту:
-	mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", response);// Отправляем ответ клиенту
-  } else {// Обработка пустого тела запроса
-	mg_http_reply(c, 400, "Content-Type: application/json\r\n","{\"status\":false,\"message\":\"Empty request body\"}");
-  }
+void handle_numline_set(struct mg_connection *c, struct mg_http_message *hm) {
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+
+    if (hm->body.len > 0) {
+        char response[256];
+        parse_numline_json(hm->body.buf, &SetSettings);
+        snprintf(response, sizeof(response),
+                 "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
+                 (unsigned long)hm->body.len);
+
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 200, extra_headers, "%s", response);
+    } else {
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 400, extra_headers, "{\"status\":false,\"message\":\"Empty request body\"}");
+    }
 }
 void gen_timer_json(const struct dbCron *dbCrontxt, int num_timers,char *buffer, int buffer_size) {
 	int offset = 0;
@@ -1007,68 +1201,441 @@ void parse_timers_json(char* json_string, struct dbCron* dbCrontxt, int count) {
 
 void handle_mysett_get(struct mg_connection *c) {
 	gen_mysett_json(&SetSettings, jsonbuf, BUFFER_SIZE);
-  mg_http_reply(c, 200, s_json_header, "%s\n", jsonbuf);
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm) {
- if (hm->body.len > 0) {
-//	printf("We got a my_settings JSON: %.*s\n", (int) hm->body.len, hm->body.buf);
-	parse_mysett_json(hm->body.buf, &SetSettings);
-	char response[256];// Формируем корректный JSON-ответ
-	snprintf(response, sizeof(response),"{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",(unsigned long)hm->body.len);
-	//printf("Sending response: %s\n", response);//чтобы увидеть, какой именно ответ формируется перед отправкой клиенту:
-	mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", response);// Отправляем ответ клиенту
-  } else {// Обработка пустого тела запроса
-	mg_http_reply(c, 400, "Content-Type: application/json\r\n","{\"status\":false,\"message\":\"Empty request body\"}");
-  }
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+
+    if (hm->body.len > 0) {
+        parse_mysett_json(hm->body.buf, &SetSettings);
+        char response[256];
+        snprintf(response, sizeof(response),
+                 "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
+                 (unsigned long)hm->body.len);
+
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 200, extra_headers, "%s", response);
+    } else {
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 400, extra_headers, "{\"status\":false,\"message\":\"Empty request body\"}");
+    }
 }
+
+/*
+    Проверяет входные параметры на корректность.
+    Добавляет открывающую и закрывающую кавычки.
+    Экранирует специальные символы (\n, \r, \t, ", \).
+    Следит за тем, чтобы выходной буфер не переполнился.
+    Возвращает true, если экранирование прошло успешно, и false в случае ошибки.
+ */
+bool json_encode_string(const char *input, char *output, size_t output_size) {
+    if (input == NULL || output == NULL || output_size < 3) { // Минимум 3 байта для пустой строки: `""\0`
+        return false;
+    }
+
+    size_t out_pos = 0;
+    size_t len = strlen(input);
+
+    // Добавляем открывающую кавычку
+    if (out_pos < output_size - 1) {
+        output[out_pos++] = '"';
+    } else {
+        return false;
+    }
+
+    // Обрабатываем каждый символ входной строки
+    for (size_t i = 0; i < len; i++) {
+        if (out_pos >= output_size - 2) { // Оставляем место для закрывающей кавычки и \0
+            return false;
+        }
+
+        switch (input[i]) {
+            case '\n':
+                if (out_pos + 2 < output_size) {
+                    output[out_pos++] = '\\';
+                    output[out_pos++] = 'n';
+                } else {
+                    return false;
+                }
+                break;
+            case '\r':
+                if (out_pos + 2 < output_size) {
+                    output[out_pos++] = '\\';
+                    output[out_pos++] = 'r';
+                } else {
+                    return false;
+                }
+                break;
+            case '\t':
+                if (out_pos + 2 < output_size) {
+                    output[out_pos++] = '\\';
+                    output[out_pos++] = 't';
+                } else {
+                    return false;
+                }
+                break;
+            case '"':
+                if (out_pos + 2 < output_size) {
+                    output[out_pos++] = '\\';
+                    output[out_pos++] = '"';
+                } else {
+                    return false;
+                }
+                break;
+            case '\\':
+                if (out_pos + 2 < output_size) {
+                    output[out_pos++] = '\\';
+                    output[out_pos++] = '\\';
+                } else {
+                    return false;
+                }
+                break;
+            default:
+                output[out_pos++] = input[i];
+                break;
+        }
+    }
+
+    // Добавляем закрывающую кавычку
+    if (out_pos < output_size - 1) {
+        output[out_pos++] = '"';
+    } else {
+        return false;
+    }
+
+    // Завершаем строку нулем
+    output[out_pos] = '\0';
+    return true;
+}
+// TODO
 void gen_mysett_json(const struct dbSettings *settings, char *buffer, int buffer_size) {
     int offset = 0;
-    offset += snprintf(buffer + offset, buffer_size - offset, "{");
-    // Основные настройки
-    offset += snprintf(buffer + offset, buffer_size - offset,
-            "\"lang\":\"%s\",\"lon_de\":%.6f,\"lat_de\":%.6f,"
-            "\"timezone\":%.4f,\"adm_name\":\"%s\",\"adm_pswd\":\"%s\","
-            "\"token\":\"%s\",",
-            settings->lang, settings->lon_de, settings->lat_de,
-            settings->timezone, settings->adm_name, settings->adm_pswd,
-            settings->token);
-    // Coordinate settings
-    offset += snprintf(buffer + offset, buffer_size - offset,
-            "\"sunset\":\"%s\",\"sunrise\":\"%s\","
-            "\"onsunrise\":%d,\"onsunset\":%d,"
-            "\"sunrise_pins\":\"%s\",\"sunset_pins\":\"%s\",\"dlength\":\"%s\",\"fullmoon\":\"%s\",",
-            settings->sunset, settings->sunrise,
-            settings->onsunrise, settings->onsunset,
-            settings->srise_pins, settings->sset_pins,settings->dlength,settings->fullmoon);
-    // MQTT настройки
-    offset += snprintf(buffer + offset, buffer_size - offset,
-            "\"check_mqtt\":%d,\"mqtt_prt\":%d,\"mqtt_clt\":\"%s\","
-            "\"mqtt_usr\":\"%s\",\"mqtt_pswd\":\"%s\",\"txmqttop\":\"%s\","
-            "\"rxmqttop\":\"%s\",\"mqtt_hst\":\"%d.%d.%d.%d\",",
-            settings->check_mqtt, settings->mqtt_prt, settings->mqtt_clt,
-            settings->mqtt_usr, settings->mqtt_pswd, settings->txmqttop,
-            settings->rxmqttop, settings->mqtt_hst0, settings->mqtt_hst1,
-            settings->mqtt_hst2, settings->mqtt_hst3);
-    // IP настройки
-    offset += snprintf(buffer + offset, buffer_size - offset,
-            "\"check_ip\":%d,\"ip_addr\":\"%d.%d.%d.%d\","
-            "\"sb_mask\":\"%d.%d.%d.%d\",\"gateway\":\"%d.%d.%d.%d\",",
-            settings->check_ip,
-            settings->ip_addr0, settings->ip_addr1, settings->ip_addr2, settings->ip_addr3,
-            settings->sb_mask0, settings->sb_mask1, settings->sb_mask2, settings->sb_mask3,
-            settings->gateway0, settings->gateway1, settings->gateway2, settings->gateway3);
-    // Добавляем offldt
-    offset += snprintf(buffer + offset, buffer_size - offset,
-            "\"offldt\":\"d:%d.%d.%d t:%02d:%02d:%02d\"",
-            settings->mday, settings->mon, settings->year,
-            settings->hour, settings->min, settings->sec);
+    char buffer_temp[1024];  // Буфер для временного хранения
 
-    if (offset < buffer_size) {
-        offset += snprintf(buffer + offset, buffer_size - offset, "}");
+    // Start JSON object
+    offset += snprintf(buffer + offset, buffer_size - offset, "{\n");
+    // Основные настройки
+    offset += snprintf(buffer + offset, buffer_size - offset, " \"lang\": \"%s\",\n", settings->lang);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"lon_de\": %.6f,\n", settings->lon_de);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"lat_de\": %.6f,\n", settings->lat_de);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"sunrise\": \"%s\",\n", settings->sunrise);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"onsunrise\": %d,\n", settings->onsunrise);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"sunset\": \"%s\",\n", settings->sunset);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"onsunset\": %d,\n", settings->onsunset);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"dlength\": \"%s\",\n", settings->dlength);
+
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"sunrise_pins\":\"%s\",\n", settings->srise_pins);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"sunset_pins\":\"%s\",\n", settings->sset_pins);
+
+    // MQTT настройки
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"check_mqtt\": %d,\n", settings->check_mqtt);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"mqtt_prt\": %d,\n", settings->mqtt_prt);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"mqtt_clt\": \"%s\",\n", settings->mqtt_clt);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"mqtt_usr\": \"%s\",\n", settings->mqtt_usr);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"mqtt_pswd\": \"%s\",\n", settings->mqtt_pswd);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"txmqttop\": \"%s\",\n", settings->txmqttop);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"rxmqttop\": \"%s\",\n", settings->rxmqttop);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"mqtt_hst\": \"%d.%d.%d.%d\",\n",
+                      settings->mqtt_hst0, settings->mqtt_hst1, settings->mqtt_hst2, settings->mqtt_hst3);
+
+    // IP настройки
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"check_ip\": %d,\n", settings->check_ip);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"ip_addr\": \"%d.%d.%d.%d\",\n",
+                      settings->ip_addr0, settings->ip_addr1, settings->ip_addr2, settings->ip_addr3);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"sb_mask\": \"%d.%d.%d.%d\",\n",
+                      settings->sb_mask0, settings->sb_mask1, settings->sb_mask2, settings->sb_mask3);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"gateway\": \"%d.%d.%d.%d\",\n",
+                      settings->gateway0, settings->gateway1, settings->gateway2, settings->gateway3);
+
+    // Остальные настройки
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"macaddr\": \"00-00-00-00-00-00\",\n");
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"adm_name\": \"%s\",\n", settings->adm_name);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"adm_pswd\": \"%s\",\n", settings->adm_pswd);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"token\": \"%s\",\n", settings->token);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"timezone\": %.0f,\n", settings->timezone);
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"fullmoon\": \"%s\",\n", settings->fullmoon);
+
+    // Offline date & time
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"offldt\": \"d:%d.%d.%d t:%02d:%02d:%02d\",\n",
+                      settings->mday, settings->mon, settings->year,
+                      settings->hour, settings->min, settings->sec);
+
+    // HTTPS настройки
+    offset += snprintf(buffer + offset, buffer_size - offset, "\"usehttps\": %d,\n", settings->usehttps);
+
+    // Telegram token - показываем заглушку или пустую строку
+    https_get_telegram_token(buffer_temp, sizeof(buffer_temp));
+    if (buffer_temp[0] != '\0') {
+        offset += snprintf(buffer + offset, buffer_size - offset, "\"telegram_token\": \"[TELEGRAM TOKEN CONFIGURED]\",\n");
+    } else {
+        offset += snprintf(buffer + offset, buffer_size - offset, "\"telegram_token\": \"\",\n");
+    }
+
+    // TLS CA - показываем заглушку или пустую строку
+    https_get_tls_ca(buffer_temp, sizeof(buffer_temp));
+    if (buffer_temp[0] != '\0') {
+        offset += snprintf(buffer + offset, buffer_size - offset, "\"tls_ca\": \"[CA CERTIFICATE CONFIGURED]\",\n");
+    } else {
+        offset += snprintf(buffer + offset, buffer_size - offset, "\"tls_ca\": \"\",\n");
+    }
+
+    // TLS Key - показываем заглушку или пустую строку
+    https_get_tls_key(buffer_temp, sizeof(buffer_temp));
+    if (buffer_temp[0] != '\0') {
+        offset += snprintf(buffer + offset, buffer_size - offset, "\"tls_key\": \"[PRIVATE KEY CONFIGURED]\",\n");
+    } else {
+        offset += snprintf(buffer + offset, buffer_size - offset, "\"tls_key\": \"\",\n");
+    }
+
+// Если TLS Cert не пустой, экранирует переносы строк (\n), кавычки (") и обратные слеши (\) прямо в исходном буфере buffer_temp
+// TLS Cert - передаем в одну строку с экранированием
+    https_get_tls_cert(buffer_temp, sizeof(buffer_temp));
+//    printf("+++buffer_temp:%s\r\n", buffer_temp); // Для отладки
+    if (buffer_temp[0] != '\0') {
+        offset += snprintf(buffer + offset, buffer_size - offset, "\"tls_cert\": \"");
+
+        char *src = buffer_temp;
+        while (*src && offset < buffer_size - 2) { // -2 для запаса на закрывающую кавычку и нуль-терминатор
+            if (*src == '\n') {
+                offset += snprintf(buffer + offset, buffer_size - offset, "\\n");
+            } else if (*src == '\r') {
+                // Пропускаем символы возврата каретки
+            } else if (*src == '"') {
+                offset += snprintf(buffer + offset, buffer_size - offset, "\\\"");
+            } else if (*src == '\\') {
+                offset += snprintf(buffer + offset, buffer_size - offset, "\\\\");
+            } else {
+                buffer[offset++] = *src;
+            }
+            src++;
+        }
+
+        offset += snprintf(buffer + offset, buffer_size - offset, "\",\n");
+    } else {
+        offset += snprintf(buffer + offset, buffer_size - offset, "\"tls_cert\": \"\",\n");
+    }
+
+    // Domain - оставляем как есть или пустую строку
+    https_get_domain(buffer_temp, sizeof(buffer_temp));
+    if (buffer_temp[0] != '\0') {
+        offset += snprintf(buffer + offset, buffer_size - offset, "\"domain\": \"%s\"\n", buffer_temp);
+    } else {
+        offset += snprintf(buffer + offset, buffer_size - offset, "\"domain\": \"\"\n");
+    }
+
+    // Закрываем JSON-объект
+    offset += snprintf(buffer + offset, buffer_size - offset, "}");
+
+    // Убедимся, что строка завершена нулем
+    if (offset >= buffer_size) {
+        buffer[buffer_size - 1] = '\0'; // Обрезаем, если буфер переполнен
+    } else {
+        buffer[offset] = '\0';
     }
 //    printf("Generated settings JSON:\n%s\n", buffer);
 }
 
+
+/******************** Zerg section ****************************/
+#define SETTINGS_VERSION_COUNT 94  // Максимальное количество копий в 11 секторе
+#define SETTINGS_SIZE sizeof(HTTPSsettings)
+#define SETTINGS_ALIGNED_SIZE ((SETTINGS_SIZE + 3) / 4 * 4)  // Размер с выравниванием до 4 байт
+#define GET_SETTINGS_ADDR(index) (FLASH_SECTOR_11_START_ADDR + (index) * SETTINGS_ALIGNED_SIZE)
+
+#define SETTINGS_MAGIC_VALUE 0xA5B6C7D8  // Магическое значение для проверки валидности
+#define FLASH_SECTOR_11_START_ADDR 0x081C0000 // Для однобанкового режима
+#define FLASH_SECTOR_11_SIZE (256 * 1024) // Размер сектора 256 КБ
+
+// Статический указатель на область флеш-памяти с настройками
+static const HTTPSsettings *const flash_settings __attribute__((section(".zagotovka_section"))) = (HTTPSsettings *)FLASH_SECTOR_11_START_ADDR;
+static const HTTPSsettings *const flash_settings_backup __attribute__((section(".zagotovka_section"))) = (HTTPSsettings *)(FLASH_SECTOR_11_START_ADDR + BACKUP_OFFSET);
+
+// Проверка, что размер структуры не превышает половину сектора (для двух копий)
+STATIC_ASSERT(sizeof(HTTPSsettings) * 2 <= FLASH_SECTOR_11_SIZE, structure_size_exceeds_flash_sector);
+extern CRC_HandleTypeDef hcrc;
+static uint8_t writebuf[sizeof(HTTPSsettings)];// Буфер для временного хранения данных при записи  используется только при записи
+
+// Функция для вычисления CRC всей структуры, кроме поля crc
+uint32_t calculate_crc(const HTTPSsettings *settings) {
+    // Создаем временный буфер для копирования данных с правильным выравниванием
+    uint32_t temp_buffer[1];
+
+    // Копируем magic в выровненный буфер
+    memcpy(temp_buffer, &settings->magic, sizeof(uint32_t));
+
+    // Вычисляем CRC для магического значения
+    uint32_t result = HAL_CRC_Calculate(&hcrc, temp_buffer, 1);
+
+    // Для остальной части структуры создаем временный выровненный буфер
+    size_t remaining_size = sizeof(HTTPSsettings) - offsetof(HTTPSsettings, domain);
+    size_t words = (remaining_size + 3) / 4; // Округление вверх до целого числа 32-битных слов
+
+    uint32_t *aligned_buffer = malloc(words * 4);
+    if (!aligned_buffer) {
+        // Обработка ошибки выделения памяти
+        return 0;
+    }
+
+    // Копируем данные с выравниванием
+    memcpy(aligned_buffer, &settings->domain, remaining_size);
+
+    // Продолжаем вычисление с предыдущего результата
+    result = HAL_CRC_Accumulate(&hcrc, aligned_buffer, words);
+
+    free(aligned_buffer);
+    return result;
+}
+
+// Функция записи данных во Flash, добавлено проверка выравнивания адреса.
+static bool write_flash_data(uint32_t address, const uint8_t *data, size_t size) {
+    HAL_StatusTypeDef status;
+
+    if ((address % 4) != 0) {
+        printf("Error: Address 0x%08lx is not aligned to 4 bytes\n", address);
+        return false;
+    }
+
+    if (size % 4 != 0) {
+        printf("Error: Size %u is not aligned to 4 bytes\n", size);
+        return false;
+    }
+
+    uint32_t *source = (uint32_t *)data;
+    uint32_t *destination = (uint32_t *)address;
+    for (size_t i = 0; i < size / 4; i++) {
+        status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t)destination, *source);
+        if (status != HAL_OK) {
+            printf("Error: HAL_FLASH_Program failed at address 0x%08lx, status %d\n", (uint32_t)destination, status);
+            printf("Flash error flags: 0x%08lx\n", HAL_FLASH_GetError());
+            return false;
+        }
+        source++;
+        destination++;
+    }
+
+    return true;
+}
+// Функция получения указателя на действительные настройки
+static const HTTPSsettings* get_valid_settings(void) {
+    const HTTPSsettings* valid_settings = NULL;
+    uint8_t max_version = 0;
+    bool found_valid = false;
+
+    // Сканируем все возможные позиции структуры в секторе
+    for (int i = 0; i < SETTINGS_VERSION_COUNT; i++) {
+        const HTTPSsettings* current = (HTTPSsettings*)GET_SETTINGS_ADDR(i);
+
+        // Проверяем валидность текущих настроек
+        if (current->magic == SETTINGS_MAGIC_VALUE) {
+            uint32_t calculated_crc = calculate_crc(current);
+            if (calculated_crc == current->crc) {
+                // Проверяем версию (с учетом цикличности)
+                if (!found_valid || ((uint8_t)(current->version - max_version)) < 128) {
+                    valid_settings = current;
+                    max_version = current->version;
+                    found_valid = true;
+//                    printf("Found valid settings version: %u at index: %d\r\n", current->version, i);
+                }
+            }
+        }
+    }
+    if (valid_settings) {
+        printf("Using settings version: %u\r\n", valid_settings->version);
+    } else {
+        printf("No valid settings found\r\n");
+    }
+    return valid_settings;
+}
+
+// Функция записи настроек во флеш
+static bool write_settings_to_flash(const HTTPSsettings* settings) {
+    // Находим текущие валидные настройки для определения версии
+    const HTTPSsettings* current = get_valid_settings();
+    uint8_t new_version = current ? ((current->version + 1) & 0xFF) : 0;
+
+    // Находим позицию текущих настроек и следующую позицию
+    int current_index = -1;
+    if (current) {
+        current_index = ((uint32_t)current - FLASH_SECTOR_11_START_ADDR) / SETTINGS_ALIGNED_SIZE;
+    }
+
+    int next_index = (current_index + 1) % SETTINGS_VERSION_COUNT;
+    uint32_t next_addr = GET_SETTINGS_ADDR(next_index);
+
+    // Проверяем, нужно ли стирать сектор (начало нового цикла)
+    bool need_erase = (next_index == 0) || (next_index < current_index);
+
+    // Копируем настройки во временный буфер и обновляем версию
+    HTTPSsettings temp_settings;
+    memcpy(&temp_settings, settings, sizeof(HTTPSsettings));
+    temp_settings.version = new_version;
+    temp_settings.magic = SETTINGS_MAGIC_VALUE;
+    temp_settings.crc = calculate_crc(&temp_settings);
+
+    // Разблокируем Flash
+    HAL_StatusTypeDef status = HAL_FLASH_Unlock();
+    if (status != HAL_OK) {
+        return false;
+    }
+
+    // Если нужно, стираем сектор
+    if (need_erase) {
+        FLASH_EraseInitTypeDef EraseInitStruct = {0};
+        EraseInitStruct.TypeErase = FLASH_TYPEERASE_SECTORS;
+        EraseInitStruct.Sector = FLASH_SECTOR_11;
+        EraseInitStruct.NbSectors = 1;
+        EraseInitStruct.VoltageRange = FLASH_VOLTAGE_RANGE_3;
+
+        uint32_t SectorError = 0;
+        status = HAL_FLASHEx_Erase(&EraseInitStruct, &SectorError);
+        if (status != HAL_OK) {
+            HAL_FLASH_Lock();
+            return false;
+        }
+
+        // После стирания следующий адрес всегда в начале сектора
+        next_addr = FLASH_SECTOR_11_START_ADDR;
+    }
+
+    // Записываем новую копию настроек
+    bool write_result = write_flash_data(next_addr, (const uint8_t*)&temp_settings, sizeof(HTTPSsettings));
+
+    // Блокируем Flash
+    HAL_FLASH_Lock();
+
+    return write_result;
+}
+
+// Функция обновления настроек с записью во флеш
+static bool update_and_write_settings(HTTPSsettings *settings) {
+    // Обновляем магическое значение
+    settings->magic = SETTINGS_MAGIC_VALUE;
+
+    // Вычисляем и устанавливаем CRC
+    settings->crc = calculate_crc(settings);
+
+    //printf("Updating settings, magic: 0x%08lu, crc: 0x%08lu\n", settings->magic, settings->crc);
+
+    // Записываем настройки во флеш
+    return write_settings_to_flash(settings);
+}
+
+// Функция для проверки, является ли значение шаблонным
+bool is_template_value(const char *value) {
+    return (strcmp(value, "[CA CERTIFICATE CONFIGURED]") == 0 ||
+            strcmp(value, "[PRIVATE KEY CONFIGURED]") == 0 ||
+            strcmp(value, "[TELEGRAM TOKEN CONFIGURED]") == 0);
+}
+// Функция для проверки Public Key TLS_CERT, является ли значение форматом C/C++ константы.
+bool is_c_like_format(const char *value) {
+    // Проверяем, содержит ли значение переносы строк и экранированные символы
+    return (strstr(value, "\\n") != NULL && strstr(value, "\"") != NULL);
+}
 void parse_mysett_json(char *json_string, struct dbSettings *settings) {
 	cJSON *json = cJSON_Parse(json_string);
 	if (json == NULL) {
@@ -1078,16 +1645,20 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
 		}
 		return;
 	}
+
+	// Обработка полей структуры dbSettings (ваш исходный код)
 	cJSON *sunrise = cJSON_GetObjectItemCaseSensitive(json, "sunrise");
 	if (cJSON_IsString(sunrise) && (sunrise->valuestring != NULL)) {
 		strncpy(settings->sunrise, sunrise->valuestring, sizeof(settings->sunrise) - 1);
 		settings->sunrise[sizeof(settings->sunrise) - 1] = '\0';
 	}
+
 	cJSON *sunset = cJSON_GetObjectItemCaseSensitive(json, "sunset");
 	if (cJSON_IsString(sunset) && (sunset->valuestring != NULL)) {
 		strncpy(settings->sunset, sunset->valuestring, sizeof(settings->sunset) - 1);
 		settings->sunset[sizeof(settings->sunset) - 1] = '\0';
 	}
+
 	cJSON *dlength = cJSON_GetObjectItemCaseSensitive(json, "dlength");
 	if (cJSON_IsString(dlength) && (dlength->valuestring != NULL)) {
 		strncpy(settings->dlength, dlength->valuestring, sizeof(settings->dlength) - 1);
@@ -1099,182 +1670,374 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
 		strncpy(settings->adm_name, adm_name->valuestring, sizeof(settings->adm_name) - 1);
 		settings->adm_name[sizeof(settings->adm_name) - 1] = '\0';
 	}
+
 	cJSON *adm_pswd = cJSON_GetObjectItemCaseSensitive(json, "adm_pswd");
 	if (cJSON_IsString(adm_pswd) && (adm_pswd->valuestring != NULL)) {
 		strncpy(settings->adm_pswd, adm_pswd->valuestring, sizeof(settings->adm_pswd) - 1);
 		settings->adm_pswd[sizeof(settings->adm_pswd) - 1] = '\0';
 	}
+
 	cJSON *lang = cJSON_GetObjectItemCaseSensitive(json, "lang");
 	if (cJSON_IsString(lang) && (lang->valuestring != NULL)) {
 		strncpy(settings->lang, lang->valuestring, sizeof(settings->lang) - 1);
 		settings->lang[sizeof(settings->lang) - 1] = '\0';
 	}
+
 	cJSON *timezone = cJSON_GetObjectItemCaseSensitive(json, "timezone");
 	if (cJSON_IsNumber(timezone)) {
 		settings->timezone = timezone->valueint;
 	}
+
 	cJSON *lon_de = cJSON_GetObjectItemCaseSensitive(json, "lon_de");
 	if (cJSON_IsNumber(lon_de)) {
 		settings->lon_de = lon_de->valuedouble;
 	}
+
 	cJSON *lat_de = cJSON_GetObjectItemCaseSensitive(json, "lat_de");
 	if (cJSON_IsNumber(lat_de)) {
 		settings->lat_de = lat_de->valuedouble;
 	}
+
 	cJSON *onsunrise = cJSON_GetObjectItemCaseSensitive(json, "onsunrise");
 	if (cJSON_IsNumber(onsunrise)) {
 		settings->onsunrise = (short) onsunrise->valueint;
 	}
+
 	cJSON *onsunset = cJSON_GetObjectItemCaseSensitive(json, "onsunset");
 	if (cJSON_IsNumber(onsunset)) {
 		settings->onsunset = (short) onsunset->valueint;
 	}
+
 	cJSON *sunrise_pins = cJSON_GetObjectItemCaseSensitive(json, "sunrise_pins");
 	if (cJSON_IsString(sunrise_pins) && (sunrise_pins->valuestring != NULL)) {
 		strncpy(settings->srise_pins, sunrise_pins->valuestring, sizeof(settings->srise_pins) - 1);
 		settings->srise_pins[sizeof(settings->srise_pins) - 1] = '\0';
 	}
+
 	cJSON *sunset_pins = cJSON_GetObjectItemCaseSensitive(json, "sunset_pins");
 	if (cJSON_IsString(sunset_pins) && (sunset_pins->valuestring != NULL)) {
 		strncpy(settings->sset_pins, sunset_pins->valuestring, sizeof(settings->sset_pins) - 1);
 		settings->sset_pins[sizeof(settings->sset_pins) - 1] = '\0';
 	}
+
 	cJSON *check_ip = cJSON_GetObjectItemCaseSensitive(json, "check_ip");
 	if (cJSON_IsNumber(check_ip)) {
 		settings->check_ip = check_ip->valueint;
 	}
+
 	cJSON *check_mqtt = cJSON_GetObjectItemCaseSensitive(json, "check_mqtt");
 	if (cJSON_IsNumber(check_mqtt)) {
 		settings->check_mqtt = check_mqtt->valueint;
 	}
+
 	cJSON *ip_addr = cJSON_GetObjectItemCaseSensitive(json, "ip_addr");
 	if (cJSON_IsString(ip_addr) && (ip_addr->valuestring != NULL)) {
 		sscanf(ip_addr->valuestring, "%hu.%hu.%hu.%hu", &settings->ip_addr0, &settings->ip_addr1, &settings->ip_addr2, &settings->ip_addr3);
 	}
+
 	cJSON *sb_mask = cJSON_GetObjectItemCaseSensitive(json, "sb_mask");
 	if (cJSON_IsString(sb_mask) && (sb_mask->valuestring != NULL)) {
 		sscanf(sb_mask->valuestring, "%hu.%hu.%hu.%hu", &settings->sb_mask0, &settings->sb_mask1, &settings->sb_mask2, &settings->sb_mask3);
 	}
+
 	cJSON *gateway = cJSON_GetObjectItemCaseSensitive(json, "gateway");
 	if (cJSON_IsString(gateway) && (gateway->valuestring != NULL)) {
 		sscanf(gateway->valuestring, "%hu.%hu.%hu.%hu", &settings->gateway0, &settings->gateway1, &settings->gateway2, &settings->gateway3);
 	}
+
 	cJSON *token = cJSON_GetObjectItemCaseSensitive(json, "token");
 	if (cJSON_IsString(token) && (token->valuestring != NULL)) {
 		strncpy(settings->token, token->valuestring, sizeof(settings->token) - 1);
 		settings->token[sizeof(settings->token) - 1] = '\0';
 	}
+
 	cJSON *mqtt_hst = cJSON_GetObjectItemCaseSensitive(json, "mqtt_hst");
 	if (cJSON_IsString(mqtt_hst) && (mqtt_hst->valuestring != NULL)) {
 		sscanf(mqtt_hst->valuestring, "%hu.%hu.%hu.%hu", &settings->mqtt_hst0, &settings->mqtt_hst1, &settings->mqtt_hst2, &settings->mqtt_hst3);
 	}
+
 	cJSON *mqtt_prt = cJSON_GetObjectItemCaseSensitive(json, "mqtt_prt");
 	if (cJSON_IsNumber(mqtt_prt)) {
 		settings->mqtt_prt = mqtt_prt->valueint;
 	}
+
 	cJSON *mqtt_clt = cJSON_GetObjectItemCaseSensitive(json, "mqtt_clt");
 	if (cJSON_IsString(mqtt_clt) && (mqtt_clt->valuestring != NULL)) {
 		strncpy(settings->mqtt_clt, mqtt_clt->valuestring, sizeof(settings->mqtt_clt) - 1);
 		settings->mqtt_clt[sizeof(settings->mqtt_clt) - 1] = '\0';
 	}
+
 	cJSON *mqtt_usr = cJSON_GetObjectItemCaseSensitive(json, "mqtt_usr");
 	if (cJSON_IsString(mqtt_usr) && (mqtt_usr->valuestring != NULL)) {
 		strncpy(settings->mqtt_usr, mqtt_usr->valuestring, sizeof(settings->mqtt_usr) - 1);
 		settings->mqtt_usr[sizeof(settings->mqtt_usr) - 1] = '\0';
 	}
+
 	cJSON *mqtt_pswd = cJSON_GetObjectItemCaseSensitive(json, "mqtt_pswd");
 	if (cJSON_IsString(mqtt_pswd) && (mqtt_pswd->valuestring != NULL)) {
 		strncpy(settings->mqtt_pswd, mqtt_pswd->valuestring, sizeof(settings->mqtt_pswd) - 1);
 		settings->mqtt_pswd[sizeof(settings->mqtt_pswd) - 1] = '\0';
 	}
+
 	cJSON *txmqttop = cJSON_GetObjectItemCaseSensitive(json, "txmqttop");
 	if (cJSON_IsString(txmqttop) && (txmqttop->valuestring != NULL)) {
 		strncpy(settings->txmqttop, txmqttop->valuestring, sizeof(settings->txmqttop) - 1);
 		settings->txmqttop[sizeof(settings->txmqttop) - 1] = '\0';
 	}
+
 	cJSON *rxmqttop = cJSON_GetObjectItemCaseSensitive(json, "rxmqttop");
 	if (cJSON_IsString(rxmqttop) && (rxmqttop->valuestring != NULL)) {
 		strncpy(settings->rxmqttop, rxmqttop->valuestring, sizeof(settings->rxmqttop) - 1);
 		settings->rxmqttop[sizeof(settings->rxmqttop) - 1] = '\0';
 	}
-	cJSON *offlinedt = cJSON_GetObjectItemCaseSensitive(json, "offldt");//
-	if (cJSON_IsString(offlinedt) && (offlinedt->valuestring != NULL)) {
-		char *dt_str = offlinedt->valuestring;
-		int day, month, year, hour, min, sec;
 
-		char *date_start = strstr(dt_str, "d:"); // Find the date part after "d:"
-		if (date_start) {
-			sscanf(date_start + 2, "%d.%d.%d", &day, &month, &year);
-			settings->mday = (uint8_t) day;
-			settings->mon = (uint8_t) month;
-			settings->year = (uint8_t) (year);
-		}
+	cJSON *offdate = cJSON_GetObjectItemCaseSensitive(json, "offdate");// OFFLINE MODE date
+	if (cJSON_IsString(offdate) && (offdate->valuestring != NULL)) {
+	    char *date_str = offdate->valuestring;
+	    int day = 0, month = 0, year = 0;
 
-		char *time_start = strstr(dt_str, "t:"); // Find the time part after "t:"
-		if (time_start) {
-			sscanf(time_start + 2, "%d:%d:%d", &hour, &min, &sec);
-			settings->hour = (uint8_t) hour;
-			settings->min = (uint8_t) min;
-			settings->sec = (uint8_t) sec;
-		}
+	    sscanf(date_str, "%d.%d.%d", &day, &month, &year);
+	    if (day >= 1 && day <= 31) settings->mday = (uint8_t)day;
+	    if (month >= 1 && month <= 12) settings->mon = (uint8_t)month;
+	    if (year >= 24 && year <= 99) settings->year = (uint8_t)year;
 	}
-	cJSON_Delete(json);
-	usbnum = 2;
-	xQueueSend(usbQueueHandle, &usbnum, 0);
-//	printf("parse_mysett_json: adm_name=%s, adm_pswd=%s, token=%s, lang=%s, timezone=%.1f, "
-//			"lon_de=%.6f, lat_de=%.6f, ip1_sntp=%d.%d.%d.%d, ip2_sntp=%d.%d.%d.%d, "
-//			"ip3_sntp=%d.%d.%d.%d, check_mqtt=%d, mqtt_prt=%d, mqtt_clt=%s, mqtt_usr=%s, "
-//			"mqtt_pswd=%s, txmqttop=%s, rxmqttop=%s, mqtt_hst=%d.%d.%d.%d, check_ip=%d, "
-//			"ip_addr=%d.%d.%d.%d, sb_mask=%d.%d.%d.%d, gateway=%d.%d.%d.%d, "
-//			"onsunrise=%d, onsunset=%d, srise_pins=%s, sset_pins=%s, "
-//			"sunrise=%s, sunset=%s, dlength=%s, OFFLINE date=%02d.%02d.%02d, OFFLINE time=%02d:%02d:%02d\n", settings->adm_name, settings->adm_pswd, settings->token, settings->lang, settings->timezone, settings->lon_de, settings->lat_de, settings->ip1_sntp0, settings->ip1_sntp1, settings->ip1_sntp2, settings->ip1_sntp3, settings->ip2_sntp0,
-//			settings->ip2_sntp1, settings->ip2_sntp2, settings->ip2_sntp3, settings->ip3_sntp0, settings->ip3_sntp1, settings->ip3_sntp2, settings->ip3_sntp3, settings->check_mqtt, settings->mqtt_prt, settings->mqtt_clt, settings->mqtt_usr, settings->mqtt_pswd, settings->txmqttop,
-//			settings->rxmqttop, settings->mqtt_hst0, settings->mqtt_hst1, settings->mqtt_hst2, settings->mqtt_hst3, settings->check_ip, settings->ip_addr0, settings->ip_addr1, settings->ip_addr2, settings->ip_addr3, settings->sb_mask0, settings->sb_mask1, settings->sb_mask2, settings->sb_mask3,
-//			settings->gateway0, settings->gateway1, settings->gateway2, settings->gateway3, settings->onsunrise, settings->onsunset, settings->srise_pins, settings->sset_pins, settings->sunrise, settings->sunset, settings->dlength, settings->mday, settings->mon, settings->year,
-//	           settings->hour, settings->min, settings->sec);
+
+	cJSON *offtime = cJSON_GetObjectItemCaseSensitive(json, "offtime");// OFFLINE MODE time
+	if (cJSON_IsString(offtime) && (offtime->valuestring != NULL)) {
+	    char *time_str = offtime->valuestring;
+	    int hour = 0, min = 0, sec = 0;
+
+	    sscanf(time_str, "%d:%d:%d", &hour, &min, &sec);
+	    if (hour >= 0 && hour <= 23) settings->hour = (uint8_t)hour;
+	    if (min >= 0 && min <= 59) settings->min = (uint8_t)min;
+	    if (sec >= 0 && sec <= 59) settings->sec = (uint8_t)sec;
+	}
+
+	cJSON *usehttps = cJSON_GetObjectItemCaseSensitive(json, "usehttps");
+	if (cJSON_IsNumber(usehttps)) {
+		settings->usehttps = usehttps->valueint;
+//		printf("+++settings->usehttps = %d",settings->usehttps);
+	}
+//---------------- HTTPS settings section -----------------------------
+/*
+ Парсит JSON-данные с помощью cJSON.
+ Извлекаем строки tls_ca, tls_key и tls_cert.
+ Декодируем их с помощью json_decode_string, чтобы удалить экранированные символы и кавычки.
+ Сохраняем декодированные данные в структуру HTTPSsettings с помощью функций https_set_tls_ca, https_set_tls_key и https_set_tls_cert.
+ */
+    // Получаем текущие настройки
+    const HTTPSsettings *current = get_valid_settings();
+    if (current == NULL) {
+        // Если нет валидных настроек, создаем настройки по умолчанию
+        reset_to_defaults();
+        current = get_valid_settings(); // Получаем созданные настройки по умолчанию
+        if (current == NULL) {
+            fprintf(stderr, "Error: Failed to create default settings\n");
+            cJSON_Delete(json);
+            return;
+        }
+    }
+
+    // Копируем текущие настройки во временный буфер
+    memcpy(writebuf, current, sizeof(HTTPSsettings));
+    HTTPSsettings *new_settings = (HTTPSsettings *)writebuf;
+
+    char decoded_buffer[1024];
+    bool settings_changed = false;
+
+    // Извлекаем и декодируем данные сертификатов и ключей
+    cJSON *tls_ca_json = cJSON_GetObjectItemCaseSensitive(json, "tls_ca");
+    if (cJSON_IsString(tls_ca_json) && (tls_ca_json->valuestring != NULL)) {
+        if (!is_template_value(tls_ca_json->valuestring)) { // Игнорируем шаблонные значения
+            memset(decoded_buffer, 0, sizeof(decoded_buffer));
+            if (!json_decode_string(tls_ca_json->valuestring, decoded_buffer, sizeof(decoded_buffer))) {
+                fprintf(stderr, "Error: Failed to decode tls_ca\n");
+            } else {
+                // Проверяем, отличается ли новое значение от текущего
+                if (strcmp(new_settings->tls_ca, decoded_buffer) != 0) {
+                    strncpy(new_settings->tls_ca, decoded_buffer, sizeof(new_settings->tls_ca) - 1);
+                    new_settings->tls_ca[sizeof(new_settings->tls_ca) - 1] = '\0';
+                    settings_changed = true;
+                    printf("tls_ca updated with new data.\n");
+                } else {
+                    printf("tls_ca not changed (same as current).\n");
+                }
+            }
+        } else {
+            printf("tls_ca not changed (template value).\n");
+        }
+    }
+
+    cJSON *tls_key_json = cJSON_GetObjectItemCaseSensitive(json, "tls_key");
+    if (cJSON_IsString(tls_key_json) && (tls_key_json->valuestring != NULL)) {
+        if (!is_template_value(tls_key_json->valuestring)) { // Игнорируем шаблонные значения
+            memset(decoded_buffer, 0, sizeof(decoded_buffer));
+            if (!json_decode_string(tls_key_json->valuestring, decoded_buffer, sizeof(decoded_buffer))) {
+                fprintf(stderr, "Error: Failed to decode tls_key\n");
+            } else {
+                // Проверяем, отличается ли новое значение от текущего
+                if (strcmp(new_settings->tls_key, decoded_buffer) != 0) {
+                    strncpy(new_settings->tls_key, decoded_buffer, sizeof(new_settings->tls_key) - 1);
+                    new_settings->tls_key[sizeof(new_settings->tls_key) - 1] = '\0';
+                    settings_changed = true;
+                    printf("tls_key updated with new data.\n");
+                } else {
+                    printf("tls_key not changed (same as current).\n");
+                }
+            }
+        } else {
+            printf("tls_key not changed (template value).\n");
+        }
+    }
+/*
+Если значение поля tls_cert соответствует формату C/C++ константы, оно декодируется и сохраняется в структуру.
+Если значение не соответствует формату C/C++ константы (скорее всего, были сгенерированы функцией gen_mysett_json()),
+оно игнорируется, и выводится сообщение о том, что данные не изменились.
+*/
+    cJSON *tls_cert_json = cJSON_GetObjectItemCaseSensitive(json, "tls_cert");
+    if (cJSON_IsString(tls_cert_json) && (tls_cert_json->valuestring != NULL)) {
+        const char *tls_cert_value = tls_cert_json->valuestring;
+        if (strlen(tls_cert_value) == 0) {// Когда пользователь хочет очистить поле.
+            if (strlen(new_settings->tls_cert) != 0) {
+                new_settings->tls_cert[0] = '\0';
+                settings_changed = true;
+                printf("tls_cert updated to empty string.\n");
+            } else {
+                printf("tls_cert not changed (already empty).\n");
+            }
+        }
+        if (!is_template_value(tls_cert_value) && is_c_like_format(tls_cert_value)) {
+            // Если значение в формате C/C++ константы и не шаблонное, обрабатываем его
+            memset(decoded_buffer, 0, sizeof(decoded_buffer));
+            if (!json_decode_string(tls_cert_value, decoded_buffer, sizeof(decoded_buffer))) {
+                fprintf(stderr, "Error: Failed to decode tls_cert\n");
+            } else {
+                // Проверяем, отличается ли новое значение от текущего
+                if (strcmp(new_settings->tls_cert, decoded_buffer) != 0) {
+                    strncpy(new_settings->tls_cert, decoded_buffer, sizeof(new_settings->tls_cert) - 1);
+                    new_settings->tls_cert[sizeof(new_settings->tls_cert) - 1] = '\0';
+                    settings_changed = true;
+                    printf("tls_cert updated with new data.\n");
+                } else {
+                    printf("tls_cert not changed (same as current).\n");
+                }
+            }
+        } else {
+            // Если значение шаблонное или не в формате C/C++ константы, игнорируем его
+            printf("tls_cert not changed (template value or not in C format).\n");
+        }
+    }
+
+    cJSON *telegram_token = cJSON_GetObjectItemCaseSensitive(json, "telegram_token");
+    if (cJSON_IsString(telegram_token) && (telegram_token->valuestring != NULL)) {
+        if (!is_template_value(telegram_token->valuestring)) { // Игнорируем шаблонные значения
+            memset(decoded_buffer, 0, sizeof(decoded_buffer));
+            if (!json_decode_string(telegram_token->valuestring, decoded_buffer, sizeof(decoded_buffer))) {
+                fprintf(stderr, "Error: Failed to decode telegram_token\n");
+            } else {
+                // Проверяем, отличается ли новое значение от текущего
+                if (strcmp(new_settings->telegram_token, decoded_buffer) != 0) {
+                    strncpy(new_settings->telegram_token, decoded_buffer, sizeof(new_settings->telegram_token) - 1);
+                    new_settings->telegram_token[sizeof(new_settings->telegram_token) - 1] = '\0';
+                    settings_changed = true;
+                    printf("telegram_token updated with new data.\n");
+                } else {
+                    printf("telegram_token not changed (same as current).\n");
+                }
+            }
+        } else {
+            printf("telegram_token not changed (template value).\n");
+        }
+    }
+
+    // Обработка остальных HTTPS-настроек, не требующих декодирования
+    cJSON *domain_json = cJSON_GetObjectItemCaseSensitive(json, "domain");
+    if (cJSON_IsString(domain_json) && (domain_json->valuestring != NULL)) {
+        // Проверяем, отличается ли новое значение от текущего
+        if (strcmp(new_settings->domain, domain_json->valuestring) != 0) {
+            strncpy(new_settings->domain, domain_json->valuestring, sizeof(new_settings->domain) - 1);
+            new_settings->domain[sizeof(new_settings->domain) - 1] = '\0';
+            settings_changed = true;
+            printf("domain updated with new data.\n");
+        } else {
+            printf("domain not changed (same as current).\n");
+        }
+    }
+
+    // Можно добавить обработку других полей, если они есть в JSON
+    cJSON *port_json = cJSON_GetObjectItemCaseSensitive(json, "port");
+    if (cJSON_IsNumber(port_json)) {
+        new_settings->port = port_json->valueint;
+    }
+
+    cJSON *timeout_json = cJSON_GetObjectItemCaseSensitive(json, "timeout");
+    if (cJSON_IsNumber(timeout_json)) {
+        new_settings->timeout = timeout_json->valueint;
+    }
+
+    cJSON *retry_cnt_json = cJSON_GetObjectItemCaseSensitive(json, "retry_cnt");
+    if (cJSON_IsNumber(retry_cnt_json)) {
+        new_settings->retry_cnt = retry_cnt_json->valueint;
+    }
+
+    cJSON *connection_mode_json = cJSON_GetObjectItemCaseSensitive(json, "connection_mode");
+    if (cJSON_IsNumber(connection_mode_json)) {
+        new_settings->connection_mode = connection_mode_json->valueint;
+    }
+
+    cJSON_Delete(json);
+
+    // Записываем обновленные настройки во флеш
+    if (settings_changed) {
+        if (update_and_write_settings(new_settings)) {
+            printf("HTTPS settings successfully updated\n");
+        } else {
+            fprintf(stderr, "Error: Failed to write settings to flash\n");
+        }
+    } else {
+        printf("No changes in HTTPS settings\n");
+    }
+
+    usbnum = 2;
+    xQueueSend(usbQueueHandle, &usbnum, 0);
 }
+/****************** End Zerg section **************************/
 
 void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm, struct dbPinToPin PinsLinks[NUMPINLINKS]) {
-//    printf("We got a delJSON: %.*s\n", (int) hm->body.len, hm->body.buf);
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
 
     if (hm->body.len > 0) {
         cJSON *root = cJSON_ParseWithLength(hm->body.buf, hm->body.len);
         if (root) {
             cJSON *id_item = cJSON_GetObjectItem(root, "id");
-//            printf("id: %d\n", id_item->valueint);
             cJSON *pin_item = cJSON_GetObjectItem(root, "pin");
-//            printf("pin: %s\n", pin_item->valuestring);
             if (cJSON_IsNumber(id_item) && cJSON_IsString(pin_item)) {
                 uint8_t id = id_item->valueint;
                 const char* pin_str = pin_item->valuestring;
 
-                char* bracket_pos = strchr(pin_str, '(');// Remove everything after and including the opening parenthesis
+                char* bracket_pos = strchr(pin_str, '(');
                 if (bracket_pos != NULL) {
-                    *bracket_pos = '\0';  // Truncate the string at the opening parenthesis
+                    *bracket_pos = '\0';
                 }
-//                printf("modified pin: %s\n", pin_str);
+
                 if (id >= 0 && id < NUMPIN) {
                     int found = 0;
                     for (int i = 0; i < PINPAIRS; i++) {
-                    	if (bracket_pos != NULL) {
-                    	    *bracket_pos = '\0';  // Обрезаем строку до скобки
-                    	}
-                        if (strcmp(PinsConf[id].pinact[i].pin, pin_str) == 0) { // Сравнение строк
-                            // Удаляем элемент, сдвигая все последующие
+                        if (bracket_pos != NULL) {
+                            *bracket_pos = '\0';
+                        }
+                        if (strcmp(PinsConf[id].pinact[i].pin, pin_str) == 0) {
                             for (int j = i; j < PINPAIRS; j++) {
                                 PinsConf[id].pinact[j] = PinsConf[id].pinact[j+1];
                             }
-                            // Очищаем последний элемент
                             memset(&PinsConf[id].pinact[9], 0, sizeof(PinAction));
                             found = 1;
                             break;
                         }
                     }
-//                    printf("Searching for id: %d, pin: %s\n", id, pin_str);
-                    // Поиск и обновление в PinsLinks
+
                     for (int i = 0; i < NUMPINLINKS; i++) {
-                        if (PinsLinks[i].idin == id && strcmp(PinsLinks[i].pins, pin_str) == 0) { // Сравнение строк
-//                        	printf("PinsLinks[%d].idin:%d == id[%d] & PinsLinks[%d].pins:%s",i, PinsLinks[i].idin, id, i, PinsLinks[i].pins);
+                        if (PinsLinks[i].idin == id && strcmp(PinsLinks[i].pins, pin_str) == 0) {
                             PinsLinks[i].idin = 0;
                             PinsLinks[i].idout = 0;
                             strcpy(PinsLinks[i].pins, "");
@@ -1288,45 +2051,59 @@ void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm, 
 
                     if (found == 2) {
                         printf("We deleted a pin with ID = %s from pinact[%d] and updated PinsLinks! \r\n", pin_str, id);
-                        mg_http_reply(c, 200, "Content-Type: application/json\r\n",
+                        MG_INFO(("Response headers for connection %ld:", c->id));
+                        log_headers(extra_headers);
+                        mg_http_reply(c, 200, extra_headers,
                                       "{\"status\":true,\"message\":\"Pin deleted successfully and PinsLinks updated\"}");
                     } else if (found == 1) {
                         printf("We deleted a pin with ID = %s from pinact[%d], but didn't find it in PinsLinks!\n", pin_str, id);
-                        mg_http_reply(c, 200, "Content-Type: application/json\r\n",
+                        MG_INFO(("Response headers for connection %ld:", c->id));
+                        log_headers(extra_headers);
+                        mg_http_reply(c, 200, extra_headers,
                                       "{\"status\":true,\"message\":\"Pin deleted successfully, but not found in PinsLinks\"}");
                     } else {
-                        mg_http_reply(c, 404, "Content-Type: application/json\r\n",
+                        MG_INFO(("Response headers for connection %ld:", c->id));
+                        log_headers(extra_headers);
+                        mg_http_reply(c, 404, extra_headers,
                                       "{\"status\":false,\"message\":\"Pin not found\"}");
                     }
                 } else {
-                    mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+                    MG_INFO(("Response headers for connection %ld:", c->id));
+                    log_headers(extra_headers);
+                    mg_http_reply(c, 400, extra_headers,
                                   "{\"status\":false,\"message\":\"Invalid ID\"}");
                 }
             } else {
-                mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+                MG_INFO(("Response headers for connection %ld:", c->id));
+                log_headers(extra_headers);
+                mg_http_reply(c, 400, extra_headers,
                               "{\"status\":false,\"message\":\"Invalid JSON format\"}");
             }
             cJSON_Delete(root);
         } else {
-            mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+            MG_INFO(("Response headers for connection %ld:", c->id));
+            log_headers(extra_headers);
+            mg_http_reply(c, 400, extra_headers,
                           "{\"status\":false,\"message\":\"Invalid JSON\"}");
         }
     } else {
-        mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 400, extra_headers,
                       "{\"status\":false,\"message\":\"Empty request body\"}");
     }
 }
 void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
     char id_str[10], value_str[10], token[11];
     int id = -1, value = -1;
-    printf("Full URI in handle_api: %.*s\r\n", (int)hm->uri.len, hm->uri.buf);
+//    printf("Full URI in handle_api: %.*s\r\n", (int)hm->uri.len, hm->uri.buf);
 
     // Копируем URI в локальный буфер для разбора
     char full_uri[256];
     char urlcopy[256];
     snprintf(full_uri, sizeof(full_uri), "%.*s", (int)hm->uri.len, hm->uri.buf);
     strncpy(urlcopy, full_uri, sizeof(urlcopy) - 1);
-    printf("full_uri: %s\n", full_uri);
+//    printf("full_uri: %s\n", full_uri);
 
     // Извлекаем токен (первая часть пути)
     char *tokenptr = full_uri;
@@ -1336,13 +2113,13 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
         if (token_len < sizeof(token)) {
             strncpy(token, tokenptr, token_len);
             token[token_len] = '\0';
-            printf("Extracted token: '%s'\n", token);
+//            printf("Extracted token: '%s'\n", token);
         }
     }
 
     // Проверяем токен
     if (strcmp(token, SetSettings.token) != 0) {
-        printf("Token mismatch: got '%s', expected '%s'\n", token, SetSettings.token);
+//        printf("Token mismatch: got '%s', expected '%s'\n", token, SetSettings.token);
         mg_http_reply(c, 401, NULL, "Invalid token\n");
         return;
     }
@@ -1352,7 +2129,7 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
     if (command) {
         command++; // Пропускаем первый слэш
         size_t cmdlen = strcspn(command, "?");
-        printf("Command part: %.*s\n", (int)cmdlen, command);
+//        printf("Command part: %.*s\n", (int)cmdlen, command);
 
         if (mg_http_get_var(&hm->query, "id", id_str, sizeof(id_str)) > 0) {
             id = atoi(id_str);
@@ -1578,17 +2355,11 @@ void gen_onewire_json(char *buffer, int buffer_size) {
 }
 
 void handle_onewire_get(struct mg_connection *c) {
-//	init_device();
-//	printf("Before generating JSON:\n");
-//	printf("  g_device.numowpin: %d\n", g_device.numowpin);
-//	printf("  myowpin.id: %d\n", myowpin.id);
-//	printf("  myowpin.pin: %s\n", myowpin.pin);
-//	printf("  myowpin.typsensr: %d\n", myowpin.typsensr);
-//	printf("  myowpin.numsens: %d\n", myowpin.numsens);
-//	printf("  myowpin[%d].onoff: %d\n", myowpin.id, myowpin.onoff);
-//	gen_onewire_json(&g_device, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
-	gen_onewire_json(jsonbuf, BUFFER_SIZE);
-  mg_http_reply(c, 200, s_json_header, "%s\n", jsonbuf);
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    gen_onewire_json(jsonbuf, BUFFER_SIZE);
+    mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 bool parse_onewire_json(const char* jstr, struct dbPinsConf *pincfg) {
     if (jstr == NULL) return false;
@@ -1840,30 +2611,35 @@ bool parse_sensor_json(const char *json_string) {
     return true;
 }
 
-
-void handle_onewire_set(struct mg_connection *c, struct mg_http_message *hm){
-	if (hm->body.len > 0) {
-//		printf("We got a OneWire JSON: %.*s\n", (int) hm->body.len, hm->body.buf);
-		parse_onewire_json(hm->body.buf, &PinsConf[NUMPIN]);
-		char response[256]; // Формируем корректный JSON-ответ
-		snprintf(response, sizeof(response), "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}", (unsigned long) hm->body.len);
-//      printf("Sending response: %s\n", response);//чтобы увидеть, какой именно ответ формируется перед отправкой клиенту:
-		mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", response); // Отправляем ответ клиенту
-	} else { // Обработка пустого тела запроса
-		mg_http_reply(c, 400, "Content-Type: application/json\r\n", "{\"status\":false,\"message\":\"Empty request body\"}");
-	}
+void handle_onewire_set(struct mg_connection *c, struct mg_http_message *hm) {
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    if (hm->body.len > 0) {
+        parse_onewire_json(hm->body.buf, &PinsConf[NUMPIN]);
+        char response[256];
+        snprintf(response, sizeof(response), "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}", (unsigned long)hm->body.len);
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 200, extra_headers, "%s", response);
+    } else {
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 400, extra_headers, "{\"status\":false,\"message\":\"Empty request body\"}");
+    }
 }
-void handle_sensor_set(struct mg_connection *c, struct mg_http_message *hm){
-	if (hm->body.len > 0) {
-//		printf("We got a OW_SENSOR JSON: %.*s\n", (int) hm->body.len, hm->body.buf);
-		parse_sensor_json(hm->body.buf);
-		char response[256]; // Формируем корректный JSON-ответ
-		snprintf(response, sizeof(response), "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}", (unsigned long) hm->body.len);
-//      printf("Sending response: %s\n", response);//чтобы увидеть, какой именно ответ формируется перед отправкой клиенту:
-		mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", response); // Отправляем ответ клиенту
-	} else { // Обработка пустого тела запроса
-		mg_http_reply(c, 400, "Content-Type: application/json\r\n", "{\"status\":false,\"message\":\"Empty request body\"}");
-	}
+void handle_sensor_set(struct mg_connection *c, struct mg_http_message *hm) {
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    if (hm->body.len > 0) {
+        parse_sensor_json(hm->body.buf);
+        char response[256];
+        snprintf(response, sizeof(response), "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}", (unsigned long)hm->body.len);
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 200, extra_headers, "%s", response);
+    } else {
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 400, extra_headers, "{\"status\":false,\"message\":\"Empty request body\"}");
+    }
 }
 /*********************************** End ONEWIRE ****************************************/
 
@@ -1886,12 +2662,17 @@ void parse_stm32time(char *response, size_t response_size, const struct dbSettin
 void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm) {
     char response[256];
     parse_stm32time(response, sizeof(response), &SetSettings);
-    //printf("Sending response: %s\n", response);
-    mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", response);
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 200, extra_headers, "%s", response);
 }
 void handle_temp_get(struct mg_connection *c) {
     pars_temp_sensors(jsonbuf, BUFFER_SIZE);
-    mg_http_reply(c, 200, s_json_header, "%s\n", jsonbuf);
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 int gen_sim800l_json(char *buffer, int buffer_size) {
     if (buffer == NULL || buffer_size <= 0) {
@@ -1923,8 +2704,11 @@ int gen_sim800l_json(char *buffer, int buffer_size) {
     return written;
 }
 void handle_sim800l_get(struct mg_connection *c) {
-	gen_sim800l_json(jsonbuf, BUFFER_SIZE);
-    mg_http_reply(c, 200, s_json_header, "%s\n", jsonbuf);
+    gen_sim800l_json(jsonbuf, BUFFER_SIZE);
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 
 void parse_sim800l_json(char *buffer) {
@@ -1984,18 +2768,24 @@ void parse_sim800l_json(char *buffer) {
 //    printf("PinsConf[1].onoff = %d\n", PinsConf[1].onoff);
 }
 
-
 void handle_sim800l_set(struct mg_connection *c, struct mg_http_message *hm) {
- if (hm->body.len > 0) {
-//	printf("We got a GPS json %.*s\n", (int) hm->body.len, hm->body.buf);
-	parse_sim800l_json(hm->body.buf);
-	char response[256];// Формируем корректный JSON-ответ
-	snprintf(response, sizeof(response),"{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",(unsigned long)hm->body.len);
-	//printf("Sending response: %s\n", response);//чтобы увидеть, какой именно ответ формируется перед отправкой клиенту:
-	mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", response);// Отправляем ответ клиенту
-  } else {// Обработка пустого тела запроса
-	mg_http_reply(c, 400, "Content-Type: application/json\r\n","{\"status\":false,\"message\":\"Empty request body\"}");
-  }
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+
+    if (hm->body.len > 0) {
+        parse_sim800l_json(hm->body.buf);
+        char response[256];
+        snprintf(response, sizeof(response),
+                 "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
+                 (unsigned long)hm->body.len);
+
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 200, extra_headers, "%s", response);
+    } else {
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 400, extra_headers, "{\"status\":false,\"message\":\"Empty request body\"}");
+    }
 }
 void mqtt_message_handler(const char *topic, const char *payload) {
     char command[20];
@@ -2305,7 +3095,7 @@ void gen_monitoring_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *
 
 //            printf("Debug before check (i=%d):\n", i);
 //            printf("  send_sms value: '%s'\n", pins_conf[i].send_sms);
-//            printf("  send_sms length: %zu\n", strlen(pins_conf[i].send_sms));
+//            printf("  send_sms length: %u\n", strlen(pins_conf[i].send_sms));
 //            printf("  First 5 chars codes: %d %d %d %d %d\n",
 //                (int)pins_conf[i].send_sms[0],
 //                (int)pins_conf[i].send_sms[1],
@@ -2335,8 +3125,11 @@ void gen_monitoring_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *
 }
 
 void handle_monitoring_get(struct mg_connection *c) {
-	gen_monitoring_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
-  mg_http_reply(c, 200, s_json_header, "%s\n", jsonbuf);
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    gen_monitoring_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+    mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 
 void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf, const struct dbPinsInfo *PinsInfo, uint8_t count) {
@@ -2400,16 +3193,19 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf, const struct
 }
 
 void handle_monitoring_set(struct mg_connection *c, struct mg_http_message *hm) {
- if (hm->body.len > 0) {
-//	printf("We got a monitoring JSON: %.*s\n", (int) hm->body.len, hm->body.buf);
-	parse_monitoring_json(hm->body.buf, PinsConf, PinsInfo, NUMPIN);
-	char response[256];// Формируем корректный JSON-ответ
-	snprintf(response, sizeof(response),"{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",(unsigned long)hm->body.len);
-	//printf("Sending response: %s\n", response);//чтобы увидеть, какой именно ответ формируется перед отправкой клиенту:
-	mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", response);// Отправляем ответ клиенту
-  } else {// Обработка пустого тела запроса
-	mg_http_reply(c, 400, "Content-Type: application/json\r\n","{\"status\":false,\"message\":\"Empty request body\"}");
-  }
+    const char *extra_headers = "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+    if (hm->body.len > 0) {
+        parse_monitoring_json(hm->body.buf, PinsConf, PinsInfo, NUMPIN);
+        char response[256];
+        snprintf(response, sizeof(response), "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}", (unsigned long)hm->body.len);
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 200, extra_headers, "%s", response);
+    } else {
+        MG_INFO(("Response headers for connection %ld:", c->id));
+        log_headers(extra_headers);
+        mg_http_reply(c, 400, extra_headers, "{\"status\":false,\"message\":\"Empty request body\"}");
+    }
 }
 /****************************** OneWire *******************************/
 typedef struct {
@@ -3339,3 +4135,382 @@ time_t initializeTime(void) {
     }
     return timestamp;
 }
+//extern bool *flagmqtt;
+
+//void setup_mqtt(struct mg_mgr *mgr, struct mg_tcpip_if *mif){
+//    if (mif->state != MG_TCPIP_STATE_READY) {// Проверяем готовность сети
+//        MG_INFO(("setup_mqtt: Network not ready, skipping MQTT setup"));
+//        return; // Если сеть не готова, выходим
+//    }
+//    // Инициализация MQTT (выполняется только один раз)
+//    if (SetSettings.check_mqtt) {
+//        set_mqtt_topic(SetSettings.txmqttop);  // Установим топик (например, "Swarm")
+//        MG_INFO(("set_mqtt_topic: Topic set to: %s", SetSettings.txmqttop));
+//
+//        // Формирование URL с корректной схемой mqtt://
+//        char mqtt_url[50];  // Увеличен размер буфера для URL
+//        int result = snprintf(mqtt_url, sizeof(mqtt_url), "http://%d.%d.%d.%d:%d",
+//                              SetSettings.mqtt_hst0, SetSettings.mqtt_hst1,
+//                              SetSettings.mqtt_hst2, SetSettings.mqtt_hst3,
+//                              SetSettings.mqtt_prt);
+//        if (result < 0 || result >= sizeof(mqtt_url)) {
+//            MG_ERROR(("Error: MQTT URL truncated or formatting error"));
+//        } else {
+//            set_mqtt_url(mqtt_url);
+//            MG_INFO(("MQTT URL set: %s", mqtt_url));
+//        }
+//
+//        // Добавление таймера для MQTT
+//        MG_INFO(("Adding MQTT timer"));
+//        mg_timer_add(mgr, 3000, MG_TIMER_REPEAT | MG_TIMER_RUN_NOW, timer_fn_mqtt, mgr);
+//        *flagmqtt = true; // Устанавливаем флаг, что инициализация выполнена
+//    } else {
+//        MG_INFO(("MQTT is disabled in settings"));
+//        *flagmqtt = true; // Устанавливаем флаг, чтобы не пытаться инициализировать снова
+//    }
+//}
+
+/******************** Zerg section ****************************/
+// Проверка валидности данных
+bool is_settings_valid(const HTTPSsettings *settings) {
+    // Если указатель NULL, возвращаем false
+    if (settings == NULL) {
+        return false;
+    }
+
+    // Проверяем магическое значение
+    if (settings->magic != SETTINGS_MAGIC_VALUE) {
+        return false;
+    }
+
+    // Проверяем контрольную сумму
+    uint32_t calculated_crc = calculate_crc(settings);
+    return (calculated_crc == settings->crc);
+}
+
+// Инициализация настроек HTTPS
+bool initialize_https_settings(void) {
+    // Получаем указатель на действительные настройки
+    const HTTPSsettings *valid_settings = get_valid_settings();
+
+    // Если валидных настроек нет, создаем настройки по умолчанию
+    if (valid_settings == NULL) {
+        printf("No valid settings found, resetting to defaults\n");
+        return reset_to_defaults();
+    }
+
+    return true;
+}
+
+// Сброс настроек к значениям по умолчанию
+bool reset_to_defaults(void) {
+    printf("Resetting HTTPS settings to defaults\n");
+
+    // Инициализируем буфер значениями по умолчанию
+    HTTPSsettings *default_settings = (HTTPSsettings *)writebuf;
+    memset(default_settings, 0, sizeof(HTTPSsettings));
+
+    // Устанавливаем значения по умолчанию
+    default_settings->magic = SETTINGS_MAGIC_VALUE;
+    strcpy(default_settings->domain, "zagotovka.examle.com");
+    default_settings->port = 8443;      // Стандартный порт mangoose
+    default_settings->timeout = 5000;   // Тайм-аут 5 секунд
+    default_settings->retry_cnt = 3;    // 3 попытки
+    default_settings->connection_mode = 0; // Режим соединения по умолчанию
+
+    // Очистим TLS-связанные поля
+    memset(default_settings->tls_key, 0, sizeof(default_settings->tls_key));
+    memset(default_settings->tls_cert, 0, sizeof(default_settings->tls_cert));
+    memset(default_settings->tls_ca, 0, sizeof(default_settings->tls_ca));
+    memset(default_settings->telegram_token, 0, sizeof(default_settings->telegram_token));
+
+    // Вычисляем CRC и записываем настройки во флеш
+    default_settings->crc = calculate_crc(default_settings);
+    printf("Default settings prepared, magic: 0x%08lu, crc: 0x%08lu\n", default_settings->magic, default_settings->crc);
+
+    bool result = write_settings_to_flash(default_settings);
+    printf("Write to flash result: %d\n", result);
+
+    return result;
+}
+
+// Восстановление из резервной копии
+bool restore_from_backup(void) {
+    // Проверяем валидность резервной копии
+    if (!is_settings_valid(flash_settings_backup)) {
+        return false;
+    }
+
+    // Копируем резервную копию во временный буфер
+    memcpy(writebuf, flash_settings_backup, sizeof(HTTPSsettings));
+
+    // Записываем во флеш
+    return write_settings_to_flash((const HTTPSsettings *)writebuf);
+}
+
+// Создание резервной копии настроек
+bool backup_settings(void) {
+    // Проверяем валидность основной копии
+    if (!is_settings_valid(flash_settings)) {
+        return false;
+    }
+
+    // Копируем основную копию во временный буфер
+    memcpy(writebuf, flash_settings, sizeof(HTTPSsettings));
+
+    // Записываем во флеш
+    return write_settings_to_flash((const HTTPSsettings *)writebuf);
+}
+
+// Функции доступа к полям настроек
+bool https_get_domain(char *domain, size_t max_len) {
+    const HTTPSsettings *settings = get_valid_settings();
+    if (settings == NULL || domain == NULL || max_len == 0) {
+        return false;
+    }
+
+    strncpy(domain, settings->domain, max_len - 1);
+    domain[max_len - 1] = '\0'; // Убедимся, что строка завершена нулем
+    return true;
+}
+
+bool https_set_domain(const char *domain) {
+    if (domain == NULL) {
+        return false;
+    }
+
+    // Получаем текущие настройки
+    const HTTPSsettings *current = get_valid_settings();
+    if (current == NULL) {
+        return reset_to_defaults(); // Если нет валидных настроек, создаем настройки по умолчанию
+    }
+
+    // Копируем текущие настройки во временный буфер
+    memcpy(writebuf, current, sizeof(HTTPSsettings));
+    HTTPSsettings *new_settings = (HTTPSsettings *)writebuf;
+
+    // Обновляем конкретное поле
+    strncpy(new_settings->domain, domain, sizeof(new_settings->domain) - 1);
+    new_settings->domain[sizeof(new_settings->domain) - 1] = '\0';
+
+    // Записываем обновленные настройки
+    return write_settings_to_flash(new_settings);
+}
+
+bool https_get_tls_key(char *key, size_t max_len) {
+    const HTTPSsettings *settings = get_valid_settings();
+    if (settings == NULL || key == NULL || max_len == 0) {
+        return false;
+    }
+
+    strncpy(key, settings->tls_key, max_len - 1);
+    key[max_len - 1] = '\0';
+    return true;
+}
+
+bool https_set_tls_key(const char *key) {
+    if (key == NULL) {
+        return false;
+    }
+
+    const HTTPSsettings *current = get_valid_settings();
+    if (current == NULL) {
+        return reset_to_defaults();
+    }
+
+    memcpy(writebuf, current, sizeof(HTTPSsettings));
+    HTTPSsettings *new_settings = (HTTPSsettings *)writebuf;
+
+    strncpy(new_settings->tls_key, key, sizeof(new_settings->tls_key) - 1);
+    new_settings->tls_key[sizeof(new_settings->tls_key) - 1] = '\0';
+
+    return update_and_write_settings(new_settings);
+}
+
+bool https_get_tls_cert(char *cert, size_t max_len) {
+    const HTTPSsettings *settings = get_valid_settings();
+    if (settings == NULL || cert == NULL || max_len == 0) {
+        return false;
+    }
+
+    strncpy(cert, settings->tls_cert, max_len - 1);
+    cert[max_len - 1] = '\0';
+    return true;
+}
+
+bool https_set_tls_cert(const char *cert) {
+    if (cert == NULL) {
+        return false;
+    }
+
+    const HTTPSsettings *current = get_valid_settings();
+    if (current == NULL) {
+        return reset_to_defaults();
+    }
+
+    memcpy(writebuf, current, sizeof(HTTPSsettings));
+    HTTPSsettings *new_settings = (HTTPSsettings *)writebuf;
+
+    strncpy(new_settings->tls_cert, cert, sizeof(new_settings->tls_cert) - 1);
+    new_settings->tls_cert[sizeof(new_settings->tls_cert) - 1] = '\0';
+
+    return update_and_write_settings(new_settings);
+}
+
+bool https_get_tls_ca(char *ca, size_t max_len) {
+    const HTTPSsettings *settings = get_valid_settings();
+    if (settings == NULL || ca == NULL || max_len == 0) {
+        return false;
+    }
+
+    strncpy(ca, settings->tls_ca, max_len - 1);
+    ca[max_len - 1] = '\0';
+    return true;
+}
+
+bool https_set_tls_ca(const char *ca) {
+    if (ca == NULL) {
+        return false;
+    }
+
+    const HTTPSsettings *current = get_valid_settings();
+    if (current == NULL) {
+        return reset_to_defaults();
+    }
+
+    memcpy(writebuf, current, sizeof(HTTPSsettings));
+    HTTPSsettings *new_settings = (HTTPSsettings *)writebuf;
+
+    strncpy(new_settings->tls_ca, ca, sizeof(new_settings->tls_ca) - 1);
+    new_settings->tls_ca[sizeof(new_settings->tls_ca) - 1] = '\0';
+
+    return update_and_write_settings(new_settings);
+}
+
+bool https_get_telegram_token(char *token, size_t max_len) {
+    const HTTPSsettings *settings = get_valid_settings();
+    if (settings == NULL || token == NULL || max_len == 0) {
+        return false;
+    }
+
+    strncpy(token, settings->telegram_token, max_len - 1);
+    token[max_len - 1] = '\0';
+    return true;
+}
+
+bool https_set_telegram_token(const char *token) {
+    if (token == NULL) {
+        return false;
+    }
+
+    const HTTPSsettings *current = get_valid_settings();
+    if (current == NULL) {
+        return reset_to_defaults();
+    }
+
+    memcpy(writebuf, current, sizeof(HTTPSsettings));
+    HTTPSsettings *new_settings = (HTTPSsettings *)writebuf;
+
+    strncpy(new_settings->telegram_token, token, sizeof(new_settings->telegram_token) - 1);
+    new_settings->telegram_token[sizeof(new_settings->telegram_token) - 1] = '\0';
+
+    return update_and_write_settings(new_settings);
+}
+
+uint16_t https_get_port(void) {
+    const HTTPSsettings *settings = get_valid_settings();
+    if (settings == NULL) {
+        return 8443; // Порт по умолчанию, если настройки недоступны
+    }
+
+    return settings->port;
+}
+
+bool https_set_port(uint16_t port) {
+    const HTTPSsettings *current = get_valid_settings();
+    if (current == NULL) {
+        return reset_to_defaults();
+    }
+
+    memcpy(writebuf, current, sizeof(HTTPSsettings));
+    HTTPSsettings *new_settings = (HTTPSsettings *)writebuf;
+
+    new_settings->port = port;
+
+    return update_and_write_settings(new_settings);
+}
+
+uint32_t https_get_timeout(void) {
+    const HTTPSsettings *settings = get_valid_settings();
+    if (settings == NULL) {
+        return 5000; // Тайм-аут по умолчанию
+    }
+
+    return settings->timeout;
+}
+
+bool https_set_timeout(uint32_t timeout) {
+    const HTTPSsettings *current = get_valid_settings();
+    if (current == NULL) {
+        return reset_to_defaults();
+    }
+
+    memcpy(writebuf, current, sizeof(HTTPSsettings));
+    HTTPSsettings *new_settings = (HTTPSsettings *)writebuf;
+
+    new_settings->timeout = timeout;
+
+    return update_and_write_settings(new_settings);
+}
+
+uint8_t https_get_retry_cnt(void) {
+    const HTTPSsettings *settings = get_valid_settings();
+    if (settings == NULL) {
+        return 3; // Число попыток по умолчанию
+    }
+
+    return settings->retry_cnt;
+}
+
+bool https_set_retry_cnt(uint8_t retry_cnt) {
+    const HTTPSsettings *current = get_valid_settings();
+    if (current == NULL) {
+        return reset_to_defaults();
+    }
+
+    memcpy(writebuf, current, sizeof(HTTPSsettings));
+    HTTPSsettings *new_settings = (HTTPSsettings *)writebuf;
+
+    new_settings->retry_cnt = retry_cnt;
+
+    return update_and_write_settings(new_settings);
+}
+
+uint8_t https_get_connection_mode(void) {
+    const HTTPSsettings *settings = get_valid_settings();
+    if (settings == NULL) {
+        return 0; // Режим по умолчанию
+    }
+
+    return settings->connection_mode;
+}
+
+bool https_set_connection_mode(uint8_t mode) {
+    const HTTPSsettings *current = get_valid_settings();
+    if (current == NULL) {
+        return reset_to_defaults();
+    }
+
+    memcpy(writebuf, current, sizeof(HTTPSsettings));
+    HTTPSsettings *new_settings = (HTTPSsettings *)writebuf;
+
+    new_settings->connection_mode = mode;
+
+    return update_and_write_settings(new_settings);
+}
+
+// Функция проверки наличия действительных настроек во Flash
+bool has_valid_settings(void) {
+    return get_valid_settings() != NULL;
+}
+/****************** End Zerg section **************************/

@@ -6478,10 +6478,9 @@ function Toast({ message, type, onClose }) {
     </div>
   `;
 }
-
+/******************************************************************************/
 function Settings({}) {
-  const [settings, setSettings] = useState(null);
-  //const [changedSettings, setChangedSettings] = useState({});
+  const [settings, setSettings] = useState({});
   const [saveResult, setSaveResult] = useState(null);
   const [submissionStatus, setSubmissionStatus] = useState(null);
   const [errors, setErrors] = useState({});
@@ -6489,213 +6488,26 @@ function Settings({}) {
   const [toast, setToast] = useState(null);
   const [topNotification, setTopNotification] = useState(null);
   const [submitButtonDisabled, setSubmitButtonDisabled] = useState(false);
-  const parseOfflineDateTime = (offldt) => {
-    if (!offldt) return { date: '', time: '' };
-    
-    const dateMatch = offldt.match(/d:(\d{1,2}\.\d{1,2}\.\d{2})/);
-    const timeMatch = offldt.match(/t:(\d{2}:\d{2}:\d{2})/);
-    
-    return {
-      date: dateMatch ? dateMatch[1] : '',
-      time: timeMatch ? timeMatch[1] : ''
-    };
-  };
-  const validateDateFormat = (dateStr) => {
-    const pattern = /^\d{1,2}\.\d{1,2}\.\d{2}$/;
-    if (!pattern.test(dateStr)) return false;
-    const [day, month, year] = dateStr.split('.').map(Number);
-    if (month < 1 || month > 12) return false;
-    if (day < 1 || day > 31) return false;
-    if (year < 0 || year > 99) return false;
-    const currentYear = new Date().getFullYear() % 100;
-    if (year > currentYear + 5) return false; // Ограничение на 5 лет вперед
-    const daysInMonth = new Date(2000 + year, month, 0).getDate();
-    if (day > daysInMonth) return false;
-    return true;
-  };
-  
-  const validateTimeFormat = (timeStr) => {
-    const pattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
-    if (!pattern.test(timeStr)) return false;
-    return true;
-  };
-  
-  const showToast = (message, type) => {
-    setToast({ message, type }); // Передаем объект
-    setTimeout(() => {
-      setToast(null);
-    }, 3000);
-  };
+  const [isPrivateKeyHidden, setIsPrivateKeyHidden] = useState(false);
+  const [isPublicKeyHidden, setIsPublicKeyHidden] = useState(false);
+  const [isSecretKeyHidden, setIsSecretKeyHidden] = useState(false);
+  const [isTelegramTokenHidden, setIsTelegramTokenHidden] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const showTopNotification = (message) => {
-    setTopNotification(message);
-    setTimeout(() => {
-      setTopNotification(null);
-    }, 3000);
-  };
-
-const refresh = () =>
-  fetch('/api/mysett/get')
-    .then((r) => r.json())
-    .then((r) => {
-      // Если получены данные offldt, разбираем их
-      if (r.offldt) {
-        const { date, time } = parseOfflineDateTime(r.offldt);
-        r.offline_date = date;
-        r.offline_time = time;
-      }
-      setSettings(r);
-    })
-    .catch(error => {
-      console.error('Error fetching settings:', error);
-      showToast('Ошибка при загрузке настроек', 'error');
-    });
-
-// Добавляем useEffect для выполнения начальной загрузки
-useEffect(() => {
-  refresh();
-}, []);
-
-  const validateInput = (key, value) => {
-    let error = null;
-    switch (key) {
-      case 'ip_addr':
-      case 'gateway':
-      case 'mqtt_hst':
-        if (!ipRegex.test(value)) {
-          error = 'Неверный IP-адрес';
-        }
-        break;
-      case 'sb_mask':
-        if (!subnetMaskRegex.test(value)) {
-          error = 'Неверная маска подсети';
-        }
-        break;
-        case 'offline_date':
-  if (!validateDateFormat(value)) {
-    error = 'Неверный формат даты (д.м.гг)';
-  }
-  break;
-case 'offline_time':
-  if (!validateTimeFormat(value)) {
-    error = 'Неверный формат времени (чч:мм:сс)';
-  }
-  break;
-      //case 'macaddr':
-      //if (!macAddressRegex.test(value)) {
-      //error = 'Неверный MAC-адрес';
-      //}
-      //break;
-    }
-    return error;
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const formData = new FormData(formRef.current);
-    const jsonData = { ...settings }; // Start with all current settings
-
-    // Собираем все данные из формы
-    for (const [key, value] of formData.entries()) {
-      // Преобразуем числовые значения обратно в числа и заменяем пустые значения на 0
-      if (['lon_de', 'lat_de', 'timezone', 'mqtt_prt'].includes(key)) {
-        jsonData[key] = value === '' || value === null ? 0 : Number(value);
-      } else {
-        jsonData[key] = value;
-      }
-    }
-      // Формируем offldt из offline_date и offline_time
-  if (jsonData.offline_date && jsonData.offline_time) {
-    jsonData.offldt = `d:${jsonData.offline_date} t:${jsonData.offline_time}`;
-  }
-    // Дополнительная проверка на null и пустые строки
-    ['lon_de', 'lat_de', 'timezone', 'mqtt_prt'].forEach((key) => {
-      if (jsonData[key] === null || jsonData[key] === '') {
-        jsonData[key] = 0;
-      }
-    });
-
-    jsonData.onsunrise = jsonData.onsunrise ? 1 : 0;
-    jsonData.onsunset = jsonData.onsunset ? 1 : 0;
-    jsonData.check_ip = jsonData.check_ip ? 1 : 0;
-    jsonData.check_mqtt = jsonData.check_mqtt ? 1 : 0;
-    jsonData.sunrise = settings.sunrise;
-    jsonData.sunset = settings.sunset;
-    jsonData.dlength = settings.dlength;
-
-    console.log('Data will be sent to STM32:');
-    console.log(jsonData);
-    console.log('Stringified data:');
-    console.log(JSON.stringify(jsonData));
-    delete jsonData.offline_date;
-    delete jsonData.offline_time;
-    fetch('/api/mysett/set', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(jsonData)
-    })
-      .then((data) => {
-        setSubmissionStatus('success');
-        setSaveResult(data);
-        console.log('Успех:', data);
-        showToast('Данные успешно сохранены', 'success');
-        showTopNotification('Данные успешно сохранены');
-      })
-      .catch((error) => {
-        setSubmissionStatus('error');
-        setSaveResult(error);
-        console.error('Ошибка:', error);
-        showToast('Ошибка при сохранении данных', 'error');
-        showTopNotification('Ошибка при сохранении данных', 'error');
-      });
-  };
-
-  const handleChange = (key, value) => {
-    //console.log(`handleChange called for ${key} with value ${value}`);
-    let error = null;
-  
-    if (key === 'offline_date') {
-      error = validateDateFormat(value) ? null : 'Неверный формат даты (д.м.гг)';
-    } else if (key === 'offline_time') {
-      error = validateTimeFormat(value) ? null : 'Неверный формат времени (чч:мм:сс)';
-    } else {
-      error = validateInput(key, value);
-    }
-  
-    //console.log(`Error for ${key}: ${error}`);
-  
-    setErrors(prevErrors => {
-      const newErrors = { ...prevErrors, [key]: error };
-      //console.log('New errors state:', newErrors);
-      const hasAnyError = Object.values(newErrors).some(err => err !== null);
-      //console.log('Has any error:', hasAnyError);
-      setSubmitButtonDisabled(hasAnyError);
-      return newErrors;
-    });
-  
-    let processedValue = value;
-    if (['lon_de', 'lat_de', 'timezone', 'mqtt_prt'].includes(key)) {
-      processedValue = value === '' || value === null ? 0 : Number(value);
-    } else if (['onsunrise', 'onsunset', 'check_ip', 'check_mqtt'].includes(key)) {
-      processedValue = value ? 1 : 0;
-    }
-  
-    setSettings(prevSettings => ({ ...prevSettings, [key]: processedValue }));
-  };
-  
-  
+  const languages = [
+    { value: 'en', label: 'English' },
+    { value: 'ru', label: 'Russian' }
+  ];
 
   const timeZone = [
     [-12.0, '(GMT -12:00) Eniwetok, Kwajalein'],
     [-11.0, '(GMT -11:00) Midway Island, Samoa'],
     [-10.0, '(GMT -10:00) Hawaii'],
     [-9.0, '(GMT -9:00) Alaska'],
-    [-8.0, '(GMT -8:00) Pacific Time (US &amp; Canada)'],
-    [-7.0, '(GMT -7:00) Mountain Time (US &amp; Canada)'],
-    [-6.0, '(GMT -6:00) Central Time (US &amp; Canada), Mexico City'],
-    [-5.0, '(GMT -5:00) Eastern Time (US &amp; Canada), Bogota, Lima'],
+    [-8.0, '(GMT -8:00) Pacific Time (US & Canada)'],
+    [-7.0, '(GMT -7:00) Mountain Time (US & Canada)'],
+    [-6.0, '(GMT -6:00) Central Time (US & Canada), Mexico City'],
+    [-5.0, '(GMT -5:00) Eastern Time (US & Canada), Bogota, Lima'],
     [-4.0, '(GMT -4:00) Atlantic Time (Canada), Caracas, La Paz'],
     [-3.3, '(GMT -3:30) Newfoundland'],
     [-3.0, '(GMT -3:00) Brazil, Buenos Aires, Georgetown'],
@@ -6721,70 +6533,416 @@ case 'offline_time':
     [12.0, '(GMT +12:00) Auckland, Wellington, Fiji, Kamchatka']
   ];
 
-  const languages = [
-    { value: 'en', label: 'English' },
-    { value: 'ru', label: 'Russian' }
-  ];
+  const ipRegex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  const subnetMaskRegex = /^(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)$/;
+
+  const parseOfflineDateTime = (offldt) => {
+    if (!offldt) return { date: '', time: '' };
+
+    const dateMatch = offldt.match(/d:(\d{1,2}\.\d{1,2}\.\d{2})/);
+    const timeMatch = offldt.match(/t:(\d{2}:\d{2}:\d{2})/);
+
+    return {
+      date: dateMatch ? dateMatch[1] : '',
+      time: timeMatch ? timeMatch[1] : ''
+    };
+  };
+
+  const validateDateFormat = (dateStr) => {
+    const pattern = /^\d{1,2}\.\d{1,2}\.\d{2}$/;
+    if (!pattern.test(dateStr)) return false;
+    const [day, month, year] = dateStr.split('.').map(Number);
+    if (month < 1 || month > 12) return false;
+    if (day < 1 || day > 31) return false;
+    if (year < 0 || year > 99) return false;
+    const currentYear = new Date().getFullYear() % 100;
+    if (year > currentYear + 5) return false;
+    const daysInMonth = new Date(2000 + year, month, 0).getDate();
+    if (day > daysInMonth) return false;
+    return true;
+  };
+
+  const validateTimeFormat = (timeStr) => {
+    const pattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+    if (!pattern.test(timeStr)) return false;
+    return true;
+  };
+
+  const isFormValid = (settings, errors) => {
+    const hasErrors = Object.values(errors).some((error) => error !== null);
+    
+    // Игнорируем проверку поля domain, если HTTPS отключен
+    const requiredFieldsFilled = settings.usehttps
+      ? settings.domain && settings.domain.trim() !== ''
+      : true; // Если HTTPS отключен, не проверяем это поле
+  
+    return !(hasErrors || !requiredFieldsFilled);
+  };
+  
+
+  const showToast = (message, type) => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(null);
+    }, 3000);
+  };
+
+  const showTopNotification = (message) => {
+    setTopNotification(message);
+    setTimeout(() => {
+      setTopNotification(null);
+    }, 3000);
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text)
+      .then(() => showToast('Скопировано в буфер обмена', 'success'))
+      .catch(() => showToast('Ошибка при копировании', 'error'));
+  };
+
+  const handleCopyPublicKey = () => {
+    if (settings.tls_cert) {
+      copyToClipboard(settings.tls_cert);
+    }
+  };
+
+  const validateInput = (key, value) => {
+    let error = null;
+  
+    // Если usehttps отключен, пропускаем валидацию HTTPS-полей
+    if (!settings.usehttps && ['domain', 'tls_key', 'tls_cert', 'tls_ca', 'telegram_token'].includes(key)) {
+      return null; // Ошибок нет, если HTTPS отключен
+    }
+  
+    if (!value && ['ip_addr', 'gateway', 'mqtt_hst', 'sb_mask', 'offdate', 'offtime', 'domain'].includes(key)) {
+      return 'Поле не может быть пустым';
+    }
+
+    switch (key) {
+      case 'ip_addr':
+      case 'gateway':
+      case 'mqtt_hst':
+        if (!ipRegex.test(value)) {
+          error = 'Неверный IP-адрес';
+        }
+        break;
+      case 'sb_mask':
+        if (!subnetMaskRegex.test(value)) {
+          error = 'Неверная маска подсети';
+        }
+        break;
+      case 'offdate':
+        if (!validateDateFormat(value)) {
+          error = 'Неверный формат даты (д.м.гг)';
+        }
+        break;
+      case 'offtime':
+        if (!validateTimeFormat(value)) {
+          error = 'Неверный формат времени (чч:мм:сс)';
+        }
+        break;
+      case 'domain':
+        if (value.length > 50) {
+          error = 'Домен не должен превышать 50 символов';
+        } else if (!value.match(/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/)) {
+          error = 'Неверный формат домена';
+        }
+        break;
+      case 'tls_key':
+        if (value && value.trim() !== '') {
+          if (value.length > 512) {
+            error = 'Private Key не должен превышать 512 символов';
+          } else if (!value.includes('BEGIN EC PRIVATE KEY') || !value.includes('END EC PRIVATE KEY')) {
+            error = 'Неверный формат Private Key';
+          }
+        }
+        break;
+      case 'tls_cert':
+        if (value && value.trim() !== '') {
+          if (value.length > 1024) {
+            error = 'Public Key не должен превышать 1024 символов';
+          } else if (!value.includes('BEGIN CERTIFICATE') || !value.includes('END CERTIFICATE')) {
+            error = 'Неверный формат Public Key';
+          }
+        }
+        break;
+      case 'tls_ca':
+        if (value && value.trim() !== '') {
+          if (value.length > 1024) {
+            error = 'Secret Key не должен превышать 1024 символов';
+          } else if (!value.includes('BEGIN CERTIFICATE') || !value.includes('END CERTIFICATE')) {
+            error = 'Неверный формат Secret Key';
+          }
+        }
+        break;
+    }
+    return error;
+  };
+
+  // 4. Основные функции
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const formData = new FormData(formRef.current);
+    let jsonData = { ...settings };
+  
+    // Преобразуем данные из формы в JSON
+    for (const [key, value] of formData.entries()) {
+      if (['lon_de', 'lat_de', 'timezone', 'mqtt_prt'].includes(key)) {
+        jsonData[key] = value === '' || value === null ? 0 : Number(value);
+      } else {
+        jsonData[key] = value;
+      }
+    }
+  
+    // Если HTTPS отключен, удаляем соответствующие поля
+    if (!jsonData.usehttps) {
+      const httpsFields = ['tls_ca', 'tls_key', 'tls_cert', 'telegram_token', 'domain'];
+      httpsFields.forEach(field => {
+        delete jsonData[field];
+      });
+    }
+  
+    // Формируем поле offldt, если есть дата и время
+    if (jsonData.offdate && jsonData.offtime) {
+      jsonData.offldt = `d:${jsonData.offdate} t:${jsonData.offtime}`;
+    } else {
+      delete jsonData.offldt;
+    }
+  
+    // Убедимся, что числовые поля не null или пустые
+    ['lon_de', 'lat_de', 'timezone', 'mqtt_prt'].forEach((key) => {
+      if (jsonData[key] === null || jsonData[key] === '') {
+        jsonData[key] = 0;
+      }
+    });
+  
+    // Преобразуем булевы значения в числа
+    jsonData.onsunrise = jsonData.onsunrise ? 1 : 0;
+    jsonData.onsunset = jsonData.onsunset ? 1 : 0;
+    jsonData.check_ip = jsonData.check_ip ? 1 : 0;
+    jsonData.check_mqtt = jsonData.check_mqtt ? 1 : 0;
+    jsonData.usehttps = jsonData.usehttps ? 1 : 0;
+  
+    // Отправляем данные на сервер
+    fetch('/api/mysett/set', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(jsonData),
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Ошибка сети или сервера');
+        }
+        return response.json();
+      })
+      .then((data) => {
+        setSubmissionStatus('success');
+        setSaveResult(data);
+        showToast('Данные успешно сохранены', 'success');
+        showTopNotification('Данные успешно сохранены');
+      })
+      .catch((error) => {
+        setSubmissionStatus('error');
+        setSaveResult(error);
+        showToast('Ошибка при сохранении данных', 'error');
+        showTopNotification('Ошибка при сохранении данных', 'error');
+      });
+  };
+
+  const handleChange = (key, value) => {
+    let error = null;
+  
+    if (key === 'offdate') {
+      error = validateDateFormat(value) ? null : 'Неверный формат даты (д.м.гг)';
+    } else if (key === 'offtime') {
+      error = validateTimeFormat(value) ? null : 'Неверный формат времени (чч:мм:сс)';
+    } else {
+      error = validateInput(key, value);
+    }
+  
+    // Обработка ошибок
+    setErrors(prevErrors => {
+      const newErrors = { ...prevErrors, [key]: error };
+  
+      const certificateKeys = ['tls_key', 'tls_cert', 'tls_ca'];
+  
+      const hasOtherErrors = Object.keys(newErrors)
+        .filter(errorKey => !certificateKeys.includes(errorKey) && errorKey !== 'telegram_token')
+        .some(errorKey => newErrors[errorKey] !== null);
+  
+      // Оцените состояние кнопки
+      setSubmitButtonDisabled(hasOtherErrors || (!settings.usehttps && certificateKeys.some(certKey => settings[certKey])));
+      
+      return newErrors;
+    });
+  
+    // Обработка значения
+    let processedValue = value;
+    if (['lon_de', 'lat_de', 'timezone', 'mqtt_prt'].includes(key)) {
+      processedValue = value === '' || value === null ? 0 : Number(value);
+    } else if (['onsunrise', 'onsunset', 'check_ip', 'check_mqtt', 'usehttps'].includes(key)) {
+      processedValue = value ? 1 : 0;
+    }
+  
+    setSettings(prevSettings => ({ ...prevSettings, [key]: processedValue }));
+  
+    // Если изменяется usehttps, сбросьте ошибки и проверьте состояние кнопки
+    if (key === 'usehttps') {
+      setErrors({}); // Очистите все ошибки
+      setSubmitButtonDisabled(false); // Активируйте кнопку
+    }
+  };
+  
+
+  const handleDelete = (key) => {
+    setSettings(prevSettings => ({ ...prevSettings, [key]: '' }));
+    setErrors(prevErrors => ({ ...prevErrors, [key]: null }));
+
+    if (key === 'tls_key') setIsPrivateKeyHidden(false);
+    if (key === 'tls_cert') setIsPublicKeyHidden(false);
+    if (key === 'tls_ca') setIsSecretKeyHidden(false);
+    if (key === 'telegram_token') setIsTelegramTokenHidden(false);
+  };
+
+  // 5. Эффекты
+  const refresh = () =>
+    fetch('/api/mysett/get')
+      .then((r) => r.json())
+      .then((r) => {
+        if (r.offldt) {
+          const { date, time } = parseOfflineDateTime(r.offldt);
+          r.offdate = date;
+          r.offtime = time;
+        }
+        console.log('Loaded settings:', r); // Проверь, что все поля присутствуют!
+        setSettings(r);
+      })
+      .catch(error => {
+        console.error('Error fetching settings:', error);
+        showToast('Ошибка при загрузке настроек', 'error');
+      });
+
+  useEffect(() => {
+    refresh().then(() => {
+      if (settings?.tls_key) setIsPrivateKeyHidden(true);
+      if (settings?.tls_cert) setIsPublicKeyHidden(true);
+      if (settings?.tls_ca) setIsSecretKeyHidden(true);
+      if (settings?.telegram_token) setIsTelegramTokenHidden(true);
+      setIsLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    const isValid = isFormValid(settings, errors);
+    setSubmitButtonDisabled(!isValid);
+  }, [settings, errors]);
+
+  // 6. Рендер компонента
+  if (isLoading) {
+    return html`<div>Loading...</div>`;
+  }
 
   if (!settings) return '';
+
   const hasErrors = Object.values(errors).some((error) => error !== null);
 
   return html`
-    <div class="m-4 divide-y divide-gray-200 overflow-auto rounded bg-white">
-      <div
-        class="font-medium uppercase flex items-center px-4 py-2 bg-gray-400"
+  <div class="m-4 divide-y divide-gray-200 overflow-auto rounded bg-white">
+    <div class="font-medium uppercase flex items-center px-4 py-2 bg-gray-400">
+      <span>Global settings</span>
+      <select
+        value=${settings.lang}
+        onChange=${(e) => handleChange('lang', e.target.value)}
+        class="ml-2 px-2 py-1 bg-white rounded text-sm"
       >
-        <span>Global settings</span>
-        <select
-          value=${settings.lang}
-          onChange=${(e) => handleChange('lang', e.target.value)}
-          class="ml-2 px-2 py-1 bg-white rounded text-sm"
-        >
-          ${languages.map(
-            (lang) => html` <option value=${lang.value}>${lang.label}</option> `
-          )}
-        </select>
-      </div>
-      <div class="flex-grow flex flex-col justify-center items-center">
-        ${topNotification &&
-        html`
-          <div
-            class="w-full bg-green-500 text-white px-4 py-2 text-center mb-4"
+        ${languages.map(
+          (lang) => html` <option value=${lang.value}>${lang.label}</option> `
+        )}
+      </select>
+    </div>
+    <div class="flex-grow flex flex-col justify-center items-center">
+      ${topNotification &&
+      html`
+        <div class="w-full bg-green-500 text-white px-4 py-2 text-center mb-4">
+          ${topNotification}
+        </div>
+      `}
+      <form
+        ref=${formRef}
+        onSubmit=${handleSubmit}
+        class="justify-center overflow-x-auto mb-4 w-full max-w-2xl settings-table"
+      >
+        <div class="flex justify-start items-center p-2">
+          <button
+            type="submit"
+            class=${`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${
+              submitButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+            disabled=${submitButtonDisabled}
           >
-            ${topNotification}
+            Save changes
+          </button>
+        </div>
+        <div class="flex flex-col items-center">
+          ${[
+            { label: 'Login', key: 'adm_name', type: 'text' },
+            { label: 'Password', key: 'adm_pswd', type: 'password' },
+            {
+              label: 'Time zone UTC',
+              key: 'timezone',
+              type: 'select',
+              options: timeZone
+            }
+          ].map(
+            (item, index) => html`
+              <div
+                class="flex items-center w-full justify-center ${index % 2 === 1
+                  ? 'bg-white'
+                  : 'bg-green-300'} p-2"
+              >
+                <div class="w-1/3 font-medium text-right pr-4">
+                  ${item.label}
+                </div>
+                <div class="w-2/3">
+                  <${pageSetting}
+                    value=${settings[item.key]}
+                    setfn=${(value) => handleChange(item.key, value)}
+                    type=${item.type}
+                    options=${item.options}
+                    class="w-full"
+                    error=${errors[item.key]}
+                  />
+                </div>
+              </div>
+            `
+          )}
+
+          <div class="flex items-center w-full justify-center bg-gray-400 p-2 mt-1">
+            <div class="w-1/3 font-medium text-right pr-4">
+              ${settings.check_ip ? 'DHCP' : 'Static IP'}
+            </div>
+            <div class="w-2/3">
+              <${Setting}
+                value=${settings.check_ip}
+                setfn=${(value) => handleChange('check_ip', value)}
+                type="switch"
+                class="w-full"
+              />
+            </div>
           </div>
-        `}
-        <form
-          ref=${formRef}
-          onSubmit=${handleSubmit}
-          class="justify-center overflow-x-auto mb-4 w-full max-w-2xl settings-table"
-        >
-          <div class="flex justify-start items-center p-2">
-  <button
-  type="submit"
-  class=${`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${
-    submitButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''
-  }`}
-  disabled=${submitButtonDisabled}
->
-  Save changes
-</button>
-          </div>
-          <div class="flex flex-col items-center">
+
+          ${!settings.check_ip &&
+          html`
             ${[
-              { label: 'Login', key: 'adm_name', type: 'text' },
-              { label: 'Password', key: 'adm_pswd', type: 'password' },
-              {
-                label: 'Time zone UTC',
-                key: 'timezone',
-                type: 'select',
-                options: timeZone
-              }
+              { label: 'IP address', key: 'ip_addr' },
+              { label: 'Subnet mask', key: 'sb_mask' },
+              { label: 'Default gateway', key: 'gateway' }
             ].map(
               (item, index) => html`
                 <div
-                  class="flex items-center w-full justify-center ${index % 2 ===
-                  1
+                  class="flex items-center w-full justify-center ${index % 2 === 1
                     ? 'bg-white'
                     : 'bg-green-300'} p-2"
                 >
@@ -6795,8 +6953,7 @@ case 'offline_time':
                     <${pageSetting}
                       value=${settings[item.key]}
                       setfn=${(value) => handleChange(item.key, value)}
-                      type=${item.type}
-                      options=${item.options}
+                      type="text"
                       class="w-full"
                       error=${errors[item.key]}
                     />
@@ -6804,278 +6961,366 @@ case 'offline_time':
                 </div>
               `
             )}
+          `}
 
-            <div
-              class="flex items-center w-full justify-center bg-gray-400 p-2 mt-1"
-            >
-              <div class="w-1/3 font-medium text-right pr-4">
-                ${settings.check_ip ? 'DHCP' : 'Static IP'}
-              </div>
-              <div class="w-2/3">
-                <${Setting}
-                  value=${settings.check_ip}
-                  setfn=${(value) => handleChange('check_ip', value)}
-                  type="switch"
-                  class="w-full"
+          <div class="w-full text-center font-bold bg-gray-400 p-2 mt-1">
+            API settings
+          </div>
+
+          <div class="flex items-center w-full justify-center bg-green-300 p-2">
+            <div class="w-1/3 font-medium text-right pr-4">Token</div>
+            <div class="w-2/3">
+              <${Setting}
+                value=${settings.token}
+                setfn=${(value) => handleChange('token', value)}
+                type="text"
+                class="w-full"
+              />
+            </div>
+          </div>
+
+          <div class="flex items-center w-full justify-center bg-gray-400 p-2 mt-1">
+            <div class="w-1/3 font-medium text-right pr-4">MQTT</div>
+            <div class="w-2/3">
+              <${Setting}
+                value=${settings.check_mqtt}
+                setfn=${(value) => handleChange('check_mqtt', value)}
+                type="switch"
+                class="w-full"
+              />
+            </div>
+          </div>
+
+          ${settings.check_mqtt
+            ? html`
+                ${[
+                  { label: 'Host', key: 'mqtt_hst', type: 'text' },
+                  { label: 'Port', key: 'mqtt_prt', type: 'number' },
+                  { label: 'Client', key: 'mqtt_clt', type: 'text' },
+                  { label: 'User', key: 'mqtt_usr', type: 'text' },
+                  { label: 'Password', key: 'mqtt_pswd', type: 'password' },
+                  { label: 'TX topic', key: 'txmqttop', type: 'text' },
+                  { label: 'RX topic', key: 'rxmqttop', type: 'text' }
+                ].map(
+                  (item, index) => html`
+                    <div
+                      class="flex items-center w-full justify-center ${index % 2 === 1
+                        ? 'bg-white'
+                        : 'bg-green-300'} p-2"
+                    >
+                      <div class="w-1/3 font-medium text-right pr-4">
+                        ${item.label}
+                      </div>
+                      <div class="w-2/3">
+                        <${pageSetting}
+                          value=${settings[item.key]}
+                          setfn=${(value) => handleChange(item.key, value)}
+                          type=${item.type}
+                          class="w-full"
+                          error=${errors[item.key]}
+                        />
+                      </div>
+                    </div>
+                  `
+                )}
+              `
+            : null}
+
+          <div class="flex items-center w-full justify-center bg-gray-400 p-2 mt-1">
+            <div class="w-1/3 font-medium text-right pr-4">HTTPS</div>
+            <div class="w-2/3">
+              <${Setting}
+                value=${settings.usehttps}
+                setfn=${(value) => handleChange('usehttps', value)}
+                type="switch"
+                class="w-full"
+              />
+            </div>
+          </div>
+
+          ${settings.usehttps
+            ? html`
+                ${[
+                  { label: 'HTTPS domain', key: 'domain', type: 'text' },
+                  //{ label: 'Secret Key', key: 'tls_ca', type: 'textarea' },
+                  { label: 'Private Key', key: 'tls_key', type: 'textarea' },
+                  { label: 'Public Key', key: 'tls_cert', type: 'textarea' }
+                  //{ label: 'Telegram bot token', key: 'telegram_token', type: 'text' }
+                ].map(
+                  (item, index) => html`
+                    <div
+                      class="flex items-center w-full justify-center ${index % 2 === 1
+                        ? 'bg-white'
+                        : 'bg-green-300'} p-2"
+                    >
+                      <div class="w-1/3 font-medium text-right pr-4">
+                        ${item.label}
+                      </div>
+                      <div class="w-2/3 flex items-center">
+                        <div class="relative w-full">
+                          ${item.key === 'telegram_token'
+                            ? html`
+                                ${settings.telegram_token
+                                  ? html`
+                                      <div class="border p-1 rounded w-full bg-gray-100 text-gray-500">
+                                        Данные введены, но информация скрыта!
+                                      </div>
+                                    `
+                                  : html`
+                                      <input
+                                        name=${item.key}
+                                        type="text"
+                                        value=${settings[item.key] || ''}
+                                        onInput=${(e) => handleChange(item.key, e.target.value)}
+                                        class="w-full px-2 py-1 border rounded"
+                                        placeholder="Enter Telegram bot token"
+                                      />
+                                    `}
+                          `
+                            : item.type === 'textarea'
+                            ? html`
+                                ${item.key === 'tls_ca' && settings.tls_ca
+                                  ? html`
+                                      <div class="border p-1 rounded w-full bg-gray-100 text-gray-500">
+                                        Данные введены, но информация скрыта!
+                                      </div>
+                                    `
+                                  : item.key === 'tls_key' && settings.tls_key
+                                  ? html`
+                                      <div class="border p-1 rounded w-full bg-gray-100 text-gray-500">
+                                        Данные введены, но информация скрыта!
+                                      </div>
+                                    `
+                                  : item.key === 'tls_cert' && settings.tls_cert
+                                  ? html`
+                                      <div class="border p-1 rounded w-full bg-gray-100 text-gray-500">
+                                        Данные введены успешно!
+                                      </div>
+                                    `
+                                  : html`
+                                      <textarea
+                                        name=${item.key}
+                                        value=${settings[item.key] || ''}
+                                        onInput=${(e) => handleChange(item.key, e.target.value)}
+                                        class="w-full px-2 py-1 border rounded"
+                                        rows="1"
+                                        placeholder="Enter ${item.label}"
+                                      ></textarea>
+                                    `}
+                          `
+                            : item.key === 'domain'
+                            ? html`
+                                <input
+                                  type="text"
+                                  name=${item.key}
+                                  value=${settings[item.key] || ''}
+                                  onInput=${(e) => handleChange(item.key, e.target.value)}
+                                  class="w-full px-2 py-1 border rounded"
+                                  maxlength="30"
+                                  placeholder="Enter domain (e.g., zagotovka.ddns.net)"
+                                />
+                              `
+                            : html`
+                                <${pageSetting}
+                                  value=${settings[item.key]}
+                                  setfn=${(value) => handleChange(item.key, value)}
+                                  type=${item.type}
+                                  class="w-full"
+                                  error=${errors[item.key]}
+                                />
+                              `}
+                          ${settings[item.key] && item.key === 'tls_cert' && html`
+                            <div class="absolute right-0 top-0 mt-1 flex space-x-2">
+                              <button
+                                type="button"
+                                onClick=${() => {
+                                  navigator.clipboard.writeText(settings[item.key]);
+                                  setTopNotification('Данные скопированы');
+                                  setTimeout(() => setTopNotification(''), 3000);
+                                }}
+                                class="px-2 py-1 bg-green-500 text-white rounded text-sm"
+                              >
+                                Копировать
+                              </button>
+                              <button
+                                type="button"
+                                onClick=${() => handleChange(item.key, '')}
+                                class="px-2 py-1 bg-red-500 text-white rounded text-sm"
+                              >
+                                Очистить
+                              </button>
+                            </div>
+                          `}
+                          ${settings[item.key] && item.key !== 'domain' && item.key !== 'tls_cert' && html`
+                            <button
+                              type="button"
+                              onClick=${() => handleChange(item.key, '')}
+                              class="absolute right-0 top-0 mt-1 mr-1 px-2 py-1 bg-red-500 text-white rounded text-sm"
+                            >
+                              Очистить
+                            </button>
+                          `}
+                        </div>
+                        ${errors[item.key] && html`
+                          <div class="text-red-500 text-sm mt-1">${errors[item.key]}</div>
+                        `}
+                      </div>
+                    </div>
+                  `
+                )}
+              `
+            : null}
+
+          <div class="w-full text-center font-bold bg-gray-400 p-2 mt-1">
+            Coordinate settings
+          </div>
+          <div class="flex items-center w-full justify-center bg-green-300 p-2">
+            <div class="w-1/3 font-medium text-right pr-4">Longitude</div>
+            <div class="w-2/3">
+              <${Setting}
+                value=${settings.lon_de}
+                setfn=${(value) => handleChange('lon_de', value)}
+                type="text"
+                class="w-full"
+              />
+            </div>
+          </div>
+          <div class="flex items-center w-full justify-center bg-white p-2">
+            <div class="w-1/3 font-medium text-right pr-4">Latitude</div>
+            <div class="w-2/3">
+              <${Setting}
+                value=${settings.lat_de}
+                setfn=${(value) => handleChange('lat_de', value)}
+                type="text"
+                class="w-full"
+              />
+            </div>
+          </div>
+
+          <div class="flex items-center w-full justify-center bg-green-300 p-2">
+            <div class="w-1/3 font-medium text-right pr-4">
+              Sunrise: ${settings.sunrise}
+            </div>
+            <div class="w-2/3 flex items-center">
+              <input
+                type="text"
+                value=${settings.sunrise_pins || ''}
+                onInput=${(e) => handleChange('sunrise_pins', e.target.value)}
+                maxlength="20"
+                placeholder="Action for sunrise"
+                class="w-1/2 mr-2 px-2 py-1 border rounded"
+              />
+              <${Setting}
+                value=${settings.onsunrise}
+                setfn=${(value) => handleChange('onsunrise', value)}
+                type="switch"
+                class="w-1/2"
+              />
+            </div>
+          </div>
+          <div class="flex items-center w-full justify-center bg-white p-2">
+            <div class="w-1/3 font-medium text-right pr-4">
+              Sunset: ${settings.sunset}
+            </div>
+            <div class="w-2/3 flex items-center">
+              <input
+                type="text"
+                value=${settings.sunset_pins || ''}
+                onInput=${(e) => handleChange('sunset_pins', e.target.value)}
+                maxlength="20"
+                placeholder="Action for sunset"
+                class="w-1/2 mr-2 px-2 py-1 border rounded"
+              />
+              <${Setting}
+                value=${settings.onsunset}
+                setfn=${(value) => handleChange('onsunset', value)}
+                type="switch"
+                class="w-1/2"
+              />
+            </div>
+          </div>
+          <div class="flex items-center w-full justify-center bg-green-300 p-2">
+            <div class="w-1/3 font-medium text-right pr-4">Day Length</div>
+            <div class="w-2/3">
+              <span class="text-lg">${settings.dlength}</span>
+            </div>
+          </div>
+
+          <div class="flex items-center w-full justify-center bg-gray-400 p-2">
+            <div class="w-1/3 font-medium text-right pr-4">
+              Next full moon:
+            </div>
+            <div class="w-2/3">
+              <span class="text-lg">
+                ${typeof settings.fullmoon === 'string' && settings.fullmoon
+                  ? `${settings.fullmoon.split(' ')[0]} at ${
+                      settings.fullmoon.split(' ')[1]
+                    }`
+                  : 'N/A'}
+              </span>
+            </div>
+          </div>
+
+          <div class="flex items-center w-full justify-between bg-gray-400 p-2 mt-1">
+            <div class="flex items-center flex-1">
+              <div class="whitespace-nowrap font-medium pr-2">[OFFLINE MODE] Date</div>
+              <div style="width: 200px;">
+                <input
+                  type="text"
+                  name="offdate"
+                  value=${settings.offdate || ''}
+                  onInput=${(e) => handleChange('offdate', e.target.value)}
+                  placeholder="Enter date (dd.mm.yy)"
+                  class="w-full px-2 py-1 border rounded"
                 />
+                ${errors.offdate &&
+                html`<div class="text-red-500 text-sm mt-1">${errors.offdate}</div>`}
               </div>
             </div>
+            <div class="flex items-center flex-1 ml-2">
+              <div class="whitespace-nowrap font-medium pr-2">Time</div>
+              <div style="width: 200px;">
+                <input
+                  type="text"
+                  name="offtime"
+                  value=${settings.offtime || ''}
+                  onInput=${(e) => handleChange('offtime', e.target.value)}
+                  placeholder="Enter time (hh:mm:ss)"
+                  class="w-full px-2 py-1 border rounded"
+                />
+                ${errors.offtime &&
+                html`<div class="text-red-500 text-sm mt-1">${errors.offtime}</div>`}
+              </div>
+            </div>
+          </div>
 
-            ${!settings.check_ip &&
+          ${topNotification &&
             html`
-              ${[
-                { label: 'IP address', key: 'ip_addr' },
-                { label: 'Subnet mask', key: 'sb_mask' },
-                { label: 'Default gateway', key: 'gateway' }
-                //{ label: 'MAC address', key: 'macaddr' }
-              ].map(
-                (item, index) => html`
-                  <div
-                    class="flex items-center w-full justify-center ${index %
-                      2 ===
-                    1
-                      ? 'bg-white'
-                      : 'bg-green-300'} p-2"
-                  >
-                    <div class="w-1/3 font-medium text-right pr-4">
-                      ${item.label}
-                    </div>
-                    <div class="w-2/3">
-                      <${pageSetting}
-                        value=${settings[item.key]}
-                        setfn=${(value) => handleChange(item.key, value)}
-                        type="text"
-                        class="w-full"
-                        error=${errors[item.key]}
-                      />
-                    </div>
-                  </div>
-                `
-              )}
+              <div class="w-full bg-green-500 text-white px-4 py-2 text-center mt-4">
+                ${topNotification}
+              </div>
             `}
 
-            <div class="w-full text-center font-bold bg-gray-400 p-2 mt-1">
-              API settings
-            </div>
+        </div> <!-- Закрытие flex flex-col items-center -->
 
-            <div
-              class="flex items-center w-full justify-center bg-green-300 p-2"
-            >
-              <div class="w-1/3 font-medium text-right pr-4">Token</div>
-              <div class="w-2/3">
-                <${Setting}
-                  value=${settings.token}
-                  setfn=${(value) => handleChange('token', value)}
-                  type="text"
-                  class="w-full"
-                />
-              </div>
-            </div>
-
-            <div
-              class="flex items-center w-full justify-center bg-gray-400 p-2 mt-1"
-            >
-              <div class="w-1/3 font-medium text-right pr-4">MQTT</div>
-              <div class="w-2/3">
-                <${Setting}
-                  value=${settings.check_mqtt}
-                  setfn=${(value) => handleChange('check_mqtt', value)}
-                  type="switch"
-                  class="w-full"
-                />
-              </div>
-            </div>
-
-            ${settings.check_mqtt
-              ? html`
-                  ${[
-                    { label: 'Host', key: 'mqtt_hst', type: 'text' },
-                    { label: 'Port', key: 'mqtt_prt', type: 'number' },
-                    { label: 'Client', key: 'mqtt_clt', type: 'text' },
-                    { label: 'User', key: 'mqtt_usr', type: 'text' },
-                    { label: 'Password', key: 'mqtt_pswd', type: 'password' },
-                    { label: 'TX topic', key: 'txmqttop', type: 'text' },
-                    { label: 'RX topic', key: 'rxmqttop', type: 'text' }
-                  ].map(
-                    (item, index) => html`
-                      <div
-                        class="flex items-center w-full justify-center ${index %
-                          2 ===
-                        1
-                          ? 'bg-white'
-                          : 'bg-green-300'} p-2"
-                      >
-                        <div class="w-1/3 font-medium text-right pr-4">
-                          ${item.label}
-                        </div>
-                        <div class="w-2/3">
-                          <${pageSetting}
-                            value=${settings[item.key]}
-                            setfn=${(value) => handleChange(item.key, value)}
-                            type=${item.type}
-                            class="w-full"
-                            error=${errors[item.key]}
-                          />
-                        </div>
-                      </div>
-                    `
-                  )}
-                `
-              : null}
-
-            <div class="w-full text-center font-bold bg-gray-400 p-2 mt-1">
-              Coordinate settings
-            </div>
-            <div
-              class="flex items-center w-full justify-center bg-green-300 p-2"
-            >
-              <div class="w-1/3 font-medium text-right pr-4">Longitude</div>
-              <div class="w-2/3">
-                <${Setting}
-                  value=${settings.lon_de}
-                  setfn=${(value) => handleChange('lon_de', value)}
-                  type="text"
-                  class="w-full"
-                />
-              </div>
-            </div>
-            <div class="flex items-center w-full justify-center bg-white p-2">
-              <div class="w-1/3 font-medium text-right pr-4">Latitude</div>
-              <div class="w-2/3">
-                <${Setting}
-                  value=${settings.lat_de}
-                  setfn=${(value) => handleChange('lat_de', value)}
-                  type="text"
-                  class="w-full"
-                />
-              </div>
-            </div>
-
-            <div
-              class="flex items-center w-full justify-center bg-green-300 p-2"
-            >
-              <div class="w-1/3 font-medium text-right pr-4">
-                Sunrise: ${settings.sunrise}
-              </div>
-              <div class="w-2/3 flex items-center">
-                <input
-                  type="text"
-                  value=${settings.sunrise_pins || ''}
-                  onInput=${(e) => handleChange('sunrise_pins', e.target.value)}
-                  maxlength="20"
-                  placeholder="Action for sunrise"
-                  class="w-1/2 mr-2 px-2 py-1 border rounded"
-                />
-                <${Setting}
-                  value=${settings.onsunrise}
-                  setfn=${(value) => handleChange('onsunrise', value)}
-                  type="switch"
-                  class="w-1/2"
-                />
-              </div>
-            </div>
-            <div class="flex items-center w-full justify-center bg-white p-2">
-              <div class="w-1/3 font-medium text-right pr-4">
-                Sunset: ${settings.sunset}
-              </div>
-              <div class="w-2/3 flex items-center">
-                <input
-                  type="text"
-                  value=${settings.sunset_pins || ''}
-                  onInput=${(e) => handleChange('sunset_pins', e.target.value)}
-                  maxlength="20"
-                  placeholder="Action for sunset"
-                  class="w-1/2 mr-2 px-2 py-1 border rounded"
-                />
-                <${Setting}
-                  value=${settings.onsunset}
-                  setfn=${(value) => handleChange('onsunset', value)}
-                  type="switch"
-                  class="w-1/2"
-                />
-              </div>
-            </div>
-            <div
-              class="flex items-center w-full justify-center bg-green-300 p-2"
-            >
-              <div class="w-1/3 font-medium text-right pr-4">Day Length</div>
-              <div class="w-2/3">
-                <span class="text-lg">${settings.dlength}</span>
-              </div>
-            </div>
-
-            <div
-              class="flex items-center w-full justify-center bg-gray-400 p-2"
-            >
-              <div class="w-1/3 font-medium text-right pr-4">
-                Next full moon:
-              </div>
-              <div class="w-2/3">
-                <span class="text-lg">
-                  ${typeof settings.fullmoon === 'string' && settings.fullmoon
-                    ? `${settings.fullmoon.split(' ')[0]} at ${
-                        settings.fullmoon.split(' ')[1]
-                      }`
-                    : 'N/A'}
-                </span>
-              </div>
-            </div>
-<div class="flex items-center w-full justify-center bg-gray-400 p-2">
-  <div class="w-1/3 font-medium text-right pr-4">[OFFLINE MODE] Date</div>
-  <div class="w-2/3 flex items-center">
-    <input
-  type="text"
-  name="offline_date"
-  value=${settings.offline_date || ''}
-  onInput=${(e) => handleChange('offline_date', e.target.value)}
-  placeholder="д.м.гг"
-  class=${`w-1/3 mr-2 px-2 py-1 border rounded ${
-    errors.offline_date ? 'border-red-500' : ''
-  } focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-    errors.offline_date ? 'focus-visible:ring-red-500' : ''
-  }`}
-/>
-<span class="mr-4">Time</span>
-<input
-  type="text"
-  name="offline_time"
-  value=${settings.offline_time || ''}
-  onInput=${(e) => handleChange('offline_time', e.target.value)}
-  placeholder="чч:мм:сс"
-  class=${`w-1/3 px-2 py-1 border rounded ${
-    errors.offline_time ? 'border-red-500' : ''
-  } focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-    errors.offline_time ? 'focus-visible:ring-red-500' : ''
-  }`}
-/>
-  </div>
-</div>
- <button 
-    type="submit" 
-    class=${`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${
-      submitButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''
-    }`}
-    disabled=${submitButtonDisabled}
-  >
-    Save changes
-  </button>
-          </div>
-        </form>
-      </div>
-      ${toast &&
-      html`
-        <div
-          class="fixed bottom-5 right-5 ${toast.type === 'success'
-            ? 'bg-green-500'
-            : 'bg-red-500'} text-white px-4 py-2 rounded shadow-lg"
-        >
-          ${toast.message}
+        <!-- Контейнер для кнопки "Save changes" -->
+        <div class="flex justify-end p-2">
+          <button
+            type="submit"
+            class=${`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${
+              submitButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+            disabled=${submitButtonDisabled}
+          >
+            Save changes
+          </button>
         </div>
-      `}
-    </div>
-  `;
+      </form> <!-- Закрытие формы -->
+    </div> <!-- Закрытие flex-grow flex flex-col justify-center items-center -->
+  </div> <!-- Закрытие внешнего контейнера -->
+`;
 }
-
+/******************************************************************************/
 
 const App = function ({}) {
   const [loading, setLoading] = useState(true);

@@ -40,7 +40,7 @@ struct dbPinsConf {     // Создали структуру с необходи
 	int dvalue;		    // Dimmer value
 	uint8_t ponr;		// Power on restore
 	uint8_t ptype; 		// Pullup type 0 - NONE; 1 - GPIO_PULLUP; 2 - GPIO_PULLDOWN
-	char sclick[125]; 	// SINGLE CLICK, (где 125 - 25-27 пар) если установить 255 то УТЕЧКА ПАМЯТИ! РАЗБЕРИСЬ!!! TODO:
+	char sclick[125]; 	// SINGLE CLICK, (где 125 - 25-27 пар)
 	char dclick[125]; 	// DOUBLE CLICK,(где 125 - 25-27 пар) где 255 это 51 пара ключ занчение (15:2).
 	char lpress[125]; 	// LONG PRESS, (где 125 - 25-27 пар) где 255 это 51 пара ключ занчение (15:2).
 	uint8_t encoderb; 	// ID of "Encoder B"
@@ -157,6 +157,7 @@ struct dbSettings { 	// Cтруктура для setting
 	uint8_t mday;       // OFFLINE День месяца: 3
 	uint8_t mon;        // OFFLINE Месяц:
 	uint8_t year;       // OFFLINE год (25 = 2025-2000)
+	short usehttps;     // enable/disable HTTPS
 };
 
 

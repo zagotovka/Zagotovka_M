@@ -33,7 +33,7 @@
 #include "cJSON.h"
 #include "setings.h"
 
-#include "stdio.h"/* для printf */
+#include "stdio.h"
 #include <string.h>
 #include "lwdtc.h"
 #include "ds18b20.h"
@@ -84,6 +84,9 @@ uint8_t usbnum = 0;
 uint8_t mqttnum = 0;
 uint8_t sumowpin = 0;
 data_pin_t data_pin;
+
+#define HTTP_URL "http://0.0.0.0:8000"
+#define HTTPS_URL "https://0.0.0.0:8443"
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -124,6 +127,8 @@ ETH_DMADescTypeDef DMATxDscrTab[ETH_TX_DESC_CNT] __attribute__((section(".TxDecr
 
 ETH_TxPacketConfig TxConfig;
 
+CRC_HandleTypeDef hcrc;
+
 ETH_HandleTypeDef heth;
 
 RNG_HandleTypeDef hrng;
@@ -144,7 +149,7 @@ const osThreadAttr_t ConfigTask_attributes = {
 osThreadId_t WebServerTaskHandle;
 const osThreadAttr_t WebServerTask_attributes = {
   .name = "WebServerTask",
-  .stack_size = 2048 * 4,
+  .stack_size = 3072 * 4, // 2048 + 1024(https)
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for OutputTask */
@@ -261,6 +266,7 @@ static void MX_USART3_UART_Init(void);
 static void MX_RNG_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_CRC_Init(void);
 void StartConfigTask(void *argument);
 void StartWebServerTask(void *argument);
 void StartOutputTask(void *argument);
@@ -304,10 +310,8 @@ static bool quick_network_check(void) {
         if ((phyreg & LAN8742A_BSR_LINK_STATUS) && (phyreg & LAN8742A_BSR_AUTONEGO_COMPLETE)) {
             return true;
         }
-
-        HAL_Delay(10);
+        osDelay(10);
     }
-
     return false;
 }
 
@@ -322,157 +326,16 @@ void mg_random(void *buf, size_t len) {  // Use on-board RNG
   }
 }
 
-static void timer_fn(void *arg) {
-  struct mg_tcpip_if *ifp = arg; // And show
-  const char *names[] = {"down", "up", "req", "ready"};  // network stats
-  MG_INFO(("Ethernet: %s, IP: %M, rx:%u, tx:%u, dr:%u, er:%u",
-           names[ifp->state], mg_print_ip4, &ifp->ip, ifp->nrecv, ifp->nsent,
-           ifp->ndrop, ifp->nerr));
-}
-
 uint64_t mg_millis(void) {
   return HAL_GetTick();
 }
-static void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
-//	printf("Event received: %d\n", ev);
-	switch (ev) {
-		case MG_EV_OPEN:
-			MG_INFO(("%lu CREATED", c->id));
-//			printf("+++Connection created: %lu\r\n", c->id);
-			break;
-		case MG_EV_ERROR:
-			MG_ERROR(("%lu ERROR %s", c->id, (char *) ev_data));
-//			printf("+++Connection error: %lu ERROR %s\r\n", c->id, (char *) ev_data);
-			s_conn = NULL;
-			break;
-		case MG_EV_CONNECT:
-//			printf("+++Connection attempt: %lu\r\n", c->id);
-			if (mg_url_is_ssl(get_mqtt_url())) {
-//				printf("SSL connection required\n");
-			}
-			break;
-		case MG_EV_MQTT_OPEN:
-//			printf("+++MQTT connection opened: %lu\r\n", c->id);
-			struct mg_str subt = mg_str(SetSettings.rxmqttop);
-			struct mg_str pubt = mg_str(SetSettings.txmqttop);
-			struct mg_str data = mg_str("Hello, this is a greeting from STM32 by mqtt!");
-			MG_INFO(("%lu CONNECTED to %s", c->id, get_mqtt_url()));
 
-			// Подписка
-			struct mg_mqtt_opts sub_opts;
-			memset(&sub_opts, 0, sizeof(sub_opts));
-			sub_opts.topic = subt;
-			sub_opts.qos = s_qos;
-			mg_mqtt_sub(c, &sub_opts);
-//			printf("Subscribed topic - %.*s\r\n", (int) subt.len, subt.buf);
-
-			// Публикация
-			struct mg_mqtt_opts pub_opts;
-			memset(&pub_opts, 0, sizeof(pub_opts));
-			pub_opts.topic = pubt;
-			pub_opts.message = data;
-			pub_opts.qos = s_qos;
-			pub_opts.retain = false;
-			mg_mqtt_pub(c, &pub_opts);
-//			printf("Publishing to topic - %.*s\r\n", (int) pubt.len, pubt.buf);
-			break;
-		case MG_EV_MQTT_CMD:
-			{
-				struct mg_mqtt_message *mm = (struct mg_mqtt_message *) ev_data;
-//				printf("MQTT command received: %d\n", mm->cmd);
-				switch (mm->cmd) {
-					case MQTT_CMD_CONNACK:
-//						printf("Connection acknowledged\n");
-						break;
-					case MQTT_CMD_PUBACK:
-//						printf("Publish acknowledged\n");
-						break;
-					case MQTT_CMD_PUBREC:
-//						printf("Publish received\n");
-						break;
-					case MQTT_CMD_PUBREL:
-//						printf("Publish release\n");
-						break;
-					case MQTT_CMD_PUBCOMP:
-//						printf("Publish complete\n");
-						break;
-					case MQTT_CMD_SUBACK:
-//						printf("Subscribe acknowledged\n");
-						break;
-					case MQTT_CMD_UNSUBACK:
-//						printf("Unsubscribe acknowledged\n");
-						break;
-					case MQTT_CMD_PINGRESP:
-//						printf("Ping response\n");
-						break;
-					default:
-//						printf("Unknown MQTT command: %d\n", mm->cmd);
-						break;
-				}
-			}
-			break;
-		case MG_EV_MQTT_MSG:
-//			printf("MQTT message received\n");
-		    struct mg_mqtt_message *mm = (struct mg_mqtt_message*) ev_data;
-
-		    // Проверяем, что топик соответствует ожидаемому
-		    if (mm->topic.len == strlen(SetSettings.rxmqttop) &&
-		        strncmp(mm->topic.buf, SetSettings.rxmqttop, mm->topic.len) == 0) {
-
-		        if (mm->data.len > 0) {
-		            printf("Raw topic: '%.*s'\n", (int) mm->topic.len, mm->topic.buf);
-		            printf("Expected topic prefix: '%s'\n", SetSettings.rxmqttop);
-		            printf("RECEIVED on topic '%.*s', content: %.*s\n",
-		                   (int) mm->topic.len, mm->topic.buf,
-		                   (int) mm->data.len, (char*)mm->data.buf);
-
-		            // Передаем содержимое payload как команду
-		            mqtt_message_handler(SetSettings.rxmqttop, (const char*)mm->data.buf);
-		        }
-		    }
-			break;
-		case MG_EV_CLOSE:
-			MG_INFO(("%lu CLOSED", c->id));
-//			printf("+++Connection closed: %lu\r\n", c->id);
-			s_conn = NULL;
-			break;
-		case MG_EV_POLL:
-			// Убрал вывод для уменьшения шума в логах
-			break;
-		case MG_EV_READ:
-//			printf("Data received: %" PRIuPTR " bytes\n", c->recv.len);
-//			if (c->recv.len > 0) {
-//				printf("Received data: ");
-//				for (size_t i = 0; i < c->recv.len && i < 16; i++) {
-//					printf("%02x ", c->recv.buf[i]);
-//				}
-//				if (c->recv.len > 16) printf("...");
-//				printf("\n");
-//			}
-			break;
-		case MG_EV_WRITE:
-//			printf("Data sent: %" PRIuPTR " bytes\n", c->send.len);
-			break;
-		case MG_EV_RESOLVE:
-//			printf("DNS resolution completed\n");
-			break;
-		default:
-//			printf("Unhandled event: %d\n", ev);
-			break;
-	}
-
-	(void) fn_data;
-}
-
-static void timer_fn_mqtt(void *arg) {
-  struct mg_mgr *mgr = (struct mg_mgr *) arg;
-  struct mg_mqtt_opts opts = {.clean = true,
-                              .qos = s_qos,
-                              .topic = mg_str(get_mqtt_topic()),
-                              .version = 4,
-                              .message = mg_str("bye")};
-  if (s_conn == NULL) s_conn = mg_mqtt_connect(mgr, get_mqtt_url(), &opts, (mg_event_handler_t) fn, NULL);
-}
+/*
+ Порядок у меня правильный:
+    Сначала происходит MG_EV_ACCEPT - принятие TCP соединения
+    В этом обработчике выполняется mg_tls_init()
+    После этого может начаться TLS рукопожатие (событие MG_EV_TLS_HS)
+ * */
 
 void send_mqtt_message(struct mg_connection *conn, const char *topic, const char *msg) {
     if (conn == NULL || conn->is_closing) {// Проверка соединения
@@ -490,6 +353,8 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic, const char
     pub_opts.message = mg_str(msg);
     pub_opts.qos = s_qos;
     pub_opts.retain = false;
+    pub_opts.keepalive = 65535;  // Макс. значение для uint16_t (~18ч и 12м)
+    pub_opts.clean = true;// Брокер не сохраняет состояние сессии, и клиент начинает "с чистого листа" при каждом подключении!
     mg_mqtt_pub(conn, &pub_opts);
     MG_INFO(("%lu PUBLISHED %s -> %.*s", conn->id, msg, (int) pub_opts.topic.len, pub_opts.topic.buf));
 }
@@ -850,6 +715,7 @@ int main(void)
   MX_TIM1_Init();
   MX_FATFS_Init();
   MX_USART2_UART_Init();
+  MX_CRC_Init();
   /* USER CODE BEGIN 2 */
   // Инициализация массивов датчиков
   memset(ds18b20, 0, sizeof(ds18b20));
@@ -1003,6 +869,37 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief CRC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CRC_Init(void)
+{
+
+  /* USER CODE BEGIN CRC_Init 0 */
+
+  /* USER CODE END CRC_Init 0 */
+
+  /* USER CODE BEGIN CRC_Init 1 */
+
+  /* USER CODE END CRC_Init 1 */
+  hcrc.Instance = CRC;
+  hcrc.Init.DefaultPolynomialUse = DEFAULT_POLYNOMIAL_ENABLE;
+  hcrc.Init.DefaultInitValueUse = DEFAULT_INIT_VALUE_ENABLE;
+  hcrc.Init.InputDataInversionMode = CRC_INPUTDATA_INVERSION_NONE;
+  hcrc.Init.OutputDataInversionMode = CRC_OUTPUTDATA_INVERSION_DISABLE;
+  hcrc.InputDataFormat = CRC_INPUTDATA_FORMAT_BYTES;
+  if (HAL_CRC_Init(&hcrc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CRC_Init 2 */
+
+  /* USER CODE END CRC_Init 2 */
+
 }
 
 /**
@@ -1865,79 +1762,96 @@ void StartConfigTask(void *argument)
 void StartWebServerTask(void *argument)
 {
   /* USER CODE BEGIN StartWebServerTask */
-	ulTaskNotifyTake(0, portMAX_DELAY);
-
-    if (!quick_network_check()) {// Проверка подключен LAN провод или нет.
+    ulTaskNotifyTake(0, portMAX_DELAY);
+    mg_log_set(MG_LL_NONE); // Установлен уровень логирования INFO для отладки
+    if (!quick_network_check()) { // Проверка подключен LAN провод или нет.
         printf("Network link down - Web server not started");
         vTaskDelete(NULL);
         return;
-    }else{
-    	onlineFlg = 1;
+    } else {
+        onlineFlg = 1;
     }
 
-	//	printf("Start 'WebServer' task \r\n");
-		struct mg_tcpip_if mif = { // Полная инициализация структуры mif
-				.mac = GENERATE_LOCALLY_ADMINISTERED_MAC(), .ip = 0, .mask = 0, .gw = 0, .driver = &mg_tcpip_driver_stm32f, .driver_data = NULL };
-		// Для теста вывод сгенерированного MAC-адреса
-		MG_INFO(("Initial Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n", mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]));
-		// MG_INFO(("Initial UUID: %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X\r\n", UUID[0], UUID[1], UUID[2], UUID[3], UUID[4], UUID[5], UUID[6], UUID[7], UUID[8], UUID[9], UUID[10], UUID[11]));
-		/* Infinite loop */
-		struct mg_mgr mgr;     // Initialise Mongoose event manager
-		mg_mgr_init(&mgr);     // and attach it to the interface
-		mg_log_set(MG_LL_NONE);// Set log level
-		// Настройка MQTT
-		char mqtt_url[35];
-		if (SetSettings.check_mqtt) {
-			int result = snprintf(mqtt_url, sizeof(mqtt_url), "http://%d.%d.%d.%d:%d", SetSettings.mqtt_hst0, SetSettings.mqtt_hst1, SetSettings.mqtt_hst2, SetSettings.mqtt_hst3, SetSettings.mqtt_prt);
-			if (result < 0 || result >= sizeof(mqtt_url)) {
-				printf("Error: MQTT URL truncated or formatting error\n");
-			} else {
-				set_mqtt_url(mqtt_url);
-			}
-		}
-		set_mqtt_topic(SetSettings.txmqttop);//Zagotovka
-		// UUID перед генерацией MAC-адреса
-		MG_INFO(("UUID before MAC generation: %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X\r\n", UUID[0], UUID[1], UUID[2], UUID[3], UUID[4], UUID[5], UUID[6], UUID[7], UUID[8], UUID[9], UUID[10], UUID[11]));
-		// Initialise Mongoose network stack
-		struct mg_tcpip_driver_stm32f_data driver_data = { .mdc_cr = 4 };
-		mif.driver_data = &driver_data;	// Дополнение структуры mif
-		MG_INFO(("MAC before static_or_dynamic_ip: %02X:%02X:%02X:%02X:%02X:%02X\r\n", mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]));
-		void static_or_dynamic_ip(struct mg_tcpip_if *mif, struct dbSettings *config) {
-			if (config->check_ip == 1) {// DHCP
-				// MAC address and driver settings are already set in mif
-				MG_INFO(("2 - Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n", mif->mac[0], mif->mac[1], mif->mac[2], mif->mac[3], mif->mac[4], mif->mac[5]));
-			} else {  // Статический IP
-		        mif->ip = mg_htonl(MG_U32(config->ip_addr0, config->ip_addr1, config->ip_addr2, config->ip_addr3));
-		        mif->mask = mg_htonl(MG_U32(config->sb_mask0, config->sb_mask1, config->sb_mask2, config->sb_mask3));
-		        mif->gw = mg_htonl(MG_U32(config->gateway0, config->gateway1, config->gateway2, config->gateway3));
-		        // Настройка DNS для статического IP
-		        mg_htonl(MG_U32(8, 8, 8, 8)); // TODO DNS сервер Google, ДОРАБОТАЙ!
-		    }
-		}
-		static_or_dynamic_ip(&mif, &SetSettings);
-		MG_INFO(("MAC before mg_tcpip_init: %02X:%02X:%02X:%02X:%02X:%02X\r\n", mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]));
-		// Проверка, что MAC-адрес не нулевой
-		if (mif.mac[0] == 0 && mif.mac[1] == 0 && mif.mac[2] == 0 && mif.mac[3] == 0 && mif.mac[4] == 0 && mif.mac[5] == 0) {
-			MG_ERROR(("Error: MAC address is all zeros!"));
-			// Здесь можно добавить код для обработки ошибки
-		}
-		mg_tcpip_init(&mgr, &mif);
-		mg_timer_add(&mgr, BLINK_PERIOD_MS, MG_TIMER_REPEAT, timer_fn, &mif);
-		MG_INFO(("MAC: %M. Waiting for IP...", mg_print_mac, mif.mac));
-		while (mif.state != MG_TCPIP_STATE_READY) {
-			mg_mgr_poll(&mgr, 0);
-		}
-		MG_INFO(("Network ready, IP: %M", mg_print_ip4, &mif.ip));
-		MG_INFO(("Initialising application..."));
-		web_init(&mgr);
-		// Запуск таймера для MQTT
-		mg_timer_add(&mgr, 3000, MG_TIMER_REPEAT | MG_TIMER_RUN_NOW, timer_fn_mqtt, &mgr);
-		MG_INFO(("Starting event loop"));
-	    /* Infinite loop */
-	for (;;) {
-        mg_mgr_poll(&mgr, 1000);
+    /* Инициализация настроек HTTPS */
+	if (SetSettings.usehttps == 1) {
+	    if (!initialize_https_settings()) {
+	        Error_Handler();
+	    }
+	}
+
+    // Инициализация TLS параметров
+    struct mg_tcpip_if mif = {
+        .mac = GENERATE_LOCALLY_ADMINISTERED_MAC(),
+        .ip = 0,
+        .mask = 0,
+        .gw = 0,
+        .driver = &mg_tcpip_driver_stm32f,
+        .driver_data = NULL
+    };
+
+    MG_INFO(("Initial Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+             mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]));
+
+    struct mg_mgr *mgr = (struct mg_mgr *)malloc(sizeof(struct mg_mgr)); // Выделяем память для mgr
+    mg_mgr_init(mgr); // Инициализируем менеджер
+
+    // Настройка MQTT
+    char mqtt_url[35];
+    if (SetSettings.check_mqtt) {
+        int result = snprintf(mqtt_url, sizeof(mqtt_url), "http://%d.%d.%d.%d:%d",
+                              SetSettings.mqtt_hst0, SetSettings.mqtt_hst1,
+                              SetSettings.mqtt_hst2, SetSettings.mqtt_hst3,
+                              SetSettings.mqtt_prt);
+        if (result < 0 || result >= sizeof(mqtt_url)) {
+            printf("Error: MQTT URL truncated or formatting error\n");
+        } else {
+            set_mqtt_url(mqtt_url);
+            MG_INFO(("MQTT URL set: %s", mqtt_url)); // Добавляем лог для проверки
+        }
+    } else {
+        MG_INFO(("MQTT is disabled in settings"));
     }
-    mg_mgr_free(&mgr);
+    set_mqtt_topic(SetSettings.txmqttop); // Zagotovka
+
+//    // UUID перед генерацией MAC-адреса
+//    MG_INFO(("UUID before MAC generation: %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X\r\n",
+//             UUID[0], UUID[1], UUID[2], UUID[3], UUID[4], UUID[5],
+//             UUID[6], UUID[7], UUID[8], UUID[9], UUID[10], UUID[11]));
+
+    // Initialise Mongoose network stack
+    struct mg_tcpip_driver_stm32f_data driver_data = { .mdc_cr = 4 };
+    mif.driver_data = &driver_data;
+    MG_INFO(("MAC before static_or_dynamic_ip: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+             mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]));
+
+    void static_or_dynamic_ip(struct mg_tcpip_if *mif, struct dbSettings *config) {
+        if (config->check_ip == 1) { // DHCP
+            MG_INFO(("2 - Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+                     mif->mac[0], mif->mac[1], mif->mac[2], mif->mac[3], mif->mac[4], mif->mac[5]));
+        } else {  // Статический IP
+            mif->ip = mg_htonl(MG_U32(config->ip_addr0, config->ip_addr1, config->ip_addr2, config->ip_addr3));
+            mif->mask = mg_htonl(MG_U32(config->sb_mask0, config->sb_mask1, config->sb_mask2, config->sb_mask3));
+            mif->gw = mg_htonl(MG_U32(config->gateway0, config->gateway1, config->gateway2, config->gateway3));
+        }
+    }
+    static_or_dynamic_ip(&mif, &SetSettings);
+
+    mg_tcpip_init(mgr, &mif);
+
+    MG_INFO(("MAC: %M. Waiting for IP...", mg_print_mac, mif.mac));
+    while (mif.state != MG_TCPIP_STATE_READY) {
+        mg_mgr_poll(mgr, 0);
+    }
+
+    web_init(mgr);
+
+    MG_INFO(("Starting event loop"));
+    /* Infinite loop */
+    for (;;) {
+         mg_mgr_poll(mgr, 1000);
+    }
+    mg_mgr_free(mgr);
+    free(mgr);
   /* USER CODE END StartWebServerTask */
 }
 
@@ -2323,11 +2237,11 @@ void StartMqttTask(void *argument)
 			            memset(mqtt_payload, 0, sizeof(mqtt_payload));
 			            strcpy(mqtt_topic, "/device/");
 
-			            printf("Debug: PinsConf[1].sclick in MQTT task = '%s'\n", PinsConf[1].sclick);  // Отладка
+//			            printf("Debug: PinsConf[1].sclick in MQTT task = '%s'\n", PinsConf[1].sclick);  // Отладка
 
 			            snprintf(mqtt_payload, sizeof(mqtt_payload), "DEVICE(s)/ACTION=%s", PinsConf[1].sclick);
 
-			            printf("Debug: Final MQTT payload = '%s'\n", mqtt_payload);  // Отладка
+//			            printf("Debug: Final MQTT payload = '%s'\n", mqtt_payload);  // Отладка
 
 			            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
 			        } else {
