@@ -7,7 +7,7 @@ permissions:
 on:
   push:
     branches:
-      - test  # Изменил нужную ветку!
+      - main  # Изменил нужную ветку!
     paths:
       - 'Proshivka/Zagotovka_M.bin'
 
