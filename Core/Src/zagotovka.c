@@ -1462,32 +1462,34 @@ static uint8_t writebuf[sizeof(HTTPSsettings)];// Буфер для времен
 
 // Функция для вычисления CRC всей структуры, кроме поля crc
 uint32_t calculate_crc(const HTTPSsettings *settings) {
-    // Создаем временный буфер для копирования данных с правильным выравниванием
-    uint32_t temp_buffer[1];
+    uint32_t temp_word_buffer __attribute__((aligned(4))); // Выровненный буфер для одного слова на стеке
+    uint32_t result;
+    const uint8_t *data_ptr; // Указатель для перебора байт
 
-    // Копируем magic в выровненный буфер
-    memcpy(temp_buffer, &settings->magic, sizeof(uint32_t));
-
-    // Вычисляем CRC для магического значения
-    uint32_t result = HAL_CRC_Calculate(&hcrc, temp_buffer, 1);
-
-    // Для остальной части структуры создаем временный выровненный буфер
-    size_t remaining_size = sizeof(HTTPSsettings) - offsetof(HTTPSsettings, domain);
-    size_t words = (remaining_size + 3) / 4; // Округление вверх до целого числа 32-битных слов
-
-    uint32_t *aligned_buffer = malloc(words * 4);
-    if (!aligned_buffer) {
-        // Обработка ошибки выделения памяти
-        return 0;
+    // --- CRC для поля magic ---
+    memcpy(&temp_word_buffer, &settings->magic, sizeof(uint32_t));
+    result = HAL_CRC_Calculate(&hcrc, &temp_word_buffer, 1); // Начинаем расчет
+    // --- CRC для остальной части структуры ---
+    const size_t remaining_size = sizeof(HTTPSsettings) - offsetof(HTTPSsettings, domain);
+    const size_t words = remaining_size / 4; // Количество *полных* 32-битных слов
+    // Проверяем, кратен ли размер 4 байтам (в вашем случае кратен, т.к. 2728 - 8 = 2720)
+    if (remaining_size % 4 != 0) {
+        // Ошибка: Размер оставшейся части не кратен 4.
+        // Это не должно произойти с вашей структурой благодаря padding.
+        // Если бы было возможно, здесь потребовалась бы специальная обработка последних 1-3 байт.
+        return 0; // Или другое значение ошибки
     }
-
-    // Копируем данные с выравниванием
-    memcpy(aligned_buffer, &settings->domain, remaining_size);
-
-    // Продолжаем вычисление с предыдущего результата
-    result = HAL_CRC_Accumulate(&hcrc, aligned_buffer, words);
-
-    free(aligned_buffer);
+    // Указатель на начало данных для CRC (поле domain)
+    data_ptr = (const uint8_t*)&settings->domain;
+    for (size_t i = 0; i < words; ++i) {
+        // Копируем следующие 4 байта из структуры в выровненный буфер
+        // memcpy безопасно копирует из возможно невыровненного источника (data_ptr)
+        memcpy(&temp_word_buffer, data_ptr, sizeof(uint32_t));
+        // Добавляем CRC этого слова
+        result = HAL_CRC_Accumulate(&hcrc, &temp_word_buffer, 1);
+        // Сдвигаем указатель на следующие 4 байта
+        data_ptr += sizeof(uint32_t);
+    }
     return result;
 }
 
