@@ -46,6 +46,7 @@ MEMORY
 {
   RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 512K
   FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 2048K
+  ZERG_FLASH (rx)  : ORIGIN = 0x081C0000,   LENGTH = 256K/* Sector 11 */
 }
 
 /* Sections */
@@ -163,6 +164,14 @@ SECTIONS
     _ebss = .;         /* define a global symbol at bss end */
     __bss_end__ = _ebss;
   } >RAM
+
+  /* Секция .zagotovka_section в области ZERG_FLASH */
+	.zagotovka_section ORIGIN(ZERG_FLASH) :
+	{
+	    . = ALIGN(8);
+	    KEEP(*(.zagotovka_section))
+	    . = ALIGN(8);
+	} >ZERG_FLASH AT> FLASH
 
   /* User_heap_stack section, used to check that there is enough "RAM" Ram  type memory left */
   ._user_heap_stack :

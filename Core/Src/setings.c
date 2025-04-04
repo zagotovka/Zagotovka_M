@@ -84,7 +84,7 @@ int enablePort(char *portName) {
 //}
 /*******************************************************************************************************************/
 
-// Когда создаем новый "settings.ini" файл.
+// Когда создаем новый "settings.ini" файл или когда сохраняем форму в файл "setings.ini"
 void SetSettingsConfig() {
 //    FRESULT fresult;
     UINT bytesWritten;
@@ -184,8 +184,10 @@ void SetSettingsConfig() {
 	writeField("mday", "%d", SetSettings.mday);
 	writeField("mon", "%d", SetSettings.mon);
 	writeField("year", "%d", SetSettings.year);
+	writeField("usehttps", "%d", SetSettings.usehttps);
 
     snprintf(buffer, JSON_BUF_SIZE, "\"tel\":\"%s\"", SetSettings.tel);
+//    printf("+++Real size of SetSettings: %u bytes & SetSettings.usehttps = %d\r\n", sizeof(struct dbSettings), SetSettings.usehttps);
     f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
     // Write closing bracket
     f_write(&USBHFile, "}", 1, &bytesWritten);
@@ -318,9 +320,10 @@ void StartSettingsConfig() {
 //    SetSettings.gateway2 = GATEWAY2;
 //    SetSettings.gateway3 = GATEWAY3;
     SetSettings.mqtt_prt = MQTT_PRT;
+    SetSettings.usehttps = CHECK_USEHTTPS;
 //    SetSettings.mqtt_qos = MQTT_QOS;
 }
-// если "settings.ini" существует, открываем его...
+// Если "settings.ini" существует, открываем его...
 void GetSettingsConfig() {
 	FILINFO finfo;
 	FRESULT fresult;
@@ -343,62 +346,7 @@ void GetSettingsConfig() {
 		return;
 	}
 //	printf("File opened successfully\r\n");
-	// Явно обнуляем поля структуры
-	SetSettings.adm_name[0] = '\0';
-	SetSettings.adm_pswd[0] = '\0';
-	SetSettings.token[0] = '\0';
-	SetSettings.lang[0] = '\0';
-	SetSettings.sunrise[0] = '\0';
-	SetSettings.sunset[0] = '\0';
-	SetSettings.dlength[0] = '\0';
-	SetSettings.srise_pins[0] = '\0';
-	SetSettings.sset_pins[0] = '\0';
-	SetSettings.mqtt_clt[0] = '\0';
-	SetSettings.mqtt_usr[0] = '\0';
-	SetSettings.mqtt_pswd[0] = '\0';
-	SetSettings.txmqttop[0] = '\0';
-	SetSettings.rxmqttop[0] = '\0';
-	SetSettings.fullmoon[0] = '\0';
-	SetSettings.tel[0] = '\0';
-	SetSettings.numline = 0;
-	SetSettings.timezone = 0.0;
-	SetSettings.lon_de = 0.0;
-	SetSettings.lat_de = 0.0;
-	SetSettings.onsunrise = 0;
-	SetSettings.onsunset = 0;
-	SetSettings.ip1_sntp0 = 0;
-	SetSettings.ip1_sntp1 = 0;
-	SetSettings.ip1_sntp2 = 0;
-	SetSettings.ip1_sntp3 = 0;
-	SetSettings.ip2_sntp0 = 0;
-	SetSettings.ip2_sntp1 = 0;
-	SetSettings.ip2_sntp2 = 0;
-	SetSettings.ip2_sntp3 = 0;
-	SetSettings.ip3_sntp0 = 0;
-	SetSettings.ip3_sntp1 = 0;
-	SetSettings.ip3_sntp2 = 0;
-	SetSettings.ip3_sntp3 = 0;
-	SetSettings.check_mqtt = 0;
-	SetSettings.mqtt_prt = 0;
-	SetSettings.mqtt_hst0 = 0;
-	SetSettings.mqtt_hst1 = 0;
-	SetSettings.mqtt_hst2 = 0;
-	SetSettings.mqtt_hst3 = 0;
-	SetSettings.check_ip = 0;
-	SetSettings.ip_addr0 = 0;
-	SetSettings.ip_addr1 = 0;
-	SetSettings.ip_addr2 = 0;
-	SetSettings.ip_addr3 = 0;
-	SetSettings.sb_mask0 = 0;
-	SetSettings.sb_mask1 = 0;
-	SetSettings.sb_mask2 = 0;
-	SetSettings.sb_mask3 = 0;
-	SetSettings.gateway0 = 0;
-	SetSettings.gateway1 = 0;
-	SetSettings.gateway2 = 0;
-	SetSettings.gateway3 = 0;
-	SetSettings.sim800l = 0;
-	SetSettings.monflg = 0;
+	memset(&SetSettings, 0, sizeof(SetSettings));// обнуляем структуру
 
 	while ((fresult = f_read(&USBHFile, &currentChar, 1, &bytesRead)) == FR_OK && bytesRead > 0) {
 	    if (currentChar == '"') {
@@ -637,6 +585,9 @@ void GetSettingsConfig() {
 //			printf("Found key: %s, value: %s\r\n", key, value);
 		} else if (strcmp(key, "ip3_sntp3") == 0) {
 			SetSettings.ip3_sntp3 = atoi(value);
+//			printf("Found key: %s, value: %s\r\n", key, value);
+		} else if (strcmp(key, "usehttps") == 0) {
+			SetSettings.usehttps = atoi(value);
 //			printf("Found key: %s, value: %s\r\n", key, value);
 		}
 		keyPos = 0;

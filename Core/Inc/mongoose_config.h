@@ -2,6 +2,9 @@
 // If we could guess an MG_ARCH so far, preserve it, otherwise try GCC-based
 #pragma once
 
+#define MG_TLS MG_TLS_BUILTIN // HTTPS
+//#define TLS_TWOWAY // Двусторонняя аутентификация
+
 #define MG_ENABLE_CUSTOM_RANDOM 1
 #define MG_ARCH MG_ARCH_NEWLIB
 #define MG_ENABLE_TCPIP 1

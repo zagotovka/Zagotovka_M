@@ -18,6 +18,10 @@
 #include "net.h"
 #include "setings.h"
 #include "ds18b20Config.h"
+#include "main.h"
+
+#include "FreeRTOS.h"
+#include "queue.h"
 
 #define BUFFER_SIZE 10000 //(max Button = 9835 символов, это не точно!)
 #define ENTER_CRITICAL() taskENTER_CRITICAL()
@@ -36,6 +40,68 @@ extern struct dbSettings SetSettings;
 extern const char *s_json_header;
 extern struct dbPinToPin PinsLinks[NUMPINLINKS];
 void processPins(uint8_t i, uint8_t action);
+
+void log_headers(const char *headers);
+/******************** Zerg section ****************************/
+// Статическая проверка на этапе компиляции
+#define STATIC_ASSERT(COND, MSG) typedef char static_assertion_##MSG[(COND) ? 1 : -1]
+#define BACKUP_OFFSET (((sizeof(HTTPSsettings) + 3) / 4) * 4) // Округление вверх до кратного 4
+typedef struct __attribute__((packed)) {
+    uint32_t magic;          // Магическое значение для проверки валидности
+    uint32_t crc;            // Контрольная сумма
+    char domain[50];
+    char tls_key[512];       // Private Key
+    char tls_cert[1024];     // Public Key
+    char tls_ca[1024];       // Secret Key
+    char telegram_token[100];
+    uint16_t port;
+    uint32_t timeout;
+    uint8_t retry_cnt;
+    uint8_t connection_mode;
+    uint8_t version;    // Номер версии настроек (0-94)
+    uint8_t padding[1]; // Остаток для выравнивания чтобы размер стал 2728 байт (кратен 4)
+} HTTPSsettings; // ~11КБ
+
+// Проверка, что размер структуры не превышает размер сектора (256 КБ)
+STATIC_ASSERT(sizeof(HTTPSsettings) <= 256 * 1024, structure_size_exceeds_flash_sector);
+
+// Определяем функции доступа к полям настроек
+bool https_get_domain(char *domain, size_t max_len);
+bool https_set_domain(const char *domain);
+
+bool https_get_tls_key(char *key, size_t max_len);
+bool https_set_tls_key(const char *key);
+
+bool https_get_tls_cert(char *cert, size_t max_len);
+bool https_set_tls_cert(const char *cert);
+
+bool https_get_tls_ca(char *ca, size_t max_len);
+bool https_set_tls_ca(const char *ca);
+
+bool https_get_telegram_token(char *token, size_t max_len);
+bool https_set_telegram_token(const char *token);
+
+uint16_t https_get_port(void);
+bool https_set_port(uint16_t port);
+
+uint32_t https_get_timeout(void);
+bool https_set_timeout(uint32_t timeout);
+
+uint8_t https_get_retry_cnt(void);
+bool https_set_retry_cnt(uint8_t retry_cnt);
+
+uint8_t https_get_connection_mode(void);
+bool https_set_connection_mode(uint8_t mode);
+
+// Функции для работы с настройками целиком
+bool is_settings_valid(const HTTPSsettings *settings);
+bool initialize_https_settings(void);
+bool reset_to_defaults(void);
+bool backup_settings(void);
+bool restore_from_backup(void);
+
+/****************** End Zerg section **************************/
+
 /******************** moon ****************************/
 typedef struct {
     uint16_t year;
@@ -114,7 +180,7 @@ void parse_timers_json(char* json_string, struct dbCron* dbCrontxt, int count);
 void handle_mysett_get(struct mg_connection *c);
 void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm);
 void gen_mysett_json(const struct dbSettings *settings, char *buffer, int buffer_size);
-void parse_mysett_json(char* json_string, struct dbSettings* settings);
+void parse_mysett_json(char *json_string, struct dbSettings *settings);
 
 void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm, struct dbPinToPin PinsLinks[NUMPINLINKS]);
 
@@ -193,5 +259,84 @@ void check_dht22_changes(uint8_t sensor_id);
 
 time_t initializeTime(void);
 void init_offline_time(void);
+
+/**************************************************************************/
+// Прототипы функций для обработки API (https)
+struct user *authenticate(struct mg_http_message *hm);
+void handle_login(struct mg_connection *c, struct user *u);
+void handle_logout(struct mg_connection *c);
+void handle_debug(struct mg_connection *c, struct mg_http_message *hm);
+void handle_stats_get(struct mg_connection *c);
+void handle_events_get(struct mg_connection *c, struct mg_http_message *hm);
+void handle_settings_get(struct mg_connection *c);
+void handle_settings_set(struct mg_connection *c, struct mg_str body);
+void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm);
+void handle_firmware_commit(struct mg_connection *c);
+void handle_firmware_rollback(struct mg_connection *c);
+void handle_firmware_status(struct mg_connection *c);
+void handle_device_reset(struct mg_connection *c);
+void handle_device_eraselast(struct mg_connection *c);
+void handle_select_get(struct mg_connection *c);
+void handle_pintopin_get(struct mg_connection *c);
+void handle_select_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_switch_get(struct mg_connection *c);
+void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_button_get(struct mg_connection *c);
+void handle_button_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_encoder_get(struct mg_connection *c);
+void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_timers_get(struct mg_connection *c);
+void handle_numline_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_mysett_get(struct mg_connection *c);
+void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm, struct dbPinToPin PinsLinks[NUMPINLINKS]);
+void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm);
+void handle_temp_get(struct mg_connection *c);
+void handle_sim800l_get(struct mg_connection *c);
+void handle_sim800l_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_monitoring_get(struct mg_connection *c);
+void handle_monitoring_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_onewire_get(struct mg_connection *c);
+void handle_sensor_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_onewire_set(struct mg_connection *c, struct mg_http_message *hm);
+void api_handler(struct mg_connection *c, struct mg_http_message *hm);
+
+//void setup_mqtt(struct mg_mgr *mgr, struct mg_tcpip_if *mif);
+
+struct mg_event {
+    struct mg_connection *c;
+    int ev;
+    void *ev_data;
+    // For copied event data
+    struct mg_http_message http_message;
+    struct mg_mqtt_message mqtt_message;
+};
+
+extern struct mg_event event; // Было в "worker_task"
+
+typedef struct {
+    struct mg_connection *c;          // Указатель на соединение
+    int ev;                           // Тип события (например, MG_EV_HTTP_MSG)
+    struct mg_http_message hm;        // Данные HTTP-сообщения
+} HttpEvent;
+
+typedef struct {
+    struct mg_connection *c;          // Указатель на соединение
+    int ev;                           // Тип события (например, MG_EV_HTTP_MSG, MG_EV_TLS_HS)
+    struct mg_http_message hm;        // Данные HTTP-сообщения (для MG_EV_HTTP_MSG)
+    char error_msg[256];              // Буфер для сообщения об ошибке (для MG_EV_ERROR)
+} HttpsEvent;
+
+typedef struct {
+    struct mg_connection *c;          // Указатель на соединение
+    int ev;                           // Тип события (например, MG_EV_MQTT_MSG)
+    struct mg_mqtt_message mm;        // Данные MQTT-сообщения
+    char error_msg[256];              // Буфер для сообщения об ошибке
+    int connack_status;               // Статус подключения для MG_EV_MQTT_OPEN
+} MqttEvent;
+
+/**************************************************************************/
 
 #endif /* INC_ZAGOTOVKA_H_ */
