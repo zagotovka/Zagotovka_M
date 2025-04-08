@@ -325,7 +325,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
             c->is_tls_hs = 0; // Где 0-инициализирует состояние TLS handshake
             MG_INFO(("HTTPS connection accepted on port %s", HTTPS_PORT));
 /***************************************************************************/
-            if (fn_data != NULL) {
+            if (fn_data != NULL && SetSettings.usehttps == 1){
                 // Локальные буферы для сертификатов и ключей (убираем static, чтобы избежать проблем в многопоточной среде)
                 char cert_buffer[1024] = {0};
                 char key_buffer[512] = {0};
@@ -677,27 +677,6 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		MG_INFO(("%lu HTTP/HTTPS request processing completed", c->id));
 		break;
 	}
-		// --- Обработка MQTT-событий ---
-//	case MG_EV_MQTT_OPEN:
-//		MG_INFO(("%lu MQTT connection opened", c->id));
-//		break;
-//
-//	case MG_EV_MQTT_MSG: {
-//		struct mg_mqtt_message *mm = (struct mg_mqtt_message*) ev_data;
-//		MG_INFO(("%lu MQTT message received (topic: %.*s)", c->id, (int) mm->topic.len, mm->topic.buf));
-//		if (mm->topic.len == strlen(SetSettings.rxmqttop) && strncmp(mm->topic.buf, SetSettings.rxmqttop, mm->topic.len) == 0) {
-//			if (mm->data.len > 0) {
-//				MG_INFO(("%lu Processing MQTT message: %.*s", c->id, (int) mm->data.len, mm->data.buf));
-//				mqtt_message_handler(SetSettings.rxmqttop, (const char*) mm->data.buf);
-//			} else {
-//				MG_INFO(("%lu Empty MQTT message received", c->id));
-//			}
-//		} else {
-//			MG_DEBUG(("%lu Unknown MQTT topic: %.*s", c->id, (int) mm->topic.len, mm->topic.buf));
-//		}
-//		MG_INFO(("%lu MQTT request processing completed", c->id));
-//		break;
-//	}
 
 	case MG_EV_CLOSE:
 		MG_INFO(("%lu Connection closed (TLS: %d)", c->id, c->is_tls));
