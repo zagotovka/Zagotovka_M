@@ -88,14 +88,14 @@ d. <a href="https://easyeda.com/editor#id=|125ff34d97324d308c97b01793449de7|1bc6
 ### Сборка и подключение. <a href="https://youtu.be/0MEFwOGv__A"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/b01398d510e53b7798d8fa7cf06d6fbc/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
 
 <h2>
-    <a href="https://raw.githubusercontent.com/zagotovka/Zagotovka_M/main/scripts/CertGeneration.sh" download="CertGeneration.sh">Скачать 'CertGeneration.sh'</a>
+    <a href="https://github.com/zagotovka/Zagotovka_M/raw/main/scripts/CertGeneration.sh" download="CertGeneration.sh">Скачать 'CertGeneration.sh'</a>
+    <a href="https://youtu.be/C4c-W71eqqY" style="vertical-align: middle; margin-left: 10px;">
+        <img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24">
+    </a>
+    <a href="https://rutube.ru/video/55e08612c6f4ec527f6d10fa24ae89fb/" style="vertical-align: middle; margin-left: 10px;">
+        <img src="/icons/Rutube.png" alt="Rutube" width="50" height="26">
+    </a>
 </h2>
-<a href="https://youtu.be/C4c-W71eqqY">
-    <img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle">
-</a>&nbsp;&nbsp;
-<a href="https://rutube.ru/video/55e08612c6f4ec527f6d10fa24ae89fb/">
-    <img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle">
-</a>
 
 ## [Скачать прошивку](https://github.com/zagotovka/Zagotovka_M/raw/main/Proshivka/Zagotovka_M.bin) и как прошить stm32? <a href="https://youtu.be/C4c-W71eqqY"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/55e08612c6f4ec527f6d10fa24ae89fb/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
 
