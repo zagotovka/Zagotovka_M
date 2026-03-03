@@ -2162,14 +2162,15 @@ void StartEncoderTask(void *argument) {
           uint8_t stateB = HAL_GPIO_ReadPin(PinsInfo[idpinb].gpio_name,
                                             PinsInfo[idpinb].hal_pin);
 
-          if (stateA != prev_A[id]) {
+          if (stateA != prev_A[id] && stateA == 1) { // только нарастающий фронт
             // Измеряем интервал между щелчками для определения скорости
             uint32_t interval = millis - lastPulse[id];
             int8_t step = (interval < ENC_FAST_THRESHOLD_MS) ? ENC_FAST_STEP
                                                              : ENC_SLOW_STEP;
             lastPulse[id] = millis;
             pinTimes[id] = millis;
-            int8_t dir = ((stateA ^ stateB) == 1) ? 1 : -1;
+            // На нарастающем фронте A: B=0 → CW (+1), B=1 → CCW (-1)
+            int8_t dir = (stateB == 0) ? 1 : -1;
 
             printf("Enc ID=%d: A=%d B=%d DIR=%d STEP=%d\r\n", id, stateA,
                    stateB, dir, step);
@@ -2178,7 +2179,9 @@ void StartEncoderTask(void *argument) {
               if (PinsLinks[a].idin == id) {
                 uint8_t idpwm = PinsLinks[a].idout;
                 if (PinsConf[idpwm].topin == 5) {
-                  int new_pct = (int)PinsConf[idpwm].dvalue + dir * step;
+                  uint8_t old_dvalue =
+                      PinsConf[idpwm].dvalue; // сохраняем ДО изменения
+                  int new_pct = (int)old_dvalue + dir * step;
                   if (new_pct > 100)
                     new_pct = 100;
                   if (new_pct < 0)
@@ -2186,8 +2189,7 @@ void StartEncoderTask(void *argument) {
                   PinsConf[idpwm].dvalue = (uint8_t)new_pct;
 
                   printf("PWM IDout=%d: old_dvalue=%d new_dvalue=%d\r\n", idpwm,
-                         PinsConf[idpwm].dvalue - (dir * step),
-                         PinsConf[idpwm].dvalue);
+                         old_dvalue, PinsConf[idpwm].dvalue);
 
                   uint32_t ccr = PercentToCCR(PinsConf[idpwm].dvalue,
                                               PinsConf[idpwm].pwmmax);
