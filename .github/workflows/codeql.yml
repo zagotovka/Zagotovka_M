@@ -2,9 +2,9 @@ name: "CodeQL Analysis"
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ "main" ]
 
 jobs:
   analyze:
@@ -12,21 +12,43 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       security-events: write
+      actions: read
+      contents: read
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Install ARM GCC toolchain
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y gcc-arm-none-eabi
+
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@v4
       with:
         languages: c-cpp
+        build-mode: manual
         queries: security-and-quality
 
-    # Мы заменяем Autobuild на ручную команду, чтобы CodeQL "увидел" твой C-код
-    - name: Manual Build
+    - name: Build Code
       run: |
-        find . -name "*.c" -exec gcc -c {} +
+        find . -name "*.c" | grep -v "node_modules" | while read f; do
+          arm-none-eabi-gcc -c "$f" \
+            -mcpu=cortex-m7 \
+            -mfpu=fpv5-d16 \
+            -mfloat-abi=hard \
+            -DUSE_HAL_DRIVER \
+            -DSTM32F767xx \
+            -ICore/Inc \
+            -IDrivers/STM32F7xx_HAL_Driver/Inc \
+            -IDrivers/CMSIS/Device/ST/STM32F7xx/Include \
+            -IDrivers/CMSIS/Include \
+            -IMiddlewares/Third_Party/FreeRTOS/Source/include \
+            -o /dev/null 2>/dev/null || true
+        done
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@v4
+      with:
+        category: "/language:c-cpp"
