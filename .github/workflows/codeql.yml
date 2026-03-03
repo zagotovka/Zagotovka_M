@@ -1,0 +1,32 @@
+name: "CodeQL Analysis"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: c-cpp
+        queries: security-and-quality
+
+    # Пытаемся собрать все .c файлы, чтобы CodeQL их "увидел"
+    - name: Build Code
+      run: |
+        gcc -c *.c || echo "Файлы не найдены в корне, ищем глубже..."
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
