@@ -2,9 +2,9 @@ name: "CodeQL Analysis"
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
 
 jobs:
   analyze:
@@ -23,10 +23,10 @@ jobs:
         languages: c-cpp
         queries: security-and-quality
 
-    # Пытаемся собрать все .c файлы, чтобы CodeQL их "увидел"
-    - name: Build Code
+    # Мы заменяем Autobuild на ручную команду, чтобы CodeQL "увидел" твой C-код
+    - name: Manual Build
       run: |
-        gcc -c *.c || echo "Файлы не найдены в корне, ищем глубже..."
+        find . -name "*.c" -exec gcc -c {} +
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
