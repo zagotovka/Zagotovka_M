@@ -31,37 +31,44 @@ struct dbCron {
 	uint8_t onoff;	// On | Off
 };
 
-struct dbPinsConf {     // Создали структуру с необходимым набором типов элиментов.
-	uint8_t topin;		// Type of pins: NONE - 0; BUTTON - 1; DEVICE - 2; SWITCH - 3; ONEWIRE - 4; PWM - 5; I2C - 6,7; Encoder - 8,9, SECURITY-10;
-	int pwm;		    // PWM frequency
-	int pwmmax;         // PWM максимальное значение сейчас пока 100
-	uint8_t on;			// Состояние выхода - 1-вкл, 0-выкл. К примеру 'EncoderB'.
-	uint8_t istate;		// Invert state
-	int dvalue;		    // Dimmer value
-	uint8_t ponr;		// Power on restore
-	uint8_t ptype; 		// Pullup type 0 - NONE; 1 - GPIO_PULLUP; 2 - GPIO_PULLDOWN
+struct dbPinsConf {
+	// --- 4-байтовые поля (32-bit) ---
+	uint32_t pwm;		// PWM frequency in milliHz (50 = 0.05Hz, 1000 = 1Hz)
+	uint32_t pwmmax;    // PWM ARR value (up to 4,294,967,295 for 32-bit timers)
+	uint32_t deb_tm;    // debounce time
+	uint32_t lasttrg;   // Last trigger time
+	int timeout;        // Timeout (ms)
+
+	// --- 2-байтовые поля (16-bit) ---
+	short parametr;     // Parameter value for dimmer (0-255), value for IncValue (-255 to 255).
+
+	// --- Массивы структур и данных ---
+	PinAction pinact[PINPAIRS]; // Массив структур для хранения пар.
 	char sclick[125]; 	// SINGLE CLICK, (где 125 - 25-27 пар)
 	char dclick[125]; 	// DOUBLE CLICK,(где 125 - 25-27 пар) где 255 это 51 пара ключ занчение (15:2).
 	char lpress[125]; 	// LONG PRESS, (где 125 - 25-27 пар) где 255 это 51 пара ключ занчение (15:2).
-	uint8_t encoderb; 	// ID of "Encoder B"
+	char info[30];	    // Info
 	char encbpin[5];	// PIN  of "Encoder B"
+	char send_sms[5];   // Send sms YES/NO.
+
+	// --- 1-байтовые поля (8-bit) ---
+	uint8_t topin;		// Type of pins: NONE - 0; BUTTON - 1; DEVICE - 2; SWITCH - 3; ONEWIRE - 4; PWM - 5; I2C - 6,7; Encoder - 8,9, SECURITY-10;
+	uint8_t on;			// Состояние выхода - 1-вкл, 0-выкл. К примеру 'EncoderB'.
+	uint8_t istate;		// Invert state
+	uint8_t dvalue;		// Dimmer value in PERCENT (0..100)
+	uint8_t ponr;		// Power on restore
+	uint8_t ptype; 		// Pullup type 0 - NONE; 1 - GPIO_PULLUP; 2 - GPIO_PULLDOWN
+	uint8_t encoderb; 	// ID of "Encoder B"
 	uint8_t hinter; 	// Hold interval
 	uint8_t repeat; 	// Repeat
 	uint8_t rinter; 	// Repeat interval
 	uint8_t dcinter;	// Double-click interval
 	uint8_t pclick; 	// Prevent Click
-	char info[30];	    // Info
 	uint8_t onoff;		// On | Off
 	uint8_t event;      // Event (StateChanged - 0, Pressed -1, Released - 2, Repeat - 3, Hold - 4, LongClick - 5, Click - 6, DoubleClick - 7)
 	uint8_t act;        // Action (No action - 0, On - 1,  Off - 2, Toggle - 3, Value - 4, IncValue - 5)
-	short parametr;     // Parameter value for dimmer (0-255), value for IncValue (-255 to 255).
-	int timeout;        // Timeout (ms)
-	char send_sms[5];   // Send sms YES/NO.
-	PinAction pinact[PINPAIRS]; // Массив структур для хранения пар.
 	uint8_t state;      // Значение текущего состояния
 	uint8_t prvstate;   // Значение предыдущего состояния
-	uint32_t deb_tm;    // debounce time
-	uint32_t lasttrg;   // Last trigger time
 };
 
 

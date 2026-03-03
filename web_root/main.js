@@ -2604,6 +2604,7 @@ const TabButton = () => {
 };
 
 // Добавлен параметр cache: 'no-store' для отключения кэширования
+// Добавлен параметр cache: 'no-store' для отключения кэширования
 function ModalEncoder({
   modalType,
   page,
@@ -2630,6 +2631,7 @@ function ModalEncoder({
 
   const [dvalue, setDvalue] = useState(selectedEncoder.dvalue || 0);
   const [ponr, setPonr] = useState(selectedEncoder.ponr || 0);
+  const [pwmFreq, setPwmFreq] = useState(selectedEncoder.pwm || 10000000);
 
   useEffect(() => {
     fetch('/api/select/get', {
@@ -2691,6 +2693,7 @@ function ModalEncoder({
           topin: 8,
           id: selectedEncoder.id,
           pins: selectedEncoder.pins,
+          pwm: parseInt(pwmFreq),
           dvalue: parseInt(dvalue),
           ponr: parseInt(ponr),
           info: encoderInfo,
@@ -2755,6 +2758,17 @@ function ModalEncoder({
 
   const handlePonrChange = (e) => {
     setPonr(e.target.value);
+  };
+
+  const handlePwmFreqChange = (e) => {
+    setPwmFreq(e.target.value);
+  };
+
+  const getFreqStatus = (mhz) => {
+    const hz = mhz / 1000;
+    if (hz <= 40000)  return { cls: 'text-green-600',  msg: 'Optimal range' };
+    if (hz <= 200000) return { cls: 'text-yellow-600', msg: 'Precision might drop' };
+    return                   { cls: 'text-red-600',    msg: 'Expert mode: low precision' };
   };
 
   const modalContent = () => {
@@ -2839,6 +2853,29 @@ function ModalEncoder({
                   <tr class="bg-white">
                     <td class="p-2 font-bold">Pin</td>
                     <td class="p-2">${selectedEncoder.pins}</td>
+                  </tr>
+                  <tr class="bg-gray-200">
+                    <td class="p-2 font-bold">PWM Frequency (milliHz)</td>
+                    <td class="p-2">
+                      <input
+                        type="number"
+                        min="50" 
+                        max="2000000000"
+                        value=${pwmFreq}
+                        oninput=${e => setPwmFreq(e.target.value)} 
+                        class="border rounded p-2 w-full font-mono" 
+                        placeholder="50 - 2000000000"
+                      />
+                      <div class="text-xs ${getFreqStatus(pwmFreq).cls}">
+                        ${getFreqStatus(pwmFreq).msg}
+                      </div>
+                    </td>
+                  </tr>
+                  <tr class="bg-white">
+                    <td class="p-2 font-bold">Resolution</td>
+                    <td class="p-2 text-blue-600 font-mono">
+                      ${selectedEncoder.pwmmax || '---'} steps
+                    </td>
                   </tr>
                   <tr class="bg-gray-200">
                     <td class="p-2 font-bold">Dimmer value (0-100)</td>
@@ -2931,7 +2968,7 @@ function ModalEncoder({
 }
 
 //FIXME: Ползунок не отправляет POST после изменения положения!
-function TabEncoder({}) {
+function TabEncoder({}) {{
   const [varencoder, setEncoder] = useState(null);
   const [saveResult, setSaveResult] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -3013,6 +3050,21 @@ function TabEncoder({}) {
     }
 
     return connectedPins;
+  };
+
+  const getFreqStatus = (mhz) => {
+    const hz = mhz / 1000;
+    if (hz <= 40000)  return { cls: 'text-green-600',  msg: '✓' };
+    if (hz <= 200000) return { cls: 'text-yellow-600', msg: '~' };
+    return                   { cls: 'text-red-600',    msg: '!' };
+  };
+
+  const formatPwmFreq = (mhz) => {
+    if (!mhz) return '—';
+    const hz = mhz / 1000;
+    if (hz >= 1000000) return `${(hz / 1000000).toFixed(2)} MHz`;
+    if (hz >= 1000)    return `${(hz / 1000).toFixed(1)} kHz`;
+    return `${hz} Hz`;
   };
 
   const getLangObject = () => ({
@@ -3257,6 +3309,7 @@ function TabEncoder({}) {
 
   const ArrayEncoder = ({ d, index }) => {
     const connectedPins = getConnectedPins(d.id);
+    const fStatus = getFreqStatus(d.pwm || 0);
 
     return html`
       <tr class="${index % 2 === 1 ? 'bg-white' : 'bg-green-300'}">
@@ -3284,6 +3337,13 @@ function TabEncoder({}) {
                 `
               )
             : 'Not set'}
+        </td>
+        <td class="px-4 py-2">
+          <span class="font-mono">${formatPwmFreq(d.pwm)}</span>
+          <span class="ml-1 font-bold ${fStatus.cls}">${fStatus.msg}</span>
+        </td>
+        <td class="px-4 py-2 font-mono text-blue-600">
+          ${d.pwmmax ? `${d.pwmmax} steps` : '—'}
         </td>
         <td class="px-4 py-2">${d.dvalue}</td>
         <td class="px-4 py-2">${d.ponr === 1 ? 'ON' : 'OFF'}</td>
@@ -3329,6 +3389,8 @@ function TabEncoder({}) {
                   <${Th} title="Encoder A (ID)" tooltipIndex=${3} />
                   <${Th} title="Encoder B (ID)" tooltipIndex=${4} />
                   <${Th} title="PWM connection" tooltipIndex=${5} />
+                  <${Th} title="PWM Frequency" tooltipIndex=${11} />
+                  <${Th} title="Resolution (steps)" tooltipIndex=${12} />
                   <${Th} title="Dimmer value (0-100)" tooltipIndex=${6} />
                   <${Th} title="Power On Restore" tooltipIndex=${7} />
                   <${Th} title="INFO" tooltipIndex=${8} />
@@ -3375,7 +3437,7 @@ function TabEncoder({}) {
       `}
     </div>
   `;
-}
+}}
 
 //FIXME:  Переменная onoff не передается в модальное окно! А вот из мольдального окна передается в таблицу!
 function ModalCron({

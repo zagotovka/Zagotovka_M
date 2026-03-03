@@ -11,7 +11,9 @@
       "ponr": 1,
       "pinact": { "PA6": 4 },
       "info": "",
-      "onoff": 1
+      "onoff": 1,
+      "pwm": 10000000,
+      "pwmmax": 1000
     },
     {
       "topin": 8,
@@ -23,7 +25,9 @@
       "ponr": 0,
       "pinact": { "PB1": 7 },
       "info": "",
-      "onoff": 0
+      "onoff": 0,
+      "pwm": 50000000,
+      "pwmmax": 200
     }
   ]
 }

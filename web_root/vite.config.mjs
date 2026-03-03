@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite';
 import redirectMiddleware from './server.js';
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [redirectMiddleware()]
-});
+  base: '', // Оставляем относительные пути (без "/" в начале)
+  plugins: [redirectMiddleware()],
+  // Блок build удаляем, чтобы Vite сам добавлял хеши
+})
