@@ -288,8 +288,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
   //		switch (ev) {
   //		case MG_EV_OPEN:
   //			MG_INFO(("%lu HTTPS connection created (TLS enabled)",
-  //c->id)); 			break; 		case MG_EV_READ: 			if (c->recv.len > 0) { 				MG_INFO(("%lu HTTPS
-  //data received (TLS enabled, %lu bytes)", c->id, c->recv.len));
+  // c->id)); 			break; 		case MG_EV_READ:
+  // if (c->recv.len > 0) { 				MG_INFO(("%lu HTTPS data
+  // received (TLS enabled, %lu bytes)", c->id, c->recv.len));
   //			}
   //			break;
   //		case MG_EV_TLS_HS:
@@ -297,7 +298,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
   //			break;
   //		case MG_EV_CLOSE:
   //			MG_INFO(("%lu HTTPS connection closed (TLS enabled)",
-  //c->id)); 			break; 		default:
+  // c->id)); 			break; 		default:
   //			// Закомментировано для уменьшения спама
   //			// MG_DEBUG(("%lu TLS-specific event: %d", c->id, ev));
   //			break;
@@ -437,7 +438,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
       MG_INFO(("%lu Serving root path (/) for connection", c->id));
       struct mg_http_message *hm = (struct mg_http_message *)ev_data;
       //		    const char *conn_hdr = get_connection_header(hm); //
-      //Получаем заголовок Connection
+      // Получаем заголовок Connection
 
       // Проверяем, запросил ли клиент Connection: close
       struct mg_str *conn_value = mg_http_get_header(hm, "Connection");
@@ -778,6 +779,13 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data,
     struct mg_mqtt_message *mm = (struct mg_mqtt_message *)ev_data;
     MG_INFO(("%lu RECEIVED %.*s <- %.*s", c->id, (int)mm->data.len,
              mm->data.buf, (int)mm->topic.len, mm->topic.buf));
+    // Передаём входящее сообщение в обработчик команд
+    char mqtt_t[64], mqtt_p[256];
+    mg_snprintf(mqtt_t, sizeof(mqtt_t), "%.*s", (int)mm->topic.len,
+                mm->topic.buf);
+    mg_snprintf(mqtt_p, sizeof(mqtt_p), "%.*s", (int)mm->data.len,
+                mm->data.buf);
+    mqtt_message_handler(mqtt_t, mqtt_p);
   } else if (ev == MG_EV_CLOSE) {
     MG_INFO(("%lu CLOSED", c->id));
     s_conn = NULL; // Mark that we're closed
