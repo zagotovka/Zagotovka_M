@@ -48,7 +48,7 @@
 #include "usart_ring.h"
 
 #define BLINK_PERIOD_MS 1000 // LED blinking period in millis
-#define DEBOUNCE_DELAY 45    // Encoder (ms)
+#define DEBOUNCE_DELAY 10    // EncoderTask & SecurityTask (ms).  Если у вас оптический или магнитный энкодер — можно смело ставить 3–5 мс.
 
 #define PI 3.14159265358979323846
 #define ZENITH -.83 // Средняя атмосферная рефракция.
@@ -2140,7 +2140,6 @@ void StartInputTask(void *argument) {
 void StartEncoderTask(void *argument) {
   /* USER CODE BEGIN StartEncoderTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
-  uint32_t millis;
   uint32_t pinTimes[NUMPIN] = {0};
   uint8_t prev_A[NUMPIN] = {0};
   //  uint8_t prev_B[NUMPIN] = {0};
@@ -2152,75 +2151,80 @@ void StartEncoderTask(void *argument) {
 #define ENC_SLOW_STEP 1             // Шаг при медленном вращении
   /* Infinite loop */
   for (;;) {
-    millis = HAL_GetTick();
-    for (uint8_t id = 0; id < NUMPIN; id++) {
-      if (PinsConf[id].topin == 8 && PinsConf[id].onoff == 1) {
-        uint8_t idpinb = PinsConf[id].encoderb;
-        if (idpinb != 0 && (millis - pinTimes[id] >= DEBOUNCE_DELAY)) {
-          uint8_t stateA =
-              HAL_GPIO_ReadPin(PinsInfo[id].gpio_name, PinsInfo[id].hal_pin);
-          uint8_t stateB = HAL_GPIO_ReadPin(PinsInfo[idpinb].gpio_name,
-                                            PinsInfo[idpinb].hal_pin);
+	// ── Читаем тик ОДИН РАЗ на итерацию ─────────────────────────────────────
+	const uint32_t millis = HAL_GetTick();
 
-          if (stateA != prev_A[id] && stateA == 1) { // только нарастающий фронт
-            // Измеряем интервал между щелчками для определения скорости
-            uint32_t interval = millis - lastPulse[id];
-            int8_t step = (interval < ENC_FAST_THRESHOLD_MS) ? ENC_FAST_STEP
-                                                             : ENC_SLOW_STEP;
-            lastPulse[id] = millis;
-            pinTimes[id] = millis;
-            // На нарастающем фронте A: B=0 → CW (+1), B=1 → CCW (-1)
-            int8_t dir = (stateB == 0) ? 1 : -1;
+	for (uint8_t id = 0; id < NUMPIN; id++) {
 
-            printf("Enc ID=%d: A=%d B=%d DIR=%d STEP=%d\r\n", id, stateA,
-                   stateB, dir, step);
+	  // ── Быстрая проверка: нас интересует только encoder-пин ──────────────
+	  if (PinsConf[id].topin != 8 || PinsConf[id].onoff != 1) continue;
 
-            for (uint8_t a = 0; a < NUMPINLINKS; a++) {
-              if (PinsLinks[a].idin == id) {
-                uint8_t idpwm = PinsLinks[a].idout;
-                if (PinsConf[idpwm].topin == 5) {
-                  uint8_t old_dvalue =
-                      PinsConf[idpwm].dvalue; // сохраняем ДО изменения
-                  int new_pct = (int)old_dvalue + dir * step;
-                  if (new_pct > 100)
-                    new_pct = 100;
-                  if (new_pct < 0)
-                    new_pct = 0;
-                  PinsConf[idpwm].dvalue = (uint8_t)new_pct;
+	  const uint8_t idpinb = PinsConf[id].encoderb;
+	  if (idpinb == 0) continue;
 
-                  printf("PWM IDout=%d: old_dvalue=%d new_dvalue=%d\r\n", idpwm,
-                         old_dvalue, PinsConf[idpwm].dvalue);
+	  // ── Дебаунс ───────────────────────────────────────────────────────────
+	  if ((millis - pinTimes[id]) < DEBOUNCE_DELAY) continue;
 
-                  uint32_t ccr = PercentToCCR(PinsConf[idpwm].dvalue,
-                                              PinsConf[idpwm].pwmmax);
-                  __HAL_TIM_SET_COMPARE(&htim[idpwm],
-                                        PinsInfo[idpwm].tim_channel, ccr);
+	  // ── АТОМАРНОЕ чтение обеих фаз ────────────────────────────────────────
+	  // Читаем A и B подряд — минимум кода между вызовами HAL_GPIO_ReadPin,
+	  // чтобы B не успело измениться пока мы обрабатываем условия.
+	  const uint8_t stateA = HAL_GPIO_ReadPin(PinsInfo[id].gpio_name,
+											   PinsInfo[id].hal_pin);
+	  const uint8_t stateB = HAL_GPIO_ReadPin(PinsInfo[idpinb].gpio_name,
+											   PinsInfo[idpinb].hal_pin);
 
-                  // Если для этого PWM-пина включено восстановление после
-                  // перезагрузки — взводим таймер отложенного сохранения
-                  if (PinsConf[idpwm].ponr == 1) {
-                    lastEncoderChange = millis;
-                    needSave = true;
-                  }
-                }
-              }
-            }
-          }
-          prev_A[id] = stateA;
-        }
-      }
-    }
+	  // ── Нарастающий фронт A ───────────────────────────────────────────────
+	  if (stateA == 1 && prev_A[id] == 0) {
 
-    // Отложенное сохранение: через 5 сек после последнего вращения
-    // сохраняем весь pins.ini на флешку (только если есть что сохранять)
-    if (needSave && (millis - lastEncoderChange >= 5000)) {
-      uint8_t usb = 1;
-      xQueueSend(usbQueueHandle, &usb, 0);
-      needSave = false;
-      // printf("Encoder: dvalue saved to pins.ini\r\n");
-    }
+		const uint32_t interval = millis - lastPulse[id];
+		const int8_t   step     = (interval < ENC_FAST_THRESHOLD_MS)
+									? ENC_FAST_STEP : ENC_SLOW_STEP;
+		const int8_t   dir      = (stateB == 0) ? 1 : -1;
 
-    osDelay(5);
+		lastPulse[id] = millis;
+		pinTimes[id]  = millis;  // сбрасываем дебаунс
+
+		// printf("Enc ID=%d: A=%d B=%d DIR=%d STEP=%d\r\n", ...); // debug
+
+		// ── Обходим связанные PWM-пины ────────────────────────────────────
+		for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+		  if (PinsLinks[a].idin != id) continue;
+
+		  const uint8_t idpwm = PinsLinks[a].idout;
+		  if (PinsConf[idpwm].topin != 5) continue;
+
+		  // Вычисляем новое значение с ограничением [0..100]
+		  int16_t new_pct = (int16_t)PinsConf[idpwm].dvalue + dir * step;
+		  if (new_pct > 100) new_pct = 100;
+		  if (new_pct <   0) new_pct = 0;
+		  PinsConf[idpwm].dvalue = (uint8_t)new_pct;
+
+		  // Обновляем PWM сразу
+		  const uint32_t ccr = PercentToCCR(PinsConf[idpwm].dvalue,
+											 PinsConf[idpwm].pwmmax);
+		  __HAL_TIM_SET_COMPARE(&htim[idpwm],
+								 PinsInfo[idpwm].tim_channel, ccr);
+
+		  // Взводим таймер отложенного сохранения
+		  if (PinsConf[idpwm].ponr == 1) {
+			lastEncoderChange = millis;
+			needSave = true;
+		  }
+		}
+	  }
+
+	  prev_A[id] = stateA;
+	}
+
+	// ── Отложенное сохранение: 5 сек после последнего поворота ───────────────
+	// xQueueSend не блокирует (таймаут 0) — запись на флешку в другой задаче
+	if (needSave && (millis - lastEncoderChange >= 5000)) {
+	  const uint8_t usb = 1;
+	  xQueueSend(usbQueueHandle, &usb, 0);
+	  needSave = false;
+	}
+
+	osDelay(1); // 1 мс вместо 5 мс — меньше пропусков при быстром вращении
   }
   /* USER CODE END StartEncoderTask */
 }

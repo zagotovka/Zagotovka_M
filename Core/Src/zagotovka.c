@@ -3165,14 +3165,18 @@ void mqtt_message_handler(const char *topic, const char *payload) {
       if (dvalue_part) {
         int value;
         if (sscanf(dvalue_part + 7, "%d", &value) == 1) {
-          PinsConf[id].pwmmax = 100;
-          if (value >= 0 && value <= PinsConf[id].pwmmax) {
-            PinsConf[id].dvalue = value;
-            processPins(id, value);
-            printf("PWM %d set to %d by mqtt!\n", id, value);
-          } else {
-            printf("Invalid dvalue for PWM: %d\n", value);
-          }
+          // Нормализация входящих процентов
+          if (value < 0)
+            value = 0;
+          if (value > 100)
+            value = 100;
+          PinsConf[id].dvalue = (uint8_t)value;
+          // Рассчитываем CCR на основе реального ARR таймера (pwmmax)
+          uint32_t ccr = PercentToCCR(PinsConf[id].dvalue, PinsConf[id].pwmmax);
+          // Прямая запись в регистр сравнения таймера
+          __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel, ccr);
+          printf("PWM %d set to %d%% (ccr=%lu, pwmmax=%lu) by mqtt!\n", id,
+                 value, ccr, PinsConf[id].pwmmax);
         } else {
           printf("Invalid dvalue format in payload\n");
         }
