@@ -154,8 +154,8 @@ function Header({ logout, user, setShowSidebar, showSidebar }) {
   return html`
     <div
       class="bg-white sticky top-0 z-[48] w-full border-b py-2 ${showSidebar
-        ? 'pl-72'
-        : ''} transition-all duration-300 transform"
+      ? 'pl-72'
+      : ''} transition-all duration-300 transform"
     >
       <div class="px-2 w-full py-0 my-0 flex items-center justify-between">
         <button
@@ -196,11 +196,10 @@ function Header({ logout, user, setShowSidebar, showSidebar }) {
 function Sidebar({ url, show }) {
   const NavLink = ({ title, icon, href, url }) => html`
   <div>
-    <a href="#${href}" class="${
-    href == url
+    <a href="#${href}" class="${href == url
       ? 'bg-slate-50 text-blue-600 group'
       : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50 group'
-  } flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold">
+    } flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold">
       <${icon} class="w-6 h-6"/>
       ${title}
     <///>
@@ -279,7 +278,7 @@ function Sidebar({ url, show }) {
   <//>`;
 }
 
-function Events({}) {
+function Events({ }) {
   const [events, setEvents] = useState([]);
   const [page, setPage] = useState(1);
 
@@ -389,7 +388,7 @@ function Chart({ data }) {
     <div class="relative">
       <svg class="bg-yellow-x50 w-full p-4" viewBox="0 0 ${n * w + ls} ${h}">
         ${range(0, yticks).map(
-          (i) => html`
+    (i) => html`
             <line
               x1="0"
               y1=${yt(i)}
@@ -403,9 +402,9 @@ function Chart({ data }) {
               >${ymax - (ymax / yticks) * (i + 1)}<//
             >
           `
-        )}
+  )}
         ${range(0, n).map(
-          (x) => html`
+    (x) => html`
             <rect
               x=${ls + x * w}
               y=${by((data[x] * 100) / ymax)}
@@ -418,7 +417,7 @@ function Chart({ data }) {
               >${x * 2}:00<//
             >
           `
-        )}
+  )}
       <//>
     <//>
   <//>`;
@@ -439,7 +438,7 @@ function DeveloperNote({ text, children }) {
   <//>`;
 }
 
-function Main({}) {
+function Main({ }) {
   const [stats, setStats] = useState(null);
   const refresh = () =>
     fetch('api/stats/get')
@@ -543,7 +542,7 @@ const MyPolzunok = ({ value, onChange }) => {
   `;
 };
 
-function TabSelect({}) {
+function TabSelect({ }) {
   const [varselect, setSelect] = useState(null);
   const [selectedValues, setSelectedValues] = useState({});
   const [submissionStatus, setSubmissionStatus] = useState(null);
@@ -662,8 +661,8 @@ function TabSelect({}) {
   const ArraySelect = ({ d }) => html`
     <tr
       class="${isRowDisabled(d.id)
-        ? 'bg-red-200 opacity-50 pointer-events-none'
-        : d.id % 2 === 1
+      ? 'bg-red-200 opacity-50 pointer-events-none'
+      : d.id % 2 === 1
         ? 'bg-white'
         : 'bg-green-300'}"
     >
@@ -813,16 +812,15 @@ function TabSelect({}) {
               <div class="relative flex justify-between items-center mb-5">
                 <button
                   type="submit"
-                  class=${`inline-flex justify-center items-center gap-2 rounded px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm ${
-                    isButtonDisabled
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-blue-500 hover:bg-blue-700'
-                  }`}
+                  class=${`inline-flex justify-center items-center gap-2 rounded px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm ${isButtonDisabled
+      ? 'bg-gray-400 cursor-not-allowed'
+      : 'bg-blue-500 hover:bg-blue-700'
+    }`}
                   disabled=${isButtonDisabled}
                 >
                   ${isButtonDisabled
-                    ? `Please wait ${countdown} sec.`
-                    : 'Submit'}
+      ? `Please wait ${countdown} sec.`
+      : 'Submit'}
                 </button>
 
                 <div class="flex items-center">
@@ -849,7 +847,7 @@ function TabSelect({}) {
               </div>
 
               ${submissionStatus === 'success' &&
-              html`
+    html`
                 <div
                   class="mb-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded"
                   role="alert"
@@ -862,7 +860,7 @@ function TabSelect({}) {
                 </div>
               `}
               ${submissionStatus === 'error' &&
-              html`
+    html`
                 <div
                   class="mb-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded"
                   role="alert"
@@ -891,16 +889,15 @@ function TabSelect({}) {
               <div class="relative mt-5">
                 <button
                   type="submit"
-                  class=${`inline-flex justify-center items-center gap-2 rounded px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm ${
-                    isButtonDisabled
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-blue-500 hover:bg-blue-700'
-                  }`}
+                  class=${`inline-flex justify-center items-center gap-2 rounded px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm ${isButtonDisabled
+      ? 'bg-gray-400 cursor-not-allowed'
+      : 'bg-blue-500 hover:bg-blue-700'
+    }`}
                   disabled=${isButtonDisabled}
                 >
                   ${isButtonDisabled
-                    ? `Please wait ${countdown} sec.`
-                    : 'Submit'}
+      ? `Please wait ${countdown} sec.`
+      : 'Submit'}
                 </button>
               </div>
             </form>
@@ -1058,12 +1055,12 @@ function ModalSwitch({
                       >
                         <option value="">Select a connection</option>
                         ${pinOptions.map(
-                          (option) => html`
+          (option) => html`
                             <option value=${option.pins}>
                               ${option.pins} (ID: ${option.id})
                             </option>
                           `
-                        )}
+        )}
                       </select>
                     </td>
                   </tr>
@@ -1181,7 +1178,7 @@ function ModalSwitch({
   `;
 }
 
-function TabSwitch({}) {
+function TabSwitch({ }) {
   const [switchData, setSwitchData] = useState(null);
   const [saveResult, setSaveResult] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1598,8 +1595,8 @@ function TabSwitch({}) {
         class="absolute z-50 invisible group-hover:visible bg-orange-300 p-2 rounded shadow-lg text-left"
         style="width: 400px; left: 50%; transform: translateX(-50%); top: 100%;"
         dangerouslySetInnerHTML=${{
-          __html: getTooltipText('langbutton', props.tooltipIndex)
-        }}
+      __html: getTooltipText('langbutton', props.tooltipIndex)
+    }}
       ></div>
     </th>
   `;
@@ -1616,14 +1613,14 @@ function TabSwitch({}) {
         </td>
         <td class="px-4 py-2">
           ${connectedPins.map(
-            ({ pin, relayId }) => html`
+      ({ pin, relayId }) => html`
               <span class="mr-2">
                 ${pin}${relayId !== undefined ? `(${relayId})` : ''}
                 <button
                   onClick=${(e) => {
-                    e.preventDefault();
-                    onsave(d.id, `${pin}(${relayId})`);
-                  }}
+          e.preventDefault();
+          onsave(d.id, `${pin}(${relayId})`);
+        }}
                   class="text-red-500 hover:text-red-700"
                   style="margin-left: 2px; font-weight: bold;"
                 >
@@ -1631,7 +1628,7 @@ function TabSwitch({}) {
                 </button>
               </span>
             `
-          )}
+    )}
         </td>
         <td class="px-4 py-2">${d.info}</td>
         <td class="px-4 py-2">
@@ -1684,9 +1681,9 @@ function TabSwitch({}) {
               </thead>
               <tbody id="tab1">
                 ${varswitch.map(
-                  (d, index) =>
-                    html`<${ArraySwitch} d=${d} index=${index} key=${d.id} />`
-                )}
+    (d, index) =>
+      html`<${ArraySwitch} d=${d} index=${index} key=${d.id} />`
+  )}
               </tbody>
             </table>
           </div>
@@ -1701,21 +1698,21 @@ function TabSwitch({}) {
           </div>
 
           ${showHelp &&
-          html`
+    html`
             <div class="mt-4 p-4 border rounded">${helpContent[language]}</div>
           `}
         </div>
       </div>
 
       ${isModalOpen &&
-      html`
+    html`
         <${ModalSwitch}
           modalType=${modalType}
           page="TabSwitch"
           hideModal=${closeModal}
           title=${modalType === 'connection'
-            ? 'Edit Connection'
-            : 'Edit switch'}
+        ? 'Edit Connection'
+        : 'Edit switch'}
           selectedSwitch=${selectedSwitch}
           onSwitchChange=${handleSwitchChange}
         />
@@ -1858,20 +1855,20 @@ const ModalButton = ({
                   name="setrpins"
                   value=${selectedButton?.setrpins || ''}
                   onChange=${(e) =>
-                    onButtonChange({
-                      ...selectedButton,
-                      setrpins: e.target.value
-                    })}
+      onButtonChange({
+        ...selectedButton,
+        setrpins: e.target.value
+      })}
                   class="border rounded p-2 w-full"
                 >
                   <option value="">Select a connection</option>
                   ${pinOptions.map(
-                    (option) => html`
+        (option) => html`
                       <option value=${option.pins}>
                         ${option.pins} (ID: ${option.id})
                       </option>
                     `
-                  )}
+      )}
                 </select>
               </td>
             </tr>
@@ -1918,14 +1915,14 @@ const ModalButton = ({
               </td>
             </tr>
             ${['sclick', 'dclick', 'lpress'].map(
-              (type) => html`
+    (type) => html`
                 <tr class=${type === 'dclick' ? 'bg-gray-200' : 'bg-white'}>
                   <td class="p-2 font-bold">
                     ${type === 'sclick'
-                      ? 'Single Click'
-                      : type === 'dclick'
-                      ? 'Double Click'
-                      : 'Long Press'}
+        ? 'Single Click'
+        : type === 'dclick'
+          ? 'Double Click'
+          : 'Long Press'}
                   </td>
                   <td class="p-2">
                     <input
@@ -1934,16 +1931,16 @@ const ModalButton = ({
                       value=${eval(type)}
                       onInput=${(e) => handleInputChange(type, e.target.value)}
                       class="border rounded p-2 w-full ${errors[type]
-                        ? 'border-red-500'
-                        : ''}"
+        ? 'border-red-500'
+        : ''}"
                       placeholder="None"
                     />
                     ${errors[type] &&
-                    html`<p class="text-red-500 text-sm">${errors[type]}</p>`}
+      html`<p class="text-red-500 text-sm">${errors[type]}</p>`}
                   </td>
                 </tr>
               `
-            )}
+  )}
             <tr class="bg-gray-200">
               <td class="p-2 font-bold">INFO</td>
               <td class="p-2">
@@ -2004,8 +2001,8 @@ const ModalButton = ({
             </button>
           </div>
           ${page === 'TabButton' && modalType === 'connection'
-            ? renderConnectionModal()
-            : renderEditModal()}
+      ? renderConnectionModal()
+      : renderEditModal()}
         </div>
       </div>
     </div>
@@ -2564,10 +2561,10 @@ const TabButton = () => {
               </thead>
               <tbody id="tab1">
                 ${varbutton.map(
-                  (d, index) => html`
+    (d, index) => html`
                     <${ArrayButton} d=${d} index=${index} key=${d.id} />
                   `
-                )}
+  )}
               </tbody>
             </table>
           </div>
@@ -2581,20 +2578,20 @@ const TabButton = () => {
           </div>
 
           ${showHelp &&
-          html`
+    html`
             <div class="mt-4 p-4 border rounded">${helpContent[language]}</div>
           `}
         </div>
       </div>
       ${isModalOpen &&
-      html`
+    html`
         <${ModalButton}
           modalType=${modalType}
           page="TabButton"
           hideModal=${closeModal}
           title=${modalType === 'connection'
-            ? 'Edit Connection'
-            : 'Edit Button pin'}
+        ? 'Edit Connection'
+        : 'Edit Button pin'}
           selectedButton=${selectedButton}
           onButtonChange=${handleButtonChange}
         />
@@ -2766,9 +2763,9 @@ function ModalEncoder({
 
   const getFreqStatus = (mhz) => {
     const hz = mhz / 1000;
-    if (hz <= 40000)  return { cls: 'text-green-600',  msg: 'Optimal range' };
+    if (hz <= 40000) return { cls: 'text-green-600', msg: 'Optimal range' };
     if (hz <= 200000) return { cls: 'text-yellow-600', msg: 'Precision might drop' };
-    return                   { cls: 'text-red-600',    msg: 'Expert mode: low precision' };
+    return { cls: 'text-red-600', msg: 'Expert mode: low precision' };
   };
 
   const modalContent = () => {
@@ -2798,12 +2795,12 @@ function ModalEncoder({
                       >
                         <option value="">Select Encoder B</option>
                         ${encoderBOptions.map(
-                          (option) => html`
+          (option) => html`
                             <option value=${option.pins}>
                               ${option.pins} (ID: ${option.id})
                             </option>
                           `
-                        )}
+        )}
                       </select>
                     </td>
                   </tr>
@@ -2818,12 +2815,12 @@ function ModalEncoder({
                       >
                         <option value="">Select PWM connection</option>
                         ${pwmOptions.map(
-                          (option) => html`
+          (option) => html`
                             <option value=${`${option.pins}|${option.id}`}>
                               ${option.pins} (ID: ${option.id})
                             </option>
                           `
-                        )}
+        )}
                       </select>
                     </td>
                   </tr>
@@ -2891,7 +2888,7 @@ function ModalEncoder({
                     </td>
                   </tr>
                   <tr class="bg-white">
-                    <td class="p-2 font-bold">Power On Restore</td>
+                    <td class="p-2 font-bold">Duty on restore</td>
                     <td class="p-2">
                       <select
                         value=${ponr}
@@ -2967,208 +2964,238 @@ function ModalEncoder({
   `;
 }
 
-//FIXME: Ползунок не отправляет POST после изменения положения!
-function TabEncoder({}) {{
-  const [varencoder, setEncoder] = useState(null);
-  const [saveResult, setSaveResult] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalType, setModalType] = useState(null);
-  const [selectedEncoder, setSelectedEncoder] = useState(null);
-  const [showHelp, setShowHelp] = useState(false);
-  const [language, setLanguage] = useState('ru');
-  const [pintopin, setPintopin] = useState([]);
+function TabEncoder({ }) {
+  {
+    const [varencoder, setEncoder] = useState(null);
+    const [saveResult, setSaveResult] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [modalType, setModalType] = useState(null);
+    const [selectedEncoder, setSelectedEncoder] = useState(null);
+    const [showHelp, setShowHelp] = useState(false);
+    const [language, setLanguage] = useState('ru');
+    const [pintopin, setPintopin] = useState([]);
+    // Флаг: пока POST /api/onoff/set в полёте — не перезаписываем состояние из поллинга
+    const isPendingOnOff = useRef(false);
 
-  const refresh = () =>
-    Promise.all([
-      fetch('/api/encoder/get').then((r) => r.json()),
-      fetch('/api/pintopin/get').then((r) => r.json())
-    ])
-      .then(([encoderData, pintopinData]) => {
-        setLanguage(encoderData.lang);
-        setEncoder(encoderData.encoders);
-        setPintopin(pintopinData);
-        console.log('Encoder data:', encoderData.encoders);
-        console.log('Pintopin data:', pintopinData);
-      })
-      .catch((error) => {
-        console.error('Error fetching data:', error);
-      });
+    const refresh = () =>
+      Promise.all([
+        fetch('/api/encoder/get').then((r) => r.json()),
+        fetch('/api/pintopin/get').then((r) => r.json())
+      ])
+        .then(([encoderData, pintopinData]) => {
+          setLanguage(encoderData.lang);
+          setEncoder(encoderData.encoders);
+          setPintopin(pintopinData);
+          console.log('Encoder data:', encoderData.encoders);
+          console.log('Pintopin data:', pintopinData);
+        })
+        .catch((error) => {
+          console.error('Error fetching data:', error);
+        });
 
-  const fetchEncoderData = () => {
-    fetch('/api/encoder/get')
-      .then((r) => r.json())
-      .then((data) => {
-        setEncoder(data.encoders);
-        setLanguage(data.lang);
-        console.log('Updated encoder data:', data.encoders);
-      })
-      .catch((error) => {
-        console.error('Error fetching encoder data:', error);
-      });
-  };
+    const fetchEncoderData = () => {
+      fetch('/api/encoder/get')
+        .then((r) => r.json())
+        .then((data) => {
+          // Пропускаем перезапись, если onoff-запрос ещё не завершился
+          if (isPendingOnOff.current) {
+            console.log('Polling skip: onoff request in flight');
+            return;
+          }
+          setEncoder(data.encoders);
+          setLanguage(data.lang);
+          console.log('Updated encoder data:', data.encoders);
+        })
+        .catch((error) => {
+          console.error('Error fetching encoder data:', error);
+        });
+    };
 
-  const fetchPintopinData = () => {
-    fetch('/api/pintopin/get')
-      .then((r) => r.json())
-      .then((data) => {
-        setPintopin(data);
-        console.log('Updated pintopin data:', data);
-      })
-      .catch((error) => {
-        console.error('Error fetching pintopin data:', error);
-      });
-  };
+    const fetchPintopinData = () => {
+      fetch('/api/pintopin/get')
+        .then((r) => r.json())
+        .then((data) => {
+          setPintopin(data);
+          console.log('Updated pintopin data:', data);
+        })
+        .catch((error) => {
+          console.error('Error fetching pintopin data:', error);
+        });
+    };
 
-  useEffect(() => {
-    fetchEncoderData();
-    fetchPintopinData();
-
-    const intervalId = setInterval(() => {
+    useEffect(() => {
       fetchEncoderData();
       fetchPintopinData();
-    }, 500);
 
-    return () => clearInterval(intervalId);
-  }, []);
+      const intervalId = setInterval(() => {
+        fetchEncoderData();
+        fetchPintopinData();
+      }, 500);
 
-  const handleEncoderChange = (updatedEncoder) => {
-    setEncoder((prevEncoders) =>
-      prevEncoders.map((enc) =>
-        enc.id === updatedEncoder.id ? updatedEncoder : enc
-      )
-    );
-  };
+      return () => clearInterval(intervalId);
+    }, []);
 
-  const getConnectedPins = (encoderId) => {
-    const encoderItem = varencoder.find((enc) => enc.id === encoderId);
-    const connectedPins = [];
+    const handleEncoderChange = (updatedEncoder) => {
+      setEncoder((prevEncoders) =>
+        prevEncoders.map((enc) =>
+          enc.id === updatedEncoder.id ? updatedEncoder : enc
+        )
+      );
 
-    if (encoderItem && encoderItem.pinact) {
-      Object.entries(encoderItem.pinact).forEach(([pin, idout]) => {
-        connectedPins.push({ pin, idout });
-      });
-    }
+      // Блокируем поллинг, чтобы он не перезатёр наше оптимистичное обновление
+      isPendingOnOff.current = true;
 
-    return connectedPins;
-  };
+      // Отправляем обновление на сервер
+      fetch('/api/onoff/set', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id: updatedEncoder.id, onoff: updatedEncoder.onoff })
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          console.log('Response from /api/onoff/set (Encoder):', data);
+        })
+        .catch((error) => {
+          console.error('Error calling /api/onoff/set (Encoder):', error);
+        })
+        .finally(() => {
+          // Разрешаем поллинг снова
+          isPendingOnOff.current = false;
+        });
+    };
 
-  const getFreqStatus = (mhz) => {
-    const hz = mhz / 1000;
-    if (hz <= 40000)  return { cls: 'text-green-600',  msg: '✓' };
-    if (hz <= 200000) return { cls: 'text-yellow-600', msg: '~' };
-    return                   { cls: 'text-red-600',    msg: '!' };
-  };
+    const getConnectedPins = (encoderId) => {
+      const encoderItem = varencoder.find((enc) => enc.id === encoderId);
+      const connectedPins = [];
 
-  const formatPwmFreq = (mhz) => {
-    if (!mhz) return '—';
-    const hz = mhz / 1000;
-    if (hz >= 1000000) return `${(hz / 1000000).toFixed(2)} MHz`;
-    if (hz >= 1000)    return `${(hz / 1000).toFixed(1)} kHz`;
-    return `${hz} Hz`;
-  };
-
-  const getLangObject = () => ({
-    langbutton: language === 'ru' ? ruencoder : enencoder
-  });
-
-  const getTooltipText = (key, index) => {
-    const langObject = getLangObject();
-    const tooltipText =
-      langObject[key] && langObject[key][index] ? langObject[key][index] : '';
-    return formatText(tooltipText);
-  };
-
-  const formatText = (text, maxLength = 50) => {
-    if (!text || typeof text !== 'string') {
-      return '';
-    }
-
-    const words = text.split(' ');
-    let lines = [];
-    let currentLine = '';
-
-    for (let i = 0; i < words.length; i++) {
-      if (currentLine.length + words[i].length + 1 <= maxLength) {
-        currentLine += `${currentLine ? ' ' : ''}${words[i]}`;
-      } else {
-        if (currentLine) {
-          lines.push(currentLine.trim());
-        }
-        currentLine = words[i];
+      if (encoderItem && encoderItem.pinact) {
+        Object.entries(encoderItem.pinact).forEach(([pin, idout]) => {
+          connectedPins.push({ pin, idout });
+        });
       }
-    }
 
-    if (currentLine) {
-      lines.push(currentLine.trim());
-    }
+      return connectedPins;
+    };
 
-    return lines.join('\n');
-  };
+    const getFreqStatus = (mhz) => {
+      const hz = mhz / 1000;
+      if (hz <= 40000) return { cls: 'text-green-600', msg: '✓' };
+      if (hz <= 200000) return { cls: 'text-yellow-600', msg: '~' };
+      return { cls: 'text-red-600', msg: '!' };
+    };
 
-  const onsave = (id, pinInfo) => {
-    console.log('Deleting connection:', id, pinInfo);
+    const formatPwmFreq = (mhz) => {
+      if (!mhz) return '—';
+      const hz = mhz / 1000;
+      if (hz >= 1000000) return `${(hz / 1000000).toFixed(2)} MHz`;
+      if (hz >= 1000) return `${(hz / 1000).toFixed(1)} kHz`;
+      return `${hz} Hz`;
+    };
 
-    const pinName = pinInfo.split('(')[0].trim();
+    const getLangObject = () => ({
+      langbutton: language === 'ru' ? ruencoder : enencoder
+    });
 
-    fetch('/api/connection/del', {
-      method: 'post',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ id: id, pin: pinName })
-    })
-      .then((response) => {
-        if (!response.ok) {
-          return response.text().then((text) => {
-            throw new Error(
-              `HTTP error! status: ${response.status}, message: ${text}`
-            );
-          });
+    const getTooltipText = (key, index) => {
+      const langObject = getLangObject();
+      const tooltipText =
+        langObject[key] && langObject[key][index] ? langObject[key][index] : '';
+      return formatText(tooltipText);
+    };
+
+    const formatText = (text, maxLength = 50) => {
+      if (!text || typeof text !== 'string') {
+        return '';
+      }
+
+      const words = text.split(' ');
+      let lines = [];
+      let currentLine = '';
+
+      for (let i = 0; i < words.length; i++) {
+        if (currentLine.length + words[i].length + 1 <= maxLength) {
+          currentLine += `${currentLine ? ' ' : ''}${words[i]}`;
+        } else {
+          if (currentLine) {
+            lines.push(currentLine.trim());
+          }
+          currentLine = words[i];
         }
-        return response.json();
-      })
-      .then((r) => {
-        setSaveResult(r);
-        setEncoder((prevEncoder) =>
-          prevEncoder.map((enc) => {
-            if (enc.id === id) {
-              const updatedPinact = { ...enc.pinact };
-              delete updatedPinact[pinName];
-              return { ...enc, pinact: updatedPinact };
-            }
-            return enc;
-          })
-        );
-        setPintopin((prevPintopin) =>
-          prevPintopin.filter(
-            (item) => !(item.idin === id && item.pins === pinName)
-          )
-        );
-      })
-      .then(() => {
-        console.log('Connection deleted successfully');
-        refresh();
-      })
-      .catch((error) => {
-        console.error('Error deleting connection:', error);
-      });
-  };
+      }
 
-  const openModal = (type, encoderData) => {
-    console.log('Opening modal:', type, encoderData);
-    setModalType(type);
-    setSelectedEncoder(encoderData);
-    setIsModalOpen(true);
-  };
+      if (currentLine) {
+        lines.push(currentLine.trim());
+      }
 
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setModalType(null);
-    setSelectedEncoder(null);
-    //refresh(); // Обновляем данные после закрытия модального окна
-  };
-  const helpContent = {
-    ru: html`
+      return lines.join('\n');
+    };
+
+    const onsave = (id, pinInfo) => {
+      console.log('Deleting connection:', id, pinInfo);
+
+      const pinName = pinInfo.split('(')[0].trim();
+
+      fetch('/api/connection/del', {
+        method: 'post',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id: id, pin: pinName })
+      })
+        .then((response) => {
+          if (!response.ok) {
+            return response.text().then((text) => {
+              throw new Error(
+                `HTTP error! status: ${response.status}, message: ${text}`
+              );
+            });
+          }
+          return response.json();
+        })
+        .then((r) => {
+          setSaveResult(r);
+          setEncoder((prevEncoder) =>
+            prevEncoder.map((enc) => {
+              if (enc.id === id) {
+                const updatedPinact = { ...enc.pinact };
+                delete updatedPinact[pinName];
+                return { ...enc, pinact: updatedPinact };
+              }
+              return enc;
+            })
+          );
+          setPintopin((prevPintopin) =>
+            prevPintopin.filter(
+              (item) => !(item.idin === id && item.pins === pinName)
+            )
+          );
+        })
+        .then(() => {
+          console.log('Connection deleted successfully');
+          refresh();
+        })
+        .catch((error) => {
+          console.error('Error deleting connection:', error);
+        });
+    };
+
+    const openModal = (type, encoderData) => {
+      console.log('Opening modal:', type, encoderData);
+      setModalType(type);
+      setSelectedEncoder(encoderData);
+      setIsModalOpen(true);
+    };
+
+    const closeModal = () => {
+      setIsModalOpen(false);
+      setModalType(null);
+      setSelectedEncoder(null);
+      //refresh(); // Обновляем данные после закрытия модального окна
+    };
+    const helpContent = {
+      ru: html`
       <div class="mytext space-y-6">
         <div>
           <pre class="mb-4">
@@ -3231,7 +3258,7 @@ function TabEncoder({}) {{
         </div>
       </div>
     `,
-    en: html`
+      en: html`
       <div class="mytext space-y-6">
         <div>
           <pre class="mb-4">
@@ -3294,8 +3321,8 @@ function TabEncoder({}) {{
         </div>
       </div>
     `
-  };
-  const Th = ({ title, tooltipIndex }) => html`
+    };
+    const Th = ({ title, tooltipIndex }) => html`
     <th class="px-4 py-2 relative group">
       ${title}
       <div
@@ -3307,11 +3334,11 @@ function TabEncoder({}) {{
     </th>
   `;
 
-  const ArrayEncoder = ({ d, index }) => {
-    const connectedPins = getConnectedPins(d.id);
-    const fStatus = getFreqStatus(d.pwm || 0);
+    const ArrayEncoder = ({ d, index }) => {
+      const connectedPins = getConnectedPins(d.id);
+      const fStatus = getFreqStatus(d.pwm || 0);
 
-    return html`
+      return html`
       <tr class="${index % 2 === 1 ? 'bg-white' : 'bg-green-300'}">
         <td class="px-4 py-2">${d.pins}(${d.id})</td>
         <td class="px-4 py-2">
@@ -3319,15 +3346,15 @@ function TabEncoder({}) {{
         </td>
         <td class="px-4 py-2">
           ${connectedPins.length > 0
-            ? connectedPins.map(
-                ({ pin, idout }) => html`
+          ? connectedPins.map(
+            ({ pin, idout }) => html`
                   <span class="mr-2">
                     ${pin}(${idout})
                     <button
                       onClick=${(e) => {
-                        e.preventDefault();
-                        onsave(d.id, `${pin}(${idout})`);
-                      }}
+                e.preventDefault();
+                onsave(d.id, `${pin}(${idout})`);
+              }}
                       class="text-red-500 hover:text-red-700"
                       style="margin-left: 2px; font-weight: bold;"
                     >
@@ -3335,8 +3362,8 @@ function TabEncoder({}) {{
                     </button>
                   </span>
                 `
-              )
-            : 'Not set'}
+          )
+          : 'Not set'}
         </td>
         <td class="px-4 py-2">
           <span class="font-mono">${formatPwmFreq(d.pwm)}</span>
@@ -3371,11 +3398,11 @@ function TabEncoder({}) {{
         </td>
       </tr>
     `;
-  };
+    };
 
-  if (!varencoder) return html`<div>Loading...</div>`;
+    if (!varencoder) return html`<div>Loading...</div>`;
 
-  return html`
+    return html`
     <div class="flex-grow flex flex-col justify-center items-center">
       <div class="font-medium uppercase flex items-center px-4 py-2">
         Encoder(s) pin(s)
@@ -3392,7 +3419,7 @@ function TabEncoder({}) {{
                   <${Th} title="PWM Frequency" tooltipIndex=${11} />
                   <${Th} title="Resolution (steps)" tooltipIndex=${12} />
                   <${Th} title="Dimmer value (0-100)" tooltipIndex=${6} />
-                  <${Th} title="Power On Restore" tooltipIndex=${7} />
+                  <${Th} title="Duty on restore" tooltipIndex=${7} />
                   <${Th} title="INFO" tooltipIndex=${8} />
                   <${Th} title="On/Off" tooltipIndex=${9} />
                   <${Th} title="Action" tooltipIndex=${10} />
@@ -3400,9 +3427,9 @@ function TabEncoder({}) {{
               </thead>
               <tbody id="tab1">
                 ${varencoder.map(
-                  (d, index) =>
-                    html`<${ArrayEncoder} d=${d} index=${index} key=${d.id} />`
-                )}
+      (d, index) =>
+        html`<${ArrayEncoder} d=${d} index=${index} key=${d.id} />`
+    )}
               </tbody>
             </table>
           </div>
@@ -3417,7 +3444,7 @@ function TabEncoder({}) {{
           </div>
 
           ${showHelp &&
-          html`
+      html`
             <div class="mt-4 p-4 border rounded">${helpContent[language]}</div>
           `}
         </div>
@@ -3429,15 +3456,16 @@ function TabEncoder({}) {{
           page="TabEncoder"
           hideModal=${closeModal}
           title=${modalType === 'connection'
-            ? 'Edit Connection'
-            : 'Edit Encoder'}
+          ? 'Edit Connection'
+          : 'Edit Encoder'}
           selectedEncoder=${selectedEncoder}
           handleEncoderChange=${handleEncoderChange}
         />
       `}
     </div>
   `;
-}}
+  }
+}
 
 //FIXME:  Переменная onoff не передается в модальное окно! А вот из мольдального окна передается в таблицу!
 function ModalCron({
@@ -3546,10 +3574,10 @@ function ModalCron({
               <table class="table-auto w-full">
                 <tbody>
                   ${[
-                    { label: 'ID', value: selectedCron.id },
-                    {
-                      label: 'Cron',
-                      value: html`
+            { label: 'ID', value: selectedCron.id },
+            {
+              label: 'Cron',
+              value: html`
                         <input
                           type="text"
                           value=${cronExpression}
@@ -3557,10 +3585,10 @@ function ModalCron({
                           class="border rounded p-2 w-full"
                         />
                       `
-                    },
-                    {
-                      label: 'Script',
-                      value: html`
+            },
+            {
+              label: 'Script',
+              value: html`
                         <input
                           type="text"
                           value=${activValue}
@@ -3568,10 +3596,10 @@ function ModalCron({
                           class="border rounded p-2 w-full"
                         />
                       `
-                    },
-                    {
-                      label: 'INFO',
-                      value: html`
+            },
+            {
+              label: 'INFO',
+              value: html`
                         <input
                           type="text"
                           value=${cronInfo}
@@ -3579,16 +3607,16 @@ function ModalCron({
                           class="border rounded p-2 w-full"
                         />
                       `
-                    },
-                    {
-                      label: 'On/Off',
-                      value: html`<${SliderComponent}
+            },
+            {
+              label: 'On/Off',
+              value: html`<${SliderComponent}
                         value=${onoff}
                         onChange=${handleOnOffChange}
                       />`
-                    }
-                  ].map(
-                    (row, index) => html`
+            }
+          ].map(
+            (row, index) => html`
                       <tr
                         class="${index % 2 === 1 ? 'bg-white' : 'bg-gray-200'}"
                       >
@@ -3596,7 +3624,7 @@ function ModalCron({
                         <td class="p-2">${row.value}</td>
                       </tr>
                     `
-                  )}
+          )}
                 </tbody>
               </table>
             </div>
@@ -3620,7 +3648,7 @@ function ModalCron({
         <div
           class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
           onclick=${(e) =>
-            closeOnOverlayClick && e.target === e.currentTarget && hideModal()}
+      closeOnOverlayClick && e.target === e.currentTarget && hideModal()}
         >
           <div
             class="modal-content bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-lg relative"
@@ -3674,7 +3702,7 @@ const HelpInfo = ({ language }) => {
   `;
 };
 
-function TabCron({}) {
+function TabCron({ }) {
   const [varcron, setCron] = useState(null);
   const [saveResult, setSaveResult] = useState(null);
   const formRef = useRef(null);
@@ -4157,10 +4185,10 @@ function TabCron({}) {
 
   const handleCronChange = (updatedCron) => {
     console.log('handleCronChange:', updatedCron);
-    
+
     // Обновляем локальное состояние
     setCron(varcron.map((b) => (b.id === updatedCron.id ? updatedCron : b)));
-    
+
     // Отправляем изменения на сервер
     fetch('/api/cron/set', {
       method: 'POST',
@@ -4169,13 +4197,13 @@ function TabCron({}) {
       },
       body: JSON.stringify(updatedCron),
     })
-    .then(response => response.json())
-    .then(data => {
-      console.log('Cron job updated successfully:', data);
-    })
-    .catch(error => {
-      console.error('Error updating cron job:', error);
-    });
+      .then(response => response.json())
+      .then(data => {
+        console.log('Cron job updated successfully:', data);
+      })
+      .catch(error => {
+        console.error('Error updating cron job:', error);
+      });
   };
 
   const getCronConnectionOptions = () => {
@@ -4240,7 +4268,7 @@ function TabCron({}) {
         </div>
         <div class="mb-4">
           ${varcron && varcron.length > 0
-            ? html`
+      ? html`
                 <table
                   class="table-auto border divide-y divide-gray-200 overflow-x-auto"
                 >
@@ -4256,7 +4284,7 @@ function TabCron({}) {
                   </thead>
                   <tbody>
                     ${varcron.slice(0, visibleCrons).map(
-                      (cron, index) => html`
+        (cron, index) => html`
                         <tr
                           class=${index % 2 === 0 ? 'bg-green-300' : 'bg-white'}
                         >
@@ -4268,7 +4296,7 @@ function TabCron({}) {
                             <${MyPolzunok}
                               value=${cron.onoff}
                               onChange=${(value) =>
-                                handleCronChange({ ...cron, onoff: value })}
+            handleCronChange({ ...cron, onoff: value })}
                             />
                           </td>
                           <td class="border px-4 py-2">
@@ -4281,11 +4309,11 @@ function TabCron({}) {
                           </td>
                         </tr>
                       `
-                    )}
+      )}
                   </tbody>
                 </table>
               `
-            : html`<div>No cron jobs available</div>`}
+      : html`<div>No cron jobs available</div>`}
         </div>
         <div class="w-full flex justify-between items-center mb-4">
           <button
@@ -4296,12 +4324,12 @@ function TabCron({}) {
           </button>
           <div>
             ${varcron.length - visibleCrons > 0
-              ? `Still available: ${varcron.length - visibleCrons} cron jobs`
-              : 'No available: cron jobs!'}
+      ? `Still available: ${varcron.length - visibleCrons} cron jobs`
+      : 'No available: cron jobs!'}
           </div>
           <div>
             ${visibleCrons < varcron.length
-              ? html`
+      ? html`
                   <button
                     class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mr-2"
                     onclick=${addCron}
@@ -4309,9 +4337,9 @@ function TabCron({}) {
                     +
                   </button>
                 `
-              : null}
+      : null}
             ${visibleCrons > 0
-              ? html`
+      ? html`
                   <button
                     class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
                     onclick=${deleteCron}
@@ -4319,13 +4347,13 @@ function TabCron({}) {
                     -
                   </button>
                 `
-              : null}
+      : null}
           </div>
         </div>
       </div>
       ${showHelp && html`<div class="mt-4">${helpContent[language]}</div>`}
       ${isModalOpen &&
-      html`
+    html`
         <${ModalCron}
           modalType=${modalType}
           page="TabCron"
@@ -4495,12 +4523,12 @@ function ModalOneWire({
                         name="numdevices"
                         value=${formData.numdevices}
                         oninput=${formData.typsensor === 1
-                          ? handleChange
-                          : undefined}
+      ? handleChange
+      : undefined}
                         class="border rounded p-2 w-full ${formData.typsensor !==
-                        1
-                          ? 'bg-gray-100'
-                          : ''}"
+      1
+      ? 'bg-gray-100'
+      : ''}"
                         min="0"
                         max="10"
                         readonly=${formData.typsensor !== 1}
@@ -4736,7 +4764,7 @@ const TabOneWire = () => {
           <${MyPolzunok}
             value=${device.onoff || 0}
             onChange=${(value) =>
-              handleOWOnOffChange({ ...device, onoff: value })}
+        handleOWOnOffChange({ ...device, onoff: value })}
           />
         </td>
         <td class="px-4 py-2">
@@ -4790,22 +4818,22 @@ const TabOneWire = () => {
               >
                 <span>
                   ${isDHT22
-                    ? `DHT22 Sensor`
-                    : `DS18B20 Sensor (S/N: ${sensorData.s_number})`}
+          ? `DHT22 Sensor`
+          : `DS18B20 Sensor (S/N: ${sensorData.s_number})`}
                 </span>
                 <a
                   href="#"
                   class="text-blue-500 hover:text-blue-700"
                   onclick=${(e) => {
-                    e.preventDefault();
-                    setSelectedSensor({
-                      ...sensorData,
-                      oneWireId: d.id,
-                      sensorType: sensorType,
-                      pins: d.pins || d.pin
-                    });
-                    setIsModalOpen(true);
-                  }}
+          e.preventDefault();
+          setSelectedSensor({
+            ...sensorData,
+            oneWireId: d.id,
+            sensorType: sensorType,
+            pins: d.pins || d.pin
+          });
+          setIsModalOpen(true);
+        }}
                 >
                   Edit
                 </a>
@@ -4816,13 +4844,13 @@ const TabOneWire = () => {
                   <td class="action-column">${sensorData.t}°C</td>
                 </tr>
                 ${isDHT22 && 'humidity' in sensorData
-                  ? html`
+          ? html`
                       <tr>
                         <td class="font-medium pr-2">Current Humidity:</td>
                         <td class="action-column">${sensorData.humidity}%</td>
                       </tr>
                     `
-                  : ''}
+          : ''}
                 <tr>
                   <td class="font-medium pr-2">
                     Upper Temp. Limit = ${sensorData.ut}°C
@@ -4836,7 +4864,7 @@ const TabOneWire = () => {
                   <td class="action-column">Action: ${sensorData.action_lt}</td>
                 </tr>
                 ${isDHT22 && 'upphumid' in sensorData
-                  ? html`
+          ? html`
                       <tr>
                         <td class="font-medium pr-2">
                           Upper Humidity Limit = ${sensorData.upphumid}%
@@ -4854,7 +4882,7 @@ const TabOneWire = () => {
                         </td>
                       </tr>
                     `
-                  : ''}
+          : ''}
                 <tr>
                   <td class="font-medium pr-2">Info:</td>
                   <td class="action-column">${sensorData.info}</td>
@@ -4896,20 +4924,20 @@ const TabOneWire = () => {
               </thead>
               <tbody id="tab1">
                 ${varonewire.length > 0
-                  ? varonewire.map(
-                      (device, index) =>
-                        html`<${ArrayOneWire}
+      ? varonewire.map(
+        (device, index) =>
+          html`<${ArrayOneWire}
                           device=${device}
                           index=${index}
                           key=${device.id}
                         />`
-                    )
-                  : html`
+      )
+      : html`
                       <tr>
                         <td colspan="6" class="px-4 py-2">
                           ${error
-                            ? `Error fetching sensor data: ${error}`
-                            : 'No available pins configured as OneWire!'}
+          ? `Error fetching sensor data: ${error}`
+          : 'No available pins configured as OneWire!'}
                         </td>
                       </tr>
                     `}
@@ -4919,8 +4947,8 @@ const TabOneWire = () => {
         </div>
       </div>
       ${isModalOpen &&
-      (selectedSensor
-        ? html`
+    (selectedSensor
+      ? html`
             <${ModalEditSensor}
               typsensor=${selectedSensor}
               oneWireId=${selectedSensor.oneWireId}
@@ -4932,7 +4960,7 @@ const TabOneWire = () => {
               refresh=${refresh}
             />
           `
-        : html`
+      : html`
             <${ModalOneWire}
               oneWire=${editingOneWire}
               onClose=${closeModal}
@@ -4972,23 +5000,23 @@ function ModalEditSensor({
 
   const validateNumericInput = (value, min, max) => {
     if (value === '' || value === '-') return value;
-    
+
     // Заменяем запятую на точку
     const normalizedValue = value.replace(',', '.');
-    
+
     // Проверяем, является ли значение числом
     if (!/^-?\d*\.?\d*$/.test(normalizedValue)) return null;
-    
+
     const numValue = parseFloat(normalizedValue);
     if (isNaN(numValue)) return null;
     if (numValue < min || numValue > max) return null;
-    
+
     return normalizedValue;
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    
+
     if (['ut', 'lt'].includes(name)) {
       const validValue = validateNumericInput(value, -55, 125);
       if (validValue !== null) {
@@ -5007,7 +5035,7 @@ function ModalEditSensor({
   const parseNumericValues = (data) => {
     const numericFields = ['ut', 'lt', 'upphumid', 'humlolim'];
     const parsedData = { ...data };
-    
+
     numericFields.forEach(field => {
       if (parsedData[field] === '' || parsedData[field] === '-') {
         parsedData[field] = 0;
@@ -5015,16 +5043,16 @@ function ModalEditSensor({
         parsedData[field] = parseFloat(parsedData[field].toString().replace(',', '.'));
       }
     });
-    
+
     return parsedData;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
+
     const parsedFormData = parseNumericValues(formData);
-    
+
     try {
       const response = await fetch('/api/sensor/set', {
         method: 'POST',
@@ -5044,7 +5072,7 @@ function ModalEditSensor({
       if (!response.ok) {
         throw new Error('Network response was not ok');
       }
-      
+
       onUpdate({
         ...typsensor,
         ...parsedFormData,
@@ -5144,7 +5172,7 @@ function ModalEditSensor({
                   </td>
                 </tr>
                 ${sensorType === 2
-                  ? html`
+      ? html`
                       <tr class="bg-blue-100">
                         <td class="p-2 font-bold">Humidity upper limit</td>
                         <td class="p-2">
@@ -5198,7 +5226,7 @@ function ModalEditSensor({
                         </td>
                       </tr>
                     `
-                  : ''}
+      : ''}
                 <tr class="bg-blue-100">
                   <td class="p-2 font-bold">Info</td>
                   <td class="p-2">
@@ -5316,19 +5344,18 @@ function ModalSIM800L({ hideModal, title, selectedGps, onSave }) {
                         type="text"
                         value=${tel}
                         onInput=${handlePhoneChange}
-                        class=${`border rounded p-2 w-full ${
-                          !isValidPhone && tel !== '' ? 'border-red-500' : ''
-                        }`}
+                        class=${`border rounded p-2 w-full ${!isValidPhone && tel !== '' ? 'border-red-500' : ''
+    }`}
                         placeholder="+XXXXXXXXXXX"
                       />
                       ${!isValidPhone && tel !== ''
-                        ? html`
+      ? html`
                             <div class="text-red-500 text-sm mt-1">
                               Please enter valid phone number starting with +
                               and containing 11-20 digits
                             </div>
                           `
-                        : ''}
+      : ''}
                     </td>
                   </tr>
                   <tr class="bg-white">
@@ -5355,11 +5382,10 @@ function ModalSIM800L({ hideModal, title, selectedGps, onSave }) {
               <button
                 type="submit"
                 disabled=${!isValidPhone || tel === ''}
-                class=${`font-bold py-2 px-4 rounded ${
-                  isValidPhone && tel !== ''
-                    ? 'bg-blue-500 hover:bg-blue-700 text-white'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                }`}
+                class=${`font-bold py-2 px-4 rounded ${isValidPhone && tel !== ''
+      ? 'bg-blue-500 hover:bg-blue-700 text-white'
+      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+    }`}
               >
                 Save changes
               </button>
@@ -5516,20 +5542,20 @@ const ModalSecurity = ({
                   name="setrpins"
                   value=${selectedSecurity?.setrpins || ''}
                   onChange=${(e) =>
-                    onSecurityChange({
-                      ...selectedSecurity,
-                      setrpins: e.target.value
-                    })}
+      onSecurityChange({
+        ...selectedSecurity,
+        setrpins: e.target.value
+      })}
                   class="border rounded p-2 w-full"
                 >
                   <option value="">Select a connection</option>
                   ${pinOptions.map(
-                    (option) => html`
+        (option) => html`
                       <option value=${option.pins}>
                         ${option.pins} (ID: ${option.id})
                       </option>
                     `
-                  )}
+      )}
                 </select>
               </td>
             </tr>
@@ -5585,12 +5611,12 @@ const ModalSecurity = ({
                   value=${action}
                   onInput=${(e) => handleInputChange('action', e.target.value)}
                   class="border rounded p-2 w-full ${errors.action
-                    ? 'border-red-500'
-                    : ''}"
+      ? 'border-red-500'
+      : ''}"
                   placeholder="None"
                 />
                 ${errors.action &&
-                html`<p class="text-red-500 text-sm">${errors.action}</p>`}
+    html`<p class="text-red-500 text-sm">${errors.action}</p>`}
               </td>
             </tr>
             <tr class="bg-white">
@@ -5600,16 +5626,16 @@ const ModalSecurity = ({
                   name="send_sms"
                   value=${send_sms}
                   onchange=${(e) =>
-                    handleInputChange('send_sms', e.target.value)}
+      handleInputChange('send_sms', e.target.value)}
                   class="border rounded p-2 w-full ${errors.send_sms
-                    ? 'border-red-500'
-                    : ''}"
+      ? 'border-red-500'
+      : ''}"
                 >
                   <option value="NO">NO</option>
                   <option value="YES">YES</option>
                 </select>
                 ${errors.send_sms &&
-                html` <p class="text-red-500 text-sm">${errors.send_sms}</p> `}
+    html` <p class="text-red-500 text-sm">${errors.send_sms}</p> `}
               </td>
             </tr>
             <tr class="bg-white">
@@ -5672,8 +5698,8 @@ const ModalSecurity = ({
             </button>
           </div>
           ${page === 'TabSecurity' && modalType === 'connection'
-            ? renderConnectionModal()
-            : renderEditModal()}
+      ? renderConnectionModal()
+      : renderEditModal()}
         </div>
       </div>
     </div>
@@ -6012,7 +6038,7 @@ const TabSecurity = () => {
   // Handler for onoff changes
   const handleOnOffChange = (updatedSecurity) => {
     console.log('handleOnOffChange:', updatedSecurity);
-  
+
     // Обновляем состояние
     setMonitoring((prevMonitoring) =>
       prevMonitoring.map((item) =>
@@ -6021,7 +6047,7 @@ const TabSecurity = () => {
           : item
       )
     );
-  
+
     // Отправляем обновление на сервер
     fetch('/api/onoff/set', {
       method: 'POST',
@@ -6038,7 +6064,7 @@ const TabSecurity = () => {
       .catch((error) => {
         console.error('Error calling /api/onoff/set:', error);
       });
-  
+
     closeModal();
   };
 
@@ -6052,14 +6078,14 @@ const TabSecurity = () => {
   return html`
     <div class="flex flex-col items-center w-full p-4">
       ${connectionStatus !== 'connected' &&
-      html`
+    html`
         <div
           class=${`w-full p-2 mb-4 text-white text-center 
           ${connectionStatus === 'error' ? 'bg-yellow-500' : 'bg-red-500'}`}
         >
           ${connectionStatus === 'error'
-            ? 'Connection problems. Retrying...'
-            : 'Connection lost. Check your internet connection.'}
+        ? 'Connection problems. Retrying...'
+        : 'Connection lost. Check your internet connection.'}
         </div>
       `}
       <div class="flex flex-col items-center w-full p-4">
@@ -6090,7 +6116,7 @@ const TabSecurity = () => {
                   <${MyPolzunok}
                     value=${sim800lData.onoff}
                     onChange=${(value) =>
-                      handleSim800lSave({ ...sim800lData, onoff: value })}
+      handleSim800lSave({ ...sim800lData, onoff: value })}
                   />
                 </td>
                 <td>
@@ -6134,8 +6160,8 @@ const TabSecurity = () => {
             </thead>
             <tbody>
               ${varmonitoring.length > 0
-                ? varmonitoring.map(
-                    (d, index) => html`
+      ? varmonitoring.map(
+        (d, index) => html`
                       <tr
                         class="${index % 2 === 1 ? 'bg-white' : 'bg-green-300'}"
                       >
@@ -6151,7 +6177,7 @@ const TabSecurity = () => {
                           <${MyPolzunok}
                             value=${d.onoff}
                             onChange=${(value) =>
-                              handleOnOffChange({ ...d, onoff: value })}
+            handleOnOffChange({ ...d, onoff: value })}
                           />
                         </td>
                         <td class="px-4 py-2">
@@ -6164,8 +6190,8 @@ const TabSecurity = () => {
                         </td>
                       </tr>
                     `
-                  )
-                : html`
+      )
+      : html`
                     <tr>
                       <td colspan="8" class="text-center">
                         No monitoring data available
@@ -6186,7 +6212,7 @@ const TabSecurity = () => {
         </div>
 
         ${isModalOpenSim800L &&
-        html`
+    html`
           <${ModalSIM800L}
             hideModal=${() => setIsModalOpenSim800L(false)}
             title="Edit SIM800L Settings"
@@ -6195,7 +6221,7 @@ const TabSecurity = () => {
           />
         `}
         ${isSecurityModalOpen &&
-        html`
+    html`
           <${ModalSecurity}
             modalType=${modalType}
             page="TabSecurity"
@@ -6227,7 +6253,7 @@ function FirmwareStatus({ title, info, children }) {
   `;
 }
 
-function FirmwareUpdate({}) {
+function FirmwareUpdate({ }) {
   const [info, setInfo] = useState([{}, {}]);
   const [alert, setAlert] = useState(null);
 
@@ -6320,8 +6346,8 @@ function FirmwareUpdate({}) {
       type === 'red'
         ? 'bg-red-100 border-red-500 text-red-700'
         : type === 'yellow'
-        ? 'bg-yellow-100 border-yellow-500 text-yellow-700'
-        : 'bg-green-100 border-green-500 text-green-700';
+          ? 'bg-yellow-100 border-yellow-500 text-yellow-700'
+          : 'bg-green-100 border-green-500 text-green-700';
 
     return html`
       <div
@@ -6456,9 +6482,8 @@ function FirmwareUpdate({}) {
 
 const pageSetting = ({ value, setfn, type, options, error, ...props }) => {
   let inputElement;
-  const inputClass = `w-full px-3 py-2 border rounded-md ${
-    error ? 'border-red-500' : 'border-gray-300'
-  }`;
+  const inputClass = `w-full px-3 py-2 border rounded-md ${error ? 'border-red-500' : 'border-gray-300'
+    }`;
 
   switch (type) {
     case 'text':
@@ -6483,8 +6508,8 @@ const pageSetting = ({ value, setfn, type, options, error, ...props }) => {
           ...${props}
         >
           ${options.map(
-            ([value, label]) => html` <option value=${value}>${label}</option> `
-          )}
+        ([value, label]) => html` <option value=${value}>${label}</option> `
+      )}
         </select>
       `;
       break;
@@ -6532,16 +6557,15 @@ function Toast({ message, type, onClose }) {
 
   return html`
     <div
-      class=${`fixed bottom-4 right-4 p-4 rounded-md ${
-        type === 'success' ? 'bg-green-500' : 'bg-red-500'
-      } text-white`}
+      class=${`fixed bottom-4 right-4 p-4 rounded-md ${type === 'success' ? 'bg-green-500' : 'bg-red-500'
+    } text-white`}
     >
       ${message}
     </div>
   `;
 }
 /******************************************************************************/
-function Settings({}) {
+function Settings({ }) {
   const [settings, setSettings] = useState({});
   const [saveResult, setSaveResult] = useState(null);
   const [submissionStatus, setSubmissionStatus] = useState(null);
@@ -6632,15 +6656,15 @@ function Settings({}) {
 
   const isFormValid = (settings, errors) => {
     const hasErrors = Object.values(errors).some((error) => error !== null);
-    
+
     // Игнорируем проверку поля domain, если HTTPS отключен
     const requiredFieldsFilled = settings.usehttps
       ? settings.domain && settings.domain.trim() !== ''
       : true; // Если HTTPS отключен, не проверяем это поле
-  
+
     return !(hasErrors || !requiredFieldsFilled);
   };
-  
+
 
   const showToast = (message, type) => {
     setToast({ message, type });
@@ -6670,12 +6694,12 @@ function Settings({}) {
 
   const validateInput = (key, value) => {
     let error = null;
-  
+
     // Если usehttps отключен, пропускаем валидацию HTTPS-полей
     if (!settings.usehttps && ['domain', 'tls_key', 'tls_cert', 'tls_ca', 'telegram_token'].includes(key)) {
       return null; // Ошибок нет, если HTTPS отключен
     }
-  
+
     if (!value && ['ip_addr', 'gateway', 'mqtt_hst', 'sb_mask', 'offdate', 'offtime', 'domain'].includes(key)) {
       return 'Поле не может быть пустым';
     }
@@ -6746,7 +6770,7 @@ function Settings({}) {
     e.preventDefault();
     const formData = new FormData(formRef.current);
     let jsonData = { ...settings };
-  
+
     // Преобразуем данные из формы в JSON
     for (const [key, value] of formData.entries()) {
       if (['lon_de', 'lat_de', 'timezone', 'mqtt_prt'].includes(key)) {
@@ -6755,7 +6779,7 @@ function Settings({}) {
         jsonData[key] = value;
       }
     }
-  
+
     // Если HTTPS отключен, удаляем соответствующие поля
     if (!jsonData.usehttps) {
       const httpsFields = ['tls_ca', 'tls_key', 'tls_cert', 'telegram_token', 'domain'];
@@ -6763,28 +6787,28 @@ function Settings({}) {
         delete jsonData[field];
       });
     }
-  
+
     // Формируем поле offldt, если есть дата и время
     if (jsonData.offdate && jsonData.offtime) {
       jsonData.offldt = `d:${jsonData.offdate} t:${jsonData.offtime}`;
     } else {
       delete jsonData.offldt;
     }
-  
+
     // Убедимся, что числовые поля не null или пустые
     ['lon_de', 'lat_de', 'timezone', 'mqtt_prt'].forEach((key) => {
       if (jsonData[key] === null || jsonData[key] === '') {
         jsonData[key] = 0;
       }
     });
-  
+
     // Преобразуем булевы значения в числа
     jsonData.onsunrise = jsonData.onsunrise ? 1 : 0;
     jsonData.onsunset = jsonData.onsunset ? 1 : 0;
     jsonData.check_ip = jsonData.check_ip ? 1 : 0;
     jsonData.check_mqtt = jsonData.check_mqtt ? 1 : 0;
     jsonData.usehttps = jsonData.usehttps ? 1 : 0;
-  
+
     // Отправляем данные на сервер
     fetch('/api/mysett/set', {
       method: 'POST',
@@ -6815,7 +6839,7 @@ function Settings({}) {
 
   const handleChange = (key, value) => {
     let error = null;
-  
+
     if (key === 'offdate') {
       error = validateDateFormat(value) ? null : 'Неверный формат даты (д.м.гг)';
     } else if (key === 'offtime') {
@@ -6823,23 +6847,23 @@ function Settings({}) {
     } else {
       error = validateInput(key, value);
     }
-  
+
     // Обработка ошибок
     setErrors(prevErrors => {
       const newErrors = { ...prevErrors, [key]: error };
-  
+
       const certificateKeys = ['tls_key', 'tls_cert', 'tls_ca'];
-  
+
       const hasOtherErrors = Object.keys(newErrors)
         .filter(errorKey => !certificateKeys.includes(errorKey) && errorKey !== 'telegram_token')
         .some(errorKey => newErrors[errorKey] !== null);
-  
+
       // Оцените состояние кнопки
       setSubmitButtonDisabled(hasOtherErrors || (!settings.usehttps && certificateKeys.some(certKey => settings[certKey])));
-      
+
       return newErrors;
     });
-  
+
     // Обработка значения
     let processedValue = value;
     if (['lon_de', 'lat_de', 'timezone', 'mqtt_prt'].includes(key)) {
@@ -6847,16 +6871,16 @@ function Settings({}) {
     } else if (['onsunrise', 'onsunset', 'check_ip', 'check_mqtt', 'usehttps'].includes(key)) {
       processedValue = value ? 1 : 0;
     }
-  
+
     setSettings(prevSettings => ({ ...prevSettings, [key]: processedValue }));
-  
+
     // Если изменяется usehttps, сбросьте ошибки и проверьте состояние кнопки
     if (key === 'usehttps') {
       setErrors({}); // Очистите все ошибки
       setSubmitButtonDisabled(false); // Активируйте кнопку
     }
   };
-  
+
 
   const handleDelete = (key) => {
     setSettings(prevSettings => ({ ...prevSettings, [key]: '' }));
@@ -6920,13 +6944,13 @@ function Settings({}) {
         class="ml-2 px-2 py-1 bg-white rounded text-sm"
       >
         ${languages.map(
-          (lang) => html` <option value=${lang.value}>${lang.label}</option> `
-        )}
+    (lang) => html` <option value=${lang.value}>${lang.label}</option> `
+  )}
       </select>
     </div>
     <div class="flex-grow flex flex-col justify-center items-center">
       ${topNotification &&
-      html`
+    html`
         <div class="w-full bg-green-500 text-white px-4 py-2 text-center mb-4">
           ${topNotification}
         </div>
@@ -6939,9 +6963,8 @@ function Settings({}) {
         <div class="flex justify-start items-center p-2">
           <button
             type="submit"
-            class=${`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${
-              submitButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
+            class=${`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${submitButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''
+    }`}
             disabled=${submitButtonDisabled}
           >
             Save changes
@@ -6949,20 +6972,20 @@ function Settings({}) {
         </div>
         <div class="flex flex-col items-center">
           ${[
-            { label: 'Login', key: 'adm_name', type: 'text' },
-            { label: 'Password', key: 'adm_pswd', type: 'password' },
-            {
-              label: 'Time zone UTC',
-              key: 'timezone',
-              type: 'select',
-              options: timeZone
-            }
-          ].map(
-            (item, index) => html`
+      { label: 'Login', key: 'adm_name', type: 'text' },
+      { label: 'Password', key: 'adm_pswd', type: 'password' },
+      {
+        label: 'Time zone UTC',
+        key: 'timezone',
+        type: 'select',
+        options: timeZone
+      }
+    ].map(
+      (item, index) => html`
               <div
                 class="flex items-center w-full justify-center ${index % 2 === 1
-                  ? 'bg-white'
-                  : 'bg-green-300'} p-2"
+          ? 'bg-white'
+          : 'bg-green-300'} p-2"
               >
                 <div class="w-1/3 font-medium text-right pr-4">
                   ${item.label}
@@ -6979,7 +7002,7 @@ function Settings({}) {
                 </div>
               </div>
             `
-          )}
+    )}
 
           <div class="flex items-center w-full justify-center bg-gray-400 p-2 mt-1">
             <div class="w-1/3 font-medium text-right pr-4">
@@ -6996,17 +7019,17 @@ function Settings({}) {
           </div>
 
           ${!settings.check_ip &&
-          html`
+    html`
             ${[
-              { label: 'IP address', key: 'ip_addr' },
-              { label: 'Subnet mask', key: 'sb_mask' },
-              { label: 'Default gateway', key: 'gateway' }
-            ].map(
-              (item, index) => html`
+        { label: 'IP address', key: 'ip_addr' },
+        { label: 'Subnet mask', key: 'sb_mask' },
+        { label: 'Default gateway', key: 'gateway' }
+      ].map(
+        (item, index) => html`
                 <div
                   class="flex items-center w-full justify-center ${index % 2 === 1
-                    ? 'bg-white'
-                    : 'bg-green-300'} p-2"
+            ? 'bg-white'
+            : 'bg-green-300'} p-2"
                 >
                   <div class="w-1/3 font-medium text-right pr-4">
                     ${item.label}
@@ -7022,7 +7045,7 @@ function Settings({}) {
                   </div>
                 </div>
               `
-            )}
+      )}
           `}
 
           <div class="w-full text-center font-bold bg-gray-400 p-2 mt-1">
@@ -7054,21 +7077,21 @@ function Settings({}) {
           </div>
 
           ${settings.check_mqtt
-            ? html`
+      ? html`
                 ${[
-                  { label: 'Host', key: 'mqtt_hst', type: 'text' },
-                  { label: 'Port', key: 'mqtt_prt', type: 'number' },
-                  { label: 'Client', key: 'mqtt_clt', type: 'text' },
-                  { label: 'User', key: 'mqtt_usr', type: 'text' },
-                  { label: 'Password', key: 'mqtt_pswd', type: 'password' },
-                  { label: 'TX topic', key: 'txmqttop', type: 'text' },
-                  { label: 'RX topic', key: 'rxmqttop', type: 'text' }
-                ].map(
-                  (item, index) => html`
+          { label: 'Host', key: 'mqtt_hst', type: 'text' },
+          { label: 'Port', key: 'mqtt_prt', type: 'number' },
+          { label: 'Client', key: 'mqtt_clt', type: 'text' },
+          { label: 'User', key: 'mqtt_usr', type: 'text' },
+          { label: 'Password', key: 'mqtt_pswd', type: 'password' },
+          { label: 'TX topic', key: 'txmqttop', type: 'text' },
+          { label: 'RX topic', key: 'rxmqttop', type: 'text' }
+        ].map(
+          (item, index) => html`
                     <div
                       class="flex items-center w-full justify-center ${index % 2 === 1
-                        ? 'bg-white'
-                        : 'bg-green-300'} p-2"
+              ? 'bg-white'
+              : 'bg-green-300'} p-2"
                     >
                       <div class="w-1/3 font-medium text-right pr-4">
                         ${item.label}
@@ -7084,9 +7107,9 @@ function Settings({}) {
                       </div>
                     </div>
                   `
-                )}
+        )}
               `
-            : null}
+      : null}
 
           <div class="flex items-center w-full justify-center bg-gray-400 p-2 mt-1">
             <div class="w-1/3 font-medium text-right pr-4">HTTPS</div>
@@ -7101,19 +7124,19 @@ function Settings({}) {
           </div>
 
           ${settings.usehttps
-            ? html`
+      ? html`
                 ${[
-                  { label: 'HTTPS domain', key: 'domain', type: 'text' },
-                  //{ label: 'Secret Key', key: 'tls_ca', type: 'textarea' },
-                  { label: 'Private Key', key: 'tls_key', type: 'textarea' },
-                  { label: 'Public Key', key: 'tls_cert', type: 'textarea' }
-                  //{ label: 'Telegram bot token', key: 'telegram_token', type: 'text' }
-                ].map(
-                  (item, index) => html`
+          { label: 'HTTPS domain', key: 'domain', type: 'text' },
+          //{ label: 'Secret Key', key: 'tls_ca', type: 'textarea' },
+          { label: 'Private Key', key: 'tls_key', type: 'textarea' },
+          { label: 'Public Key', key: 'tls_cert', type: 'textarea' }
+          //{ label: 'Telegram bot token', key: 'telegram_token', type: 'text' }
+        ].map(
+          (item, index) => html`
                     <div
                       class="flex items-center w-full justify-center ${index % 2 === 1
-                        ? 'bg-white'
-                        : 'bg-green-300'} p-2"
+              ? 'bg-white'
+              : 'bg-green-300'} p-2"
                     >
                       <div class="w-1/3 font-medium text-right pr-4">
                         ${item.label}
@@ -7121,14 +7144,14 @@ function Settings({}) {
                       <div class="w-2/3 flex items-center">
                         <div class="relative w-full">
                           ${item.key === 'telegram_token'
-                            ? html`
+              ? html`
                                 ${settings.telegram_token
-                                  ? html`
+                  ? html`
                                       <div class="border p-1 rounded w-full bg-gray-100 text-gray-500">
                                         Данные введены, но информация скрыта!
                                       </div>
                                     `
-                                  : html`
+                  : html`
                                       <input
                                         name=${item.key}
                                         type="text"
@@ -7139,27 +7162,27 @@ function Settings({}) {
                                       />
                                     `}
                           `
-                            : item.type === 'textarea'
-                            ? html`
+              : item.type === 'textarea'
+                ? html`
                                 ${item.key === 'tls_ca' && settings.tls_ca
-                                  ? html`
+                    ? html`
                                       <div class="border p-1 rounded w-full bg-gray-100 text-gray-500">
                                         Данные введены, но информация скрыта!
                                       </div>
                                     `
-                                  : item.key === 'tls_key' && settings.tls_key
-                                  ? html`
+                    : item.key === 'tls_key' && settings.tls_key
+                      ? html`
                                       <div class="border p-1 rounded w-full bg-gray-100 text-gray-500">
                                         Данные введены, но информация скрыта!
                                       </div>
                                     `
-                                  : item.key === 'tls_cert' && settings.tls_cert
-                                  ? html`
+                      : item.key === 'tls_cert' && settings.tls_cert
+                        ? html`
                                       <div class="border p-1 rounded w-full bg-gray-100 text-gray-500">
                                         Данные введены успешно!
                                       </div>
                                     `
-                                  : html`
+                        : html`
                                       <textarea
                                         name=${item.key}
                                         value=${settings[item.key] || ''}
@@ -7170,8 +7193,8 @@ function Settings({}) {
                                       ></textarea>
                                     `}
                           `
-                            : item.key === 'domain'
-                            ? html`
+                : item.key === 'domain'
+                  ? html`
                                 <input
                                   type="text"
                                   name=${item.key}
@@ -7182,7 +7205,7 @@ function Settings({}) {
                                   placeholder="Enter domain (e.g., zagotovka.ddns.net)"
                                 />
                               `
-                            : html`
+                  : html`
                                 <${pageSetting}
                                   value=${settings[item.key]}
                                   setfn=${(value) => handleChange(item.key, value)}
@@ -7196,10 +7219,10 @@ function Settings({}) {
                               <button
                                 type="button"
                                 onClick=${() => {
-                                  navigator.clipboard.writeText(settings[item.key]);
-                                  setTopNotification('Данные скопированы');
-                                  setTimeout(() => setTopNotification(''), 3000);
-                                }}
+                navigator.clipboard.writeText(settings[item.key]);
+                setTopNotification('Данные скопированы');
+                setTimeout(() => setTopNotification(''), 3000);
+              }}
                                 class="px-2 py-1 bg-green-500 text-white rounded text-sm"
                               >
                                 Копировать
@@ -7229,9 +7252,9 @@ function Settings({}) {
                       </div>
                     </div>
                   `
-                )}
+        )}
               `
-            : null}
+      : null}
 
           <div class="w-full text-center font-bold bg-gray-400 p-2 mt-1">
             Coordinate settings
@@ -7315,10 +7338,9 @@ function Settings({}) {
             <div class="w-2/3">
               <span class="text-lg">
                 ${typeof settings.fullmoon === 'string' && settings.fullmoon
-                  ? `${settings.fullmoon.split(' ')[0]} at ${
-                      settings.fullmoon.split(' ')[1]
-                    }`
-                  : 'N/A'}
+      ? `${settings.fullmoon.split(' ')[0]} at ${settings.fullmoon.split(' ')[1]
+      }`
+      : 'N/A'}
               </span>
             </div>
           </div>
@@ -7336,7 +7358,7 @@ function Settings({}) {
                   class="w-full px-2 py-1 border rounded"
                 />
                 ${errors.offdate &&
-                html`<div class="text-red-500 text-sm mt-1">${errors.offdate}</div>`}
+    html`<div class="text-red-500 text-sm mt-1">${errors.offdate}</div>`}
               </div>
             </div>
             <div class="flex items-center flex-1 ml-2">
@@ -7351,13 +7373,13 @@ function Settings({}) {
                   class="w-full px-2 py-1 border rounded"
                 />
                 ${errors.offtime &&
-                html`<div class="text-red-500 text-sm mt-1">${errors.offtime}</div>`}
+    html`<div class="text-red-500 text-sm mt-1">${errors.offtime}</div>`}
               </div>
             </div>
           </div>
 
           ${topNotification &&
-            html`
+    html`
               <div class="w-full bg-green-500 text-white px-4 py-2 text-center mt-4">
                 ${topNotification}
               </div>
@@ -7369,9 +7391,8 @@ function Settings({}) {
         <div class="flex justify-end p-2">
           <button
             type="submit"
-            class=${`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${
-              submitButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
+            class=${`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${submitButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''
+    }`}
             disabled=${submitButtonDisabled}
           >
             Save changes
@@ -7384,7 +7405,7 @@ function Settings({}) {
 }
 /******************************************************************************/
 
-const App = function ({}) {
+const App = function ({ }) {
   const [loading, setLoading] = useState(true);
   const [url, setUrl] = useState('/');
   const [user, setUser] = useState('');
@@ -7395,9 +7416,9 @@ const App = function ({}) {
     !r.ok
       ? setLoading(false) && setUser(null)
       : r
-          .json()
-          .then((r) => setUser(r.user))
-          .finally((r) => setLoading(false));
+        .json()
+        .then((r) => setUser(r.user))
+        .finally((r) => setLoading(false));
 
   useEffect(() => fetch('api/login').then(login), []);
 

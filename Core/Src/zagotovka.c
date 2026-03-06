@@ -355,6 +355,28 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
     if (onoffid >= 0 && onoffid < num_pins) {
       PinsConf[onoffid].onoff = (uint8_t)onoff;
       printf("Updated pin %ld: onoff = %d\n", onoffid, onoff);
+
+      // --- НОВАЯ ЛОГИКА ДЛЯ ЭНКОДЕРОВ И PWM ---
+      if (PinsConf[onoffid].topin == 8) {
+        for (short k = 0; k < NUMPINLINKS; k++) {
+          if (PinsLinks[k].idin == onoffid) {
+            uint8_t pwm_id = PinsLinks[k].idout;
+            if (PinsConf[pwm_id].topin == 5) {
+              if (PinsConf[onoffid].onoff) {
+                HAL_TIM_PWM_Start(&htim[pwm_id], PinsInfo[pwm_id].tim_channel);
+              } else {
+                HAL_TIM_PWM_Stop(&htim[pwm_id], PinsInfo[pwm_id].tim_channel);
+              }
+            }
+            break;
+          }
+        }
+        // Сохраняем во Flash/SD (чтобы ползунок не сбрасывался после ребута)
+        uint8_t usb = 1;
+        xQueueSend(usbQueueHandle, &usb, 0); // Обновляем pins.ini
+      }
+      // ----------------------------------------
+
       /*********************************************************/
       // Формируем payload
       memset(mqtt_payload, 0, sizeof(mqtt_payload));
@@ -1083,6 +1105,20 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
   cJSON *onoff_item = cJSON_GetObjectItem(root, "onoff");
   if (cJSON_IsNumber(onoff_item)) {
     PinsConf[id].onoff = (uint8_t)onoff_item->valueint;
+    // Контролируем таймер связанного PWM
+    for (short k = 0; k < NUMPINLINKS; k++) {
+      if (PinsLinks[k].idin == id) {
+        uint8_t pwm_id = PinsLinks[k].idout;
+        if (PinsConf[pwm_id].topin == 5) {
+          if (PinsConf[id].onoff) {
+            HAL_TIM_PWM_Start(&htim[pwm_id], PinsInfo[pwm_id].tim_channel);
+          } else {
+            HAL_TIM_PWM_Stop(&htim[pwm_id], PinsInfo[pwm_id].tim_channel);
+          }
+        }
+        break;
+      }
+    }
   }
 
   // ponr относится к PWM-пину, применяем к связанному выходу
@@ -2371,8 +2407,20 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
   // --- Команда управления диммером (PWM) ---
   else if (strncmp(command, "pwm", cmd_len) == 0) {
     if (PinsConf[id].topin == 5) { // Проверка, что это PWM канал
-      if (mg_http_get_var(&hm->query, "dvalue", value_str, sizeof(value_str)) >
-          0) {
+      // Проверяем флаг onoff связанного энкодера
+      uint8_t enc_onoff = 1; // по умолчанию разрешено (нет связанного энкодера)
+      for (short k = 0; k < NUMPINLINKS; k++) {
+        if (PinsLinks[k].idout == id &&
+            PinsConf[PinsLinks[k].idin].topin == 8) {
+          enc_onoff = PinsConf[PinsLinks[k].idin].onoff;
+          break;
+        }
+      }
+      if (enc_onoff == 0) {
+        mg_http_reply(c, 403, "Content-Type: text/plain\r\n",
+                      "PWM %d is disabled\n", id);
+      } else if (mg_http_get_var(&hm->query, "dvalue", value_str,
+                                 sizeof(value_str)) > 0) {
         int val = atoi(value_str);
 
         // Нормализация входящих процентов
@@ -2389,6 +2437,10 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
 
         // Прямая запись в регистр сравнения таймера
         __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel, ccr);
+
+        // Сохраняем на флешку (pins.ini) через очередь
+        uint8_t usb_save = 1;
+        xQueueSend(usbQueueHandle, &usb_save, 0);
 
         mg_http_reply(c, 200, "Content-Type: text/plain\r\n",
                       "PWM %d set to %d%%\n", id, val);
@@ -3161,27 +3213,44 @@ void mqtt_message_handler(const char *topic, const char *payload) {
     }
   } else if (strcmp(command, "pwm") == 0) {
     if (PinsConf[id].topin == 5) { // PWM
-      const char *dvalue_part = strstr(command_start, "dvalue=");
-      if (dvalue_part) {
-        int value;
-        if (sscanf(dvalue_part + 7, "%d", &value) == 1) {
-          // Нормализация входящих процентов
-          if (value < 0)
-            value = 0;
-          if (value > 100)
-            value = 100;
-          PinsConf[id].dvalue = (uint8_t)value;
-          // Рассчитываем CCR на основе реального ARR таймера (pwmmax)
-          uint32_t ccr = PercentToCCR(PinsConf[id].dvalue, PinsConf[id].pwmmax);
-          // Прямая запись в регистр сравнения таймера
-          __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel, ccr);
-          printf("PWM %d set to %d%% (ccr=%lu, pwmmax=%lu) by mqtt!\n", id,
-                 value, ccr, PinsConf[id].pwmmax);
-        } else {
-          printf("Invalid dvalue format in payload\n");
+      // Проверяем флаг onoff связанного энкодера
+      uint8_t enc_onoff = 1; // по умолчанию разрешено (нет связанного энкодера)
+      for (short k = 0; k < NUMPINLINKS; k++) {
+        if (PinsLinks[k].idout == id &&
+            PinsConf[PinsLinks[k].idin].topin == 8) {
+          enc_onoff = PinsConf[PinsLinks[k].idin].onoff;
+          break;
         }
+      }
+      if (enc_onoff == 0) {
+        printf("PWM %d is disabled (On/Off = 0), ignoring mqtt command\n", id);
       } else {
-        printf("No dvalue found in payload\n");
+        const char *dvalue_part = strstr(command_start, "dvalue=");
+        if (dvalue_part) {
+          int value;
+          if (sscanf(dvalue_part + 7, "%d", &value) == 1) {
+            // Нормализация входящих процентов
+            if (value < 0)
+              value = 0;
+            if (value > 100)
+              value = 100;
+            PinsConf[id].dvalue = (uint8_t)value;
+            // Рассчитываем CCR на основе реального ARR таймера (pwmmax)
+            uint32_t ccr =
+                PercentToCCR(PinsConf[id].dvalue, PinsConf[id].pwmmax);
+            // Прямая запись в регистр сравнения таймера
+            __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel, ccr);
+            printf("PWM %d set to %d%% (ccr=%lu, pwmmax=%lu) by mqtt!\n", id,
+                   value, ccr, PinsConf[id].pwmmax);
+            // Сохраняем на флешку (pins.ini) через очередь
+            uint8_t usb_save = 1;
+            xQueueSend(usbQueueHandle, &usb_save, 0);
+          } else {
+            printf("Invalid dvalue format in payload\n");
+          }
+        } else {
+          printf("No dvalue found in payload\n");
+        }
       }
     } else {
       printf("Error, pwm with id = %d doesn't exist or has incorrect topin "

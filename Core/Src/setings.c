@@ -1460,7 +1460,19 @@ void InitPin() {
       GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
       GPIO_InitStruct.Alternate = PinsInfo[i].af;
       HAL_GPIO_Init(PinsInfo[i].gpio_name, &GPIO_InitStruct);
-      HAL_TIM_PWM_Start(&htim[i], PinsInfo[i].tim_channel);
+
+      uint8_t enc_onoff = 1; // по умолчанию разрешено
+      for (short k = 0; k < NUMPINLINKS; k++) {
+        if (PinsLinks[k].idout == i && PinsConf[PinsLinks[k].idin].topin == 8) {
+          enc_onoff = PinsConf[PinsLinks[k].idin].onoff;
+          break;
+        }
+      }
+      if (enc_onoff) {
+        HAL_TIM_PWM_Start(&htim[i], PinsInfo[i].tim_channel);
+      } else {
+        HAL_TIM_PWM_Stop(&htim[i], PinsInfo[i].tim_channel);
+      }
     } else if (PinsConf[i].topin == 10) {
       checkPortClockStatus(PinsInfo[i].gpio_name);
       if (SetSettings.sim800l == 1 && (i == 1 || i == 35)) {
