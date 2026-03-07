@@ -153,15 +153,15 @@ function Header({ logout, user, setShowSidebar, showSidebar }) {
 
   return html`
     <div
-      class="bg-white sticky top-0 z-[48] w-full border-b py-2 ${showSidebar
+      class="bg-white/40 backdrop-blur-md border-b border-white/40 shadow-sm sticky top-0 z-[48] w-full py-2 ${showSidebar
       ? 'pl-72'
       : ''} transition-all duration-300 transform"
     >
-      <div class="px-2 w-full py-0 my-0 flex items-center justify-between">
+      <div class="px-4 w-full py-0 my-0 flex items-center justify-between">
         <button
           type="button"
           onclick=${() => setShowSidebar((v) => !v)}
-          class="text-slate-400"
+          class="text-slate-500 hover:text-teal-500 transition-colors"
         >
           <${Icons.bars3} class="h-6" />
         </button>
@@ -183,10 +183,13 @@ function Header({ logout, user, setShowSidebar, showSidebar }) {
         <div class="flex items-center gap-x-4 lg:gap-x-6">
           <span class="text-sm text-slate-400">logged in as: ${user}</span>
           <div
-            class="hidden lg:block lg:h-4 lg:w-px lg:bg-gray-200"
+            class="hidden lg:block lg:h-4 lg:w-px lg:bg-slate-200/60"
             aria-hidden="true"
           ></div>
-          <${Button} title="Logout" icon=${Icons.logout} onclick=${logout} />
+          <${Button} title="Logout" icon=${Icons.logout} onclick=${logout}
+  colors="bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 shadow-md hover:shadow-cyan-500/40 transition-all duration-300 hover:scale-105 active:scale-95"
+  cls="rounded-full font-bold"
+/>
         </div>
       </div>
     </div>
@@ -197,18 +200,19 @@ function Sidebar({ url, show }) {
   const NavLink = ({ title, icon, href, url }) => html`
   <div>
     <a href="#${href}" class="${href == url
-      ? 'bg-slate-50 text-blue-600 group'
-      : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50 group'
+      ? 'bg-gradient-to-r from-teal-400 to-cyan-500 text-white shadow-md group'
+      : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-800 group'
     } flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold">
       <${icon} class="w-6 h-6"/>
       ${title}
     <///>
   <//>`;
   return html` <div
-    class="bg-violet-100 hs-overlay hs-overlay-open:translate-x-0
+    class="hs-overlay hs-overlay-open:translate-x-0
             -translate-x-full transition-all duration-300 transform
-            fixed top-0 left-0 bottom-0 z-[60] w-72 bg-white border-r
-            border-gray-200 overflow-y-auto scrollbar-y
+            fixed top-0 left-0 bottom-0 z-[60] w-72
+            bg-white/60 backdrop-blur-md border-r border-white/40 shadow-xl
+            overflow-y-auto scrollbar-y
             ${show && 'translate-x-0'} right-auto bottom-0"
   >
     <div class="flex flex-col m-4 gap-y-6">
@@ -487,58 +491,18 @@ const MyPolzunok = ({ value, onChange }) => {
   };
 
   return html`
-    <label class="switch">
-      <input type="checkbox" checked=${value} onChange=${handleSliderChange} />
-      <span class="slider"></span>
-    </label>
-    <span class="switch-status">${value ? 'On' : 'Off'}</span>
-    <style>
-      .switch {
-        position: relative;
-        display: inline-block;
-        width: 60px;
-        height: 34px;
-        vertical-align: middle;
-        margin-left: 10px;
-      }
-      .switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-      }
-      .slider {
-        position: absolute;
-        cursor: pointer;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: #ccc;
-        transition: 0.4s;
-        border-radius: 34px;
-      }
-      .slider:before {
-        position: absolute;
-        content: '';
-        height: 26px;
-        width: 26px;
-        left: 4px;
-        bottom: 4px;
-        background-color: white;
-        transition: 0.4s;
-        border-radius: 50%;
-      }
-      input:checked + .slider {
-        background-color: #2196f3;
-      }
-      input:checked + .slider:before {
-        transform: translateX(26px);
-      }
-      .switch-status {
-        margin-left: 10px;
-        vertical-align: middle;
-      }
-    </style>
+    <div class="flex items-center gap-3">
+      <label class="relative inline-flex items-center cursor-pointer">
+        <input
+          type="checkbox"
+          class="sr-only peer"
+          checked=${value}
+          onChange=${handleSliderChange}
+        />
+        <div class="w-[42px] h-[22px] bg-slate-200/80 rounded-full peer peer-focus:ring-2 peer-focus:ring-teal-300/50 peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-teal-400 peer-checked:to-cyan-500 shadow-inner"></div>
+      </label>
+      <span class="text-sm font-medium text-slate-600 w-8">${value ? 'On' : 'Off'}</span>
+    </div>
   `;
 };
 
@@ -658,255 +622,141 @@ function TabSelect({ }) {
 
   if (!varselect) return '';
 
-  const ArraySelect = ({ d }) => html`
-    <tr
-      class="${isRowDisabled(d.id)
-      ? 'bg-red-200 opacity-50 pointer-events-none'
-      : d.id % 2 === 1
-        ? 'bg-white'
-        : 'bg-green-300'}"
-    >
-      <td class="px-4 py-2">${d.id}</td>
-      <td class="px-4 py-2">${d.pins}</td>
-      <td class="px-4 py-2 flex justify-center">
-        <div class="px-8 flex items-center">
-          <input
-            id="${d.id}_0"
-            class="mr-2"
-            type="radio"
-            name="topin_${d.id}"
-            value="0"
-            checked="${selectedValues[`topin_${d.id}`] === '0'}"
-            onChange=${handleRadioChange}
-            aria-label="NONE"
-          />
-          <label for="${d.id}_0" class="mr-2">NONE </label>
-        </div>
-        <div class="px-8 flex items-center">
-          <input
-            id="${d.id}_3"
-            class="mr-2"
-            type="radio"
-            name="topin_${d.id}"
-            value="3"
-            checked="${selectedValues[`topin_${d.id}`] === '3'}"
-            onChange=${handleRadioChange}
-            aria-label="SWITCH"
-          />
-          <label for="${d.id}_3" class="mr-2">SWITCH</label>
-        </div>
-        <div class="px-8 flex items-center">
-          <input
-            id="${d.id}_1"
-            class="mr-2"
-            type="radio"
-            name="topin_${d.id}"
-            value="1"
-            checked="${selectedValues[`topin_${d.id}`] === '1'}"
-            onChange=${handleRadioChange}
-            aria-label="BUTTON"
-          />
-          <label for="${d.id}_1" class="mr-2">BUTTON</label>
-        </div>
-        <div class="mx-2 flex items-center">
-          <input
-            id="${d.id}_2"
-            class="mr-2"
-            type="radio"
-            name="topin_${d.id}"
-            value="2"
-            checked="${selectedValues[`topin_${d.id}`] === '2'}"
-            onChange=${handleRadioChange}
-            aria-label="DEVICE"
-          />
-          <label for="${d.id}_2" class="mr-2">DEVICE</label>
-        </div>
-        <div class="mx-2 flex items-center">
-          <input
-            id="${d.id}_4"
-            class="mr-2"
-            type="radio"
-            name="topin_${d.id}"
-            value="4"
-            checked="${selectedValues[`topin_${d.id}`] === '4'}"
-            onChange=${handleRadioChange}
-            aria-label="1-WIRE"
-          />
-          <label for="${d.id}_4" class="mr-2">1-WIRE</label>
-        </div>
-        <div class="mx-2 flex items-center">
-          <input
-            id="${d.id}_5"
-            class="mr-2"
-            type="radio"
-            name="topin_${d.id}"
-            value="5"
-            checked="${selectedValues[`topin_${d.id}`] === '5'}"
-            onChange=${handleRadioChange}
-            disabled="${d.pwm == 0 ? 'disabled' : ''}"
-            aria-label="PWM"
-          />
-          <label
-            for="${d.id}_5"
-            class="${d.pwm == 0 ? 'text-gray-400' : ''} mr-2"
-            >PWM</label
-          >
-        </div>
-        <div class="mx-2 flex items-center">
-          <input
-            id="${d.id}_8"
-            class="mr-2"
-            type="radio"
-            name="topin_${d.id}"
-            value="8"
-            checked="${selectedValues[`topin_${d.id}`] === '8'}"
-            onChange=${handleRadioChange}
-            aria-label="EncoderA"
-          />
-          <label for="${d.id}_8" class="mr-2">Enc.OutA</label>
-        </div>
-        <div class="mx-2 flex items-center">
-          <input
-            id="${d.id}_9"
-            class="mr-2"
-            type="radio"
-            name="topin_${d.id}"
-            value="9"
-            checked="${selectedValues[`topin_${d.id}`] === '9'}"
-            onChange=${handleRadioChange}
-            aria-label="EncoderB"
-          />
-          <label for="${d.id}_9" class="mr-2">Enc.OutB</label>
-        </div>
-        <div class="mx-2 flex items-center">
-          <input
-            id="${d.id}_10"
-            class="mr-2"
-            type="radio"
-            name="topin_${d.id}"
-            value="10"
-            checked="${selectedValues[`topin_${d.id}`] === '10'}"
-            onChange=${handleRadioChange}
-            disabled="${d.monitoring == 0 ? 'disabled' : ''}"
-            aria-label="Security"
-          />
-          <label
-            for="${d.id}_7"
-            class="${d.monitoring == 0 ? 'text-gray-400' : ''} mr-2"
-            >Security</label
-          >
-        </div>
-      </td>
-    </tr>
+  const RadioOption = ({ id, value, label, disabled = false, onChange, checked }) => html`
+    <div class="relative">
+      <input
+        id="${id}_${value}"
+        class="sr-only peer"
+        type="radio"
+        name="topin_${id}"
+        value="${value}"
+        checked=${checked}
+        onChange=${onChange}
+        disabled=${disabled}
+        aria-label="${label}"
+      />
+      <label
+        for="${id}_${value}"
+        class="cursor-pointer px-3 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap transition-all duration-300 
+               ${disabled ? 'text-gray-400 cursor-not-allowed opacity-60' : 'text-slate-700 hover:bg-black/5'}
+               peer-checked:bg-gradient-to-r peer-checked:from-teal-500 peer-checked:to-cyan-500 peer-checked:text-white peer-checked:shadow-sm"
+      >
+        ${label}
+      </label>
+    </div>
   `;
 
-  return html`
-    <div class="m-4 divide-y divide-gray-200 overflow-auto rounded bg-white">
-      <div class="font-medium uppercase flex items-center px-4 py-2">
-        Select pin(s)
+  const ArraySelect = ({ d }) => html`
+  <tr class="${isRowDisabled(d.id)
+      ? 'bg-red-200/50 opacity-50 pointer-events-none'
+      : d.id % 2 === 1
+        ? 'bg-white/80'
+        : 'bg-sky-200/40'
+    } hover:bg-slate-200/80 transition-colors">
+    <td class="px-6 py-2 text-sm text-slate-800">${d.id}</td>
+    <td class="px-6 py-2 text-sm text-slate-800 font-medium">${d.pins}</td>
+    <td class="px-2 py-2">
+      <div class="flex flex-wrap items-center justify-center gap-x-1 gap-y-1">
+        <${RadioOption} id=${d.id} value="0"  label="NONE"     checked=${selectedValues[`topin_${d.id}`] === '0'}  onChange=${handleRadioChange} />
+        <${RadioOption} id=${d.id} value="3"  label="SWITCH"   checked=${selectedValues[`topin_${d.id}`] === '3'}  onChange=${handleRadioChange} />
+        <${RadioOption} id=${d.id} value="1"  label="BUTTON"   checked=${selectedValues[`topin_${d.id}`] === '1'}  onChange=${handleRadioChange} />
+        <${RadioOption} id=${d.id} value="2"  label="DEVICE"   checked=${selectedValues[`topin_${d.id}`] === '2'}  onChange=${handleRadioChange} />
+        <${RadioOption} id=${d.id} value="4"  label="1-WIRE"   checked=${selectedValues[`topin_${d.id}`] === '4'}  onChange=${handleRadioChange} />
+        <${RadioOption} id=${d.id} value="5"  label="PWM"      disabled=${d.pwm == 0} checked=${selectedValues[`topin_${d.id}`] === '5'}  onChange=${handleRadioChange} />
+        <${RadioOption} id=${d.id} value="8"  label="Enc.OutA" checked=${selectedValues[`topin_${d.id}`] === '8'}  onChange=${handleRadioChange} />
+        <${RadioOption} id=${d.id} value="9"  label="Enc.OutB" checked=${selectedValues[`topin_${d.id}`] === '9'}  onChange=${handleRadioChange} />
+        <${RadioOption} id=${d.id} value="10" label="Security" disabled=${d.monitoring == 0} checked=${selectedValues[`topin_${d.id}`] === '10'} onChange=${handleRadioChange} />
       </div>
-      <div class="flex-grow flex flex-col justify-center items-center">
-        <div class="justify-center">
-          <div class="mb-4">
-            <form onSubmit=${handleSubmit}>
-              <div class="relative flex justify-between items-center mb-5">
-                <button
-                  type="submit"
-                  class=${`inline-flex justify-center items-center gap-2 rounded px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm ${isButtonDisabled
-      ? 'bg-gray-400 cursor-not-allowed'
-      : 'bg-blue-500 hover:bg-blue-700'
+    </td>
+  </tr>
+`;
+
+  return html`
+    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative overflow-hidden">
+      <!-- Decorative background glow -->
+      <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div class="relative z-10">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
+          Select pin(s)
+        </div>
+        
+        <form onSubmit=${handleSubmit}>
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+            <button
+              type="submit"
+              class=${`px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${isButtonDisabled
+      ? 'bg-gray-400 cursor-not-allowed opacity-70 hover:scale-100 hover:shadow-none'
+      : 'bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40'
     }`}
-                  disabled=${isButtonDisabled}
-                >
-                  ${isButtonDisabled
-      ? `Please wait ${countdown} sec.`
-      : 'Submit'}
-                </button>
+              disabled=${isButtonDisabled}
+            >
+              ${isButtonDisabled ? `Please wait ${countdown} sec.` : 'Submit'}
+            </button>
 
-                <div class="flex items-center">
-                  <span class="mr-3 text-gray-700">SIM800L</span>
-                  <label
-                    class="relative inline-flex items-center cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      class="sr-only peer"
-                      checked=${gpsEnabled}
-                      onChange=${(e) => handleGpsToggle(e.target.checked)}
-                    />
-                    <div
-                      class="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 
-                            peer-focus:ring-blue-300 peer-checked:after:translate-x-full 
-                            peer-checked:after:border-white after:content-[''] after:absolute 
-                            after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 
-                            after:border after:rounded-full after:h-5 after:w-5 after:transition-all 
-                            peer-checked:bg-blue-600"
-                    ></div>
-                  </label>
-                </div>
-              </div>
+            <div class="flex items-center gap-3">
+              <span class="text-slate-600 font-bold uppercase tracking-widest text-2xl drop-shadow-sm">SIMBOOL</span>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  class="sr-only peer"
+                  checked=${gpsEnabled}
+                  onChange=${(e) => handleGpsToggle(e.target.checked)}
+                />
+                <div class="w-[42px] h-[22px] bg-slate-200/80 rounded-full peer peer-focus:ring-2 peer-focus:ring-teal-300/50 peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-teal-400 peer-checked:to-cyan-500 shadow-inner"></div>
+              </label>
+            </div>
+          </div>
 
-              ${submissionStatus === 'success' &&
-    html`
-                <div
-                  class="mb-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded"
-                  role="alert"
-                >
-                  <strong class="font-bold">Успех! </strong>
-                  <span class="block sm:inline">
-                    Данные успешно сохранены. Идет запись на USB флешку. Кнопка
-                    станет активной через ${countdown} секунд.
-                  </span>
-                </div>
-              `}
-              ${submissionStatus === 'error' &&
-    html`
-                <div
-                  class="mb-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded"
-                  role="alert"
-                >
-                  <strong class="font-bold">Ошибка!</strong>
-                  <span class="block sm:inline">
-                    Произошла ошибка при отправке данных. Пожалуйста, попробуйте
-                    еще раз через ${countdown} секунд.
-                  </span>
-                </div>
-              `}
+          ${submissionStatus === 'success' && html`
+            <div class="mb-6 bg-green-50/80 backdrop-blur-sm border border-green-200 text-green-700 px-4 py-3 rounded-xl shadow-sm" role="alert">
+              <strong class="font-bold">Успех! </strong>
+              <span class="block sm:inline">Данные успешно сохранены. Идет запись на USB флешку. Кнопка станет активной через ${countdown} секунд.</span>
+            </div>
+          `}
+          ${submissionStatus === 'error' && html`
+            <div class="mb-6 bg-red-50/80 backdrop-blur-sm border border-red-200 text-red-700 px-4 py-3 rounded-xl shadow-sm" role="alert">
+              <strong class="font-bold">Ошибка!</strong>
+              <span class="block sm:inline">Произошла ошибка при отправке данных. Пожалуйста, попробуйте еще раз через ${countdown} секунд.</span>
+            </div>
+          `}
 
-              <table class="table-auto border divide-y divide-gray-200">
+          <div class="rounded-2xl overflow-hidden bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse whitespace-nowrap">
                 <thead>
-                  <tr class="bg-gray-400">
-                    <th class="px-4 py-2">ID</th>
-                    <th class="px-4 py-2">Pin</th>
-                    <th class="px-4 py-2">Type(s) of pin(s)</th>
+                  <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide">ID</th>
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide">Pin</th>
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide text-center">Type(s) of pin(s)</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody class="divide-y divide-white/40">
                   ${varselect && varselect.map((d) => h(ArraySelect, { d }))}
                 </tbody>
               </table>
-
-              <div class="relative mt-5">
-                <button
-                  type="submit"
-                  class=${`inline-flex justify-center items-center gap-2 rounded px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm ${isButtonDisabled
-      ? 'bg-gray-400 cursor-not-allowed'
-      : 'bg-blue-500 hover:bg-blue-700'
-    }`}
-                  disabled=${isButtonDisabled}
-                >
-                  ${isButtonDisabled
-      ? `Please wait ${countdown} sec.`
-      : 'Submit'}
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
-        </div>
+
+          <div class="mt-6 flex justify-start">
+            <button
+              type="submit"
+              class=${`px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${isButtonDisabled
+      ? 'bg-gray-400 cursor-not-allowed opacity-70 hover:scale-100 hover:shadow-none'
+      : 'bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40'
+    }`}
+              disabled=${isButtonDisabled}
+            >
+              ${isButtonDisabled ? `Please wait ${countdown} sec.` : 'Submit'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   `;
 }
+
 // Добавлен параметр cache: 'no-store' для отключения кэширования
 function ModalSwitch({
   modalType,
@@ -1589,10 +1439,10 @@ function TabSwitch({ }) {
     `
   };
   const Th = (props) => html`
-    <th class="px-4 py-2 relative group">
+    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide relative group">
       ${props.title}
       <div
-        class="absolute z-50 invisible group-hover:visible bg-orange-300 p-2 rounded shadow-lg text-left"
+        class="absolute z-50 invisible group-hover:visible bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-xl border border-slate-200 text-left text-sm font-normal text-slate-600"
         style="width: 400px; left: 50%; transform: translateX(-50%); top: 100%;"
         dangerouslySetInnerHTML=${{
       __html: getTooltipText('langbutton', props.tooltipIndex)
@@ -1605,49 +1455,49 @@ function TabSwitch({ }) {
     const connectedPins = getConnectedPins(d.id);
 
     return html`
-      <tr class="${index % 2 === 1 ? 'bg-white' : 'bg-green-300'}">
-        <td class="px-4 py-2">${d.id}</td>
-        <td class="px-4 py-2">${d.pins}</td>
-        <td class="px-4 py-2">
+      <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
+        <td class="px-6 py-2 text-sm text-slate-800">${d.id}</td>
+        <td class="px-6 py-2 text-sm text-slate-800 font-medium">${d.pins}</td>
+        <td class="px-6 py-2 text-sm text-slate-700">
           ${['None', 'GPIO_PULLUP', 'GPIO_PULLDOWN'][d.ptype]}
         </td>
-        <td class="px-4 py-2">
+        <td class="px-6 py-2 text-sm text-slate-700 font-mono">
           ${connectedPins.map(
       ({ pin, relayId }) => html`
-              <span class="mr-2">
+              <span class="mr-2 inline-flex items-center">
                 ${pin}${relayId !== undefined ? `(${relayId})` : ''}
                 <button
                   onClick=${(e) => {
           e.preventDefault();
           onsave(d.id, `${pin}(${relayId})`);
         }}
-                  class="text-red-500 hover:text-red-700"
-                  style="margin-left: 2px; font-weight: bold;"
+                  class="ml-1 text-red-500 hover:text-red-700 transition-colors font-bold"
+                  title="Remove connection"
                 >
-                  [<strong>x</strong>]
+                  [x]
                 </button>
               </span>
             `
     )}
         </td>
-        <td class="px-4 py-2">${d.info}</td>
-        <td class="px-4 py-2">
+        <td class="px-6 py-2 text-sm text-slate-600">${d.info}</td>
+        <td class="px-6 py-2">
           <${MyPolzunok}
             value=${d.onoff}
             onChange=${(value) => handleSwitchChange({ ...d, onoff: value })}
           />
         </td>
-        <td class="px-4 py-2">
+        <td class="px-6 py-2 text-sm">
           <button
             onClick=${() => openModal('connection', d)}
-            class="text-blue-500 hover:text-blue-700 mr-2"
+            class="text-teal-600 hover:text-cyan-600 font-semibold transition-colors mr-2"
           >
             Connection
           </button>
-          |
+          <span class="text-slate-300">|</span>
           <button
             onClick=${() => openModal('edit', d)}
-            class="text-blue-500 hover:text-blue-700 ml-2"
+            class="text-blue-600 hover:text-blue-800 font-semibold transition-colors ml-2"
           >
             Edit
           </button>
@@ -1659,64 +1509,74 @@ function TabSwitch({ }) {
   if (!varswitch) return '';
 
   return html`
-    <div class="flex-grow flex flex-col justify-center items-center">
-      <div class="font-medium uppercase flex items-center px-4 py-2">
-        Switch(es) pin(s)
-      </div>
+    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative overflow-hidden flex-grow flex flex-col justify-center items-center">
+      <!-- Decorative background glow -->
+      <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
+      <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
-      <div class="flex-grow flex flex-col justify-center items-center">
-        <div class="justify-center">
-          <div class="mb-4">
-            <table class="table-auto border divide-y divide-gray-200">
-              <thead>
-                <tr class="bg-gray-400">
-                  <${Th} title="ID" tooltipIndex=${1} />
-                  <${Th} title="Pin" tooltipIndex=${2} />
-                  <${Th} title="Pullup type" tooltipIndex=${3} />
-                  <${Th} title="Device connection" tooltipIndex=${4} />
-                  <${Th} title="INFO" tooltipIndex=${5} />
-                  <${Th} title="On/Off" tooltipIndex=${6} />
-                  <${Th} title="Action" tooltipIndex=${7} />
-                </tr>
-              </thead>
-              <tbody id="tab1">
-                ${varswitch.map(
+      <div class="w-full relative z-10">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
+          Switch(es) pin(s)
+        </div>
+
+        <div class="flex-grow flex flex-col justify-center items-center w-full">
+          <div class="w-full">
+            <div class="rounded-2xl overflow-hidden bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6">
+              <div class="overflow-x-auto w-full">
+                <table class="w-full text-left border-collapse whitespace-nowrap">
+                  <thead>
+                    <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                      <${Th} title="ID" tooltipIndex=${1} />
+                      <${Th} title="Pin" tooltipIndex=${2} />
+                      <${Th} title="Pullup type" tooltipIndex=${3} />
+                      <${Th} title="Device connection" tooltipIndex=${4} />
+                      <${Th} title="INFO" tooltipIndex=${5} />
+                      <${Th} title="On/Off" tooltipIndex=${6} />
+                      <${Th} title="Action" tooltipIndex=${7} />
+                    </tr>
+                  </thead>
+                  <tbody id="tab1" class="divide-y divide-white/40">
+                    ${varswitch.map(
     (d, index) =>
       html`<${ArraySwitch} d=${d} index=${index} key=${d.id} />`
   )}
-              </tbody>
-            </table>
-          </div>
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-          <div class="flex justify-end mt-4">
-            <button
-              onclick=${() => setShowHelp(!showHelp)}
-              class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-            >
-              ${showHelp ? 'Hide Help' : 'Show Help'}
-            </button>
-          </div>
+            <div class="flex justify-end mt-6">
+              <button
+                onclick=${() => setShowHelp(!showHelp)}
+                class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
+              >
+                ${showHelp ? 'Hide Help' : 'Show Help'}
+              </button>
+            </div>
 
-          ${showHelp &&
+            ${showHelp &&
     html`
-            <div class="mt-4 p-4 border rounded">${helpContent[language]}</div>
-          `}
+              <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
+                ${helpContent[language]}
+              </div>
+            `}
+          </div>
         </div>
-      </div>
 
-      ${isModalOpen &&
+        ${isModalOpen &&
     html`
-        <${ModalSwitch}
-          modalType=${modalType}
-          page="TabSwitch"
-          hideModal=${closeModal}
-          title=${modalType === 'connection'
+          <${ModalSwitch}
+            modalType=${modalType}
+            page="TabSwitch"
+            hideModal=${closeModal}
+            title=${modalType === 'connection'
         ? 'Edit Connection'
         : 'Edit switch'}
-          selectedSwitch=${selectedSwitch}
-          onSwitchChange=${handleSwitchChange}
-        />
-      `}
+            selectedSwitch=${selectedSwitch}
+            onSwitchChange=${handleSwitchChange}
+          />
+        `}
+      </div>
     </div>
   `;
 }
@@ -2477,10 +2337,10 @@ const TabButton = () => {
   };
 
   const Th = (props) => html`
-    <th class="px-3 py-2 relative group" style="white-space: pre-line;">
+    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide relative group" style="white-space: pre-line;">
       ${props.title}
       <div
-        class="absolute z-50 invisible group-hover:visible bg-orange-300 p-2 rounded shadow-lg text-left"
+        class="absolute z-50 invisible group-hover:visible bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-xl border border-slate-200 text-left text-sm font-normal text-slate-600"
         style="min-width: 200px; max-width: 300px; white-space: pre-wrap; left: 50%; transform: translateX(-50%); top: 100%;"
       >
         ${getTooltipText('langbutton', props.tooltipIndex)}
@@ -2492,39 +2352,39 @@ const TabButton = () => {
     const connectedPins = getConnectedPins(d.id);
 
     return html`
-      <tr class="${index % 2 === 1 ? 'bg-white' : 'bg-green-300'}">
-        <td class="px-4 py-2">${d.id}</td>
-        <td class="px-4 py-2">${d.pins}</td>
-        <td class="px-4 py-2">
+      <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
+        <td class="px-6 py-2 text-sm text-slate-800">${d.id}</td>
+        <td class="px-6 py-2 text-sm text-slate-800 font-medium">${d.pins}</td>
+        <td class="px-6 py-2 text-sm text-slate-700">
           ${['None', 'GPIO_PULLUP', 'GPIO_PULLDOWN'][d.ptype]}
         </td>
 
         <td
-          class="px-4 py-2 max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis"
+          class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis"
         >
           ${formatText(d.sclick)}
         </td>
         <td
-          class="px-4 py-2 max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis"
+          class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis"
         >
           ${formatText(d.dclick)}
         </td>
         <td
-          class="px-4 py-2 max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis"
+          class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis"
         >
           ${formatText(d.lpress)}
         </td>
-        <td class="px-4 py-2">${d.info}</td>
-        <td class="px-4 py-2">
+        <td class="px-6 py-2 text-sm text-slate-600">${d.info}</td>
+        <td class="px-6 py-2">
           <${MyPolzunok}
             value=${d.onoff}
             onChange=${(value) => handleButtonChange({ ...d, onoff: value })}
           />
         </td>
-        <td class="px-4 py-2">
+        <td class="px-6 py-2 text-sm">
           <button
             onClick=${() => openModal('edit', d)}
-            class="text-blue-500 hover:text-blue-700 ml-2"
+            class="text-blue-600 hover:text-blue-800 font-semibold transition-colors ml-2"
           >
             Edit
           </button>
@@ -2536,66 +2396,77 @@ const TabButton = () => {
   if (!varbutton) return '';
 
   return html`
-    <div class="flex-grow flex flex-col justify-center items-center">
-      <div class="font-medium uppercase flex items-center px-4 py-2">
-        Button(s) pin(s)
-      </div>
-      <div class="flex-grow flex flex-col justify-center items-center">
-        <div class="justify-center">
-          <div class="mb-4">
-            <table
-              class="table-auto border divide-y divide-gray-200 overflow-x-auto"
-            >
-              <thead>
-                <tr class="bg-gray-400">
-                  <${Th} title="ID" tooltipIndex=${1} />
-                  <${Th} title="Pin" tooltipIndex=${2} />
-                  <${Th} title="Pullup type" tooltipIndex=${3} />
-                  <${Th} title="SINGLE CLICK" tooltipIndex=${4} />
-                  <${Th} title="DOUBLE CLICK" tooltipIndex=${5} />
-                  <${Th} title="LONG PRESS" tooltipIndex=${6} />
-                  <${Th} title="INFO" tooltipIndex=${7} />
-                  <${Th} title="On/Off" tooltipIndex=${8} />
-                  <${Th} title="Action" tooltipIndex=${9} />
-                </tr>
-              </thead>
-              <tbody id="tab1">
-                ${varbutton.map(
-    (d, index) => html`
-                    <${ArrayButton} d=${d} index=${index} key=${d.id} />
-                  `
-  )}
-              </tbody>
-            </table>
-          </div>
-          <div class="flex justify-end mt-4">
-            <button
-              onclick=${() => setShowHelp(!showHelp)}
-              class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-            >
-              ${showHelp ? 'Hide Help' : 'Show Help'}
-            </button>
-          </div>
+    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative overflow-hidden flex-grow flex flex-col justify-center items-center">
+      <!-- Decorative background glow -->
+      <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
+      <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
-          ${showHelp &&
-    html`
-            <div class="mt-4 p-4 border rounded">${helpContent[language]}</div>
-          `}
+      <div class="w-full relative z-10">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
+          Button(s) pin(s)
         </div>
-      </div>
-      ${isModalOpen &&
+
+        <div class="flex-grow flex flex-col justify-center items-center w-full">
+          <div class="w-full">
+            <div class="rounded-2xl overflow-hidden bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6">
+              <div class="overflow-x-auto w-full">
+                <table
+                  class="w-full text-left border-collapse whitespace-nowrap"
+                >
+                  <thead>
+                    <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                      <${Th} title="ID" tooltipIndex=${1} />
+                      <${Th} title="Pin" tooltipIndex=${2} />
+                      <${Th} title="Pullup type" tooltipIndex=${3} />
+                      <${Th} title="SINGLE CLICK" tooltipIndex=${4} />
+                      <${Th} title="DOUBLE CLICK" tooltipIndex=${5} />
+                      <${Th} title="LONG PRESS" tooltipIndex=${6} />
+                      <${Th} title="INFO" tooltipIndex=${7} />
+                      <${Th} title="On/Off" tooltipIndex=${8} />
+                      <${Th} title="Action" tooltipIndex=${9} />
+                    </tr>
+                  </thead>
+                  <tbody id="tab1" class="divide-y divide-white/40">
+                    ${varbutton.map(
+    (d, index) => html`
+                        <${ArrayButton} d=${d} index=${index} key=${d.id} />
+                      `
+  )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="flex justify-end mt-6">
+              <button
+                onclick=${() => setShowHelp(!showHelp)}
+                class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
+              >
+                ${showHelp ? 'Hide Help' : 'Show Help'}
+              </button>
+            </div>
+
+            ${showHelp &&
     html`
-        <${ModalButton}
-          modalType=${modalType}
-          page="TabButton"
-          hideModal=${closeModal}
-          title=${modalType === 'connection'
+              <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
+                ${helpContent[language]}
+              </div>
+            `}
+          </div>
+        </div>
+        ${isModalOpen &&
+    html`
+          <${ModalButton}
+            modalType=${modalType}
+            page="TabButton"
+            hideModal=${closeModal}
+            title=${modalType === 'connection'
         ? 'Edit Connection'
         : 'Edit Button pin'}
-          selectedButton=${selectedButton}
-          onButtonChange=${handleButtonChange}
-        />
-      `}
+            selectedButton=${selectedButton}
+            onButtonChange=${handleButtonChange}
+          />
+        `}
+      </div>
     </div>
   `;
 };
@@ -3323,10 +3194,10 @@ function TabEncoder({ }) {
     `
     };
     const Th = ({ title, tooltipIndex }) => html`
-    <th class="px-4 py-2 relative group">
+    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide relative group">
       ${title}
       <div
-        class="absolute z-50 invisible group-hover:visible bg-orange-300 p-2 rounded shadow-lg whitespace-normal break-words text-left transform -translate-x-1/2 left-1/2 top-full mt-1"
+        class="absolute z-50 invisible group-hover:visible bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-xl border border-slate-200 text-left text-sm font-normal text-slate-600 whitespace-normal break-words transform -translate-x-1/2 left-1/2 top-full mt-2"
         style="min-width: 200px; max-width: 400px;"
       >
         ${getTooltipText('langbutton', tooltipIndex)}
@@ -3339,59 +3210,59 @@ function TabEncoder({ }) {
       const fStatus = getFreqStatus(d.pwm || 0);
 
       return html`
-      <tr class="${index % 2 === 1 ? 'bg-white' : 'bg-green-300'}">
-        <td class="px-4 py-2">${d.pins}(${d.id})</td>
-        <td class="px-4 py-2">
+      <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
+        <td class="px-6 py-2 text-sm text-slate-800 font-medium">${d.pins}(${d.id})</td>
+        <td class="px-6 py-2 text-sm text-slate-700">
           ${d.encdrbpin ? `${d.encdrbpin}(${d.encoderb})` : 'Not set'}
         </td>
-        <td class="px-4 py-2">
+        <td class="px-6 py-2 text-sm text-slate-700 font-mono">
           ${connectedPins.length > 0
           ? connectedPins.map(
             ({ pin, idout }) => html`
-                  <span class="mr-2">
+                  <span class="mr-2 inline-flex items-center">
                     ${pin}(${idout})
                     <button
                       onClick=${(e) => {
                 e.preventDefault();
                 onsave(d.id, `${pin}(${idout})`);
               }}
-                      class="text-red-500 hover:text-red-700"
-                      style="margin-left: 2px; font-weight: bold;"
+                      class="ml-1 text-red-500 hover:text-red-700 transition-colors font-bold"
+                      title="Remove connection"
                     >
-                      [<strong>x</strong>]
+                      [x]
                     </button>
                   </span>
                 `
           )
           : 'Not set'}
         </td>
-        <td class="px-4 py-2">
-          <span class="font-mono">${formatPwmFreq(d.pwm)}</span>
+        <td class="px-6 py-2 text-sm">
+          <span class="font-mono text-slate-700">${formatPwmFreq(d.pwm)}</span>
           <span class="ml-1 font-bold ${fStatus.cls}">${fStatus.msg}</span>
         </td>
-        <td class="px-4 py-2 font-mono text-blue-600">
+        <td class="px-6 py-2 font-mono text-sm text-blue-600">
           ${d.pwmmax ? `${d.pwmmax} steps` : '—'}
         </td>
-        <td class="px-4 py-2">${d.dvalue}</td>
-        <td class="px-4 py-2">${d.ponr === 1 ? 'ON' : 'OFF'}</td>
-        <td class="px-4 py-2">${d.info}</td>
-        <td class="px-4 py-2">
+        <td class="px-6 py-2 text-sm text-slate-800">${d.dvalue}</td>
+        <td class="px-6 py-2 text-sm text-slate-700 font-semibold">${d.ponr === 1 ? 'ON' : 'OFF'}</td>
+        <td class="px-6 py-2 text-sm text-slate-600">${d.info}</td>
+        <td class="px-6 py-2">
           <${MyPolzunok}
             value=${d.onoff}
             onChange=${(value) => handleEncoderChange({ ...d, onoff: value })}
           />
         </td>
-        <td class="px-4 py-2">
+        <td class="px-6 py-2 text-sm whitespace-nowrap">
           <button
             onClick=${() => openModal('connection', d)}
-            class="text-blue-500 hover:text-blue-700 mr-2"
+            class="text-teal-600 hover:text-cyan-600 font-semibold transition-colors mr-2"
           >
             Connection
           </button>
-          |
+          <span class="text-slate-300">|</span>
           <button
             onClick=${() => openModal('edit', d)}
-            class="text-blue-500 hover:text-blue-700 ml-2"
+            class="text-blue-600 hover:text-blue-800 font-semibold transition-colors ml-2"
           >
             Edit Encdr.
           </button>
@@ -3400,68 +3271,78 @@ function TabEncoder({ }) {
     `;
     };
 
-    if (!varencoder) return html`<div>Loading...</div>`;
+    if (!varencoder) return html`<div class="flex items-center justify-center p-8 text-slate-500 font-medium">Loading...</div>`;
 
     return html`
-    <div class="flex-grow flex flex-col justify-center items-center">
-      <div class="font-medium uppercase flex items-center px-4 py-2">
-        Encoder(s) pin(s)
-      </div>
-      <div class="flex-grow flex flex-col justify-center items-center">
-        <div class="justify-center">
-          <div class="mb-4">
-            <table class="table-auto border divide-y divide-gray-200">
-              <thead>
-                <tr class="bg-gray-400">
-                  <${Th} title="Encoder A (ID)" tooltipIndex=${3} />
-                  <${Th} title="Encoder B (ID)" tooltipIndex=${4} />
-                  <${Th} title="PWM connection" tooltipIndex=${5} />
-                  <${Th} title="PWM Frequency" tooltipIndex=${11} />
-                  <${Th} title="Resolution (steps)" tooltipIndex=${12} />
-                  <${Th} title="Dimmer value (0-100)" tooltipIndex=${6} />
-                  <${Th} title="Duty on restore" tooltipIndex=${7} />
-                  <${Th} title="INFO" tooltipIndex=${8} />
-                  <${Th} title="On/Off" tooltipIndex=${9} />
-                  <${Th} title="Action" tooltipIndex=${10} />
-                </tr>
-              </thead>
-              <tbody id="tab1">
-                ${varencoder.map(
+    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative overflow-hidden flex-grow flex flex-col justify-center items-center">
+      <!-- Decorative background glow -->
+      <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
+      <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+      <div class="w-full relative z-10">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
+          Encoder(s) pin(s)
+        </div>
+        <div class="flex-grow flex flex-col justify-center items-center w-full">
+          <div class="w-full">
+            <div class="rounded-2xl overflow-hidden bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6">
+              <div class="overflow-x-auto w-full">
+                <table class="w-full text-left border-collapse whitespace-nowrap">
+                  <thead>
+                    <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                      <${Th} title="Encoder A (ID)" tooltipIndex=${3} />
+                      <${Th} title="Encoder B (ID)" tooltipIndex=${4} />
+                      <${Th} title="PWM connection" tooltipIndex=${5} />
+                      <${Th} title="PWM Frequency" tooltipIndex=${11} />
+                      <${Th} title="Resolution (steps)" tooltipIndex=${12} />
+                      <${Th} title="Dimmer value (0-100)" tooltipIndex=${6} />
+                      <${Th} title="Duty on restore" tooltipIndex=${7} />
+                      <${Th} title="INFO" tooltipIndex=${8} />
+                      <${Th} title="On/Off" tooltipIndex=${9} />
+                      <${Th} title="Action" tooltipIndex=${10} />
+                    </tr>
+                  </thead>
+                  <tbody id="tab1" class="divide-y divide-white/40">
+                    ${varencoder.map(
       (d, index) =>
         html`<${ArrayEncoder} d=${d} index=${index} key=${d.id} />`
     )}
-              </tbody>
-            </table>
-          </div>
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-          <div class="flex justify-end mt-4">
-            <button
-              onclick=${() => setShowHelp(!showHelp)}
-              class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-            >
-              ${showHelp ? 'Hide Help' : 'Show Help'}
-            </button>
-          </div>
+            <div class="flex justify-end mt-6">
+              <button
+                onclick=${() => setShowHelp(!showHelp)}
+                class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
+              >
+                ${showHelp ? 'Hide Help' : 'Show Help'}
+              </button>
+            </div>
 
-          ${showHelp &&
+            ${showHelp &&
       html`
-            <div class="mt-4 p-4 border rounded">${helpContent[language]}</div>
-          `}
+              <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
+                ${helpContent[language]}
+              </div>
+            `}
+          </div>
         </div>
-      </div>
-      ${isModalOpen &&
+        ${isModalOpen &&
       html`
-        <${ModalEncoder}
-          modalType=${modalType}
-          page="TabEncoder"
-          hideModal=${closeModal}
-          title=${modalType === 'connection'
+          <${ModalEncoder}
+            modalType=${modalType}
+            page="TabEncoder"
+            hideModal=${closeModal}
+            title=${modalType === 'connection'
           ? 'Edit Connection'
           : 'Edit Encoder'}
-          selectedEncoder=${selectedEncoder}
-          handleEncoderChange=${handleEncoderChange}
-        />
-      `}
+            selectedEncoder=${selectedEncoder}
+            handleEncoderChange=${handleEncoderChange}
+          />
+        `}
+      </div>
     </div>
   `;
   }
@@ -4227,32 +4108,33 @@ function TabCron({ }) {
   };
 
   const Th = (props) => html`
-    <th class="px-3 py-2 relative group">
+    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide relative group">
       ${props.title}
       <div
-        class="absolute z-50 invisible group-hover:visible bg-orange-300 p-2 rounded shadow-lg whitespace-normal break-words text-left"
-        style="width: fit-content; max-width: 80vw; left: 50%; transform: translateX(-50%); top: 100%;"
+        class="absolute z-50 invisible group-hover:visible bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-xl border border-slate-200 text-left text-sm font-normal text-slate-600 whitespace-normal break-words transform -translate-x-1/2 left-1/2 top-full mt-2"
+        style="width: fit-content; max-width: 80vw;"
       >
         ${getTooltipText('langtimers', props.tooltipIndex)}
       </div>
     </th>
   `;
+
   const ArrayCron = ({ d, index }) => html`
-    <tr class="${index % 2 === 1 ? 'bg-white' : 'bg-green-300'}">
-      <td class="px-4 py-2">${d.id}</td>
-      <td class="px-4 py-2">${d.cron}</td>
-      <td class="px-4 py-2">${d.activ}</td>
-      <td class="px-4 py-2">${d.info}</td>
-      <td class="px-4 py-2">
+    <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
+      <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.id}</td>
+      <td class="px-6 py-4 text-sm text-slate-700 font-mono tracking-wider">${d.cron}</td>
+      <td class="px-6 py-4 text-sm text-slate-700 font-mono tracking-wider">${d.activ}</td>
+      <td class="px-6 py-4 text-sm text-slate-600">${d.info}</td>
+      <td class="px-6 py-4">
         <${MyPolzunok}
           value=${d.onoff}
           onChange=${(value) => handleCronChange({ ...d, onoff: value })}
         />
       </td>
-      <td class="px-4 py-2">
+      <td class="px-6 py-4 text-center">
         <button
           onclick=${() => openModal('edit', d)}
-          class="text-blue-500 hover:text-blue-700 ml-2"
+          class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap"
         >
           Edit
         </button>
@@ -4261,78 +4143,61 @@ function TabCron({ }) {
   `;
 
   return html`
-    <div class="flex-grow flex flex-col justify-center items-center">
-      <div class="flex-grow flex flex-col justify-center items-center">
-        <div class="font-medium uppercase flex items-center px-4 py-2">
+    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative overflow-hidden flex-grow flex flex-col justify-center items-center">
+      <!-- Decorative background glow -->
+      <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
+      <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+      <div class="flex-grow flex flex-col justify-center items-center w-full relative z-10">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
           Timer(s)
         </div>
-        <div class="mb-4">
+        <div class="w-full mb-6 relative">
           ${varcron && varcron.length > 0
       ? html`
-                <table
-                  class="table-auto border divide-y divide-gray-200 overflow-x-auto"
-                >
-                  <thead>
-                    <tr class="bg-gray-400">
-                      <${Th} title="No" tooltipIndex=${1} />
-                      <${Th} title="Cron" tooltipIndex=${2} />
-                      <${Th} title="Script" tooltipIndex=${3} />
-                      <${Th} title="Info" tooltipIndex=${4} />
-                      <${Th} title="On/Off" tooltipIndex=${5} />
-                      <${Th} title="Action" tooltipIndex=${6} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${varcron.slice(0, visibleCrons).map(
-        (cron, index) => html`
-                        <tr
-                          class=${index % 2 === 0 ? 'bg-green-300' : 'bg-white'}
-                        >
-                          <td class="border px-4 py-2">${cron.id}</td>
-                          <td class="border px-4 py-2">${cron.cron}</td>
-                          <td class="border px-4 py-2">${cron.activ}</td>
-                          <td class="border px-4 py-2">${cron.info}</td>
-                          <td class="border px-4 py-2">
-                            <${MyPolzunok}
-                              value=${cron.onoff}
-                              onChange=${(value) =>
-            handleCronChange({ ...cron, onoff: value })}
-                            />
-                          </td>
-                          <td class="border px-4 py-2">
-                            <button
-                              onclick=${() => openModal('edit', cron)}
-                              class="text-blue-500 hover:text-blue-700 ml-2"
-                            >
-                              Edit
-                            </button>
-                          </td>
+                <div class="rounded-2xl overflow-hidden bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6">
+                  <div class="overflow-x-auto w-full">
+                    <table class="w-full text-left border-collapse whitespace-nowrap">
+                      <thead>
+                        <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                          <${Th} title="No" tooltipIndex=${1} />
+                          <${Th} title="Cron" tooltipIndex=${2} />
+                          <${Th} title="Script" tooltipIndex=${3} />
+                          <${Th} title="Info" tooltipIndex=${4} />
+                          <${Th} title="On/Off" tooltipIndex=${5} />
+                          <${Th} title="Action" tooltipIndex=${6} />
                         </tr>
-                      `
+                      </thead>
+                      <tbody class="divide-y divide-white/40">
+                        ${varcron.slice(0, visibleCrons).map(
+        (cron, index) => html`<${ArrayCron} d=${cron} index=${index} key=${cron.id} />`
       )}
-                  </tbody>
-                </table>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               `
-      : html`<div>No cron jobs available</div>`}
+      : html`<div class="flex items-center justify-center p-8 text-slate-500 font-medium">No cron jobs available</div>`}
         </div>
-        <div class="w-full flex justify-between items-center mb-4">
+        <div class="w-full flex justify-between items-center mb-4 mt-2 bg-white/40 backdrop-blur-md border border-white/60 shadow-sm p-4 rounded-2xl">
           <button
-            class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
             onclick=${() => setShowHelp(!showHelp)}
           >
             ${showHelp ? 'Hide Help' : 'Show Help'}
           </button>
-          <div>
-            ${varcron.length - visibleCrons > 0
+          <div class="font-semibold text-slate-600 tracking-wide">
+            ${varcron && (varcron.length - visibleCrons > 0)
       ? `Still available: ${varcron.length - visibleCrons} cron jobs`
       : 'No available: cron jobs!'}
           </div>
-          <div>
-            ${visibleCrons < varcron.length
+          <div class="flex gap-2">
+            ${varcron && (visibleCrons < varcron.length)
       ? html`
                   <button
-                    class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mr-2"
+                    class="bg-emerald-500 hover:bg-emerald-600 shadow-md text-white font-black text-xl w-10 h-10 rounded-full transition-transform hover:scale-110 active:scale-95 flex items-center justify-center pb-1 shadow-emerald-500/30"
                     onclick=${addCron}
+                    title="Add Cron"
                   >
                     +
                   </button>
@@ -4341,8 +4206,9 @@ function TabCron({ }) {
             ${visibleCrons > 0
       ? html`
                   <button
-                    class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+                    class="bg-rose-500 hover:bg-rose-600 shadow-md text-white font-black text-xl w-10 h-10 rounded-full transition-transform hover:scale-110 active:scale-95 flex items-center justify-center pb-1 shadow-rose-500/30"
                     onclick=${deleteCron}
+                    title="Remove Cron"
                   >
                     -
                   </button>
@@ -4351,7 +4217,7 @@ function TabCron({ }) {
           </div>
         </div>
       </div>
-      ${showHelp && html`<div class="mt-4">${helpContent[language]}</div>`}
+      ${showHelp && html`<div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700 w-full">${helpContent[language]}</div>`}
       ${isModalOpen &&
     html`
         <${ModalCron}
@@ -4735,11 +4601,11 @@ const TabOneWire = () => {
   };
 
   const Th = (props) => html`
-    <th class="px-3 py-2 relative group">
+    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide relative group">
       ${props.title}
       <div
-        class="absolute z-50 invisible group-hover:visible bg-orange-300 p-2 rounded shadow-lg whitespace-normal break-words text-left"
-        style="width: fit-content; max-width: 80vw; left: 50%; transform: translateX(-50%); top: 100%;"
+        class="absolute z-50 invisible group-hover:visible bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-xl border border-slate-200 text-left text-sm font-normal text-slate-600 whitespace-normal break-words transform -translate-x-1/2 left-1/2 top-full mt-2"
+        style="width: fit-content; max-width: 80vw;"
       >
         ${getTooltipText('lang1Wire', props.tooltipIndex)}
       </div>
@@ -4755,21 +4621,21 @@ const TabOneWire = () => {
     const numDevices = device.numdevices || device.numsens || 0;
 
     return html`
-      <tr class="${index % 2 === 1 ? 'bg-white' : 'bg-green-300'}">
-        <td class="px-4 py-2">${device.id}</td>
-        <td class="px-4 py-2">${pinValue}</td>
-        <td class="px-4 py-2">${['None', 'DS18B20', 'DHT22'][sensorType]}</td>
-        <td class="px-4 py-2">${numDevices}</td>
-        <td class="px-4 py-2">
+      <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
+        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${device.id}</td>
+        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${pinValue}</td>
+        <td class="px-6 py-4 text-sm text-slate-700 font-medium">${['None', 'DS18B20', 'DHT22'][sensorType]}</td>
+        <td class="px-6 py-4 text-sm text-slate-700 font-medium">${numDevices}</td>
+        <td class="px-6 py-4">
           <${MyPolzunok}
             value=${device.onoff || 0}
             onChange=${(value) =>
         handleOWOnOffChange({ ...device, onoff: value })}
           />
         </td>
-        <td class="px-4 py-2">
+        <td class="px-6 py-4">
           <button
-            class="text-blue-500 hover:text-blue-700"
+            class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap"
             onclick=${() => openOneWireModal(device)}
           >
             Edit
@@ -4778,11 +4644,11 @@ const TabOneWire = () => {
       </tr>
       ${sensorType !== 0 && numDevices > 0
         ? html`
-            <tr>
-              <td colspan="7" class="px-4 py-2">
-                <table class="w-full">
+            <tr class="bg-white/40">
+              <td colspan="6" class="p-4 md:p-6">
+                <div class="w-full">
                   <${SensorTable} d=${device} />
-                </table>
+                </div>
               </td>
             </tr>
           `
@@ -4797,11 +4663,9 @@ const TabOneWire = () => {
 
     if (sensorType === 0 || numDevices === 0) {
       return html`
-        <tr>
-          <td colspan="7" class="px-4 py-2">
-            No connected sensors for this OneWire pin.
-          </td>
-        </tr>
+        <div class="px-4 py-2 text-slate-500 font-medium">
+          No connected sensors for this OneWire pin.
+        </div>
       `;
     }
 
@@ -4810,21 +4674,19 @@ const TabOneWire = () => {
     const renderSensor = (sensorData, idx) => {
       const isDHT22 = sensorType === 2;
       return html`
-        <tr class="${idx % 2 === 0 ? 'bg-blue-100' : 'bg-white'}">
-          <td class="px-4 py-2">
-            <div class="bg-blue-200 p-4 rounded-lg shadow-md">
-              <div
-                class="font-semibold text-lg mb-2 flex justify-between items-center"
-              >
-                <span>
-                  ${isDHT22
+        <div class="bg-white/70 backdrop-blur-md p-6 rounded-2xl shadow-lg border border-white/60 mb-4 transition-all hover:shadow-xl">
+          <div
+            class="font-extrabold text-xl text-slate-700 mb-4 flex justify-between items-center border-b border-slate-200/60 pb-3"
+          >
+            <span class="tracking-tight drop-shadow-sm">
+              ${isDHT22
           ? `DHT22 Sensor`
           : `DS18B20 Sensor (S/N: ${sensorData.s_number})`}
-                </span>
-                <a
-                  href="#"
-                  class="text-blue-500 hover:text-blue-700"
-                  onclick=${(e) => {
+            </span>
+            <a
+              href="#"
+              class="text-blue-600 hover:text-blue-800 font-semibold text-sm transition-colors uppercase tracking-wider bg-white/50 hover:bg-white/80 px-4 py-1.5 rounded-lg shadow-sm"
+              onclick=${(e) => {
           e.preventDefault();
           setSelectedSensor({
             ...sensorData,
@@ -4834,96 +4696,106 @@ const TabOneWire = () => {
           });
           setIsModalOpen(true);
         }}
-                >
-                  Edit
-                </a>
-              </div>
-              <table class="w-full text-sm">
-                <tr>
-                  <td class="font-medium pr-2">Current Temperature:</td>
-                  <td class="action-column">${sensorData.t}°C</td>
-                </tr>
-                ${isDHT22 && 'humidity' in sensorData
+            >
+              Edit
+            </a>
+          </div>
+          <table class="w-full text-sm text-slate-700">
+            <tbody>
+              <tr class="hover:bg-slate-100/50 transition-colors rounded-lg">
+                <td class="font-semibold py-2 px-2 text-slate-800">Current Temperature:</td>
+                <td class="font-mono text-cyan-700 font-bold py-2 px-2 text-right">${sensorData.t}°C</td>
+              </tr>
+              ${isDHT22 && 'humidity' in sensorData
           ? html`
-                      <tr>
-                        <td class="font-medium pr-2">Current Humidity:</td>
-                        <td class="action-column">${sensorData.humidity}%</td>
-                      </tr>
-                    `
+                    <tr class="hover:bg-slate-100/50 transition-colors rounded-lg">
+                      <td class="font-semibold py-2 px-2 text-slate-800">Current Humidity:</td>
+                      <td class="font-mono text-teal-700 font-bold py-2 px-2 text-right">${sensorData.humidity}%</td>
+                    </tr>
+                  `
           : ''}
-                <tr>
-                  <td class="font-medium pr-2">
-                    Upper Temp. Limit = ${sensorData.ut}°C
-                  </td>
-                  <td class="action-column">Action: ${sensorData.action_ut}</td>
-                </tr>
-                <tr>
-                  <td class="font-medium pr-2">
-                    Lower Temp. Limit = ${sensorData.lt}°C
-                  </td>
-                  <td class="action-column">Action: ${sensorData.action_lt}</td>
-                </tr>
-                ${isDHT22 && 'upphumid' in sensorData
+              <tr class="hover:bg-slate-100/50 transition-colors rounded-lg border-t border-slate-100">
+                <td class="font-medium py-2 px-2 text-slate-600">
+                  Upper Temp. Limit = ${sensorData.ut}°C
+                </td>
+                <td class="py-2 px-2 text-right">
+                  <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${sensorData.action_ut}</span>
+                </td>
+              </tr>
+              <tr class="hover:bg-slate-100/50 transition-colors rounded-lg">
+                <td class="font-medium py-2 px-2 text-slate-600">
+                  Lower Temp. Limit = ${sensorData.lt}°C
+                </td>
+                <td class="py-2 px-2 text-right">
+                  <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${sensorData.action_lt}</span>
+                </td>
+              </tr>
+              ${isDHT22 && 'upphumid' in sensorData
           ? html`
-                      <tr>
-                        <td class="font-medium pr-2">
-                          Upper Humidity Limit = ${sensorData.upphumid}%
-                        </td>
-                        <td class="action-column">
-                          Action: ${sensorData.actuphum}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td class="font-medium pr-2">
-                          Lower Humidity Limit = ${sensorData.humlolim}%
-                        </td>
-                        <td class="action-column">
-                          Action: ${sensorData.actlowhum}
-                        </td>
-                      </tr>
-                    `
+                    <tr class="hover:bg-slate-100/50 transition-colors rounded-lg border-t border-slate-100">
+                      <td class="font-medium py-2 px-2 text-slate-600">
+                        Upper Humidity Limit = ${sensorData.upphumid}%
+                      </td>
+                      <td class="py-2 px-2 text-right">
+                        <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${sensorData.actuphum}</span>
+                      </td>
+                    </tr>
+                    <tr class="hover:bg-slate-100/50 transition-colors rounded-lg">
+                      <td class="font-medium py-2 px-2 text-slate-600">
+                        Lower Humidity Limit = ${sensorData.humlolim}%
+                      </td>
+                      <td class="py-2 px-2 text-right">
+                        <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${sensorData.actlowhum}</span>
+                      </td>
+                    </tr>
+                  `
           : ''}
-                <tr>
-                  <td class="font-medium pr-2">Info:</td>
-                  <td class="action-column">${sensorData.info}</td>
-                </tr>
-              </table>
-            </div>
-          </td>
-        </tr>
+              <tr class="hover:bg-slate-100/50 transition-colors rounded-lg border-t border-slate-200/60 mt-2">
+                <td class="font-semibold py-3 px-2 text-slate-800">Info:</td>
+                <td class="text-slate-600 py-3 px-2 text-right italic">${sensorData.info}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       `;
     };
 
     return sensors.length > 0 && Object.keys(sensors[0]).length > 0
-      ? sensors.map((sensor, idx) => renderSensor(sensor, idx))
-      : html`<tr>
-          <td colspan="7" class="px-4 py-2">
+      ? html`<div class="space-y-4 w-full">${sensors.map((sensor, idx) => renderSensor(sensor, idx))}</div>`
+      : html`
+          <div class="px-4 py-4 text-slate-500 font-medium bg-white/50 backdrop-blur-sm rounded-xl border border-white/40 text-center">
             No sensor data available for this OneWire pin.
-          </td>
-        </tr>`;
+          </div>
+        `;
   };
 
   return html`
-    <div class="flex-grow flex flex-col justify-center items-center">
-      <div class="font-medium uppercase flex items-center px-4 py-2">
-        OneWire(s) pin(s)
-      </div>
-      <div class="flex-grow flex flex-col justify-center items-center">
-        <div class="justify-center">
+    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative overflow-hidden flex-grow flex flex-col justify-center items-center">
+      <!-- Decorative background glow -->
+      <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
+      <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+      <div class="flex-grow flex flex-col justify-center items-center w-full relative z-10">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
+          OneWire(s) pin(s)
+        </div>
+        <div class="justify-center w-full">
           <div class="mb-4">
-            <table class="table-auto border divide-y divide-gray-200">
-              <thead>
-                <tr class="bg-gray-400">
-                  <${Th} title="ID" tooltipIndex=${1} />
-                  <${Th} title="Pin" tooltipIndex=${2} />
-                  <${Th} title="Selected sensor" tooltipIndex=${3} />
-                  <${Th} title="Count of sensors" tooltipIndex=${4} />
-                  <${Th} title="On/Off" tooltipIndex=${5} />
-                  <${Th} title="Actions" tooltipIndex=${6} />
-                </tr>
-              </thead>
-              <tbody id="tab1">
-                ${varonewire.length > 0
+            <div class="rounded-2xl overflow-hidden bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6">
+              <div class="overflow-x-auto w-full">
+                <table class="w-full text-left border-collapse whitespace-nowrap">
+                  <thead>
+                    <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                      <${Th} title="ID" tooltipIndex=${1} />
+                      <${Th} title="Pin" tooltipIndex=${2} />
+                      <${Th} title="Selected sensor" tooltipIndex=${3} />
+                      <${Th} title="Count of sensors" tooltipIndex=${4} />
+                      <${Th} title="On/Off" tooltipIndex=${5} />
+                      <${Th} title="Actions" tooltipIndex=${6} />
+                    </tr>
+                  </thead>
+                  <tbody id="tab1" class="divide-y divide-white/40">
+                    ${varonewire.length > 0
       ? varonewire.map(
         (device, index) =>
           html`<${ArrayOneWire}
@@ -4945,6 +4817,8 @@ const TabOneWire = () => {
             </table>
           </div>
         </div>
+      </div>
+      </div>
       </div>
       ${isModalOpen &&
     (selectedSensor
@@ -6080,132 +5954,142 @@ const TabSecurity = () => {
       ${connectionStatus !== 'connected' &&
     html`
         <div
-          class=${`w-full p-2 mb-4 text-white text-center 
-          ${connectionStatus === 'error' ? 'bg-yellow-500' : 'bg-red-500'}`}
+          class=${`w-full p-2 mb-4 text-white text-center rounded-xl shadow-md backdrop-blur-md 
+          ${connectionStatus === 'error' ? 'bg-yellow-500/80 border border-yellow-400/50' : 'bg-red-500/80 border border-red-400/50'}`}
         >
           ${connectionStatus === 'error'
         ? 'Connection problems. Retrying...'
         : 'Connection lost. Check your internet connection.'}
         </div>
       `}
-      <div class="flex flex-col items-center w-full p-4">
-        <div class="w-full max-w-4xl mb-8">
-          <h2 class="text-xl font-bold mb-4">SIM800L Settings</h2>
-          <table class="w-full border-collapse bg-gray-400 shadow-sm mb-4">
-            <thead>
-              <tr>
-                <th>RXD Pin</th>
-                <th>TXD Pin</th>
-                <th>Phone Number</th>
-                <th>Info</th>
-                <th>OnOff</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="bg-green-300">
-                <td>
-                  ${sim800lData.sim800l === 1 ? 'PA3(1)' : 'Not configured'}
-                </td>
-                <td>
-                  ${sim800lData.sim800l === 1 ? 'PD5(35)' : 'Not configured'}
-                </td>
-                <td>${sim800lData.tel || 'Not set'}</td>
-                <td>${sim800lData.info || 'No info'}</td>
-                <td>
-                  <${MyPolzunok}
-                    value=${sim800lData.onoff}
-                    onChange=${(value) =>
+      <div class="flex flex-col items-center w-full p-6 bg-white/40 backdrop-blur-md rounded-2xl shadow-xl border border-white/50">
+        <div class="w-full mb-10">
+          <h2 class="text-3xl font-extrabold text-slate-800 tracking-tight mb-6 drop-shadow-sm">SIM800L Settings</h2>
+          
+          <div class="overflow-x-auto w-full rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm mb-4">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-gradient-to-r from-teal-500/90 to-cyan-600/90 border-b border-teal-400/50 shadow-sm">
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">RXD Pin</th>
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">TXD Pin</th>
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">Phone Number</th>
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">Info</th>
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">OnOff</th>
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">Action</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/40">
+                <tr class="bg-white/80 hover:bg-slate-200/80 transition-colors">
+                  <td class="px-6 py-4 text-sm text-slate-800 font-medium">
+                    ${sim800lData.sim800l === 1 ? 'PA3(1)' : 'Not configured'}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-slate-800 font-medium">
+                    ${sim800lData.sim800l === 1 ? 'PD5(35)' : 'Not configured'}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-slate-800 font-medium">${sim800lData.tel || 'Not set'}</td>
+                  <td class="px-6 py-4 text-sm text-slate-800 font-medium">${sim800lData.info || 'No info'}</td>
+                  <td class="px-6 py-4 text-sm text-slate-800 font-medium">
+                    <${MyPolzunok}
+                      value=${sim800lData.onoff}
+                      onChange=${(value) =>
       handleSim800lSave({ ...sim800lData, onoff: value })}
-                  />
-                </td>
-                <td>
-                  <button
-                    onClick=${() => setIsModalOpenSim800L(true)}
-                    class="text-blue-500 hover:text-blue-700"
-                  >
-                    Edit
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                    />
+                  </td>
+                  <td class="px-6 py-4 text-sm text-slate-800 font-medium">
+                    <button
+                      onClick=${() => setIsModalOpenSim800L(true)}
+                      class="text-teal-600 hover:text-cyan-600 font-bold transition-colors"
+                    >
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
           <div class="flex justify-end w-full">
             <button
               onClick=${() => setShowHelpSim800L(!showHelpSim800L)}
-              class="bg-blue-500 hover:bg-blue-700 text-white"
+              class="relative inline-flex items-center justify-center px-6 py-2.5 overflow-hidden font-medium text-white transition-all duration-300 bg-gradient-to-r from-teal-500 to-cyan-600 rounded-xl hover:from-teal-400 hover:to-cyan-500 shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_25px_rgba(20,184,166,0.5)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_0_15px_rgba(20,184,166,0.4)]"
             >
-              ${showHelpSim800L ? 'Hide Help' : 'Show Help'}
+              <span class="relative flex items-center gap-2">
+                ${showHelpSim800L ? 'Hide Help' : 'Show Help'}
+              </span>
             </button>
           </div>
           ${showHelpSim800L && helpContentSim800L[language]}
         </div>
 
-        <div class="w-full max-w-4xl">
-          <h2 class="text-xl font-bold mb-4">Security Pins</h2>
-          <table
-            class="table-auto border divide-y divide-gray-200 overflow-x-auto"
-          >
-            <thead>
-              <tr class="bg-gray-400">
-                <th>ID</th>
-                <th>Pin</th>
-                <th>Type of sensor</th>
-                <th>Action</th>
-                <th>Send SMS</th>
-                <th>INFO</th>
-                <th>On/Off</th>
-                <th>Edit Pin</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${varmonitoring.length > 0
+        <div class="w-full">
+          <h2 class="text-3xl font-extrabold text-slate-800 tracking-tight mb-6 drop-shadow-sm">Security Pins</h2>
+          
+          <div class="overflow-x-auto w-full rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm mb-4">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-gradient-to-r from-teal-500/90 to-cyan-600/90 border-b border-teal-400/50 shadow-sm">
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">ID</th>
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">Pin</th>
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">Type of sensor</th>
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">Action</th>
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">Send SMS</th>
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">INFO</th>
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">On/Off</th>
+                  <th class="px-6 py-4 text-2xl font-bold text-white tracking-wide">Edit Pin</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/40">
+                ${varmonitoring.length > 0
       ? varmonitoring.map(
         (d, index) => html`
-                      <tr
-                        class="${index % 2 === 1 ? 'bg-white' : 'bg-green-300'}"
-                      >
-                        <td class="px-4 py-2">${d.id}</td>
-                        <td class="px-4 py-2">${d.pins}</td>
-                        <td class="px-4 py-2">
-                          ${['PIR', 'Normal open', 'Normal close'][d.ptype]}
-                        </td>
-                        <td class="px-4 py-2">${d.action}</td>
-                        <td class="px-4 py-2">${d.send_sms}</td>
-                        <td class="px-4 py-2">${d.info}</td>
-                        <td class="px-4 py-2">
-                          <${MyPolzunok}
-                            value=${d.onoff}
-                            onChange=${(value) =>
+                        <tr
+                          class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors"
+                        >
+                          <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.id}</td>
+                          <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.pins}</td>
+                          <td class="px-6 py-4 text-sm text-slate-800 font-medium">
+                            ${['PIR', 'Normal open', 'Normal close'][d.ptype]}
+                          </td>
+                          <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.action}</td>
+                          <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.send_sms}</td>
+                          <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.info}</td>
+                          <td class="px-6 py-4 text-sm text-slate-800 font-medium">
+                            <${MyPolzunok}
+                              value=${d.onoff}
+                              onChange=${(value) =>
             handleOnOffChange({ ...d, onoff: value })}
-                          />
-                        </td>
-                        <td class="px-4 py-2">
-                          <button
-                            onClick=${() => openModal('edit', d)}
-                            class="text-blue-500 hover:text-blue-700"
-                          >
-                            Edit
-                          </button>
-                        </td>
-                      </tr>
-                    `
+                            />
+                          </td>
+                          <td class="px-6 py-4 text-sm text-slate-800 font-medium">
+                            <button
+                              onClick=${() => openModal('edit', d)}
+                              class="text-teal-600 hover:text-cyan-600 font-bold transition-colors"
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      `
       )
       : html`
-                    <tr>
-                      <td colspan="8" class="text-center">
-                        No monitoring data available
-                      </td>
-                    </tr>
-                  `}
-            </tbody>
-          </table>
+                      <tr>
+                        <td colspan="8" class="px-6 py-4 text-center text-sm text-slate-600 font-medium">
+                          No monitoring data available
+                        </td>
+                      </tr>
+                    `}
+              </tbody>
+            </table>
+          </div>
+          
           <div class="flex justify-end mt-4">
             <button
               onClick=${() => setShowHlp(!showHelpSecurity)}
-              class="bg-blue-500 hover:bg-blue-700 text-white"
+              class="relative inline-flex items-center justify-center px-6 py-2.5 overflow-hidden font-medium text-white transition-all duration-300 bg-gradient-to-r from-teal-500 to-cyan-600 rounded-xl hover:from-teal-400 hover:to-cyan-500 shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_25px_rgba(20,184,166,0.5)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_0_15px_rgba(20,184,166,0.4)]"
             >
-              ${showHelpSecurity ? 'Hide Help' : 'Show Help'}
+              <span class="relative flex items-center gap-2">
+                ${showHelpSecurity ? 'Hide Help' : 'Show Help'}
+              </span>
             </button>
           </div>
           ${showHelpSecurity && helpContentSecurity[language]}
@@ -6935,473 +6819,388 @@ function Settings({ }) {
   const hasErrors = Object.values(errors).some((error) => error !== null);
 
   return html`
-  <div class="m-4 divide-y divide-gray-200 overflow-auto rounded bg-white">
-    <div class="font-medium uppercase flex items-center px-4 py-2 bg-gray-400">
-      <span>Global settings</span>
-      <select
-        value=${settings.lang}
-        onChange=${(e) => handleChange('lang', e.target.value)}
-        class="ml-2 px-2 py-1 bg-white rounded text-sm"
-      >
-        ${languages.map(
-    (lang) => html` <option value=${lang.value}>${lang.label}</option> `
-  )}
-      </select>
-    </div>
-    <div class="flex-grow flex flex-col justify-center items-center">
-      ${topNotification &&
-    html`
-        <div class="w-full bg-green-500 text-white px-4 py-2 text-center mb-4">
-          ${topNotification}
-        </div>
-      `}
-      <form
-        ref=${formRef}
-        onSubmit=${handleSubmit}
-        class="justify-center overflow-x-auto mb-4 w-full max-w-2xl settings-table"
-      >
-        <div class="flex justify-start items-center p-2">
-          <button
-            type="submit"
-            class=${`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${submitButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''
-    }`}
-            disabled=${submitButtonDisabled}
+    <div class="flex flex-col items-center w-full p-4 mb-16">
+      <div class="flex flex-col items-center w-full p-6 bg-white/40 backdrop-blur-md rounded-2xl shadow-xl border border-white/50">
+        
+        <div class="w-full mb-6 flex flex-col md:flex-row justify-between items-center bg-gradient-to-r from-teal-500/90 to-cyan-600/90 rounded-2xl p-4 shadow-sm border border-teal-400/50 gap-4">
+          <h2 class="text-3xl font-extrabold text-white tracking-wide drop-shadow-sm uppercase">Global Settings</h2>
+          <select
+            value=${settings.lang}
+            onChange=${(e) => handleChange('lang', e.target.value)}
+            class="px-3 py-1.5 bg-white/90 text-slate-800 rounded-lg text-sm font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer"
           >
-            Save changes
-          </button>
+            ${languages.map((lang) => html`<option value=${lang.value}>${lang.label}</option>`)}
+          </select>
         </div>
-        <div class="flex flex-col items-center">
-          ${[
-      { label: 'Login', key: 'adm_name', type: 'text' },
-      { label: 'Password', key: 'adm_pswd', type: 'password' },
-      {
-        label: 'Time zone UTC',
-        key: 'timezone',
-        type: 'select',
-        options: timeZone
-      }
-    ].map(
-      (item, index) => html`
-              <div
-                class="flex items-center w-full justify-center ${index % 2 === 1
-          ? 'bg-white'
-          : 'bg-green-300'} p-2"
-              >
-                <div class="w-1/3 font-medium text-right pr-4">
-                  ${item.label}
-                </div>
-                <div class="w-2/3">
-                  <${pageSetting}
-                    value=${settings[item.key]}
-                    setfn=${(value) => handleChange(item.key, value)}
-                    type=${item.type}
-                    options=${item.options}
-                    class="w-full"
-                    error=${errors[item.key]}
-                  />
-                </div>
-              </div>
-            `
-    )}
 
-          <div class="flex items-center w-full justify-center bg-gray-400 p-2 mt-1">
-            <div class="w-1/3 font-medium text-right pr-4">
-              ${settings.check_ip ? 'DHCP' : 'Static IP'}
-            </div>
-            <div class="w-2/3">
-              <${Setting}
-                value=${settings.check_ip}
-                setfn=${(value) => handleChange('check_ip', value)}
-                type="switch"
-                class="w-full"
-              />
-            </div>
+        ${topNotification && html`
+          <div class="w-full max-w-4xl bg-gradient-to-r from-green-500/90 to-emerald-600/90 text-white font-bold px-4 py-3 rounded-xl shadow-md text-center mb-6 border border-green-400/50 backdrop-blur-md">
+            ${topNotification}
+          </div>
+        `}
+
+        <form
+          ref=${formRef}
+          onSubmit=${handleSubmit}
+          class="w-full max-w-4xl flex flex-col gap-6 relative"
+        >
+          <div class="flex justify-end w-full">
+            <button
+              type="submit"
+              class=${`relative inline-flex items-center justify-center px-8 py-3 overflow-hidden font-bold text-white transition-all duration-300 rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_25px_rgba(20,184,166,0.5)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_0_15px_rgba(20,184,166,0.4)] ${submitButtonDisabled ? 'opacity-50 cursor-not-allowed bg-slate-400' : 'bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-400 hover:to-cyan-500'}`}
+              disabled=${submitButtonDisabled}
+            >
+              <span class="relative flex items-center gap-2 text-lg tracking-wide drop-shadow-md">
+                Save changes
+              </span>
+            </button>
           </div>
 
-          ${!settings.check_ip &&
-    html`
-            ${[
-        { label: 'IP address', key: 'ip_addr' },
-        { label: 'Subnet mask', key: 'sb_mask' },
-        { label: 'Default gateway', key: 'gateway' }
-      ].map(
-        (item, index) => html`
-                <div
-                  class="flex items-center w-full justify-center ${index % 2 === 1
-            ? 'bg-white'
-            : 'bg-green-300'} p-2"
-                >
-                  <div class="w-1/3 font-medium text-right pr-4">
+          <!-- General Settings -->
+          <div class="overflow-hidden w-full rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+            <div class="bg-gradient-to-r from-teal-500/90 to-cyan-600/90 border-b border-teal-400/50 px-6 py-4">
+              <h3 class="text-2xl font-bold text-white tracking-wide drop-shadow-sm">General</h3>
+            </div>
+            <div class="flex flex-col divide-y divide-white/40">
+              ${[
+      { label: 'Login', key: 'adm_name', type: 'text' },
+      { label: 'Password', key: 'adm_pswd', type: 'password' },
+      { label: 'Time zone UTC', key: 'timezone', type: 'select', options: timeZone }
+    ].map((item, index) => html`
+                <div class="flex flex-col md:flex-row md:items-center p-4 transition-colors ${index % 2 === 0 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 gap-2 md:gap-0">
+                  <div class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2">
                     ${item.label}
                   </div>
-                  <div class="w-2/3">
-                    <${pageSetting}
-                      value=${settings[item.key]}
-                      setfn=${(value) => handleChange(item.key, value)}
-                      type="text"
-                      class="w-full"
-                      error=${errors[item.key]}
+                  <div class="w-full md:w-2/3">
+                    <${pageSetting} 
+                      value=${settings[item.key]} 
+                      setfn=${(value) => handleChange(item.key, value)} 
+                      type=${item.type} 
+                      options=${item.options}
+                      class=${`w-full px-3 py-2 bg-white/50 border ${errors[item.key] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                      error=${errors[item.key]} 
                     />
                   </div>
                 </div>
-              `
-      )}
-          `}
-
-          <div class="w-full text-center font-bold bg-gray-400 p-2 mt-1">
-            API settings
-          </div>
-
-          <div class="flex items-center w-full justify-center bg-green-300 p-2">
-            <div class="w-1/3 font-medium text-right pr-4">Token</div>
-            <div class="w-2/3">
-              <${Setting}
-                value=${settings.token}
-                setfn=${(value) => handleChange('token', value)}
-                type="text"
-                class="w-full"
-              />
+              `)}
             </div>
           </div>
 
-          <div class="flex items-center w-full justify-center bg-gray-400 p-2 mt-1">
-            <div class="w-1/3 font-medium text-right pr-4">MQTT</div>
-            <div class="w-2/3">
-              <${Setting}
-                value=${settings.check_mqtt}
-                setfn=${(value) => handleChange('check_mqtt', value)}
-                type="switch"
-                class="w-full"
-              />
+          <!-- Network Settings -->
+          <div class="overflow-hidden w-full rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+            <div class="bg-gradient-to-r from-teal-500/90 to-cyan-600/90 border-b border-teal-400/50 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <h3 class="text-2xl font-bold text-white tracking-wide drop-shadow-sm w-full sm:w-auto text-center sm:text-left">Network</h3>
+              <div class="flex items-center justify-center sm:justify-end gap-3 w-full sm:w-auto">
+                <span class="text-white font-medium drop-shadow-sm tracking-wide text-lg">${settings.check_ip ? 'DHCP' : 'Static IP'}</span>
+                <${MyPolzunok}
+                  value=${settings.check_ip}
+                  onChange=${(value) => handleChange('check_ip', value)}
+                />
+              </div>
             </div>
-          </div>
-
-          ${settings.check_mqtt
-      ? html`
-                ${[
-          { label: 'Host', key: 'mqtt_hst', type: 'text' },
-          { label: 'Port', key: 'mqtt_prt', type: 'number' },
-          { label: 'Client', key: 'mqtt_clt', type: 'text' },
-          { label: 'User', key: 'mqtt_usr', type: 'text' },
-          { label: 'Password', key: 'mqtt_pswd', type: 'password' },
-          { label: 'TX topic', key: 'txmqttop', type: 'text' },
-          { label: 'RX topic', key: 'rxmqttop', type: 'text' }
-        ].map(
-          (item, index) => html`
-                    <div
-                      class="flex items-center w-full justify-center ${index % 2 === 1
-              ? 'bg-white'
-              : 'bg-green-300'} p-2"
-                    >
-                      <div class="w-1/3 font-medium text-right pr-4">
-                        ${item.label}
-                      </div>
-                      <div class="w-2/3">
-                        <${pageSetting}
-                          value=${settings[item.key]}
-                          setfn=${(value) => handleChange(item.key, value)}
-                          type=${item.type}
-                          class="w-full"
-                          error=${errors[item.key]}
-                        />
-                      </div>
+            
+            ${!settings.check_ip ? html`
+              <div class="flex flex-col divide-y divide-white/40">
+                ${[{ label: 'IP address', key: 'ip_addr', type: 'text' },
+      { label: 'Subnet mask', key: 'sb_mask', type: 'text' },
+      { label: 'Default gateway', key: 'gateway', type: 'text' }].map((item, index) => html`
+                  <div class="flex flex-col md:flex-row md:items-center p-4 transition-colors ${index % 2 === 0 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 gap-2 md:gap-0">
+                    <div class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2">
+                      ${item.label}
                     </div>
-                  `
-        )}
-              `
-      : null}
+                    <div class="w-full md:w-2/3">
+                      <${pageSetting} 
+                        value=${settings[item.key]} 
+                        setfn=${(value) => handleChange(item.key, value)} 
+                        type=${item.type} 
+                        class=${`w-full px-3 py-2 bg-white/50 border ${errors[item.key] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                        error=${errors[item.key]} 
+                      />
+                    </div>
+                  </div>
+                `)}
+              </div>
+            ` : null}
+          </div>
 
-          <div class="flex items-center w-full justify-center bg-gray-400 p-2 mt-1">
-            <div class="w-1/3 font-medium text-right pr-4">HTTPS</div>
-            <div class="w-2/3">
-              <${Setting}
-                value=${settings.usehttps}
-                setfn=${(value) => handleChange('usehttps', value)}
-                type="switch"
-                class="w-full"
-              />
+          <!-- API Settings -->
+          <div class="overflow-hidden w-full rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+            <div class="bg-gradient-to-r from-teal-500/90 to-cyan-600/90 border-b border-teal-400/50 px-6 py-4">
+              <h3 class="text-2xl font-bold text-white tracking-wide drop-shadow-sm">API Settings</h3>
+            </div>
+            <div class="flex flex-col divide-y divide-white/40">
+              <div class="flex flex-col md:flex-row md:items-center p-4 transition-colors bg-white/80 hover:bg-slate-200/80 gap-2 md:gap-0">
+                <div class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2">Token</div>
+                <div class="w-full md:w-2/3">
+                  <${pageSetting}
+                    value=${settings.token}
+                    setfn=${(value) => handleChange('token', value)}
+                    type="text"
+                    class="w-full px-3 py-2 bg-white/50 border border-white/50 rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
-          ${settings.usehttps
-      ? html`
+          <!-- MQTT Settings -->
+          <div class="overflow-hidden w-full rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+            <div class="bg-gradient-to-r from-teal-500/90 to-cyan-600/90 border-b border-teal-400/50 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <h3 class="text-2xl font-bold text-white tracking-wide drop-shadow-sm w-full sm:w-auto text-center sm:text-left">MQTT</h3>
+              <div class="flex items-center justify-center sm:justify-end gap-3 w-full sm:w-auto">
+                 <span class="text-white font-medium drop-shadow-sm tracking-wide text-lg">Enabled</span>
+                 <${MyPolzunok}
+                   value=${settings.check_mqtt}
+                   onChange=${(value) => handleChange('check_mqtt', value)}
+                 />
+              </div>
+            </div>
+            
+            ${settings.check_mqtt ? html`
+              <div class="flex flex-col divide-y divide-white/40">
                 ${[
-          { label: 'HTTPS domain', key: 'domain', type: 'text' },
-          //{ label: 'Secret Key', key: 'tls_ca', type: 'textarea' },
-          { label: 'Private Key', key: 'tls_key', type: 'textarea' },
-          { label: 'Public Key', key: 'tls_cert', type: 'textarea' }
-          //{ label: 'Telegram bot token', key: 'telegram_token', type: 'text' }
-        ].map(
-          (item, index) => html`
-                    <div
-                      class="flex items-center w-full justify-center ${index % 2 === 1
-              ? 'bg-white'
-              : 'bg-green-300'} p-2"
-                    >
-                      <div class="w-1/3 font-medium text-right pr-4">
-                        ${item.label}
-                      </div>
-                      <div class="w-2/3 flex items-center">
-                        <div class="relative w-full">
-                          ${item.key === 'telegram_token'
-              ? html`
-                                ${settings.telegram_token
-                  ? html`
-                                      <div class="border p-1 rounded w-full bg-gray-100 text-gray-500">
-                                        Данные введены, но информация скрыта!
-                                      </div>
-                                    `
-                  : html`
-                                      <input
-                                        name=${item.key}
-                                        type="text"
-                                        value=${settings[item.key] || ''}
-                                        onInput=${(e) => handleChange(item.key, e.target.value)}
-                                        class="w-full px-2 py-1 border rounded"
-                                        placeholder="Enter Telegram bot token"
-                                      />
-                                    `}
+        { label: 'Host', key: 'mqtt_hst', type: 'text' },
+        { label: 'Port', key: 'mqtt_prt', type: 'number' },
+        { label: 'Client', key: 'mqtt_clt', type: 'text' },
+        { label: 'User', key: 'mqtt_usr', type: 'text' },
+        { label: 'Password', key: 'mqtt_pswd', type: 'password' },
+        { label: 'TX topic', key: 'txmqttop', type: 'text' },
+        { label: 'RX topic', key: 'rxmqttop', type: 'text' }
+      ].map((item, index) => html`
+                  <div class="flex flex-col md:flex-row md:items-center p-4 transition-colors ${index % 2 === 0 ? 'bg-sky-200/40' : 'bg-white/80'} hover:bg-slate-200/80 gap-2 md:gap-0">
+                    <div class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2">
+                      ${item.label}
+                    </div>
+                    <div class="w-full md:w-2/3">
+                      <${pageSetting} 
+                        value=${settings[item.key]} 
+                        setfn=${(value) => handleChange(item.key, value)} 
+                        type=${item.type} 
+                        class=${`w-full px-3 py-2 bg-white/50 border ${errors[item.key] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                        error=${errors[item.key]} 
+                      />
+                    </div>
+                  </div>
+                `)}
+              </div>
+            ` : null}
+          </div>
+
+          <!-- HTTPS Settings -->
+          <div class="overflow-hidden w-full rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+            <div class="bg-gradient-to-r from-teal-500/90 to-cyan-600/90 border-b border-teal-400/50 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <h3 class="text-2xl font-bold text-white tracking-wide drop-shadow-sm w-full sm:w-auto text-center sm:text-left">HTTPS</h3>
+              <div class="flex items-center justify-center sm:justify-end gap-3 w-full sm:w-auto">
+                 <span class="text-white font-medium drop-shadow-sm tracking-wide text-lg">Enabled</span>
+                 <${MyPolzunok}
+                   value=${settings.usehttps}
+                   onChange=${(value) => handleChange('usehttps', value)}
+                 />
+              </div>
+            </div>
+            
+            ${settings.usehttps ? html`
+              <div class="flex flex-col divide-y divide-white/40">
+                ${[
+        { label: 'HTTPS domain', key: 'domain', type: 'text' },
+        { label: 'Private Key', key: 'tls_key', type: 'textarea' },
+        { label: 'Public Key', key: 'tls_cert', type: 'textarea' }
+      ].map((item, index) => html`
+                  <div class="flex flex-col md:flex-row md:items-center p-4 transition-colors ${index % 2 === 0 ? 'bg-sky-200/40' : 'bg-white/80'} hover:bg-slate-200/80 gap-2 md:gap-0">
+                    <div class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2 mt-1 md:mt-0">
+                      ${item.label}
+                    </div>
+                    <div class="w-full md:w-2/3 flex items-start md:items-center">
+                      <div class="relative w-full">
+                        ${item.type === 'textarea'
+          ? html`
+                            ${item.key === 'tls_key' && settings.tls_key
+              ? html`<div class="w-full px-3 py-2 bg-white/40 border border-white/50 rounded-lg text-slate-600 font-medium shadow-inner">Данные введены, но информация скрыта!</div>`
+              : item.key === 'tls_cert' && settings.tls_cert
+                ? html`<div class="w-full px-3 py-2 bg-white/40 border border-white/50 rounded-lg text-slate-600 font-medium shadow-inner">Данные введены успешно!</div>`
+                : html`<textarea
+                                    name=${item.key}
+                                    value=${settings[item.key] || ''}
+                                    onInput=${(e) => handleChange(item.key, e.target.value)}
+                                    class=${`w-full px-3 py-2 bg-white/50 border ${errors[item.key] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                                    rows="1"
+                                    placeholder="Enter ${item.label}"
+                                  ></textarea>`
+            }
                           `
-              : item.type === 'textarea'
-                ? html`
-                                ${item.key === 'tls_ca' && settings.tls_ca
-                    ? html`
-                                      <div class="border p-1 rounded w-full bg-gray-100 text-gray-500">
-                                        Данные введены, но информация скрыта!
-                                      </div>
-                                    `
-                    : item.key === 'tls_key' && settings.tls_key
-                      ? html`
-                                      <div class="border p-1 rounded w-full bg-gray-100 text-gray-500">
-                                        Данные введены, но информация скрыта!
-                                      </div>
-                                    `
-                      : item.key === 'tls_cert' && settings.tls_cert
-                        ? html`
-                                      <div class="border p-1 rounded w-full bg-gray-100 text-gray-500">
-                                        Данные введены успешно!
-                                      </div>
-                                    `
-                        : html`
-                                      <textarea
-                                        name=${item.key}
-                                        value=${settings[item.key] || ''}
-                                        onInput=${(e) => handleChange(item.key, e.target.value)}
-                                        class="w-full px-2 py-1 border rounded"
-                                        rows="1"
-                                        placeholder="Enter ${item.label}"
-                                      ></textarea>
-                                    `}
-                          `
-                : item.key === 'domain'
-                  ? html`
-                                <input
-                                  type="text"
-                                  name=${item.key}
-                                  value=${settings[item.key] || ''}
-                                  onInput=${(e) => handleChange(item.key, e.target.value)}
-                                  class="w-full px-2 py-1 border rounded"
-                                  maxlength="30"
-                                  placeholder="Enter domain (e.g., zagotovka.ddns.net)"
-                                />
-                              `
-                  : html`
-                                <${pageSetting}
-                                  value=${settings[item.key]}
-                                  setfn=${(value) => handleChange(item.key, value)}
-                                  type=${item.type}
-                                  class="w-full"
-                                  error=${errors[item.key]}
-                                />
-                              `}
-                          ${settings[item.key] && item.key === 'tls_cert' && html`
-                            <div class="absolute right-0 top-0 mt-1 flex space-x-2">
-                              <button
-                                type="button"
-                                onClick=${() => {
-                navigator.clipboard.writeText(settings[item.key]);
-                setTopNotification('Данные скопированы');
-                setTimeout(() => setTopNotification(''), 3000);
-              }}
-                                class="px-2 py-1 bg-green-500 text-white rounded text-sm"
-                              >
-                                Копировать
-                              </button>
-                              <button
-                                type="button"
-                                onClick=${() => handleChange(item.key, '')}
-                                class="px-2 py-1 bg-red-500 text-white rounded text-sm"
-                              >
-                                Очистить
-                              </button>
-                            </div>
+          : html`
+                            <input
+                              type="text"
+                              name=${item.key}
+                              value=${settings[item.key] || ''}
+                              onInput=${(e) => handleChange(item.key, e.target.value)}
+                              class=${`w-full px-3 py-2 bg-white/50 border ${errors[item.key] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                              maxlength="30"
+                              placeholder="Enter domain (e.g., zagotovka.ddns.net)"
+                            />
                           `}
-                          ${settings[item.key] && item.key !== 'domain' && item.key !== 'tls_cert' && html`
+                        
+                        ${settings[item.key] && item.key === 'tls_cert' && html`
+                          <div class="absolute right-0 top-0 mt-[3px] mr-[3px] flex gap-2">
+                            <button
+                              type="button"
+                              onClick=${() => {
+            navigator.clipboard.writeText(settings[item.key]);
+            setTopNotification('Данные скопированы');
+            setTimeout(() => setTopNotification(''), 3000);
+          }}
+                              class="px-3 py-1 bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold rounded-md text-sm shadow-[0_0_10px_rgba(16,185,129,0.3)] hover:shadow-[0_0_15px_rgba(16,185,129,0.5)] transition-all hover:-translate-y-0.5"
+                            >Копировать</button>
                             <button
                               type="button"
                               onClick=${() => handleChange(item.key, '')}
-                              class="absolute right-0 top-0 mt-1 mr-1 px-2 py-1 bg-red-500 text-white rounded text-sm"
-                            >
-                              Очистить
-                            </button>
-                          `}
-                        </div>
-                        ${errors[item.key] && html`
-                          <div class="text-red-500 text-sm mt-1">${errors[item.key]}</div>
+                              class="px-3 py-1 bg-gradient-to-r from-rose-500 to-red-600 text-white font-bold rounded-md text-sm shadow-[0_0_10px_rgba(225,29,72,0.3)] hover:shadow-[0_0_15px_rgba(225,29,72,0.5)] transition-all hover:-translate-y-0.5"
+                            >Очистить</button>
+                          </div>
+                        `}
+                        ${settings[item.key] && item.key !== 'domain' && item.key !== 'tls_cert' && html`
+                          <button
+                            type="button"
+                            onClick=${() => handleChange(item.key, '')}
+                            class="absolute right-0 top-0 mt-[3px] mr-[3px] px-3 py-1 bg-gradient-to-r from-rose-500 to-red-600 text-white font-bold rounded-md text-sm shadow-[0_0_10px_rgba(225,29,72,0.3)] hover:shadow-[0_0_15px_rgba(225,29,72,0.5)] transition-all hover:-translate-y-0.5"
+                          >Очистить</button>
                         `}
                       </div>
+                      ${errors[item.key] && html`
+                        <div class="text-red-500 text-sm mt-1 font-semibold w-full text-left">${errors[item.key]}</div>
+                      `}
                     </div>
-                  `
-        )}
-              `
-      : null}
-
-          <div class="w-full text-center font-bold bg-gray-400 p-2 mt-1">
-            Coordinate settings
-          </div>
-          <div class="flex items-center w-full justify-center bg-green-300 p-2">
-            <div class="w-1/3 font-medium text-right pr-4">Longitude</div>
-            <div class="w-2/3">
-              <${Setting}
-                value=${settings.lon_de}
-                setfn=${(value) => handleChange('lon_de', value)}
-                type="text"
-                class="w-full"
-              />
-            </div>
-          </div>
-          <div class="flex items-center w-full justify-center bg-white p-2">
-            <div class="w-1/3 font-medium text-right pr-4">Latitude</div>
-            <div class="w-2/3">
-              <${Setting}
-                value=${settings.lat_de}
-                setfn=${(value) => handleChange('lat_de', value)}
-                type="text"
-                class="w-full"
-              />
-            </div>
+                  </div>
+                `)}
+              </div>
+            ` : null}
           </div>
 
-          <div class="flex items-center w-full justify-center bg-green-300 p-2">
-            <div class="w-1/3 font-medium text-right pr-4">
-              Sunrise: ${settings.sunrise}
+          <!-- Coordinate Settings -->
+          <div class="overflow-hidden w-full rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+            <div class="bg-gradient-to-r from-teal-500/90 to-cyan-600/90 border-b border-teal-400/50 px-6 py-4">
+              <h3 class="text-2xl font-bold text-white tracking-wide drop-shadow-sm">Coordinates & Astronomy</h3>
             </div>
-            <div class="w-2/3 flex items-center">
-              <input
-                type="text"
-                value=${settings.sunrise_pins || ''}
-                onInput=${(e) => handleChange('sunrise_pins', e.target.value)}
-                maxlength="20"
-                placeholder="Action for sunrise"
-                class="w-1/2 mr-2 px-2 py-1 border rounded"
-              />
-              <${Setting}
-                value=${settings.onsunrise}
-                setfn=${(value) => handleChange('onsunrise', value)}
-                type="switch"
-                class="w-1/2"
-              />
-            </div>
-          </div>
-          <div class="flex items-center w-full justify-center bg-white p-2">
-            <div class="w-1/3 font-medium text-right pr-4">
-              Sunset: ${settings.sunset}
-            </div>
-            <div class="w-2/3 flex items-center">
-              <input
-                type="text"
-                value=${settings.sunset_pins || ''}
-                onInput=${(e) => handleChange('sunset_pins', e.target.value)}
-                maxlength="20"
-                placeholder="Action for sunset"
-                class="w-1/2 mr-2 px-2 py-1 border rounded"
-              />
-              <${Setting}
-                value=${settings.onsunset}
-                setfn=${(value) => handleChange('onsunset', value)}
-                type="switch"
-                class="w-1/2"
-              />
-            </div>
-          </div>
-          <div class="flex items-center w-full justify-center bg-green-300 p-2">
-            <div class="w-1/3 font-medium text-right pr-4">Day Length</div>
-            <div class="w-2/3">
-              <span class="text-lg">${settings.dlength}</span>
+            <div class="flex flex-col divide-y divide-white/40">
+              <div class="flex flex-col md:flex-row md:items-center p-4 transition-colors bg-white/80 hover:bg-slate-200/80 gap-2 md:gap-0">
+                <div class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2">Longitude</div>
+                <div class="w-full md:w-2/3">
+                  <${pageSetting} value=${settings.lon_de} setfn=${(value) => handleChange('lon_de', value)} type="text" class=${`w-full px-3 py-2 bg-white/50 border ${errors.lon_de ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`} error=${errors.lon_de} />
+                </div>
+              </div>
+              <div class="flex flex-col md:flex-row md:items-center p-4 transition-colors bg-sky-200/40 hover:bg-slate-200/80 gap-2 md:gap-0">
+                <div class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2">Latitude</div>
+                <div class="w-full md:w-2/3">
+                  <${pageSetting} value=${settings.lat_de} setfn=${(value) => handleChange('lat_de', value)} type="text" class=${`w-full px-3 py-2 bg-white/50 border ${errors.lat_de ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`} error=${errors.lat_de} />
+                </div>
+              </div>
+              <div class="flex flex-col md:flex-row md:items-center p-4 transition-colors bg-white/80 hover:bg-slate-200/80 gap-2 md:gap-0">
+                <div class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2">
+                  Sunrise: <span class="text-teal-600 drop-shadow-sm">${settings.sunrise}</span>
+                </div>
+                <div class="w-full md:w-2/3 flex items-center gap-4">
+                  <${MyPolzunok} value=${settings.onsunrise} onChange=${(value) => handleChange('onsunrise', value)} />
+                  <input
+                    type="text"
+                    value=${settings.sunrise_pins || ''}
+                    onInput=${(e) => handleChange('sunrise_pins', e.target.value)}
+                    maxlength="20"
+                    placeholder="Action for sunrise"
+                    class="flex-grow w-full px-3 py-2 bg-white/50 border border-white/50 rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+              </div>
+              <div class="flex flex-col md:flex-row md:items-center p-4 transition-colors bg-sky-200/40 hover:bg-slate-200/80 gap-2 md:gap-0">
+                <div class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2">
+                  Sunset: <span class="text-teal-600 drop-shadow-sm">${settings.sunset}</span>
+                </div>
+                <div class="w-full md:w-2/3 flex items-center gap-4">
+                  <${MyPolzunok} value=${settings.onsunset} onChange=${(value) => handleChange('onsunset', value)} />
+                  <input
+                    type="text"
+                    value=${settings.sunset_pins || ''}
+                    onInput=${(e) => handleChange('sunset_pins', e.target.value)}
+                    maxlength="20"
+                    placeholder="Action for sunset"
+                    class="flex-grow w-full px-3 py-2 bg-white/50 border border-white/50 rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+              </div>
+              <div class="flex flex-col md:flex-row md:items-center p-4 transition-colors bg-white/80 hover:bg-slate-200/80 gap-2 md:gap-0">
+                <div class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2">Day Length</div>
+                <div class="w-full md:w-2/3">
+                  <span class="text-xl font-medium text-slate-800">${settings.dlength}</span>
+                </div>
+              </div>
+              <div class="flex flex-col md:flex-row md:items-center p-4 transition-colors bg-sky-200/40 hover:bg-slate-200/80 gap-2 md:gap-0">
+                <div class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2">Next full moon</div>
+                <div class="w-full md:w-2/3">
+                  <span class="text-xl font-medium text-slate-800">
+                    ${typeof settings.fullmoon === 'string' && settings.fullmoon ? `${settings.fullmoon.split(' ')[0]} at ${settings.fullmoon.split(' ')[1]}` : 'N/A'}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="flex items-center w-full justify-center bg-gray-400 p-2">
-            <div class="w-1/3 font-medium text-right pr-4">
-              Next full moon:
+          <!-- Offline Mode -->
+          <div class="overflow-hidden w-full rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm mb-4">
+            <div class="bg-gradient-to-r from-teal-500/90 to-cyan-600/90 border-b border-teal-400/50 px-6 py-4">
+              <h3 class="text-2xl font-bold text-white tracking-wide drop-shadow-sm">[OFFLINE MODE] Date & Time</h3>
             </div>
-            <div class="w-2/3">
-              <span class="text-lg">
-                ${typeof settings.fullmoon === 'string' && settings.fullmoon
-      ? `${settings.fullmoon.split(' ')[0]} at ${settings.fullmoon.split(' ')[1]
-      }`
-      : 'N/A'}
+            <div class="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-white/40 bg-white/80 items-stretch">
+              <div class="flex-1 p-4 flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 hover:bg-slate-200/80 transition-colors">
+                <div class="font-bold text-slate-700 text-lg sm:w-1/3 flex-shrink-0">Date</div>
+                <div class="flex-grow flex flex-col w-full">
+                  <input
+                    type="text"
+                    name="offdate"
+                    value=${settings.offdate || ''}
+                    onInput=${(e) => handleChange('offdate', e.target.value)}
+                    placeholder="dd.mm.yy"
+                    class=${`w-full px-3 py-2 bg-white/50 border ${errors.offdate ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                  />
+                  ${errors.offdate && html`<div class="text-red-500 text-sm mt-1 font-semibold">${errors.offdate}</div>`}
+                </div>
+              </div>
+              <div class="flex-1 p-4 flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 hover:bg-slate-200/80 transition-colors">
+                <div class="font-bold text-slate-700 text-lg sm:w-1/3 flex-shrink-0 pl-0 sm:pl-2">Time</div>
+                <div class="flex-grow flex flex-col w-full">
+                  <input
+                    type="text"
+                    name="offtime"
+                    value=${settings.offtime || ''}
+                    onInput=${(e) => handleChange('offtime', e.target.value)}
+                    placeholder="hh:mm:ss"
+                    class=${`w-full px-3 py-2 bg-white/50 border ${errors.offtime ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                  />
+                  ${errors.offtime && html`<div class="text-red-500 text-sm mt-1 font-semibold">${errors.offtime}</div>`}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          ${topNotification && html`
+            <div class="w-full bg-gradient-to-r from-green-500/90 to-emerald-600/90 text-white font-bold px-4 py-3 rounded-xl shadow-md text-center border border-green-400/50 backdrop-blur-md">
+              ${topNotification}
+            </div>
+          `}
+
+          <div class="flex justify-end w-full mb-4">
+            <button
+              type="submit"
+              class=${`relative inline-flex items-center justify-center px-8 py-3 overflow-hidden font-bold text-white transition-all duration-300 rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_25px_rgba(20,184,166,0.5)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_0_15px_rgba(20,184,166,0.4)] ${submitButtonDisabled ? 'opacity-50 cursor-not-allowed bg-slate-400' : 'bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-400 hover:to-cyan-500'}`}
+              disabled=${submitButtonDisabled}
+            >
+              <span class="relative flex items-center gap-2 text-lg tracking-wide drop-shadow-md">
+                Save changes
               </span>
-            </div>
+            </button>
           </div>
-
-          <div class="flex items-center w-full justify-between bg-gray-400 p-2 mt-1">
-            <div class="flex items-center flex-1">
-              <div class="whitespace-nowrap font-medium pr-2">[OFFLINE MODE] Date</div>
-              <div style="width: 200px;">
-                <input
-                  type="text"
-                  name="offdate"
-                  value=${settings.offdate || ''}
-                  onInput=${(e) => handleChange('offdate', e.target.value)}
-                  placeholder="Enter date (dd.mm.yy)"
-                  class="w-full px-2 py-1 border rounded"
-                />
-                ${errors.offdate &&
-    html`<div class="text-red-500 text-sm mt-1">${errors.offdate}</div>`}
-              </div>
-            </div>
-            <div class="flex items-center flex-1 ml-2">
-              <div class="whitespace-nowrap font-medium pr-2">Time</div>
-              <div style="width: 200px;">
-                <input
-                  type="text"
-                  name="offtime"
-                  value=${settings.offtime || ''}
-                  onInput=${(e) => handleChange('offtime', e.target.value)}
-                  placeholder="Enter time (hh:mm:ss)"
-                  class="w-full px-2 py-1 border rounded"
-                />
-                ${errors.offtime &&
-    html`<div class="text-red-500 text-sm mt-1">${errors.offtime}</div>`}
-              </div>
-            </div>
-          </div>
-
-          ${topNotification &&
-    html`
-              <div class="w-full bg-green-500 text-white px-4 py-2 text-center mt-4">
-                ${topNotification}
-              </div>
-            `}
-
-        </div> <!-- Закрытие flex flex-col items-center -->
-
-        <!-- Контейнер для кнопки "Save changes" -->
-        <div class="flex justify-end p-2">
-          <button
-            type="submit"
-            class=${`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${submitButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''
-    }`}
-            disabled=${submitButtonDisabled}
-          >
-            Save changes
-          </button>
-        </div>
-      </form> <!-- Закрытие формы -->
-    </div> <!-- Закрытие flex-grow flex flex-col justify-center items-center -->
-  </div> <!-- Закрытие внешнего контейнера -->
-`;
+        </form>
+      </div>
+    </div>
+  `;;
 }
 /******************************************************************************/
 

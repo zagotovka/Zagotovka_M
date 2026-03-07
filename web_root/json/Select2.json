@@ -5,7 +5,7 @@
     {
       "id": 0,
       "pins": "PA0",
-      "topin": 10,
+      "topin": 8,
       "pwm": 1,
       "i2cdata": 0,
       "i2cclok": 0
@@ -13,7 +13,7 @@
     {
       "id": 1,
       "pins": "PA3",
-      "topin": 9,
+      "topin": 0,
       "pwm": 1,
       "i2cdata": 0,
       "i2cclok": 0

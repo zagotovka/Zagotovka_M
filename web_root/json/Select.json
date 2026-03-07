@@ -13,7 +13,7 @@
     {
       "id": 1,
       "pins": "PA3",
-      "topin": 9,
+      "topin": 0,
       "pwm": 1,
       "i2cdata": 0,
       "i2cclok": 0
