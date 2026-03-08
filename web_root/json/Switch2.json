@@ -1,5 +1,8 @@
 {
-  "setrpins": "",
+  "setrpins": "PB2",
   "id": 14,
-  "pins": "PB9"
+  "pins": "PB9",
+  "pinact": {
+    "8": "PB2"
+  }
 }

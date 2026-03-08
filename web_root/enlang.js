@@ -1,50 +1,60 @@
 export const enLangswitch = [
   '', // Empty string for index 0
-  'ID - is a unique numerical identifier of the pin. Assigned automatically',
+  'ID - A unique numerical identifier of the switch. Assigned automatically',
   'PIN - The unique number of the digital or analog pin.',
   'Pullup type (EXTERNAL_PULLDOWN, INTERNAL_PULLUP, EXTERNAL_PULLUP)',
-  'Relay connection - Here will appear one or more relays of pin(s) with which this button interacts.',
-  'INFO - Give a name of this button for quick navigation. Example: "Kitchen", "Children room", etc. Max. 30 characters!',
-  "On/Off - 'On' or 'Off' this pin/switch.",
-  'Action - Some actions with this pin.'
+  'Device connection - Here will appear one or more devices/relays of pin(s) with which this switch interacts.',
+  'INFO - Give a name of this switch for quick navigation. Example: "Kitchen", "Children room", etc. Max. 30 characters!',
+  "On/Off - Enable or disable the switch state handler on this pin.",
+  'Action - The Edit button allows you to access the switch settings menu.'
+];
+
+export const enLangselect = [
+  '', // 0
+  'ID - A unique numerical identifier. Assigned automatically.', // 1
+  'Pin - The unique number of the digital or analog pin.', // 2
+  'Type(s) of pin(s) - Select the operating mode of this pin from the provided options.' // 3
 ];
 
 export const enlangbutton = [
   '', // Empty string for index 0
-  'ID - is a unique numerical identifier of the pin. Assigned automatically',
+  'ID - A unique numerical identifier of the button. Assigned automatically.',
   'PIN - The unique number of the digital or analog pin.',
   'Pullup type (EXTERNAL_PULLDOWN, INTERNAL_PULLUP, EXTERNAL_PULLUP)',
-  'sclick - Do I need to track the single pressing of the button or not',
-  'dclick - Do I need to track the double pressing of the button or not',
-  'lpress - Do I need to track the long pressing of the button or not',
-  'Relay connection - Here will appear one or more relays of pin(s) with which this button interacts.',
+  'sclick - Command to execute when the button is pressed once.',
+  'dclick - Command to execute when the button is pressed twice.',
+  'lpress - Command to execute when the button is long pressed.',
   'INFO - Give a name of this button for quick navigation. Example: "Kitchen", "Children room", etc. Max. 30 characters!',
-  "On/Off - 'On' or 'Off' this pin/switch.",
-  'Action - Some actions with this pin.'
+  "On/Off - Enable or disable the button function on this pin.",
+  'Action - The Edit button allows you to access the button settings menu.'
 ];
+
 export const enlangmonitoring = [
   '', // Empty string for index 0
-  'ID - is a unique numerical identifier of the pin. Assigned automatically',
+  'ID - A unique numerical identifier of the pin. Assigned automatically',
   'PIN - The unique number of the digital or analog pin.',
   'Pullup type (EXTERNAL_PULLDOWN, INTERNAL_PULLUP, EXTERNAL_PULLUP)',
-  'monitoring - Do I need to track the single pressing of the button or not',
-  'Relay connection - Here will appear one or more relays of pin(s) with which this button interacts.',
-  'INFO - Give a name of this button for quick navigation. Example: "Kitchen", "Children room", etc. Max. 30 characters!',
-  "On/Off - 'On' or 'Off' this pin/switch.",
+  'Monitoring - Enable or disable the monitoring of this pin.',
+  'Relay connection - Pins with which this monitor interacts.',
+  'INFO - Name for navigation.',
+  "On/Off - 'On' or 'Off' this monitor.",
   'Action - Some actions with this pin.'
 ];
+
 export const enencoder = [
-  '', // Empty string for index 0
-  'ID - is a unique numerical identifier of the pin. Assigned automatically',
-  'PIN - The unique number of the digital or analog pin.',
-  'Pullup type (EXTERNAL_PULLDOWN, INTERNAL_PULLUP, EXTERNAL_PULLUP)',
-  'sclick - Do I need to track the single pressing of the button or not',
-  'dclick - Do I need to track the double pressing of the button or not',
-  'lpress - Do I need to track the long pressing of the button or not',
-  'Relay connection - Here will appear one or more relays of pin(s) with which this button interacts.',
-  'INFO - Give a name of this button for quick navigation. Example: "Kitchen", "Children room", etc. Max. 30 characters!',
-  "On/Off - 'On' or 'Off' this pin/switch.",
-  'Action - Some actions with this pin.'
+  '', // 0
+  'ID - A unique numerical identifier of the encoder. Assigned automatically.', // 1
+  'PIN - The unique number of the pin.', // 2
+  'Encoder A (ID) - Main pin of encoder A (DT).', // 3
+  'Encoder B (ID) - Additional pin of encoder B (CLK).', // 4
+  'PWM connection - PWM connection for brightness control (dimmer).', // 5
+  'Dimmer value (0-100) - Current dimmer value from 0 to 100.', // 6
+  'Duty on restore - Value of duty cycle (brightness) to restore when the controller is turned on.', // 7
+  'INFO - Give a name to this encoder for quick navigation.', // 8
+  'On/Off - Enable or disable the encoder handler.', // 9
+  'Action - The Edit button allows you to access the encoder settings menu.', // 10
+  'PWM Frequency - PWM frequency of the controlled device (in Hertz).', // 11
+  'Resolution (steps) - Maximum number of steps from 0 to 100% for the PWM device.' // 12
 ];
 
 export const enlangeditbutton = [
@@ -111,12 +121,13 @@ export const enlangeditrelay = [
 ];
 
 export const enlangtimers = [
-  '', // Empty string for index 0
-  'ID - is a unique numerical identifier of the cron. Assigned automatically',
-  'Configure a cron.',
-  'What action must be performed at the time specified in the timer.',
-  'INFO - Give a name to the selected timer for quick navigation, e.g."Lawn Watering", "Backyard Light", etc. No more than 30 characters!',
-  'Action - Some actions with this cron.'
+  '', // 0
+  'No - A unique numerical identifier of the task (cron). Assigned automatically.', // 1
+  'Cron - Configure a schedule (cron) to perform the action.', // 2
+  'Script - What action (script) must be performed at the time specified in the timer.', // 3
+  'Info - Give a name to the selected timer for quick navigation, e.g."Lawn Watering", "Backyard Light", etc. No more than 30 characters!', // 4
+  'On/Off - Enable or disable the execution of this task.', // 5
+  'Action - The Edit button allows you to access the task settings menu.' // 6
 ];
 
 export const enlangsettings = [
@@ -173,12 +184,34 @@ export const enactionhelp = [
   "Pin 12 will change its state (TOGGLE) every CRON's valid time"
 ];
 
+export const enLangsecurity = [
+  '', // 0
+  'RXD Pin - Receive Data Pin (RX).', // 1
+  'TXD Pin - Transmit Data Pin (TX).', // 2
+  'Phone Number - Phone number for SMS notifications and calls.', // 3
+  'Info - Additional information for quick navigation.', // 4
+  'OnOff - Enable or disable the SIM800L module.', // 5
+  'Action - The Edit button allows you to access the settings menu.' // 6
+];
+
+export const enLangsecuritypins = [
+  '', // 0
+  'ID - A unique numerical identifier of the pin. Assigned automatically.', // 1
+  'Pin - The unique number of the digital or analog pin.', // 2
+  'Type of sensor - Type of connected sensor (PIR, Normal open, Normal close).', // 3
+  'Action - Action to perform when the sensor is triggered.', // 4
+  'Send SMS - Whether to send SMS when the sensor is triggered (YES/NO).', // 5
+  'INFO - Additional information for quick navigation.', // 6
+  'On/Off - Enable or disable the security pin.', // 7
+  'Edit Pin - The Edit button allows you to access the security pin settings.' // 8
+];
+
 export const enlange1Wire = [
-  '', // Empty string for index 0
-  'ID - is a unique numerical identifier of the pin. Assigned automatically',
-  'PIN - The unique number of the digital or analog pin.',
-  'PWM frequency (Hz) - PWM frequency in Hertz. If 0, then PWM is not used.',
-  "ON - State of pin -1 is 'On', 0 is 'Off'.",
-  'INFO - Give a name to the selected relay for quick navigation, e.g."Kitchen", "Kids room", etc. No more than 30 characters!',
-  "On/Off - 'On' or 'Off' this relay."
+  '', // 0
+  'ID - A unique numerical identifier. Assigned automatically.', // 1
+  'Pin - The unique number of the digital pin to which the 1-Wire bus is connected.', // 2
+  'Selected sensor - Address of the selected and bound unique 1-Wire sensor to this pin (e.g., DS18B20).', // 3
+  'Count of sensors - Number of found 1-Wire temperature sensors on this pin.', // 4
+  'On/Off - The function of enabling or disabling polling of connected sensors on this bus.', // 5
+  'Actions - The Edit button to bind a specific sensor to this connection.' // 6
 ];

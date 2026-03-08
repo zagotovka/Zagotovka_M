@@ -2,11 +2,11 @@
   "topin": 1,
   "id": 30,
   "pins": "PC13",
-  "ptype": 0,
-  "sclick": "None",
-  "dclick": "None",
-  "lpress": "None",
+  "ptype": 2,
+  "sclick": "12:1",
+  "dclick": "18:1",
+  "lpress": "18:0,12:0",
   "pinact": {},
-  "info": "",
-  "onoff": 0
+  "info": "Test",
+  "onoff": 1
 }

@@ -1,5 +1,7 @@
 {
   "id": 22,
   "pin": "PC3",
+  "typsensor": 1,
+  "numdevices": 5,
   "onoff": 1
 }
