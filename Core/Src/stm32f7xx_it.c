@@ -1,25 +1,26 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file    stm32f7xx_it.c
-  * @brief   Interrupt Service Routines.
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2024 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file    stm32f7xx_it.c
+ * @brief   Interrupt Service Routines.
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2024 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
-#include "main.h"
 #include "stm32f7xx_it.h"
+#include "main.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "usart_ring.h"
@@ -47,7 +48,8 @@
 extern volatile gsm_rx_buffer_index_t gsm_rx_buffer_head;
 extern volatile gsm_rx_buffer_index_t gsm_rx_buffer_tail;
 extern unsigned char gsm_rx_buffer[GSM_RX_BUFFER_SIZE];
-/////////////////// DEBUG USART //////////////////// можно удалить после отладки всего
+/////////////////// DEBUG USART //////////////////// можно удалить после отладки
+/// всего
 extern volatile dbg_rx_buffer_index_t dbg_rx_buffer_head;
 extern volatile dbg_rx_buffer_index_t dbg_rx_buffer_tail;
 extern unsigned char dbg_rx_buffer[DBG_RX_BUFFER_SIZE];
@@ -66,96 +68,83 @@ extern unsigned char dbg_rx_buffer[DBG_RX_BUFFER_SIZE];
 /* External variables --------------------------------------------------------*/
 extern HCD_HandleTypeDef hhcd_USB_OTG_FS;
 extern ETH_HandleTypeDef heth;
-extern UART_HandleTypeDef huart2;
 extern TIM_HandleTypeDef htim6;
-
 /* USER CODE BEGIN EV */
-
+extern UART_HandleTypeDef huart2; // GSM SIM800L (определён в gsm.c)
 /* USER CODE END EV */
 
 /******************************************************************************/
 /*           Cortex-M7 Processor Interruption and Exception Handlers          */
 /******************************************************************************/
 /**
-  * @brief This function handles Non maskable interrupt.
-  */
-void NMI_Handler(void)
-{
+ * @brief This function handles Non maskable interrupt.
+ */
+void NMI_Handler(void) {
   /* USER CODE BEGIN NonMaskableInt_IRQn 0 */
 
   /* USER CODE END NonMaskableInt_IRQn 0 */
   /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
-   while (1)
-  {
+  while (1) {
   }
   /* USER CODE END NonMaskableInt_IRQn 1 */
 }
 
 /**
-  * @brief This function handles Hard fault interrupt.
-  */
-void HardFault_Handler(void)
-{
+ * @brief This function handles Hard fault interrupt.
+ */
+void HardFault_Handler(void) {
   /* USER CODE BEGIN HardFault_IRQn 0 */
 
   /* USER CODE END HardFault_IRQn 0 */
-  while (1)
-  {
+  while (1) {
     /* USER CODE BEGIN W1_HardFault_IRQn 0 */
     /* USER CODE END W1_HardFault_IRQn 0 */
   }
 }
 
 /**
-  * @brief This function handles Memory management fault.
-  */
-void MemManage_Handler(void)
-{
+ * @brief This function handles Memory management fault.
+ */
+void MemManage_Handler(void) {
   /* USER CODE BEGIN MemoryManagement_IRQn 0 */
 
   /* USER CODE END MemoryManagement_IRQn 0 */
-  while (1)
-  {
+  while (1) {
     /* USER CODE BEGIN W1_MemoryManagement_IRQn 0 */
     /* USER CODE END W1_MemoryManagement_IRQn 0 */
   }
 }
 
 /**
-  * @brief This function handles Pre-fetch fault, memory access fault.
-  */
-void BusFault_Handler(void)
-{
+ * @brief This function handles Pre-fetch fault, memory access fault.
+ */
+void BusFault_Handler(void) {
   /* USER CODE BEGIN BusFault_IRQn 0 */
 
   /* USER CODE END BusFault_IRQn 0 */
-  while (1)
-  {
+  while (1) {
     /* USER CODE BEGIN W1_BusFault_IRQn 0 */
     /* USER CODE END W1_BusFault_IRQn 0 */
   }
 }
 
 /**
-  * @brief This function handles Undefined instruction or illegal state.
-  */
-void UsageFault_Handler(void)
-{
+ * @brief This function handles Undefined instruction or illegal state.
+ */
+void UsageFault_Handler(void) {
   /* USER CODE BEGIN UsageFault_IRQn 0 */
 
   /* USER CODE END UsageFault_IRQn 0 */
-  while (1)
-  {
+  while (1) {
     /* USER CODE BEGIN W1_UsageFault_IRQn 0 */
     /* USER CODE END W1_UsageFault_IRQn 0 */
   }
 }
 
 /**
-  * @brief This function handles Debug monitor.
-  */
-void DebugMon_Handler(void)
-{
+ * @brief This function handles Debug monitor.
+ */
+void DebugMon_Handler(void) {
   /* USER CODE BEGIN DebugMonitor_IRQn 0 */
 
   /* USER CODE END DebugMonitor_IRQn 0 */
@@ -172,63 +161,10 @@ void DebugMon_Handler(void)
 /******************************************************************************/
 
 /**
-  * @brief This function handles USART2 global interrupt.
-  */
-void USART2_IRQHandler(void)
-{
-  /* USER CODE BEGIN USART2_IRQn 0 */
-// ВАРИАНТ - 1
-//	if(((huart2.Instance->ISR & USART_ISR_RXNE) != RESET) && ((huart2.Instance->CR1 & USART_CR1_RXNEIE) != RESET))
-//	{
-//	   uint8_t rbyte = (uint8_t)(huart2.Instance->RDR & (uint8_t)0x00FF); // читает байт из регистра
-//	   gsm_rx_buffer_index_t i = (uint16_t)(gsm_rx_buffer_head + 1) % GSM_RX_BUFFER_SIZE;
-//
-//	   if(i != gsm_rx_buffer_tail)
-//	   {
-//	    gsm_rx_buffer[gsm_rx_buffer_head] = rbyte;
-//	    gsm_rx_buffer_head = i;
-//	   }
-//	}
-//	return;
-// ВАРИАНТ - 2
-    // Проверка на ошибки
-    if(huart2.Instance->ISR & (USART_ISR_ORE | USART_ISR_NE | USART_ISR_FE | USART_ISR_PE))
-    {
-        // Сброс флагов ошибок
-        huart2.Instance->ICR = USART_ICR_ORECF | USART_ICR_NCF |
-                              USART_ICR_FECF | USART_ICR_PECF;
-    }
-
-    if(((huart2.Instance->ISR & USART_ISR_RXNE) != RESET) &&
-       ((huart2.Instance->CR1 & USART_CR1_RXNEIE) != RESET))
-    {
-        uint8_t rbyte = (uint8_t)(huart2.Instance->RDR & (uint8_t)0x00FF);
-        gsm_rx_buffer_index_t i = (uint16_t)(gsm_rx_buffer_head + 1) % GSM_RX_BUFFER_SIZE;
-
-        if(i != gsm_rx_buffer_tail)
-        {
-            gsm_rx_buffer[gsm_rx_buffer_head] = rbyte;
-            gsm_rx_buffer_head = i;
-        }
-        else
-        {
-            // Буфер переполнен
-            // Можно добавить обработку этой ситуации
-        }
-    }
-
-  /* USER CODE END USART2_IRQn 0 */
-  HAL_UART_IRQHandler(&huart2);
-  /* USER CODE BEGIN USART2_IRQn 1 */
-
-  /* USER CODE END USART2_IRQn 1 */
-}
-
-/**
-  * @brief This function handles TIM6 global interrupt, DAC1 and DAC2 underrun error interrupts.
-  */
-void TIM6_DAC_IRQHandler(void)
-{
+ * @brief This function handles TIM6 global interrupt, DAC1 and DAC2 underrun
+ * error interrupts.
+ */
+void TIM6_DAC_IRQHandler(void) {
   /* USER CODE BEGIN TIM6_DAC_IRQn 0 */
 
   /* USER CODE END TIM6_DAC_IRQn 0 */
@@ -239,11 +175,11 @@ void TIM6_DAC_IRQHandler(void)
 }
 
 /**
-  * @brief This function handles Ethernet global interrupt.
-  */
-//void ETH_IRQHandler(void)
+ * @brief This function handles Ethernet global interrupt.
+ */
+// void ETH_IRQHandler(void)
 //{
-//  /* USER CODE BEGIN ETH_IRQn 0 */
+//   /* USER CODE BEGIN ETH_IRQn 0 */
 ////
 //  /* USER CODE END ETH_IRQn 0 */
 //  HAL_ETH_IRQHandler(&heth);
@@ -253,10 +189,9 @@ void TIM6_DAC_IRQHandler(void)
 //}
 
 /**
-  * @brief This function handles USB On The Go FS global interrupt.
-  */
-void OTG_FS_IRQHandler(void)
-{
+ * @brief This function handles USB On The Go FS global interrupt.
+ */
+void OTG_FS_IRQHandler(void) {
   /* USER CODE BEGIN OTG_FS_IRQn 0 */
 
   /* USER CODE END OTG_FS_IRQn 0 */
@@ -267,5 +202,58 @@ void OTG_FS_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+
+/**
+ * @brief This function handles USART2 global interrupt (GSM SIM800L).
+ */
+void USART2_IRQHandler(void) {
+  /* USER CODE BEGIN USART2_IRQn 0 */
+  // Проверка на ошибки
+  if (huart2.Instance->ISR &
+      (USART_ISR_ORE | USART_ISR_NE | USART_ISR_FE | USART_ISR_PE)) {
+    // Сброс флагов ошибок
+    huart2.Instance->ICR =
+        USART_ICR_ORECF | USART_ICR_NCF | USART_ICR_FECF | USART_ICR_PECF;
+  }
+
+  if (((huart2.Instance->ISR & USART_ISR_RXNE) != RESET) &&
+      ((huart2.Instance->CR1 & USART_CR1_RXNEIE) != RESET)) {
+    uint8_t rbyte = (uint8_t)(huart2.Instance->RDR & (uint8_t)0x00FF);
+    gsm_rx_buffer_index_t i =
+        (uint16_t)(gsm_rx_buffer_head + 1) % GSM_RX_BUFFER_SIZE;
+
+    if (i != gsm_rx_buffer_tail) {
+      gsm_rx_buffer[gsm_rx_buffer_head] = rbyte;
+      gsm_rx_buffer_head = i;
+    } else {
+      // Буфер переполнен
+    }
+  }
+
+  /* USER CODE END USART2_IRQn 0 */
+  HAL_UART_IRQHandler(&huart2);
+  /* USER CODE BEGIN USART2_IRQn 1 */
+
+  /* USER CODE END USART2_IRQn 1 */
+}
+
+/**
+ * @brief Rx Transfer completed callback — вызывается из HAL_UART_IRQHandler.
+ *        Кладёт принятый байт в кольцевой буфер GSM и перезапускает приём.
+ */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+  if (huart->Instance == USART2) {
+    extern uint8_t RxByte;
+    gsm_rx_buffer_index_t next =
+        (gsm_rx_buffer_index_t)(gsm_rx_buffer_head + 1) % GSM_RX_BUFFER_SIZE;
+    if (next != gsm_rx_buffer_tail) // буфер не переполнен
+    {
+      gsm_rx_buffer[gsm_rx_buffer_head] = RxByte;
+      gsm_rx_buffer_head = next;
+    }
+    /* Перезапускаем приём следующего байта */
+    HAL_UART_Receive_IT(&huart2, &RxByte, 1);
+  }
+}
 
 /* USER CODE END 1 */

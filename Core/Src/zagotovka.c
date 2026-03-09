@@ -2472,8 +2472,7 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
   }
 }
 
-/*********************************** ONEWIRE
- * ****************************************/
+/*********************************** ONEWIRE ****************************************/
 void gen_onewire_json(char *buffer, int buffer_size) {
   //    printf("\n=== Start of gen_onewire_json ===\n");
   //    printf("Buffer size: %d\n", buffer_size);
