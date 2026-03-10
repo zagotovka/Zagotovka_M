@@ -131,28 +131,75 @@ export const enlangtimers = [
 ];
 
 export const enlangsettings = [
-  '', // Empty string for index 0
-  'Login - Enter the username for authorization.',
-  'Password - Enter your password for authorization.',
-  'Language - Select the interface/help language.',
-  'Time zone - Select your time zone.',
-  'IP address - Enter a static IP address. After the reboot, the STM32 will be available at the entered address!',
-  'Subnet mask - Enter the subnet mask.',
-  'Default gateway - Enter the default gateway.',
-  'MAC address - If you have more than one device, you need to give each device a unique MAC address.',
-  'Host - Enter the static IP address of the MQTT broker.',
-  'Port - Specify the MQTT port of the broker.',
-  'Client - Specify the client ID.',
-  'User - Specify a user name.',
-  'Password - Enter password for authorization.',
-  'Topic - Specify the name of the topic',
-  'Full Topic - Specify the full topic.',
-  'QOS - Specify the quality of service.',
-  'Longitude - Round up the longitude value to three decimal places.',
-  'Latitude - Round up the latitude value to three decimal places.',
-  'Sunrise - The sunrise time is automatically set according to your coordinates.',
-  'Sunset - The sunset time is set automatically according to your coordinates.'
+  '', // 0
+  'Login - Enter the username for logging into the system. Used for web interface authentication.', // 1
+  'Password - Enter your password for the system. It is recommended to use a strong password.', // 2
+  'Time zone UTC - Select your time zone. Affects time display and sunrise/sunset calculations.', // 3
+  'IP address - Enter a static IP address for the device. After reboot, STM32 will be available at this address. Format: 192.168.1.100', // 4
+  'Subnet mask - Enter the subnet mask. Defines the range of addresses in your local network. Format: 255.255.255.0', // 5
+  'Default gateway - Enter the default gateway IP address (usually your router address). Format: 192.168.1.1', // 6
+  'Token - Secret key for API request authorization. Used in device control URL commands. Example: /api/Token/switch?id=1&onoff=1', // 7
+  'Host - Enter the IP address or domain name of the MQTT broker. Example: 192.168.1.50 or broker.hivemq.com', // 8
+  'Port - Specify the MQTT broker port. Standard port: 1883 (no encryption), 8883 (with TLS).', // 9
+  'Client - Unique MQTT client identifier. Each device must have its own unique Client ID.', // 10
+  'User - Username for connecting to the MQTT broker. Leave empty if the broker does not require authorization.', // 11
+  'Password - Password for connecting to the MQTT broker. Leave empty if the broker does not require authorization.', // 12
+  'TX topic - Outgoing MQTT topic. The device publishes its data and events to this topic. Example: Swarm', // 13
+  'RX topic - Incoming MQTT topic. The device receives control commands from this topic. Example: Swarm', // 14
+  'HTTPS domain - Domain name for HTTPS connection. A valid SSL certificate for this domain is required. Example: zagotovka.ddns.net', // 15
+  'Private Key - SSL certificate private key in PEM format. Starts with "-----BEGIN EC PRIVATE KEY-----". Stored in encrypted form.', // 16
+  'Public Key - SSL public certificate in PEM format. Starts with "-----BEGIN CERTIFICATE-----". Used for HTTPS connection.', // 17
+  'Longitude - Longitude of your location for sunrise/sunset calculation. Round to 3 decimal places. Example: 37.618 (Moscow)', // 18
+  'Latitude - Latitude of your location for sunrise/sunset calculation. Round to 3 decimal places. Example: 55.751 (Moscow)', // 19
+  'Sunrise - Sunrise time is calculated automatically based on your coordinates. The slider enables/disables the action at sunrise.', // 20
+  'Sunset - Sunset time is calculated automatically based on your coordinates. The slider enables/disables the action at sunset.', // 21
+  'Day Length - Duration of daylight, calculated automatically based on coordinates and current date.', // 22
+  'Next full moon - Date and time of the next full moon, calculated automatically.', // 23
+  'Date - Date for offline mode in dd.mm.yy format. Used when there is no access to the NTP server. Example: 15.03.25', // 24
+  'Time - Time for offline mode in hh:mm:ss format. Used when there is no access to the NTP server. Example: 14:30:00' // 25
 ];
+
+export const enlangsettingsmap = {
+  'Login':          1,
+  'Password':       2,
+  'Time zone UTC':  3,
+  'IP address':     4,
+  'Subnet mask':    5,
+  'Default gateway':6,
+  'Token':          7,
+  'Host':           8,
+  'Port':           9,
+  'Client':         10,
+  'User':           11,
+  'MQTT Password':  12,
+  'TX topic':       13,
+  'RX topic':       14,
+  'HTTPS domain':   15,
+  'Private Key':    16,
+  'Public Key':     17,
+  'Longitude':      18,
+  'Latitude':       19,
+  'Sunrise':        20,
+  'Sunset':         21,
+  'Day Length':     22,
+  'Next full moon': 23,
+  'Date':           24,
+  'Time':           25,
+};
+
+export const enlangsettingsmap2 = enlangsettingsmap;
+
+export const enlangsettings2 = enlangsettings;
+
+export const enlangsettings_idx = enlangsettingsmap;
+
+export const enlangsettings_full = enlangsettings;
+
+export const enlangsettings_complete = enlangsettings;
+
+export const enlangsettings3 = enlangsettings;
+
+export const enlangsettings_v2 = enlangsettings;
 
 export const encronhelp = [
   '', // Empty string for index 0

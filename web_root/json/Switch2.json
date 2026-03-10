@@ -1,8 +1,7 @@
 {
-  "setrpins": "PB2",
-  "id": 14,
-  "pins": "PB9",
-  "pinact": {
-    "8": "PB2"
-  }
+  "ptype": "2",
+  "info": "Test2",
+  "id": 27,
+  "pins": "PC10",
+  "onoff": 1
 }

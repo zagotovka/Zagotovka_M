@@ -5,6 +5,84 @@ import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
 
+// ---------------------------------------------------------------------------
+// Глобальный tooltip-хелпер (портал в document.body, position:fixed)
+// Инициализируется один раз, работает для всех [data-tip] на странице.
+// ---------------------------------------------------------------------------
+function initGlobalTooltip() {
+  if (document.__tipInited) return;
+  document.__tipInited = true;
+
+  const tip = document.createElement('div');
+  tip.id = '__global_tip';
+  Object.assign(tip.style, {
+    position:      'fixed',
+    zIndex:        '99999',
+    maxWidth:      '280px',
+    background:    '#1a2332',
+    color:         '#e8f4f8',
+    padding:       '8px 12px',
+    borderRadius:  '8px',
+    border:        '1px solid rgba(0,188,188,0.35)',
+    fontSize:      '12px',
+    lineHeight:    '1.6',
+    boxShadow:     '0 6px 20px rgba(0,0,0,0.45)',
+    pointerEvents: 'none',
+    whiteSpace:    'normal',
+    display:       'none',
+    transition:    'opacity 0.12s ease',
+    opacity:       '0',
+  });
+  document.body.appendChild(tip);
+
+  let hideTimer = null;
+
+  function show(el) {
+    clearTimeout(hideTimer);
+    tip.innerHTML = el.dataset.tip;
+    tip.style.display = 'block';
+
+    tip.style.opacity = '0';
+    tip.style.left = '0px';
+    tip.style.top  = '0px';
+
+    requestAnimationFrame(() => {
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      const vw = window.innerWidth;
+      const r  = el.getBoundingClientRect();
+
+      let left = r.left + r.width / 2 - tw / 2;
+      left = Math.max(8, Math.min(left, vw - tw - 8));
+
+      let top = r.top - th - 8;
+      if (top < 8) top = r.bottom + 8;
+
+      tip.style.left    = left + 'px';
+      tip.style.top     = top  + 'px';
+      tip.style.opacity = '1';
+    });
+  }
+
+  function hide() {
+    hideTimer = setTimeout(() => {
+      tip.style.opacity = '0';
+      setTimeout(() => { tip.style.display = 'none'; }, 120);
+    }, 80);
+  }
+
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el);
+  });
+
+  document.addEventListener('mouseout', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) hide();
+  });
+}
+// ---------------------------------------------------------------------------
+
 const TabButton = () => {
   const [buttonData, setButtonData] = useState(null);
   const [pintopin, setPintopin] = useState([]);
@@ -14,9 +92,13 @@ const TabButton = () => {
   const [modalType, setModalType] = useState(null);
   const [selectedButton, setSelectedButton] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
-  const [language, setLanguage] = useState('ru'); // Default to Russian
+  const [language, setLanguage] = useState('ru');
   const [debugInfo, setDebugInfo] = useState('');
   const [isUpdating, setIsUpdating] = useState(true);
+
+  // Инициализируем глобальный tooltip один раз при монтировании
+  useEffect(() => { initGlobalTooltip(); }, []);
+
   const helpContent = {
     ru: html`
       <div class="mytext space-y-6">
@@ -65,7 +147,6 @@ const TabButton = () => {
             </tbody>
           </table>
         </div>
-  
         <div>
           <pre class="mb-4">
             MQTT позволяет дистанционно управлять кнопкой из интернета!
@@ -82,17 +163,13 @@ const TabButton = () => {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">
-                  Swarm/button/id=30/single_click
-                </td>
+                <td class="border px-4 py-2">Swarm/button/id=30/single_click</td>
                 <td class="border px-4 py-2">
                   Данная MQTT команда выполнит команду, прописанную в 'SINGLE CLICK' c id = 30. Где "Swarm" это Ваш 'TX topic'.
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">
-                  Swarm/button/id=30/double_click
-                </td>
+                <td class="border px-4 py-2">Swarm/button/id=30/double_click</td>
                 <td class="border px-4 py-2">
                   Данная MQTT команда выполнит команду, прописанную в 'DOUBLE CLICK' c id = 30. Где "Swarm" это Ваш 'TX topic'.
                 </td>
@@ -175,7 +252,6 @@ const TabButton = () => {
             </tbody>
           </table>
         </div>
-  
         <div>
           <pre class="mb-4">
             MQTT allows you to remotely control a switch from the internet!
@@ -192,17 +268,13 @@ const TabButton = () => {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">
-                  Swarm/button/id=30/single_click
-                </td>
+                <td class="border px-4 py-2">Swarm/button/id=30/single_click</td>
                 <td class="border px-4 py-2">
                   This MQTT command will execute the command specified in 'SINGLE CLICK' with id = 30. Where "Swarm" is your 'RX topic'.
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">
-                  Swarm/button/id=30/double_click
-                </td>
+                <td class="border px-4 py-2">Swarm/button/id=30/double_click</td>
                 <td class="border px-4 py-2">
                   This MQTT command will execute the command specified in 'DOUBLE CLICK' with id = 30. Where "Swarm" is your 'RX topic'.
                 </td>
@@ -238,6 +310,7 @@ const TabButton = () => {
       </div>
     `,
   };
+
   const refresh = () =>
     Promise.all([fetch('/api/button/get').then((r) => r.json())])
       .then(([buttonData, pintopinData]) => {
@@ -246,11 +319,7 @@ const TabButton = () => {
         setButtonData(buttonData);
         setPintopin(pintopinData);
         setDebugInfo(
-          `Pintopin data: ${JSON.stringify(
-            pintopinData,
-            null,
-            2
-          )}\n\nButton data: ${JSON.stringify(buttonData.buttons, null, 2)}`
+          `Pintopin data: ${JSON.stringify(pintopinData, null, 2)}\n\nButton data: ${JSON.stringify(buttonData.buttons, null, 2)}`
         );
       })
       .catch((error) => {
@@ -282,9 +351,7 @@ const TabButton = () => {
     }
 
     return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
+      if (intervalId) clearInterval(intervalId);
     };
   }, [isUpdating]);
 
@@ -323,9 +390,7 @@ const TabButton = () => {
   };
 
   const formatText = (text, maxLength = 100) => {
-    if (!text || typeof text !== 'string') {
-      return '';
-    }
+    if (!text || typeof text !== 'string') return '';
 
     const lines = [];
     let currentLine = '';
@@ -335,16 +400,14 @@ const TabButton = () => {
     paragraphs.forEach((paragraph, paragraphIndex) => {
       const words = paragraph.split(' ').filter((word) => word.length > 0);
 
-      words.forEach((word, wordIndex) => {
+      words.forEach((word) => {
         const wordWithSpace = currentLine.length === 0 ? word : ' ' + word;
         const potentialLength = currentLine.length + wordWithSpace.length;
 
         if (potentialLength <= maxLength) {
           currentLine += wordWithSpace;
         } else {
-          if (currentLine.length > 0) {
-            lines.push(currentLine);
-          }
+          if (currentLine.length > 0) lines.push(currentLine);
           currentLine = word;
         }
       });
@@ -354,14 +417,10 @@ const TabButton = () => {
         currentLine = '';
       }
 
-      if (paragraphIndex < paragraphs.length - 1) {
-        lines.push('');
-      }
+      if (paragraphIndex < paragraphs.length - 1) lines.push('');
     });
 
-    if (currentLine.length > 0) {
-      lines.push(currentLine);
-    }
+    if (currentLine.length > 0) lines.push(currentLine);
 
     return lines.join('\n');
   };
@@ -374,9 +433,7 @@ const TabButton = () => {
 
     fetch('/api/connection/del', {
       method: 'post',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: id, pin: pinName.trim() })
     })
       .then((r) => r.json())
@@ -439,9 +496,7 @@ const TabButton = () => {
 
     fetch('/api/onoff/set', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: updatedButton.id, onoff: updatedButton.onoff })
     })
       .then((response) => response.json())
@@ -455,15 +510,15 @@ const TabButton = () => {
     closeModal();
   };
 
+  // -------------------------------------------------------------------------
+  // Th — заголовок таблицы с tooltip через data-tip (портал в body)
+  // -------------------------------------------------------------------------
   const Th = (props) => html`
-    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide relative group" style="white-space: pre-line;">
+    <th
+      class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
+      data-tip=${getTooltipText('langbutton', props.tooltipIndex)}
+    >
       ${props.title}
-      <div
-        class="absolute z-50 invisible group-hover:visible bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-xl border border-slate-200 text-left text-sm font-normal text-slate-600"
-        style="min-width: 200px; max-width: 300px; white-space: pre-wrap; left: 50%; transform: translateX(-50%); top: 100%;"
-      >
-        ${getTooltipText('langbutton', props.tooltipIndex)}
-      </div>
     </th>
   `;
 
@@ -477,20 +532,13 @@ const TabButton = () => {
         <td class="px-6 py-2 text-sm text-slate-700">
           ${['None', 'GPIO_PULLUP', 'GPIO_PULLDOWN'][d.ptype]}
         </td>
-
-        <td
-          class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis"
-        >
+        <td class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis">
           ${formatText(d.sclick)}
         </td>
-        <td
-          class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis"
-        >
+        <td class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis">
           ${formatText(d.dclick)}
         </td>
-        <td
-          class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis"
-        >
+        <td class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis">
           ${formatText(d.lpress)}
         </td>
         <td class="px-6 py-2 text-sm text-slate-600">${d.info}</td>
@@ -529,9 +577,7 @@ const TabButton = () => {
           <div class="w-full">
             <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6">
               <div class="overflow-x-auto w-full">
-                <table
-                  class="w-full text-left border-collapse whitespace-nowrap"
-                >
+                <table class="w-full text-left border-collapse whitespace-nowrap">
                   <thead>
                     <tr class="bg-teal-600/10 border-b border-teal-600/20">
                       <${Th} title="ID" tooltipIndex=${1} />
@@ -547,14 +593,13 @@ const TabButton = () => {
                   </thead>
                   <tbody id="tab1" class="divide-y divide-white/40">
                     ${varbutton.map(
-    (d, index) => html`
-                        <${ArrayButton} d=${d} index=${index} key=${d.id} />
-                      `
-  )}
+                      (d, index) => html`<${ArrayButton} d=${d} index=${index} key=${d.id} />`
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
+
             <div class="flex justify-end mt-6">
               <button
                 onclick=${() => setShowHelp(!showHelp)}
@@ -565,29 +610,29 @@ const TabButton = () => {
             </div>
 
             ${showHelp &&
-    html`
-              <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
-                ${helpContent[language]}
-              </div>
-            `}
+              html`
+                <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
+                  ${helpContent[language]}
+                </div>
+              `}
           </div>
         </div>
       </div>
     </div>
 
     ${isModalOpen &&
-    html`
-      <${ModalButton}
-        modalType=${modalType}
-        page="TabButton"
-        hideModal=${closeModal}
-        title=${modalType === 'connection'
-        ? 'Edit Connection'
-        : 'Edit Button pin'}
-        selectedButton=${selectedButton}
-        onButtonChange=${handleButtonChange}
-      />
-    `}
+      html`
+        <${ModalButton}
+          modalType=${modalType}
+          page="TabButton"
+          hideModal=${closeModal}
+          title=${modalType === 'connection'
+            ? 'Edit Connection'
+            : 'Edit Button pin'}
+          selectedButton=${selectedButton}
+          onButtonChange=${handleButtonChange}
+        />
+      `}
   `;
 };
 

@@ -6,6 +6,84 @@ import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
 
+// ---------------------------------------------------------------------------
+// Глобальный tooltip-хелпер (портал в document.body, position:fixed)
+// Инициализируется один раз, работает для всех [data-tip] на странице.
+// ---------------------------------------------------------------------------
+function initGlobalTooltip() {
+  if (document.__tipInited) return;
+  document.__tipInited = true;
+
+  const tip = document.createElement('div');
+  tip.id = '__global_tip';
+  Object.assign(tip.style, {
+    position:      'fixed',
+    zIndex:        '99999',
+    maxWidth:      '280px',
+    background:    '#1a2332',
+    color:         '#e8f4f8',
+    padding:       '8px 12px',
+    borderRadius:  '8px',
+    border:        '1px solid rgba(0,188,188,0.35)',
+    fontSize:      '12px',
+    lineHeight:    '1.6',
+    boxShadow:     '0 6px 20px rgba(0,0,0,0.45)',
+    pointerEvents: 'none',
+    whiteSpace:    'normal',
+    display:       'none',
+    transition:    'opacity 0.12s ease',
+    opacity:       '0',
+  });
+  document.body.appendChild(tip);
+
+  let hideTimer = null;
+
+  function show(el) {
+    clearTimeout(hideTimer);
+    tip.innerHTML = el.dataset.tip;
+    tip.style.display = 'block';
+
+    tip.style.opacity = '0';
+    tip.style.left = '0px';
+    tip.style.top  = '0px';
+
+    requestAnimationFrame(() => {
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      const vw = window.innerWidth;
+      const r  = el.getBoundingClientRect();
+
+      let left = r.left + r.width / 2 - tw / 2;
+      left = Math.max(8, Math.min(left, vw - tw - 8));
+
+      let top = r.top - th - 8;
+      if (top < 8) top = r.bottom + 8;
+
+      tip.style.left    = left + 'px';
+      tip.style.top     = top  + 'px';
+      tip.style.opacity = '1';
+    });
+  }
+
+  function hide() {
+    hideTimer = setTimeout(() => {
+      tip.style.opacity = '0';
+      setTimeout(() => { tip.style.display = 'none'; }, 120);
+    }, 80);
+  }
+
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el);
+  });
+
+  document.addEventListener('mouseout', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) hide();
+  });
+}
+// ---------------------------------------------------------------------------
+
 const TabOneWire = () => {
   const [varonewire, setOneWire] = useState([]);
   const [error, setError] = useState(null);
@@ -14,6 +92,9 @@ const TabOneWire = () => {
   const [editingOneWire, setEditingOneWire] = useState(null);
   const [language, setLanguage] = useState('ru');
   const [modalType, setModalType] = useState(null);
+
+  // Инициализируем глобальный tooltip один раз при монтировании
+  useEffect(() => { initGlobalTooltip(); }, []);
 
   const refresh = () => {
     console.log('Calling initial refresh...');
@@ -134,9 +215,9 @@ const TabOneWire = () => {
     return html`<div>Error fetching sensor data: ${error}</div>`;
   }
 
-  const getLangObject = () => {
-    return { lang1Wire: language === 'ru' ? rulange1Wire : enlange1Wire };
-  };
+  const getLangObject = () => ({
+    lang1Wire: language === 'ru' ? rulange1Wire : enlange1Wire
+  });
 
   const getTooltipText = (key, index) => {
     const langObject = getLangObject();
@@ -150,15 +231,15 @@ const TabOneWire = () => {
     return lines.join('<br>');
   };
 
+  // -------------------------------------------------------------------------
+  // Th — заголовок таблицы с tooltip через data-tip (портал в body)
+  // -------------------------------------------------------------------------
   const Th = (props) => html`
-    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide relative group">
+    <th
+      class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
+      data-tip=${getTooltipText('lang1Wire', props.tooltipIndex)}
+    >
       ${props.title}
-      <div
-        class="absolute z-50 invisible group-hover:visible bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-xl border border-slate-200 text-left text-sm font-normal text-slate-600 whitespace-normal break-words transform -translate-x-1/2 left-1/2 top-full mt-2"
-        style="width: fit-content; max-width: 80vw;"
-      >
-        ${getTooltipText('lang1Wire', props.tooltipIndex)}
-      </div>
     </th>
   `;
 

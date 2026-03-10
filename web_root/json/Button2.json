@@ -2,7 +2,7 @@
   "topin": 1,
   "id": 30,
   "pins": "PC13",
-  "ptype": 2,
+  "ptype": 1,
   "sclick": "12:1",
   "dclick": "18:1",
   "lpress": "18:0,12:0",

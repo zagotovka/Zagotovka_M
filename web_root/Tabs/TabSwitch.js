@@ -5,6 +5,87 @@ import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
 
+// ---------------------------------------------------------------------------
+// Глобальный tooltip-хелпер (портал в document.body, position:fixed)
+// Инициализируется один раз, работает для всех [data-tip] на странице.
+// ---------------------------------------------------------------------------
+function initGlobalTooltip() {
+  if (document.__tipInited) return;
+  document.__tipInited = true;
+
+  const tip = document.createElement('div');
+  tip.id = '__global_tip';
+  Object.assign(tip.style, {
+    position:      'fixed',
+    zIndex:        '99999',
+    maxWidth:      '280px',
+    background:    '#1a2332',
+    color:         '#e8f4f8',
+    padding:       '8px 12px',
+    borderRadius:  '8px',
+    border:        '1px solid rgba(0,188,188,0.35)',
+    fontSize:      '12px',
+    lineHeight:    '1.6',
+    boxShadow:     '0 6px 20px rgba(0,0,0,0.45)',
+    pointerEvents: 'none',
+    whiteSpace:    'normal',
+    display:       'none',
+    transition:    'opacity 0.12s ease',
+    opacity:       '0',
+  });
+  document.body.appendChild(tip);
+
+  let hideTimer = null;
+
+  function show(el) {
+    clearTimeout(hideTimer);
+    tip.innerHTML = el.dataset.tip;   // поддерживаем <br> из getTooltipText
+    tip.style.display = 'block';
+
+    // Позиционируем над элементом
+    const r = el.getBoundingClientRect();
+    tip.style.opacity = '0';           // сначала скрытый, чтобы измерить высоту
+    tip.style.left = '0px';
+    tip.style.top  = '0px';
+
+    requestAnimationFrame(() => {
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      const vw = window.innerWidth;
+
+      let left = r.left + r.width / 2 - tw / 2;
+      // не вылезаем за правый/левый край вьюпорта
+      left = Math.max(8, Math.min(left, vw - tw - 8));
+
+      let top = r.top - th - 8;
+      // если не помещается сверху — рисуем снизу
+      if (top < 8) top = r.bottom + 8;
+
+      tip.style.left    = left + 'px';
+      tip.style.top     = top  + 'px';
+      tip.style.opacity = '1';
+    });
+  }
+
+  function hide() {
+    hideTimer = setTimeout(() => {
+      tip.style.opacity = '0';
+      setTimeout(() => { tip.style.display = 'none'; }, 120);
+    }, 80);
+  }
+
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el);
+  });
+
+  document.addEventListener('mouseout', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) hide();
+  });
+}
+// ---------------------------------------------------------------------------
+
 function TabSwitch({ }) {
   const [switchData, setSwitchData] = useState(null);
   const [saveResult, setSaveResult] = useState(null);
@@ -17,6 +98,10 @@ function TabSwitch({ }) {
   const [pintopin, setPintopin] = useState([]);
   const [debugInfo, setDebugInfo] = useState('');
   const [isFormValid, setIsFormValid] = useState(false);
+
+  // Инициализируем глобальный tooltip один раз при монтировании
+  useEffect(() => { initGlobalTooltip(); }, []);
+
   const refresh = () =>
     Promise.all([
       fetch('/api/switch/get').then((r) => r.json()),
@@ -68,24 +153,20 @@ function TabSwitch({ }) {
   };
 
   useEffect(() => {
-    // Начальная загрузка данных
     fetchSwitchData();
     fetchPintopinData();
 
-    // Устанавливаем интервал для периодического обновления данных
     const intervalId = setInterval(() => {
       fetchSwitchData();
       fetchPintopinData();
-    }, 1000); // Обновляем каждую секунду
+    }, 1000);
 
-    // Очищаем интервал при размонтировании компонента
     return () => clearInterval(intervalId);
   }, []);
 
   const getConnectedPins = (switchId) => {
     const connectedPins = new Map();
 
-    // Добавляем пины из pinact
     const switchItem = varswitch.find((sw) => sw.id === switchId);
     if (switchItem && switchItem.pinact) {
       Object.entries(switchItem.pinact).forEach(([pin, relayId]) => {
@@ -93,7 +174,6 @@ function TabSwitch({ }) {
       });
     }
 
-    // Добавляем пины из pintopin
     pintopin.forEach((item) => {
       if (item.idin === switchId) {
         const key = `${item.pins}(${item.idout})`;
@@ -105,39 +185,28 @@ function TabSwitch({ }) {
     return Array.from(connectedPins.values());
   };
 
-  const getLangObject = () => {
-    return language === 'ru' ? ruLangswitch : enLangswitch;
-  };
+  const getLangObject = () => ({
+    langswitch: language === 'ru' ? ruLangswitch : enLangswitch
+  });
 
   const getTooltipText = (key, index) => {
     const langObject = getLangObject();
-    const tooltipText = langObject[index] || '';
+    const tooltipText = (langObject[key] && langObject[key][index]) || '';
 
-    // Split text into words
     const words = tooltipText.split(' ');
     const lines = [];
     let currentLine = '';
 
-    // Build lines word by word
     for (let i = 0; i < words.length; i++) {
       const word = words[i];
-
       if (currentLine.length + word.length + 1 <= 200) {
-        // Add word to current line
         currentLine += (currentLine.length > 0 ? ' ' : '') + word;
       } else {
-        // Line would be too long, start a new line
-        if (currentLine.length > 0) {
-          lines.push(currentLine);
-        }
+        if (currentLine.length > 0) lines.push(currentLine);
         currentLine = word;
       }
     }
-
-    // Add the last line if there's anything left
-    if (currentLine.length > 0) {
-      lines.push(currentLine);
-    }
+    if (currentLine.length > 0) lines.push(currentLine);
 
     return lines.join('<br>');
   };
@@ -150,9 +219,7 @@ function TabSwitch({ }) {
 
     fetch('/api/connection/del', {
       method: 'post',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: id, pin: pinName.trim() })
     })
       .then((r) => r.json())
@@ -203,18 +270,14 @@ function TabSwitch({ }) {
   const handleSwitchChange = (updatedSwitch) => {
     console.log('handleSwitchChange:', updatedSwitch);
 
-    // Отправляем обновление на сервер
     fetch('/api/onoff/set', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: updatedSwitch.id, onoff: updatedSwitch.onoff })
     })
       .then((response) => response.json())
       .then((data) => {
         console.log('Response from /api/onoff/set:', data);
-        // Обновление будет получено при следующем fetchSwitchData
       })
       .catch((error) => {
         console.error('Error calling /api/onoff/set:', error);
@@ -227,6 +290,7 @@ function TabSwitch({ }) {
     const connection = pintopin.find((item) => item.idin === switchId);
     return connection ? `${connection.pins} (${connection.idout})` : '';
   };
+
   const helpContent = {
     ru: html`
       <div class="mytext space-y-6">
@@ -267,7 +331,6 @@ function TabSwitch({ }) {
             </tbody>
           </table>
         </div>
-  
         <div>
           <pre class="mb-4">
             MQTT позволяет дистанционно управлять выключателем из интернета!
@@ -298,7 +361,6 @@ function TabSwitch({ }) {
             </tbody>
           </table>
         </div>
-  
         <div>
           <h2 class="text-xl font-bold mb-2">Отслеживание изменений</h2>
           <table class="w-full">
@@ -360,7 +422,6 @@ function TabSwitch({ }) {
             </tbody>
           </table>
         </div>
-  
         <div>
           <pre class="mb-4">
             MQTT allows you to remotely control a switch from the internet!
@@ -391,7 +452,6 @@ function TabSwitch({ }) {
             </tbody>
           </table>
         </div>
-  
         <div>
           <h2 class="text-xl font-bold mb-2">Change Tracking</h2>
           <table class="w-full">
@@ -415,16 +475,17 @@ function TabSwitch({ }) {
       </div>
     `
   };
+
+  // -------------------------------------------------------------------------
+  // Th — заголовок таблицы с tooltip через data-tip (портал в body)
+  // Убран старый div с position:absolute внутри overflow-контейнера.
+  // -------------------------------------------------------------------------
   const Th = (props) => html`
-    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide relative group">
+    <th
+      class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
+      data-tip=${getTooltipText('langswitch', props.tooltipIndex)}
+    >
       ${props.title}
-      <div
-        class="absolute z-50 invisible group-hover:visible bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-xl border border-slate-200 text-left text-sm font-normal text-slate-600"
-        style="width: 400px; left: 50%; transform: translateX(-50%); top: 100%;"
-        dangerouslySetInnerHTML=${{
-      __html: getTooltipText('langbutton', props.tooltipIndex)
-    }}
-      ></div>
     </th>
   `;
 
@@ -440,14 +501,14 @@ function TabSwitch({ }) {
         </td>
         <td class="px-6 py-2 text-sm text-slate-700 font-mono">
           ${connectedPins.map(
-      ({ pin, relayId }) => html`
+            ({ pin, relayId }) => html`
               <span class="mr-2 inline-flex items-center">
                 ${pin}${relayId !== undefined ? `(${relayId})` : ''}
                 <button
                   onClick=${(e) => {
-          e.preventDefault();
-          onsave(d.id, `${pin}(${relayId})`);
-        }}
+                    e.preventDefault();
+                    onsave(d.id, `${pin}(${relayId})`);
+                  }}
                   class="ml-1 text-red-500 hover:text-red-700 transition-colors font-bold"
                   title="Remove connection"
                 >
@@ -455,7 +516,7 @@ function TabSwitch({ }) {
                 </button>
               </span>
             `
-    )}
+          )}
         </td>
         <td class="px-6 py-2 text-sm text-slate-600">${d.info}</td>
         <td class="px-6 py-2">
@@ -486,7 +547,7 @@ function TabSwitch({ }) {
   if (!varswitch) return '';
 
   return html`
-    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative overflow-hidden flex-grow flex flex-col justify-center items-center">
+    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-center items-center">
       <!-- Decorative background glow -->
       <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
@@ -498,7 +559,8 @@ function TabSwitch({ }) {
 
         <div class="flex-grow flex flex-col justify-center items-center w-full">
           <div class="w-full">
-            <div class="rounded-2xl overflow-hidden bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6">
+            <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6">
+              <!-- overflow-x-auto только здесь, убран overflow-hidden с родителя -->
               <div class="overflow-x-auto w-full">
                 <table class="w-full text-left border-collapse whitespace-nowrap">
                   <thead>
@@ -514,9 +576,9 @@ function TabSwitch({ }) {
                   </thead>
                   <tbody id="tab1" class="divide-y divide-white/40">
                     ${varswitch.map(
-    (d, index) =>
-      html`<${ArraySwitch} d=${d} index=${index} key=${d.id} />`
-  )}
+                      (d, index) =>
+                        html`<${ArraySwitch} d=${d} index=${index} key=${d.id} />`
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -532,27 +594,27 @@ function TabSwitch({ }) {
             </div>
 
             ${showHelp &&
-    html`
-              <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
-                ${helpContent[language]}
-              </div>
-            `}
+              html`
+                <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
+                  ${helpContent[language]}
+                </div>
+              `}
           </div>
         </div>
 
         ${isModalOpen &&
-    html`
-          <${ModalSwitch}
-            modalType=${modalType}
-            page="TabSwitch"
-            hideModal=${closeModal}
-            title=${modalType === 'connection'
-        ? 'Edit Connection'
-        : 'Edit switch'}
-            selectedSwitch=${selectedSwitch}
-            onSwitchChange=${handleSwitchChange}
-          />
-        `}
+          html`
+            <${ModalSwitch}
+              modalType=${modalType}
+              page="TabSwitch"
+              hideModal=${closeModal}
+              title=${modalType === 'connection'
+                ? 'Edit Connection'
+                : 'Edit switch'}
+              selectedSwitch=${selectedSwitch}
+              onSwitchChange=${handleSwitchChange}
+            />
+          `}
       </div>
     </div>
   `;

@@ -1,8 +1,86 @@
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
-import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
-import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
+import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, ruLangselect } from '../rulang.js';
+import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire, enLangselect } from '../enlang.js';
+
+// ---------------------------------------------------------------------------
+// Глобальный tooltip-хелпер (портал в document.body, position:fixed)
+// Инициализируется один раз, работает для всех [data-tip] на странице.
+// ---------------------------------------------------------------------------
+function initGlobalTooltip() {
+  if (document.__tipInited) return;
+  document.__tipInited = true;
+
+  const tip = document.createElement('div');
+  tip.id = '__global_tip';
+  Object.assign(tip.style, {
+    position:      'fixed',
+    zIndex:        '99999',
+    maxWidth:      '280px',
+    background:    '#1a2332',
+    color:         '#e8f4f8',
+    padding:       '8px 12px',
+    borderRadius:  '8px',
+    border:        '1px solid rgba(0,188,188,0.35)',
+    fontSize:      '12px',
+    lineHeight:    '1.6',
+    boxShadow:     '0 6px 20px rgba(0,0,0,0.45)',
+    pointerEvents: 'none',
+    whiteSpace:    'normal',
+    display:       'none',
+    transition:    'opacity 0.12s ease',
+    opacity:       '0',
+  });
+  document.body.appendChild(tip);
+
+  let hideTimer = null;
+
+  function show(el) {
+    clearTimeout(hideTimer);
+    tip.innerHTML = el.dataset.tip;
+    tip.style.display = 'block';
+
+    tip.style.opacity = '0';
+    tip.style.left = '0px';
+    tip.style.top  = '0px';
+
+    requestAnimationFrame(() => {
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      const vw = window.innerWidth;
+      const r  = el.getBoundingClientRect();
+
+      let left = r.left + r.width / 2 - tw / 2;
+      left = Math.max(8, Math.min(left, vw - tw - 8));
+
+      let top = r.top - th - 8;
+      if (top < 8) top = r.bottom + 8;
+
+      tip.style.left    = left + 'px';
+      tip.style.top     = top  + 'px';
+      tip.style.opacity = '1';
+    });
+  }
+
+  function hide() {
+    hideTimer = setTimeout(() => {
+      tip.style.opacity = '0';
+      setTimeout(() => { tip.style.display = 'none'; }, 120);
+    }, 80);
+  }
+
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el);
+  });
+
+  document.addEventListener('mouseout', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) hide();
+  });
+}
+// ---------------------------------------------------------------------------
 
 function TabSelect({ }) {
   const [varselect, setSelect] = useState(null);
@@ -12,6 +90,9 @@ function TabSelect({ }) {
   const [countdown, setCountdown] = useState(3);
   const [gpsEnabled, setGpsEnabled] = useState(false);
   const [language, setLanguage] = useState('ru');
+
+  // Инициализируем глобальный tooltip один раз при монтировании
+  useEffect(() => { initGlobalTooltip(); }, []);
 
   const handleGpsToggle = (enabled) => {
     setGpsEnabled(enabled);
@@ -25,12 +106,10 @@ function TabSelect({ }) {
     fetch('api/select/get')
       .then((r) => r.json())
       .then((r) => {
-        // Assuming the new structure with 'data' array
         const data = r.data || r;
         setSelect(data);
-
-        // Initialize GPS state from received data
         setGpsEnabled(r.sim800l === 1);
+        if (r.lang) setLanguage(r.lang);
 
         const initialValues = {};
         data.forEach((d) => {
@@ -82,15 +161,11 @@ function TabSelect({ }) {
     try {
       const response = await fetch('api/select/set', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(jsonData)
       });
 
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
+      if (!response.ok) throw new Error('Network response was not ok');
 
       const data = await response.json();
       setSubmissionStatus('success');
@@ -120,6 +195,38 @@ function TabSelect({ }) {
 
   if (!varselect) return '';
 
+  // -------------------------------------------------------------------------
+  // getLangObject / getTooltipText — аналогично другим страницам
+  // -------------------------------------------------------------------------
+  const getLangObject = () => ({
+    langselect: language === 'ru' ? ruLangselect : enLangselect
+  });
+
+  const getTooltipText = (key, index) => {
+    const langObject = getLangObject();
+    let tooltipText =
+      langObject[key] && langObject[key][index] ? langObject[key][index] : '';
+    const words = tooltipText.split(' ');
+    const lines = [];
+    for (let i = 0; i < words.length; i += 15) {
+      lines.push(words.slice(i, i + 15).join(' '));
+    }
+    return lines.join('<br>');
+  };
+
+  // -------------------------------------------------------------------------
+  // Th — заголовок таблицы с tooltip через data-tip (портал в body)
+  // -------------------------------------------------------------------------
+  const Th = (props) => html`
+    <th
+      class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
+      style=${props.center ? 'text-align: center' : ''}
+      data-tip=${getTooltipText('langselect', props.tooltipIndex)}
+    >
+      ${props.title}
+    </th>
+  `;
+
   const RadioOption = ({ id, value, label, disabled = false, onChange, checked }) => html`
     <div class="relative">
       <input
@@ -145,29 +252,29 @@ function TabSelect({ }) {
   `;
 
   const ArraySelect = ({ d }) => html`
-  <tr class="${isRowDisabled(d.id)
-      ? 'bg-red-200/50 opacity-50 pointer-events-none'
-      : d.id % 2 === 1
-        ? 'bg-white/80'
-        : 'bg-sky-200/40'
-    } hover:bg-slate-200/80 transition-colors">
-    <td class="px-6 py-2 text-sm text-slate-800">${d.id}</td>
-    <td class="px-6 py-2 text-sm text-slate-800 font-medium">${d.pins}</td>
-    <td class="px-2 py-2">
-      <div class="flex flex-wrap items-center justify-center gap-x-1 gap-y-1">
-        <${RadioOption} id=${d.id} value="0"  label="NONE"     checked=${selectedValues[`topin_${d.id}`] === '0'}  onChange=${handleRadioChange} />
-        <${RadioOption} id=${d.id} value="3"  label="SWITCH"   checked=${selectedValues[`topin_${d.id}`] === '3'}  onChange=${handleRadioChange} />
-        <${RadioOption} id=${d.id} value="1"  label="BUTTON"   checked=${selectedValues[`topin_${d.id}`] === '1'}  onChange=${handleRadioChange} />
-        <${RadioOption} id=${d.id} value="2"  label="DEVICE"   checked=${selectedValues[`topin_${d.id}`] === '2'}  onChange=${handleRadioChange} />
-        <${RadioOption} id=${d.id} value="4"  label="1-WIRE"   checked=${selectedValues[`topin_${d.id}`] === '4'}  onChange=${handleRadioChange} />
-        <${RadioOption} id=${d.id} value="5"  label="PWM"      disabled=${d.pwm == 0} checked=${selectedValues[`topin_${d.id}`] === '5'}  onChange=${handleRadioChange} />
-        <${RadioOption} id=${d.id} value="8"  label="Enc.OutA" checked=${selectedValues[`topin_${d.id}`] === '8'}  onChange=${handleRadioChange} />
-        <${RadioOption} id=${d.id} value="9"  label="Enc.OutB" checked=${selectedValues[`topin_${d.id}`] === '9'}  onChange=${handleRadioChange} />
-        <${RadioOption} id=${d.id} value="10" label="Security" disabled=${d.monitoring == 0} checked=${selectedValues[`topin_${d.id}`] === '10'} onChange=${handleRadioChange} />
-      </div>
-    </td>
-  </tr>
-`;
+    <tr class="${isRowDisabled(d.id)
+        ? 'bg-red-200/50 opacity-50 pointer-events-none'
+        : d.id % 2 === 1
+          ? 'bg-white/80'
+          : 'bg-sky-200/40'
+      } hover:bg-slate-200/80 transition-colors">
+      <td class="px-6 py-2 text-sm text-slate-800">${d.id}</td>
+      <td class="px-6 py-2 text-sm text-slate-800 font-medium">${d.pins}</td>
+      <td class="px-2 py-2">
+        <div class="flex flex-wrap items-center justify-center gap-x-1 gap-y-1">
+          <${RadioOption} id=${d.id} value="0"  label="NONE"     checked=${selectedValues[`topin_${d.id}`] === '0'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="3"  label="SWITCH"   checked=${selectedValues[`topin_${d.id}`] === '3'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="1"  label="BUTTON"   checked=${selectedValues[`topin_${d.id}`] === '1'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="2"  label="DEVICE"   checked=${selectedValues[`topin_${d.id}`] === '2'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="4"  label="1-WIRE"   checked=${selectedValues[`topin_${d.id}`] === '4'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="5"  label="PWM"      disabled=${d.pwm == 0} checked=${selectedValues[`topin_${d.id}`] === '5'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="8"  label="Enc.OutA" checked=${selectedValues[`topin_${d.id}`] === '8'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="9"  label="Enc.OutB" checked=${selectedValues[`topin_${d.id}`] === '9'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="10" label="Security" disabled=${d.monitoring == 0} checked=${selectedValues[`topin_${d.id}`] === '10'} onChange=${handleRadioChange} />
+        </div>
+      </td>
+    </tr>
+  `;
 
   return html`
     <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative overflow-hidden">
@@ -179,15 +286,15 @@ function TabSelect({ }) {
         <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
           Select pin(s)
         </div>
-        
+
         <form onSubmit=${handleSubmit}>
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
             <button
               type="submit"
               class=${`px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${isButtonDisabled
-      ? 'bg-gray-400 cursor-not-allowed opacity-70 hover:scale-100 hover:shadow-none'
-      : 'bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40'
-    }`}
+                ? 'bg-gray-400 cursor-not-allowed opacity-70 hover:scale-100 hover:shadow-none'
+                : 'bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40'
+              }`}
               disabled=${isButtonDisabled}
             >
               ${isButtonDisabled ? `Please wait ${countdown} sec.` : 'Submit'}
@@ -220,14 +327,14 @@ function TabSelect({ }) {
             </div>
           `}
 
-          <div class="rounded-2xl overflow-hidden bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner">
+          <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner">
             <div class="overflow-x-auto">
               <table class="w-full text-left border-collapse whitespace-nowrap">
                 <thead>
                   <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide">ID</th>
-                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide">Pin</th>
-                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide text-center">Type(s) of pin(s)</th>
+                    <${Th} title="ID" tooltipIndex=${1} />
+                    <${Th} title="Pin" tooltipIndex=${2} />
+                    <${Th} title="Type(s) of pin(s)" tooltipIndex=${3} center=${true} />
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-white/40">
@@ -241,9 +348,9 @@ function TabSelect({ }) {
             <button
               type="submit"
               class=${`px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${isButtonDisabled
-      ? 'bg-gray-400 cursor-not-allowed opacity-70 hover:scale-100 hover:shadow-none'
-      : 'bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40'
-    }`}
+                ? 'bg-gray-400 cursor-not-allowed opacity-70 hover:scale-100 hover:shadow-none'
+                : 'bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40'
+              }`}
               disabled=${isButtonDisabled}
             >
               ${isButtonDisabled ? `Please wait ${countdown} sec.` : 'Submit'}

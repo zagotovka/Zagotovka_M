@@ -39,7 +39,6 @@ extern struct dbCron dbCrontxt[MAXSIZE];
 extern struct dbSettings SetSettings;
 extern const char *s_json_header;
 extern struct dbPinToPin PinsLinks[NUMPINLINKS];
-extern TIM_HandleTypeDef htim[NUMPIN]; // Доступ к таймерам из main.c
 void processPins(uint8_t i, uint8_t action);
 
 void log_headers(const char *headers);
@@ -339,6 +338,5 @@ typedef struct {
 } MqttEvent;
 
 /**************************************************************************/
-uint32_t PercentToCCR(uint8_t percent, uint32_t pwmmax);
 
 #endif /* INC_ZAGOTOVKA_H_ */
