@@ -1,63 +1,63 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2024 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2024 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "string.h"
 #include "cmsis_os.h"
 #include "fatfs.h"
+#include "string.h"
 #include "usb_host.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "mongoose.h"
-#include "hal.h"
-#include "net.h"
-#include "db.h"
-#include "multi_button.h"
 #include "cJSON.h"
+#include "db.h"
+#include "hal.h"
+#include "mongoose.h"
+#include "multi_button.h"
+#include "net.h"
 #include "setings.h"
 
-#include "stdio.h"
-#include <string.h>
-#include "lwdtc.h"
 #include "ds18b20.h"
 #include "ds18b20Config.h"
-#include "zagotovka.h"
+#include "lwdtc.h"
 #include "mongoose.h"
-#include <math.h>
-#include <time.h>
+#include "stdio.h"
+#include "zagotovka.h"
 #include <inttypes.h> // Для поддержки PRIuPTR
+#include <math.h>
+#include <string.h>
+#include <time.h>
 
-#include "usart_ring.h"
 #include "gsm.h"
+#include "usart_ring.h"
 
-#define BLINK_PERIOD_MS 1000  // LED blinking period in millis
-#define DEBOUNCE_DELAY 45 //Encoder (ms)
+#define BLINK_PERIOD_MS 1000 // LED blinking period in millis
+#define DEBOUNCE_DELAY 45    // Encoder (ms)
 
 #define PI 3.14159265358979323846
-#define ZENITH -.83  // Средняя атмосферная рефракция.
+#define ZENITH -.83 // Средняя атмосферная рефракция.
 
-extern OneWire_t    OneWire;
-extern uint8_t	    OneWireDevices;
-extern uint8_t 	    temp_cnt;
-extern uint8_t		Ds18b20StartConvert;
-extern uint16_t	    Ds18b20Timeout;
+extern OneWire_t OneWire;
+extern uint8_t OneWireDevices;
+extern uint8_t temp_cnt;
+extern uint8_t Ds18b20StartConvert;
+extern uint16_t Ds18b20Timeout;
 extern uint64_t s_boot_timestamp;
 uint32_t onoffid;
 extern onewire_config_t ow_conf[MAX_DS18B20_P + MAX_DHT22_P];
@@ -85,6 +85,15 @@ uint8_t mqttnum = 0;
 uint8_t sumowpin = 0;
 data_pin_t data_pin;
 
+/* PWM Fade (sunrise/sunset) */
+typedef struct {
+  uint8_t pwm_id;
+  uint32_t duration_sec;
+  int start_duty;
+  int end_duty;
+} PwmFadeParams_t;
+static TaskHandle_t fade_task_handles[NUMPIN] = {0};
+
 #define HTTP_URL "http://0.0.0.0:8000"
 #define HTTPS_URL "https://0.0.0.0:8443"
 /* USER CODE END PTD */
@@ -102,27 +111,33 @@ time_t cronetime;
 time_t cronetime_old;
 time_t moontime = (time_t)-1;
 int year;
-uint8_t month;// 1-12
-uint8_t day; // 1-31
-char str[40] = { 0 };
+uint8_t month; // 1-12
+uint8_t day;   // 1-31
+char str[40] = {0};
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-#if defined ( __ICCARM__ ) /*!< IAR Compiler */
-#pragma location=0x2007c000
-ETH_DMADescTypeDef  DMARxDscrTab[ETH_RX_DESC_CNT]; /* Ethernet Rx DMA Descriptors */
-#pragma location=0x2007c0a0
-ETH_DMADescTypeDef  DMATxDscrTab[ETH_TX_DESC_CNT]; /* Ethernet Tx DMA Descriptors */
+#if defined(__ICCARM__) /*!< IAR Compiler */
+#pragma location = 0x2007c000
+ETH_DMADescTypeDef
+    DMARxDscrTab[ETH_RX_DESC_CNT]; /* Ethernet Rx DMA Descriptors */
+#pragma location = 0x2007c0a0
+ETH_DMADescTypeDef
+    DMATxDscrTab[ETH_TX_DESC_CNT]; /* Ethernet Tx DMA Descriptors */
 
-#elif defined ( __CC_ARM )  /* MDK ARM Compiler */
+#elif defined(__CC_ARM) /* MDK ARM Compiler */
 
-__attribute__((at(0x2007c000))) ETH_DMADescTypeDef  DMARxDscrTab[ETH_RX_DESC_CNT]; /* Ethernet Rx DMA Descriptors */
-__attribute__((at(0x2007c0a0))) ETH_DMADescTypeDef  DMATxDscrTab[ETH_TX_DESC_CNT]; /* Ethernet Tx DMA Descriptors */
+__attribute__((at(0x2007c000))) ETH_DMADescTypeDef
+    DMARxDscrTab[ETH_RX_DESC_CNT]; /* Ethernet Rx DMA Descriptors */
+__attribute__((at(0x2007c0a0))) ETH_DMADescTypeDef
+    DMATxDscrTab[ETH_TX_DESC_CNT]; /* Ethernet Tx DMA Descriptors */
 
-#elif defined ( __GNUC__ ) /* GNU Compiler */
+#elif defined(__GNUC__) /* GNU Compiler */
 
-ETH_DMADescTypeDef DMARxDscrTab[ETH_RX_DESC_CNT] __attribute__((section(".RxDecripSection"))); /* Ethernet Rx DMA Descriptors */
-ETH_DMADescTypeDef DMATxDscrTab[ETH_TX_DESC_CNT] __attribute__((section(".TxDecripSection")));   /* Ethernet Tx DMA Descriptors */
+ETH_DMADescTypeDef DMARxDscrTab[ETH_RX_DESC_CNT] __attribute__((
+    section(".RxDecripSection"))); /* Ethernet Rx DMA Descriptors */
+ETH_DMADescTypeDef DMATxDscrTab[ETH_TX_DESC_CNT] __attribute__((
+    section(".TxDecripSection"))); /* Ethernet Tx DMA Descriptors */
 #endif
 
 ETH_TxPacketConfig TxConfig;
@@ -141,102 +156,96 @@ UART_HandleTypeDef huart3;
 /* Definitions for ConfigTask */
 osThreadId_t ConfigTaskHandle;
 const osThreadAttr_t ConfigTask_attributes = {
-  .name = "ConfigTask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "ConfigTask",
+    .stack_size = 512 * 4,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for WebServerTask */
 osThreadId_t WebServerTaskHandle;
 const osThreadAttr_t WebServerTask_attributes = {
-  .name = "WebServerTask",
-  .stack_size = 3072 * 4, // 2048 + 1024(https)
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "WebServerTask",
+    .stack_size = 3072 * 4, // 2048 + 1024(https)
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for OutputTask */
 osThreadId_t OutputTaskHandle;
 const osThreadAttr_t OutputTask_attributes = {
-  .name = "OutputTask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "OutputTask",
+    .stack_size = 512 * 4,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for CronTask */
 osThreadId_t CronTaskHandle;
 const osThreadAttr_t CronTask_attributes = {
-  .name = "CronTask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "CronTask",
+    .stack_size = 512 * 4,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for InputTask */
 osThreadId_t InputTaskHandle;
 const osThreadAttr_t InputTask_attributes = {
-  .name = "InputTask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "InputTask",
+    .stack_size = 512 * 4,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for EncoderTask */
 osThreadId_t EncoderTaskHandle;
 const osThreadAttr_t EncoderTask_attributes = {
-  .name = "EncoderTask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "EncoderTask",
+    .stack_size = 512 * 4,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for mqttTask */
 osThreadId_t mqttTaskHandle;
 const osThreadAttr_t mqttTask_attributes = {
-  .name = "mqttTask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "mqttTask",
+    .stack_size = 512 * 4,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for ds18b20Task */
 osThreadId_t ds18b20TaskHandle;
 const osThreadAttr_t ds18b20Task_attributes = {
-  .name = "ds18b20Task",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "ds18b20Task",
+    .stack_size = 512 * 4,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for dht22Task */
 osThreadId_t dht22TaskHandle;
 const osThreadAttr_t dht22Task_attributes = {
-  .name = "dht22Task",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "dht22Task",
+    .stack_size = 512 * 4,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for ServiceTask */
 osThreadId_t ServiceTaskHandle;
 const osThreadAttr_t ServiceTask_attributes = {
-  .name = "ServiceTask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "ServiceTask",
+    .stack_size = 512 * 4,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for SIM800LTask */
 osThreadId_t SIM800LTaskHandle;
 const osThreadAttr_t SIM800LTask_attributes = {
-  .name = "SIM800LTask",
-  .stack_size = 1024 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "SIM800LTask",
+    .stack_size = 1024 * 4,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for SecurityTask */
 osThreadId_t SecurityTaskHandle;
 const osThreadAttr_t SecurityTask_attributes = {
-  .name = "SecurityTask",
-  .stack_size = 1024 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "SecurityTask",
+    .stack_size = 1024 * 4,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for outputQueue */
 osMessageQueueId_t outputQueueHandle;
-const osMessageQueueAttr_t outputQueue_attributes = {
-  .name = "outputQueue"
-};
+const osMessageQueueAttr_t outputQueue_attributes = {.name = "outputQueue"};
 /* Definitions for usbQueue */
 osMessageQueueId_t usbQueueHandle;
-const osMessageQueueAttr_t usbQueue_attributes = {
-  .name = "usbQueue"
-};
+const osMessageQueueAttr_t usbQueue_attributes = {.name = "usbQueue"};
 /* Definitions for mqttQueue */
 osMessageQueueId_t mqttQueueHandle;
-const osMessageQueueAttr_t mqttQueue_attributes = {
-  .name = "mqttQueue"
-};
+const osMessageQueueAttr_t mqttQueue_attributes = {.name = "mqttQueue"};
 /* USER CODE BEGIN PV */
 extern struct dbSettings SetSettings;
 extern struct dbCron dbCrontxt[MAXSIZE];
@@ -279,47 +288,47 @@ void StartSecurityTask(void *argument);
 /* USER CODE BEGIN 0 */
 /*********************** для printf ******************************/
 #ifdef __GNUC__
-/* With GCC/RAISONANCE, small printf (option LD Linker->Libraries->Small printf set to 'Yes') calls __io_putchar() */
+/* With GCC/RAISONANCE, small printf (option LD Linker->Libraries->Small printf
+ * set to 'Yes') calls __io_putchar() */
 #define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
 #else
 #define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
 #endif /* __GNUC__ */
 /*********************** M ******************************/
-#define LAN8742A_PHY_ADDRESS       0x00
-#define LAN8742A_BSR               0x01
-#define LAN8742A_BSR_LINK_STATUS       0x0004
+#define LAN8742A_PHY_ADDRESS 0x00
+#define LAN8742A_BSR 0x01
+#define LAN8742A_BSR_LINK_STATUS 0x0004
 #define LAN8742A_BSR_AUTONEGO_COMPLETE 0x0020
 
 static bool quick_network_check(void) {
-    uint32_t phyreg;
-    uint32_t retry_count = 3;
+  uint32_t phyreg;
+  uint32_t retry_count = 3;
 
-    while (retry_count--) {
-        // Чтение Basic Status Register (BSR)
-        HAL_ETH_ReadPHYRegister(&heth, LAN8742A_PHY_ADDRESS, LAN8742A_BSR, &phyreg);
+  while (retry_count--) {
+    // Чтение Basic Status Register (BSR)
+    HAL_ETH_ReadPHYRegister(&heth, LAN8742A_PHY_ADDRESS, LAN8742A_BSR, &phyreg);
 
-        if ((phyreg & LAN8742A_BSR_LINK_STATUS) && (phyreg & LAN8742A_BSR_AUTONEGO_COMPLETE)) {
-            return true;
-        }
-        osDelay(10);
+    if ((phyreg & LAN8742A_BSR_LINK_STATUS) &&
+        (phyreg & LAN8742A_BSR_AUTONEGO_COMPLETE)) {
+      return true;
     }
-    return false;
+    osDelay(10);
+  }
+  return false;
 }
 
-const char *s_sub_topic = SetSettings.rxmqttop;// Rx topic
+const char *s_sub_topic = SetSettings.rxmqttop; // Rx topic
 
-void mg_random(void *buf, size_t len) {  // Use on-board RNG
+void mg_random(void *buf, size_t len) { // Use on-board RNG
   extern RNG_HandleTypeDef hrng;
   for (size_t n = 0; n < len; n += sizeof(uint32_t)) {
     uint32_t r;
     HAL_RNG_GenerateRandomNumber(&hrng, &r);
-    memcpy((char *) buf + n, &r, n + sizeof(r) > len ? len - n : sizeof(r));
+    memcpy((char *)buf + n, &r, n + sizeof(r) > len ? len - n : sizeof(r));
   }
 }
 
-uint64_t mg_millis(void) {
-  return HAL_GetTick();
-}
+uint64_t mg_millis(void) { return HAL_GetTick(); }
 
 /*
  Порядок у меня правильный:
@@ -328,31 +337,35 @@ uint64_t mg_millis(void) {
     После этого может начаться TLS рукопожатие (событие MG_EV_TLS_HS)
  * */
 
-void send_mqtt_message(struct mg_connection *conn, const char *topic, const char *msg) {
-    if (conn == NULL || conn->is_closing) {// Проверка соединения
-        if (onlineFlg != 0) {
-              MG_ERROR(("MQTT connection unavailable"));
-          }
-        return;
+void send_mqtt_message(struct mg_connection *conn, const char *topic,
+                       const char *msg) {
+  if (conn == NULL || conn->is_closing) { // Проверка соединения
+    if (onlineFlg != 0) {
+      MG_ERROR(("MQTT connection unavailable"));
     }
+    return;
+  }
 
-    struct mg_mqtt_opts pub_opts;
-    memset(&pub_opts, 0, sizeof(pub_opts));
-    char full_topic[128];// Буфер для полного топика
-    snprintf(full_topic, sizeof(full_topic), "%s%s", get_mqtt_topic(), topic);
-    pub_opts.topic = mg_str(full_topic);
-    pub_opts.message = mg_str(msg);
-    pub_opts.qos = s_qos;
-    pub_opts.retain = false;
-    pub_opts.keepalive = 20;  // Макс. значение для uint16_t (~18ч и 12м)
-    pub_opts.clean = true;// Брокер не сохраняет состояние сессии, и клиент начинает "с чистого листа" при каждом подключении!
-    mg_mqtt_pub(conn, &pub_opts);
-    MG_INFO(("%lu PUBLISHED %s -> %.*s", conn->id, msg, (int) pub_opts.topic.len, pub_opts.topic.buf));
+  struct mg_mqtt_opts pub_opts;
+  memset(&pub_opts, 0, sizeof(pub_opts));
+  char full_topic[128]; // Буфер для полного топика
+  snprintf(full_topic, sizeof(full_topic), "%s%s", get_mqtt_topic(), topic);
+  pub_opts.topic = mg_str(full_topic);
+  pub_opts.message = mg_str(msg);
+  pub_opts.qos = s_qos;
+  pub_opts.retain = false;
+  pub_opts.keepalive = 20; // Макс. значение для uint16_t (~18ч и 12м)
+  pub_opts.clean = true;   // Брокер не сохраняет состояние сессии, и клиент
+                           // начинает "с чистого листа" при каждом подключении!
+  mg_mqtt_pub(conn, &pub_opts);
+  MG_INFO(("%lu PUBLISHED %s -> %.*s", conn->id, msg, (int)pub_opts.topic.len,
+           pub_opts.topic.buf));
 }
 /*********************** End M ******************************/
 
 #ifdef __GNUC__
-/* With GCC/RAISONANCE, small MG_INFO (option LD Linker->Libraries->Small MG_INFO set to 'Yes') calls __io_putchar() */
+/* With GCC/RAISONANCE, small MG_INFO (option LD Linker->Libraries->Small
+ * MG_INFO set to 'Yes') calls __io_putchar() */
 #define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
 #else
 #define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
@@ -361,239 +374,258 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic, const char
 unsigned long Ti;
 unsigned long Te;
 
-static bool check_mqtt_connection(void* conn) {
-    if (conn == NULL) {
-        return false;
-    }
-    return true;
+static bool check_mqtt_connection(void *conn) {
+  if (conn == NULL) {
+    return false;
+  }
+  return true;
 }
 
-void button_event_handler(Button *handle) {// Функция callback для обработки событий кнопки
-    if (handle->button_id >= NUMPIN) {
-        return;
-    }
-	// Обработчик событий кнопки
-	PressEvent event = get_button_event(handle);
+void button_event_handler(
+    Button *handle) { // Функция callback для обработки событий кнопки
+  if (handle->button_id >= NUMPIN) {
+    return;
+  }
+  // Обработчик событий кнопки
+  PressEvent event = get_button_event(handle);
 
-	switch (event) {
-	case NONE_PRESS:// Нет нажатия
-		break;
-	case PRESS_DOWN:// Кнопка нажата
-//       printf("Button %d: PRESS_DOWN!\r\n", handle->button_id);
-		break;
-	case PRESS_UP:// Кнопка отпущена
-//       printf("Button %d: PRESS_UP!\r\n", handle->button_id);
-		break;
-	case LONG_PRESS_START:// Начало долгого нажатия
-//       printf("Button %d: LONG_PRESS_START!\r\n", handle->button_id);
-		if (handle->button_id < NUMPIN) {
-//        	 printf("PinsConf[%d].lpress content: %s\n", handle->button_id, PinsConf[handle->button_id].lpress);
-			action_handler(handle->button_id, PinsConf[handle->button_id].lpress, "long press");
-			// Формируем payload
-			memset(mqtt_payload, 0, sizeof(mqtt_payload));
-			snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s", handle->button_id, PinsConf[handle->button_id].lpress);
-			// Подготовка MQTT сообщения
-			mqttMsg.command = 3;  // Команда для LONG_PRESS
-			mqttMsg.deviceId = handle->button_id;
-			mqttMsg.state = 1;    // Для long press
-			mqttMsg.reserved = 0;
-			// Отправка в очередь
-			if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-				printf("Error sending LONG_PRESS to MQTT queue!\r\n");
-			}
-		} else {
-			printf("Invalid button ID: %d\n", handle->button_id);
-		}
-		break;
-	case LONG_PRESS_HOLD:// Продолжение долгого нажатия
-//       printf("Button %d: LONG_PRESS_HOLD!\r\n", handle->button_id);
-		break;
-	case SINGLE_CLICK:// Одиночное нажатие кнопки
-		if (handle->button_id < NUMPIN) {
-			//printf("PinsConf[%d].sclick content: %s\n", handle->button_id, PinsConf[handle->button_id].sclick);
-			action_handler(handle->button_id, PinsConf[handle->button_id].sclick, "sclick press");
-		    // Формируем payload
-			memset(mqtt_payload, 0, sizeof(mqtt_payload));
-			snprintf(mqtt_payload, sizeof(mqtt_payload),"ID=%d/SINGLE_CLICK/%s", handle->button_id, PinsConf[handle->button_id].sclick);
-			// Подготовка MQTT сообщения
-			mqttMsg.command = 4;  // Команда для SINGLE_CLICK
-			mqttMsg.deviceId = handle->button_id;
-			mqttMsg.state = 2;    // Для single click
-			mqttMsg.reserved = 0;
-			// Отправка в очередь
-			if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-				printf("Error sending SINGLE_CLICK to MQTT queue!\r\n");
-			}
-		    } else {
-		        printf("Invalid button ID: %d\n", handle->button_id);
-		    }
-		    printf("Button %d: SINGLE_CLICK!\r\n", handle->button_id);
-		    break;
-	case DOUBLE_CLICK:// Двойное нажатие кнопки
-//		printf("Button %d: DOUBLE_CLICK!\r\n", handle->button_id);
-		if (handle->button_id < NUMPIN) {
-//        	 rintf("PinsConf[%d].lpress content: %s\n", handle->button_id, PinsConf[handle->button_id].lpress);
-			action_handler(handle->button_id, PinsConf[handle->button_id].dclick, "double press");
-			// Формируем payload
-			memset(mqtt_payload, 0, sizeof(mqtt_payload));
-			snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s", handle->button_id, PinsConf[handle->button_id].dclick);
-			// Подготовка MQTT сообщения
-			mqttMsg.command = 5;  // Команда для DOUBLE_CLICK
-			mqttMsg.deviceId = handle->button_id;
-			mqttMsg.state = 3;    // Для double click
-			mqttMsg.reserved = 0;
-			// Отправка в очередь
-			if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-				printf("Error sending DOUBLE_CLICK to MQTT queue!\r\n");
-			}
-		} else {
-			printf("Invalid button ID: %d\n", handle->button_id);
-		}
-		break;
-	case PRESS_REPEAT:// Повторное нажатие кнопки
-		printf("Button %d: PRESS_REPEAT!\r\n", handle->button_id);
-		break;
-	default:
-		// Обработка неизвестного значения event
-		break;
-	}
-}
-
- void pwm_event_handler(Button* handle)
-  {
-      // Обработчик событий кнопки
-      PressEvent event = get_button_event(handle);
-
-      int i = 0;
-
-      switch (event) {
-          case NONE_PRESS:// Нет нажатия
-              break;
-          case PRESS_DOWN: // Кнопка нажата
-//              printf("Button %d: PRESS_DOWN!\r\n", handle->button_id);
-              break;
-          case PRESS_UP: // Кнопка отпущена
-//              printf("Button %d: PRESS_UP!\r\n", handle->button_id);
-              break;
-          case LONG_PRESS_START:// Начало долгого нажатия
-              printf("Button %d: LONG_PRESS_START!\r\n", handle->button_id);
-              break;
-          case LONG_PRESS_HOLD:
-//        	  if(PinsConf[handle->button_id].sclick == 2){
-				for (uint8_t a = 0; a < NUMPINLINKS; a++) {
-					if (PinsLinks[a].idin == handle->button_id) {
-						//PinsInfo[i].tim->CCR1 = 50;
-								// PWM
-								i = PinsLinks[a].idout;
-								if (PinsConf[i].topin == 5 ){
-									  //for (int d = 0; d <= 11; ++d) {
-									PinsConf[i].dvalue  = (int) HAL_TIM_ReadCapturedValue(&htim[i], PinsInfo[i].tim_channel);
-
-									if(PinsConf[handle->button_id].on == 1) {
-										PinsConf[i].pwmmax = 100;
-										PinsConf[i].dvalue += 1;
-										if(PinsConf[i].dvalue > PinsConf[i].pwmmax){
-											PinsConf[i].dvalue = PinsConf[i].pwmmax;
-											//pwmflag[handle->button_id] = 0;
-										}
-									}
-									if(PinsConf[handle->button_id].on == 0) {
-										PinsConf[i].dvalue -= 1;
-										if(PinsConf[i].dvalue < 0){
-											PinsConf[i].dvalue = 0;
-											//pwmflag[handle->button_id] = 1;
-										}
-									}
-
-									__HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, PinsConf[i].dvalue);
-									printf("PWM pwmValue %d %s \r\n", PinsConf[i].dvalue, PinsInfo[i].pins);
-								}
-// 						data_pin.id = PinsLinks[a].idout;
-// 						data_pin.action = 2;
-// 						xQueueSend(outputQueueHandle, (void* ) &data_pin, 0);
-								printf("Button %d: SINGLE_CLICK PWM pwmValue %d flag %d!\r\n", handle->button_id, PinsConf[i].dvalue, PinsConf[handle->button_id].on);
-					}
-//				}
-        	  }
-        	  printf("Button %d: LONG_PRESS_HOLD!\r\n", handle->button_id);
-              break;
-          case SINGLE_CLICK: // Одиночное нажатие кнопки
-//        	  if(PinsConf[handle->button_id].sclick == 2){
- 				for (uint8_t a = 0; a < NUMPINLINKS; a++) {
- 					if (PinsLinks[a].idin == handle->button_id) {
- 						//PinsInfo[i].tim->CCR1 = 50;
- 							//for (uint8_t i = 0; i < NUMPIN; i++) {
- 								// PWM
- 								i = PinsLinks[a].idout;
- 								if (PinsConf[i].topin == 5){
- 									  //for (int d = 0; d <= 11; ++d) {
- 									PinsConf[i].dvalue  = (int) HAL_TIM_ReadCapturedValue(&htim[i], PinsInfo[i].tim_channel);
- 									//printf("PWM pwmValue %d \r\n", PinsConf[i].dvalue);
- 									if(PinsConf[handle->button_id].on == 1) {
- 										PinsConf[i].pwmmax = 100;
- 										PinsConf[i].dvalue += 1;
-										if(PinsConf[i].dvalue > PinsConf[i].pwmmax){
-											PinsConf[i].dvalue = PinsConf[i].pwmmax;
-											PinsConf[handle->button_id].on = 0;
-										}
- 									}
- 									if(PinsConf[handle->button_id].on == 0) {
- 										PinsConf[i].dvalue -= 1;
-										if(PinsConf[i].dvalue < 0){
-											PinsConf[i].dvalue = 0;
-											PinsConf[handle->button_id].on = 1;
-										}
- 									}
-									__HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, PinsConf[i].dvalue);
-									printf("PWM pwmValue %d %s \r\n", PinsConf[i].dvalue, PinsInfo[i].pins);
- 								//}
- 							}
-
-// 						data_pin.id = PinsLinks[a].idout;
-// 						data_pin.action = 2;
-// 						xQueueSend(outputQueueHandle, (void* ) &data_pin, 0);
- 						printf("Button %d: SINGLE_CLICK PWM pwmValue %d flag %d!\r\n", handle->button_id, PinsConf[i].dvalue, PinsConf[handle->button_id].on);
- 					}
- 				}
-//        	  }
-              //printf("Button %d: SINGLE_CLICK PWM!\r\n", handle->button_id);
-              break;
-          case DOUBLE_CLICK: // Двойное нажатие кнопки
-        	  PinsConf[handle->button_id].on ^= 1;
-              printf("Button %d: DOUBLE_CLICK PWM %d!\r\n", handle->button_id, PinsConf[handle->button_id].on);
-              break;
-          case PRESS_REPEAT: // Повторное нажатие кнопки
-              printf("Button %d: PRESS_REPEAT PWM!\r\n", handle->button_id);
-              break;
-          default:
-              // Обработка неизвестного значения event
-              break;
+  switch (event) {
+  case NONE_PRESS: // Нет нажатия
+    break;
+  case PRESS_DOWN: // Кнопка нажата
+    //       printf("Button %d: PRESS_DOWN!\r\n", handle->button_id);
+    break;
+  case PRESS_UP: // Кнопка отпущена
+                 //       printf("Button %d: PRESS_UP!\r\n", handle->button_id);
+    break;
+  case LONG_PRESS_START: // Начало долгого нажатия
+    //       printf("Button %d: LONG_PRESS_START!\r\n", handle->button_id);
+    if (handle->button_id < NUMPIN) {
+      //        	 printf("PinsConf[%d].lpress content: %s\n",
+      //        handle->button_id, PinsConf[handle->button_id].lpress);
+      action_handler(handle->button_id, PinsConf[handle->button_id].lpress,
+                     "long press");
+      // Формируем payload
+      memset(mqtt_payload, 0, sizeof(mqtt_payload));
+      snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s",
+               handle->button_id, PinsConf[handle->button_id].lpress);
+      // Подготовка MQTT сообщения
+      mqttMsg.command = 3; // Команда для LONG_PRESS
+      mqttMsg.deviceId = handle->button_id;
+      mqttMsg.state = 1; // Для long press
+      mqttMsg.reserved = 0;
+      // Отправка в очередь
+      if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
+        printf("Error sending LONG_PRESS to MQTT queue!\r\n");
       }
+    } else {
+      printf("Invalid button ID: %d\n", handle->button_id);
+    }
+    break;
+  case LONG_PRESS_HOLD: // Продолжение долгого нажатия
+    //       printf("Button %d: LONG_PRESS_HOLD!\r\n", handle->button_id);
+    break;
+  case SINGLE_CLICK: // Одиночное нажатие кнопки
+    if (handle->button_id < NUMPIN) {
+      // printf("PinsConf[%d].sclick content: %s\n", handle->button_id,
+      // PinsConf[handle->button_id].sclick);
+      action_handler(handle->button_id, PinsConf[handle->button_id].sclick,
+                     "sclick press");
+      // Формируем payload
+      memset(mqtt_payload, 0, sizeof(mqtt_payload));
+      snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/SINGLE_CLICK/%s",
+               handle->button_id, PinsConf[handle->button_id].sclick);
+      // Подготовка MQTT сообщения
+      mqttMsg.command = 4; // Команда для SINGLE_CLICK
+      mqttMsg.deviceId = handle->button_id;
+      mqttMsg.state = 2; // Для single click
+      mqttMsg.reserved = 0;
+      // Отправка в очередь
+      if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
+        printf("Error sending SINGLE_CLICK to MQTT queue!\r\n");
+      }
+    } else {
+      printf("Invalid button ID: %d\n", handle->button_id);
+    }
+    printf("Button %d: SINGLE_CLICK!\r\n", handle->button_id);
+    break;
+  case DOUBLE_CLICK: // Двойное нажатие кнопки
+    //		printf("Button %d: DOUBLE_CLICK!\r\n", handle->button_id);
+    if (handle->button_id < NUMPIN) {
+      //        	 rintf("PinsConf[%d].lpress content: %s\n",
+      //        handle->button_id, PinsConf[handle->button_id].lpress);
+      action_handler(handle->button_id, PinsConf[handle->button_id].dclick,
+                     "double press");
+      // Формируем payload
+      memset(mqtt_payload, 0, sizeof(mqtt_payload));
+      snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s",
+               handle->button_id, PinsConf[handle->button_id].dclick);
+      // Подготовка MQTT сообщения
+      mqttMsg.command = 5; // Команда для DOUBLE_CLICK
+      mqttMsg.deviceId = handle->button_id;
+      mqttMsg.state = 3; // Для double click
+      mqttMsg.reserved = 0;
+      // Отправка в очередь
+      if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
+        printf("Error sending DOUBLE_CLICK to MQTT queue!\r\n");
+      }
+    } else {
+      printf("Invalid button ID: %d\n", handle->button_id);
+    }
+    break;
+  case PRESS_REPEAT: // Повторное нажатие кнопки
+    printf("Button %d: PRESS_REPEAT!\r\n", handle->button_id);
+    break;
+  default:
+    // Обработка неизвестного значения event
+    break;
   }
+}
 
- // Функция для получения состояния GPIO кнопки
-  uint8_t read_button_level(uint8_t button_id)
-  {
-      // Вернуть состояние GPIO пина, к которому подключена кнопка
- 	 return  HAL_GPIO_ReadPin(PinsInfo[button_id].gpio_name, PinsInfo[button_id].hal_pin);
-      //return GPIO_PIN_RESET; // Значение по умолчанию, если кнопка не найдена
+void pwm_event_handler(Button *handle) {
+  // Обработчик событий кнопки
+  PressEvent event = get_button_event(handle);
+
+  int i = 0;
+
+  switch (event) {
+  case NONE_PRESS: // Нет нажатия
+    break;
+  case PRESS_DOWN: // Кнопка нажата
+    //              printf("Button %d: PRESS_DOWN!\r\n", handle->button_id);
+    break;
+  case PRESS_UP: // Кнопка отпущена
+    //              printf("Button %d: PRESS_UP!\r\n", handle->button_id);
+    break;
+  case LONG_PRESS_START: // Начало долгого нажатия
+    printf("Button %d: LONG_PRESS_START!\r\n", handle->button_id);
+    break;
+  case LONG_PRESS_HOLD:
+    //        	  if(PinsConf[handle->button_id].sclick == 2){
+    for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+      if (PinsLinks[a].idin == handle->button_id) {
+        // PinsInfo[i].tim->CCR1 = 50;
+        //  PWM
+        i = PinsLinks[a].idout;
+        if (PinsConf[i].topin == 5) {
+          // for (int d = 0; d <= 11; ++d) {
+          PinsConf[i].dvalue =
+              (int)HAL_TIM_ReadCapturedValue(&htim[i], PinsInfo[i].tim_channel);
+
+          if (PinsConf[handle->button_id].on == 1) {
+            PinsConf[i].dvalue += 1;
+            if (PinsConf[i].dvalue > PinsConf[i].pwmmax) {
+              PinsConf[i].dvalue = PinsConf[i].pwmmax;
+              // pwmflag[handle->button_id] = 0;
+            }
+          }
+          if (PinsConf[handle->button_id].on == 0) {
+            PinsConf[i].dvalue -= 1;
+            if (PinsConf[i].dvalue < 0) {
+              PinsConf[i].dvalue = 0;
+              // pwmflag[handle->button_id] = 1;
+            }
+          }
+
+          __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel,
+                                PinsConf[i].dvalue);
+          printf("PWM pwmValue %d %s \r\n", PinsConf[i].dvalue,
+                 PinsInfo[i].pins);
+        }
+        // 						data_pin.id =
+        // PinsLinks[a].idout;
+        // data_pin.action = 2;
+        // xQueueSend(outputQueueHandle, (void* ) &data_pin, 0);
+        printf("Button %d: SINGLE_CLICK PWM pwmValue %d flag %d!\r\n",
+               handle->button_id, PinsConf[i].dvalue,
+               PinsConf[handle->button_id].on);
+      }
+      //				}
+    }
+    printf("Button %d: LONG_PRESS_HOLD!\r\n", handle->button_id);
+    break;
+  case SINGLE_CLICK: // Одиночное нажатие кнопки
+                     //        	  if(PinsConf[handle->button_id].sclick == 2){
+    for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+      if (PinsLinks[a].idin == handle->button_id) {
+        // PinsInfo[i].tim->CCR1 = 50;
+        // for (uint8_t i = 0; i < NUMPIN; i++) {
+        //  PWM
+        i = PinsLinks[a].idout;
+        if (PinsConf[i].topin == 5) {
+          // for (int d = 0; d <= 11; ++d) {
+          PinsConf[i].dvalue =
+              (int)HAL_TIM_ReadCapturedValue(&htim[i], PinsInfo[i].tim_channel);
+          // printf("PWM pwmValue %d \r\n", PinsConf[i].dvalue);
+          if (PinsConf[handle->button_id].on == 1) {
+            PinsConf[i].dvalue += 1;
+            if (PinsConf[i].dvalue > PinsConf[i].pwmmax) {
+              PinsConf[i].dvalue = PinsConf[i].pwmmax;
+              PinsConf[handle->button_id].on = 0;
+            }
+          }
+          if (PinsConf[handle->button_id].on == 0) {
+            PinsConf[i].dvalue -= 1;
+            if (PinsConf[i].dvalue < 0) {
+              PinsConf[i].dvalue = 0;
+              PinsConf[handle->button_id].on = 1;
+            }
+          }
+          __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel,
+                                PinsConf[i].dvalue);
+          printf("PWM pwmValue %d %s \r\n", PinsConf[i].dvalue,
+                 PinsInfo[i].pins);
+          //}
+        }
+
+        // 						data_pin.id =
+        // PinsLinks[a].idout;
+        // data_pin.action = 2;
+        // xQueueSend(outputQueueHandle, (void* ) &data_pin, 0);
+        printf("Button %d: SINGLE_CLICK PWM pwmValue %d flag %d!\r\n",
+               handle->button_id, PinsConf[i].dvalue,
+               PinsConf[handle->button_id].on);
+      }
+    }
+    //        	  }
+    // printf("Button %d: SINGLE_CLICK PWM!\r\n", handle->button_id);
+    break;
+  case DOUBLE_CLICK: // Двойное нажатие кнопки
+    PinsConf[handle->button_id].on ^= 1;
+    printf("Button %d: DOUBLE_CLICK PWM %d!\r\n", handle->button_id,
+           PinsConf[handle->button_id].on);
+    break;
+  case PRESS_REPEAT: // Повторное нажатие кнопки
+    printf("Button %d: PRESS_REPEAT PWM!\r\n", handle->button_id);
+    break;
+  default:
+    // Обработка неизвестного значения event
+    break;
   }
+}
 
-  /**************************** GSM ***************************************/
-  uint32_t zerg_t;   /* используется в gsm.c через extern */
-  uint32_t swarm_t;  /* используется в gsm.c через extern */
+// Функция для получения состояния GPIO кнопки
+uint8_t read_button_level(uint8_t button_id) {
+  // Вернуть состояние GPIO пина, к которому подключена кнопка
+  return HAL_GPIO_ReadPin(PinsInfo[button_id].gpio_name,
+                          PinsInfo[button_id].hal_pin);
+  // return GPIO_PIN_RESET; // Значение по умолчанию, если кнопка не найдена
+}
 
-  /* clear_string перенесена в gsm.c */
-  /* check_speed перенесена в gsm.c */
-  /*************************** END GSM ************************************/
+/**************************** GSM ***************************************/
+uint32_t zerg_t;  /* используется в gsm.c через extern */
+uint32_t swarm_t; /* используется в gsm.c через extern */
+
+/* clear_string перенесена в gsm.c */
+/* check_speed перенесена в gsm.c */
+/*************************** END GSM ************************************/
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
-int main(void)
-{
+ * @brief  The application entry point.
+ * @retval int
+ */
+int main(void) {
 
   /* USER CODE BEGIN 1 */
 
@@ -601,7 +633,8 @@ int main(void)
 
   /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick.
+   */
   HAL_Init();
 
   /* USER CODE BEGIN Init */
@@ -649,13 +682,15 @@ int main(void)
 
   /* Create the queue(s) */
   /* creation of outputQueue */
-  outputQueueHandle = osMessageQueueNew (16, sizeof(struct data_pin_t), &outputQueue_attributes);
+  outputQueueHandle =
+      osMessageQueueNew(16, sizeof(struct data_pin_t), &outputQueue_attributes);
 
   /* creation of usbQueue */
-  usbQueueHandle = osMessageQueueNew (16, sizeof(uint8_t), &usbQueue_attributes);
+  usbQueueHandle = osMessageQueueNew(16, sizeof(uint8_t), &usbQueue_attributes);
 
   /* creation of mqttQueue */
-  mqttQueueHandle = osMessageQueueNew (16, sizeof(MqttMessage_t), &mqttQueue_attributes);
+  mqttQueueHandle =
+      osMessageQueueNew(16, sizeof(MqttMessage_t), &mqttQueue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -666,7 +701,8 @@ int main(void)
   ConfigTaskHandle = osThreadNew(StartConfigTask, NULL, &ConfigTask_attributes);
 
   /* creation of WebServerTask */
-  WebServerTaskHandle = osThreadNew(StartWebServerTask, NULL, &WebServerTask_attributes);
+  WebServerTaskHandle =
+      osThreadNew(StartWebServerTask, NULL, &WebServerTask_attributes);
 
   /* creation of OutputTask */
   OutputTaskHandle = osThreadNew(StartOutputTask, NULL, &OutputTask_attributes);
@@ -678,25 +714,30 @@ int main(void)
   InputTaskHandle = osThreadNew(StartInputTask, NULL, &InputTask_attributes);
 
   /* creation of EncoderTask */
-  EncoderTaskHandle = osThreadNew(StartEncoderTask, NULL, &EncoderTask_attributes);
+  EncoderTaskHandle =
+      osThreadNew(StartEncoderTask, NULL, &EncoderTask_attributes);
 
   /* creation of mqttTask */
   mqttTaskHandle = osThreadNew(StartMqttTask, NULL, &mqttTask_attributes);
 
   /* creation of ds18b20Task */
-  ds18b20TaskHandle = osThreadNew(StartDs18b20Task, NULL, &ds18b20Task_attributes);
+  ds18b20TaskHandle =
+      osThreadNew(StartDs18b20Task, NULL, &ds18b20Task_attributes);
 
   /* creation of dht22Task */
   dht22TaskHandle = osThreadNew(StartDht22Task, NULL, &dht22Task_attributes);
 
   /* creation of ServiceTask */
-  ServiceTaskHandle = osThreadNew(StartServiceTask, NULL, &ServiceTask_attributes);
+  ServiceTaskHandle =
+      osThreadNew(StartServiceTask, NULL, &ServiceTask_attributes);
 
   /* creation of SIM800LTask */
-  SIM800LTaskHandle = osThreadNew(StartSIM800LTask, NULL, &SIM800LTask_attributes);
+  SIM800LTaskHandle =
+      osThreadNew(StartSIM800LTask, NULL, &SIM800LTask_attributes);
 
   /* creation of SecurityTask */
-  SecurityTaskHandle = osThreadNew(StartSecurityTask, NULL, &SecurityTask_attributes);
+  SecurityTaskHandle =
+      osThreadNew(StartSecurityTask, NULL, &SecurityTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -713,8 +754,7 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+  while (1) {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -723,26 +763,25 @@ int main(void)
 }
 
 /**
-  * @brief System Clock Configuration
-  * @retval None
-  */
-void SystemClock_Config(void)
-{
+ * @brief System Clock Configuration
+ * @retval None
+ */
+void SystemClock_Config(void) {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
   /** Configure LSE Drive Capability
-  */
+   */
   HAL_PWR_EnableBkUpAccess();
 
   /** Configure the main internal regulator output voltage
-  */
+   */
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
   /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
+   * in the RCC_OscInitTypeDef structure.
+   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
@@ -752,40 +791,36 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 9;
   RCC_OscInitStruct.PLL.PLLR = 2;
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-  {
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
     Error_Handler();
   }
 
   /** Activate the Over-Drive mode
-  */
-  if (HAL_PWREx_EnableOverDrive() != HAL_OK)
-  {
+   */
+  if (HAL_PWREx_EnableOverDrive() != HAL_OK) {
     Error_Handler();
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+   */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK |
+                                RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_7) != HAL_OK)
-  {
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_7) != HAL_OK) {
     Error_Handler();
   }
 }
 
 /**
-  * @brief CRC Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_CRC_Init(void)
-{
+ * @brief CRC Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_CRC_Init(void) {
 
   /* USER CODE BEGIN CRC_Init 0 */
 
@@ -800,29 +835,26 @@ static void MX_CRC_Init(void)
   hcrc.Init.InputDataInversionMode = CRC_INPUTDATA_INVERSION_NONE;
   hcrc.Init.OutputDataInversionMode = CRC_OUTPUTDATA_INVERSION_DISABLE;
   hcrc.InputDataFormat = CRC_INPUTDATA_FORMAT_BYTES;
-  if (HAL_CRC_Init(&hcrc) != HAL_OK)
-  {
+  if (HAL_CRC_Init(&hcrc) != HAL_OK) {
     Error_Handler();
   }
   /* USER CODE BEGIN CRC_Init 2 */
 
   /* USER CODE END CRC_Init 2 */
-
 }
 
 /**
-  * @brief ETH Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_ETH_Init(void)
-{
+ * @brief ETH Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_ETH_Init(void) {
 
   /* USER CODE BEGIN ETH_Init 0 */
 
   /* USER CODE END ETH_Init 0 */
 
-   static uint8_t MACAddr[6];
+  static uint8_t MACAddr[6];
 
   /* USER CODE BEGIN ETH_Init 1 */
 
@@ -844,28 +876,26 @@ static void MX_ETH_Init(void)
 
   /* USER CODE END MACADDRESS */
 
-  if (HAL_ETH_Init(&heth) != HAL_OK)
-  {
+  if (HAL_ETH_Init(&heth) != HAL_OK) {
     Error_Handler();
   }
 
-  memset(&TxConfig, 0 , sizeof(ETH_TxPacketConfig));
-  TxConfig.Attributes = ETH_TX_PACKETS_FEATURES_CSUM | ETH_TX_PACKETS_FEATURES_CRCPAD;
+  memset(&TxConfig, 0, sizeof(ETH_TxPacketConfig));
+  TxConfig.Attributes =
+      ETH_TX_PACKETS_FEATURES_CSUM | ETH_TX_PACKETS_FEATURES_CRCPAD;
   TxConfig.ChecksumCtrl = ETH_CHECKSUM_IPHDR_PAYLOAD_INSERT_PHDR_CALC;
   TxConfig.CRCPadCtrl = ETH_CRC_PAD_INSERT;
   /* USER CODE BEGIN ETH_Init 2 */
 
   /* USER CODE END ETH_Init 2 */
-
 }
 
 /**
-  * @brief RNG Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_RNG_Init(void)
-{
+ * @brief RNG Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_RNG_Init(void) {
 
   /* USER CODE BEGIN RNG_Init 0 */
 
@@ -875,23 +905,20 @@ static void MX_RNG_Init(void)
 
   /* USER CODE END RNG_Init 1 */
   hrng.Instance = RNG;
-  if (HAL_RNG_Init(&hrng) != HAL_OK)
-  {
+  if (HAL_RNG_Init(&hrng) != HAL_OK) {
     Error_Handler();
   }
   /* USER CODE BEGIN RNG_Init 2 */
 
   /* USER CODE END RNG_Init 2 */
-
 }
 
 /**
-  * @brief TIM1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM1_Init(void)
-{
+ * @brief TIM1 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_TIM1_Init(void) {
 
   /* USER CODE BEGIN TIM1_Init 0 */
 
@@ -904,41 +931,36 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 216-1;
+  htim1.Init.Prescaler = 216 - 1;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim1.Init.Period = 65535;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
-  {
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK) {
     Error_Handler();
   }
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
-  {
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK) {
     Error_Handler();
   }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
-  {
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK) {
     Error_Handler();
   }
   /* USER CODE BEGIN TIM1_Init 2 */
 
   /* USER CODE END TIM1_Init 2 */
-
 }
 
 /**
-  * @brief USART2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART2_UART_Init(void)
-{
+ * @brief USART2 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_USART2_UART_Init(void) {
 
   /* USER CODE BEGIN USART2_Init 0 */
 
@@ -957,23 +979,20 @@ static void MX_USART2_UART_Init(void)
   huart2.Init.OverSampling = UART_OVERSAMPLING_16;
   huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
   huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart2) != HAL_OK)
-  {
+  if (HAL_UART_Init(&huart2) != HAL_OK) {
     Error_Handler();
   }
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
-
 }
 
 /**
-  * @brief USART3 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART3_UART_Init(void)
-{
+ * @brief USART3 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_USART3_UART_Init(void) {
 
   /* USER CODE BEGIN USART3_Init 0 */
 
@@ -992,26 +1011,23 @@ static void MX_USART3_UART_Init(void)
   huart3.Init.OverSampling = UART_OVERSAMPLING_16;
   huart3.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
   huart3.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart3) != HAL_OK)
-  {
+  if (HAL_UART_Init(&huart3) != HAL_OK) {
     Error_Handler();
   }
   /* USER CODE BEGIN USART3_Init 2 */
 
   /* USER CODE END USART3_Init 2 */
-
 }
 
 /**
-  * @brief GPIO Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_GPIO_Init(void)
-{
+ * @brief GPIO Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_GPIO_Init(void) {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-/* USER CODE BEGIN MX_GPIO_Init_1 */
-/* USER CODE END MX_GPIO_Init_1 */
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
+  /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
@@ -1025,10 +1041,11 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(SENSOR_GPIO_Port, SENSOR_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, LD1_Pin|LD3_Pin|LD2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, LD1_Pin | LD3_Pin | LD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(USB_PowerSwitchOn_GPIO_Port, USB_PowerSwitchOn_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(USB_PowerSwitchOn_GPIO_Port, USB_PowerSwitchOn_Pin,
+                    GPIO_PIN_RESET);
 
   /*Configure GPIO pin : USER_Btn_Pin */
   GPIO_InitStruct.Pin = USER_Btn_Pin;
@@ -1044,7 +1061,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(SENSOR_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LD1_Pin LD3_Pin LD2_Pin */
-  GPIO_InitStruct.Pin = LD1_Pin|LD3_Pin|LD2_Pin;
+  GPIO_InitStruct.Pin = LD1_Pin | LD3_Pin | LD2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -1063,71 +1080,170 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(USB_OverCurrent_GPIO_Port, &GPIO_InitStruct);
 
-/* USER CODE BEGIN MX_GPIO_Init_2 */
-/* USER CODE END MX_GPIO_Init_2 */
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+  /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
 /*********************** для printf ******************************/
 PUTCHAR_PROTOTYPE {
-	HAL_UART_Transmit(&huart3, (uint8_t*) &ch, 1, 0xFFFF);
-	return ch;
+  HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 1, 0xFFFF);
+  return ch;
+}
+
+/************************ PWM Fade (sunrise / sunset) *************/
+/* FreeRTOS задача плавного изменения PWM — 1 шаг каждую секунду. */
+static void pwm_fade_task(void *arg) {
+  PwmFadeParams_t *p = (PwmFadeParams_t *)arg;
+  uint8_t id = p->pwm_id;
+  uint32_t steps = p->duration_sec > 0 ? p->duration_sec : 1;
+  float duty = (float)p->start_duty;
+  float delta = (float)(p->end_duty - p->start_duty) / (float)steps;
+  vPortFree(p);
+
+  for (uint32_t i = 0; i <= steps; i++) {
+    if (PinsConf[id].topin == 5 && PinsConf[id].onoff == 1) {
+      int d = (int)(duty + 0.5f);
+      if (d < 0)
+        d = 0;
+      if (d > 100)
+        d = 100;
+      PinsConf[id].dvalue = d;
+      __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel, (uint32_t)d);
+    }
+    duty += delta;
+    osDelay(1000);
+  }
+  /* Гарантируем установку финального значения */
+  if (PinsConf[id].topin == 5) {
+    float fin = duty - delta;
+    int d = (int)(fin + 0.5f);
+    if (d < 0)
+      d = 0;
+    if (d > 100)
+      d = 100;
+    PinsConf[id].dvalue = d;
+    __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel, (uint32_t)d);
+  }
+  fade_task_handles[id] = NULL;
+  vTaskDelete(NULL);
+}
+
+/* Запускает (или перезапускает) задачу плавного изменения PWM.
+ * pwm_id       — индекс PWM-пина (topin == 5)
+ * duration_sec — длительность перехода в секундах
+ * start_duty   — начальная яркость 0–100%
+ * end_duty     — конечная яркость   0–100% */
+void start_pwm_fade(uint8_t pwm_id, uint32_t duration_sec, int start_duty,
+                    int end_duty) {
+  if (pwm_id >= NUMPIN || PinsConf[pwm_id].topin != 5) {
+    printf("start_pwm_fade: bad id=%d\r\n", pwm_id);
+    return;
+  }
+  /* Завершаем предыдущий fade для того же пина, если есть */
+  if (fade_task_handles[pwm_id] != NULL) {
+    vTaskDelete(fade_task_handles[pwm_id]);
+    fade_task_handles[pwm_id] = NULL;
+  }
+  PwmFadeParams_t *p = (PwmFadeParams_t *)pvPortMalloc(sizeof(PwmFadeParams_t));
+  if (p == NULL) {
+    printf("start_pwm_fade: malloc fail\r\n");
+    return;
+  }
+  p->pwm_id = pwm_id;
+  p->duration_sec = duration_sec;
+  p->start_duty = start_duty;
+  p->end_duty = end_duty;
+  /* Устанавливаем начальное значение немедленно */
+  PinsConf[pwm_id].dvalue = start_duty;
+  __HAL_TIM_SET_COMPARE(&htim[pwm_id], PinsInfo[pwm_id].tim_channel,
+                        (uint32_t)start_duty);
+  BaseType_t res =
+      xTaskCreate(pwm_fade_task, "pwm_fade", 256, p, tskIDLE_PRIORITY + 1,
+                  &fade_task_handles[pwm_id]);
+  if (res != pdPASS) {
+    printf("start_pwm_fade: xTaskCreate fail\r\n");
+    vPortFree(p);
+  } else {
+    printf("PWM fade: id=%d %ds %d%%->%d%%\r\n", pwm_id, (int)duration_sec,
+           start_duty, end_duty);
+  }
 }
 
 void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
-    char *token;
-    char *saveptr;
-    int flag = 0;
-    int k = 0;
-    int pin = 0;
-    char delim[] = ",";
-    MqttMessage_t mqttMsg = {0};
-    int mqtt_sent = 0;  // Флаг отправки MQTT сообщения
-//    printf("Debug: Parsing string for cronindex=%d, pause=%d\n", cronindex, pause);
-//    printf("Debug: Input string: %s\n", str);
-    token = strtok_r(str, delim, &saveptr);
-    while (token != NULL) {
-        char *end_token;
-//        printf("Debug: Processing token: %s\n", token);
-        if (token[0] == 'p') {
-            char *newstring = token + 1;
-            dbCrontxt[cronindex].ptime = cronetime_olds + atoi(newstring);
-            flag = 1;
-//            printf("Debug: Found pause token, flag set to 1\n");
-        }
-        if (flag == pause) {
-            char *token2 = strtok_r(token, ":", &end_token);
-            k = 0;
-            while (token2 != NULL) {
-                if (k == 0) {
-                    pin = atoi(token2);
-                    if (pin != 0) {
-                        data_pin.id = pin;
-                    }
-                }
-                if (k == 1) {
-                    data_pin.action = atoi(token2);
-                }
-                token2 = strtok_r(NULL, ":", &end_token);
-                k++;
-            }
-            if (k == 2) {
-                xQueueSend(outputQueueHandle, (void* )&data_pin, 0);
-                if (!mqtt_sent) {
-//                    printf("Debug: Sending MQTT message for cronindex=%d\n", cronindex);
-                    mqttMsg.command = 7;
-                    mqttMsg.deviceId = cronindex;
-                    mqttMsg.state = data_pin.action;
-                    mqttMsg.reserved = 0;
-                    if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-                        printf("Error sending TIMER event to MQTT queue!\r\n");
-                    }
-                    mqtt_sent = 1;  // Устанавливаем флаг отправки
-                }
-            }
-        }
-        token = strtok_r(NULL, delim, &saveptr);
+  char *token;
+  char *saveptr;
+  int flag = 0;
+  int k = 0;
+  int pin = 0;
+  char delim[] = ",";
+  MqttMessage_t mqttMsg = {0};
+  int mqtt_sent = 0; // Флаг отправки MQTT сообщения
+  //    printf("Debug: Parsing string for cronindex=%d, pause=%d\n", cronindex,
+  //    pause); printf("Debug: Input string: %s\n", str);
+  token = strtok_r(str, delim, &saveptr);
+  while (token != NULL) {
+    char *end_token;
+    //        printf("Debug: Processing token: %s\n", token);
+    /* --- PWM Fade: формат "pwm:<id>,<duration_sec>,<start%>,<end%>" --- */
+    if (strncmp(token, "pwm:", 4) == 0 && pause == 0) {
+      int pwm_id = 0, dur = 0, sduty = 0, eduty = 0;
+      char *t1 = token + 4;
+      char *t2 = strtok_r(NULL, delim, &saveptr);
+      char *t3 = strtok_r(NULL, delim, &saveptr);
+      char *t4 = strtok_r(NULL, delim, &saveptr);
+      if (t1 && t2 && t3 && t4) {
+        pwm_id = atoi(t1);
+        dur = atoi(t2);
+        sduty = atoi(t3);
+        eduty = atoi(t4);
+        start_pwm_fade((uint8_t)pwm_id, (uint32_t)dur, sduty, eduty);
+      } else {
+        printf("parse_string: bad pwm token: %s\r\n", token);
+      }
+      token = strtok_r(NULL, delim, &saveptr);
+      continue; /* переходим к следующему токену */
     }
+    if (token[0] == 'p') {
+      char *newstring = token + 1;
+      dbCrontxt[cronindex].ptime = cronetime_olds + atoi(newstring);
+      flag = 1;
+      //            printf("Debug: Found pause token, flag set to 1\n");
+    }
+    if (flag == pause) {
+      char *token2 = strtok_r(token, ":", &end_token);
+      k = 0;
+      while (token2 != NULL) {
+        if (k == 0) {
+          pin = atoi(token2);
+          if (pin != 0) {
+            data_pin.id = pin;
+          }
+        }
+        if (k == 1) {
+          data_pin.action = atoi(token2);
+        }
+        token2 = strtok_r(NULL, ":", &end_token);
+        k++;
+      }
+      if (k == 2) {
+        xQueueSend(outputQueueHandle, (void *)&data_pin, 0);
+        if (!mqtt_sent) {
+          //                    printf("Debug: Sending MQTT message for
+          //                    cronindex=%d\n", cronindex);
+          mqttMsg.command = 7;
+          mqttMsg.deviceId = cronindex;
+          mqttMsg.state = data_pin.action;
+          mqttMsg.reserved = 0;
+          if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
+            printf("Error sending TIMER event to MQTT queue!\r\n");
+          }
+          mqtt_sent = 1; // Устанавливаем флаг отправки
+        }
+      }
+    }
+    token = strtok_r(NULL, delim, &saveptr);
+  }
 }
 /************************ GSM *************************************/
 /* init_sim800l_module и process_sim800l_data перенесены в gsm.c  */
@@ -1136,1148 +1252,1260 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
 
 /* USER CODE BEGIN Header_StartConfigTask */
 /**
-  * @brief  Function implementing the ConfigTask thread.
-  * @param  argument: Not used
-  * @retval None
-  */
+ * @brief  Function implementing the ConfigTask thread.
+ * @param  argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_StartConfigTask */
-void StartConfigTask(void *argument)
-{
+void StartConfigTask(void *argument) {
   /* init code for USB_HOST */
   MX_USB_HOST_Init();
   /* USER CODE BEGIN 5 */
-	/* Infinite loop */
-	int usbflag = 1;
-	FILINFO finfo;
-	for (;;) {
-		switch (Appli_state) {
-		case APPLICATION_READY:
-			if (usbflag == 1) {
-				osDelay(1000);
-				printf("APPLICATION_READY! \r\n");
+  /* Infinite loop */
+  int usbflag = 1;
+  FILINFO finfo;
+  for (;;) {
+    switch (Appli_state) {
+    case APPLICATION_READY:
+      if (usbflag == 1) {
+        osDelay(1000);
+        printf("APPLICATION_READY! \r\n");
 
-				FRESULT fresult = f_stat("settings.ini", &finfo);// Проверяем существует ли файл или нет!?
-				if (fresult == FR_OK) {
-					GetSettingsConfig();// если файл "settings.ini" существует, открываем его и перезаписываем
-					GetCronConfig();   // если файл "cron.ini" существует, открываем для чтения.
-					GetPinConfig();    // если файл "pins.ini" существует, открываем для чтения.
-					GetPinToPin();     // если файл "pintopin.ini" существует, открываем его
-					GetOneWireConfig();// если файл "onewire.ini" существует, открываем его
+        FRESULT fresult = f_stat(
+            "settings.ini", &finfo); // Проверяем существует ли файл или нет!?
+        if (fresult == FR_OK) {
+          GetSettingsConfig(); // если файл "settings.ini" существует, открываем
+                               // его и перезаписываем
+          GetCronConfig();     // если файл "cron.ini" существует, открываем для
+                               // чтения.
+          GetPinConfig();      // если файл "pins.ini" существует, открываем для
+                               // чтения.
+          GetPinToPin(); // если файл "pintopin.ini" существует, открываем его
+          GetOneWireConfig(); // если файл "onewire.ini" существует, открываем
+                              // его
 
-					InitPin();// Инициализация пинов
+          InitPin(); // Инициализация пинов
 
-					if (SetSettings.sim800l == 1) {// Если модуль sim800l включен
-						xTaskNotifyGive(SIM800LTaskHandle); // ТО ВКЛЮЧАЕМ ЗАДАЧУ SIM800LTask
-						ulTaskNotifyTake(pdTRUE, portMAX_DELAY);// Ждем уведомления от SIM800LTask
-					}
+          if (SetSettings.sim800l == 1) { // Если модуль sim800l включен
+            xTaskNotifyGive(
+                SIM800LTaskHandle); // ТО ВКЛЮЧАЕМ ЗАДАЧУ SIM800LTask
+            ulTaskNotifyTake(pdTRUE,
+                             portMAX_DELAY); // Ждем уведомления от SIM800LTask
+          }
 
-					xTaskNotifyGive(WebServerTaskHandle); // ТО ВКЛЮЧАЕМ ЗАДАЧУ WebServerTask
-					xTaskNotifyGive(CronTaskHandle);      // И ВКЛЮЧАЕМ ЗАДАЧУ CronTask
-					xTaskNotifyGive(OutputTaskHandle);    // И ВКЛЮЧАЕМ ЗАДАЧУ OutputTask
-					xTaskNotifyGive(InputTaskHandle);     // И ВКЛЮЧАЕМ ЗАДАЧУ InputTask
-					xTaskNotifyGive(EncoderTaskHandle);   // И ВКЛЮЧАЕМ ЗАДАЧУ PWMTask
+          xTaskNotifyGive(
+              WebServerTaskHandle);          // ТО ВКЛЮЧАЕМ ЗАДАЧУ WebServerTask
+          xTaskNotifyGive(CronTaskHandle);   // И ВКЛЮЧАЕМ ЗАДАЧУ CronTask
+          xTaskNotifyGive(OutputTaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ OutputTask
+          xTaskNotifyGive(InputTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ InputTask
+          xTaskNotifyGive(EncoderTaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ PWMTask
 
-					xTaskNotifyGive(ServiceTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ TechnolTask
-					xTaskNotifyGive(mqttTaskHandle);     // И ВКЛЮЧАЕМ ЗАДАЧУ mqttTask
-					xTaskNotifyGive(SecurityTaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ SecurityTask
+          xTaskNotifyGive(ServiceTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ TechnolTask
+          xTaskNotifyGive(mqttTaskHandle);     // И ВКЛЮЧАЕМ ЗАДАЧУ mqttTask
+          xTaskNotifyGive(SecurityTaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ SecurityTask
 
-					osDelay(100);
-					xTaskNotifyGive(ds18b20TaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ ds18b20
-					xTaskNotifyGive(dht22TaskHandle);   // И ВКЛЮЧАЕМ ЗАДАЧУ dht22
+          osDelay(100);
+          xTaskNotifyGive(ds18b20TaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ ds18b20
+          xTaskNotifyGive(dht22TaskHandle);   // И ВКЛЮЧАЕМ ЗАДАЧУ dht22
 
-				} else {// Файл "pins.ini" не существует, создаем его и записываем данные
-					StartSettingsConfig();
+        } else { // Файл "pins.ini" не существует, создаем его и записываем
+                 // данные
+          StartSettingsConfig();
 
-					xTaskNotifyGive(WebServerTaskHandle); // ВКЛЮЧАЕМ ЗАДАЧУ WebServerTask
-					xTaskNotifyGive(CronTaskHandle);      // ВКЛЮЧАЕМ ЗАДАЧУ CronTask
-					xTaskNotifyGive(OutputTaskHandle);    // ВКЛЮЧАЕМ ЗАДАЧУ OutputTask
-					xTaskNotifyGive(InputTaskHandle);     // ВКЛЮЧАЕМ ЗАДАЧУ InputTask
-					xTaskNotifyGive(EncoderTaskHandle);   // ВКЛЮЧАЕМ ЗАДАЧУ PWMTask
-					xTaskNotifyGive(mqttTaskHandle);      // ВКЛЮЧАЕМ ЗАДАЧУ mqttTask
+          xTaskNotifyGive(WebServerTaskHandle); // ВКЛЮЧАЕМ ЗАДАЧУ WebServerTask
+          xTaskNotifyGive(CronTaskHandle);      // ВКЛЮЧАЕМ ЗАДАЧУ CronTask
+          xTaskNotifyGive(OutputTaskHandle);    // ВКЛЮЧАЕМ ЗАДАЧУ OutputTask
+          xTaskNotifyGive(InputTaskHandle);     // ВКЛЮЧАЕМ ЗАДАЧУ InputTask
+          xTaskNotifyGive(EncoderTaskHandle);   // ВКЛЮЧАЕМ ЗАДАЧУ PWMTask
+          xTaskNotifyGive(mqttTaskHandle);      // ВКЛЮЧАЕМ ЗАДАЧУ mqttTask
 
-					osDelay(100);
-					xTaskNotifyGive(ServiceTaskHandle); // ВКЛЮЧАЕМ ЗАДАЧУ TechnolTask
-					xTaskNotifyGive(ds18b20TaskHandle);  // ВКЛЮЧАЕМ ЗАДАЧУ ds18b20
-					xTaskNotifyGive(dht22TaskHandle);    // ВКЛЮЧАЕМ ЗАДАЧУ dht22
-					xTaskNotifyGive(SecurityTaskHandle); // ВКЛЮЧАЕМ ЗАДАЧУ SecurityTask
-
-				}
-				usbflag = 0;
-			}
-			// Функция для чтения целых чисел из очереди
-			if (xQueueReceive(usbQueueHandle, &usbnum, portMAX_DELAY) == pdTRUE) {
-				switch (usbnum) {
-				case 1:
-					SetPinConfig();// Если файл "pins.ini" не существует, создаем его и записываем данные
-					break;
-				case 2:
-					SetSettingsConfig();// Когда сохраняем форму в файл "setings.ini"
-					break;
-				case 3:
-					SetCronConfig();// Если файл "cron.ini" не существует, создаем его и записываем данные
-					break;
-				case 4:
-					SetPinToPin();// Если файл "pintopin.ini" не существует, создаем его и записываем данные
-					break;
-				case 5:
-					SetOneWireConfig();// Если файл "onewire.ini" не существует, создаем его и записываем данные
-					break;
-				default:
-					printf("xQueueReceive get wrong data! \r\n");
-					break;
-				}
-//				printf("xQueueReceive number: %u\n", usbnum);
-			}
-			break;
-		default:
-			//printf("Wrong data! \r\n");
-			break;
-		}
-		osDelay(1);
-	}
+          osDelay(100);
+          xTaskNotifyGive(ServiceTaskHandle);  // ВКЛЮЧАЕМ ЗАДАЧУ TechnolTask
+          xTaskNotifyGive(ds18b20TaskHandle);  // ВКЛЮЧАЕМ ЗАДАЧУ ds18b20
+          xTaskNotifyGive(dht22TaskHandle);    // ВКЛЮЧАЕМ ЗАДАЧУ dht22
+          xTaskNotifyGive(SecurityTaskHandle); // ВКЛЮЧАЕМ ЗАДАЧУ SecurityTask
+        }
+        usbflag = 0;
+      }
+      // Функция для чтения целых чисел из очереди
+      if (xQueueReceive(usbQueueHandle, &usbnum, portMAX_DELAY) == pdTRUE) {
+        switch (usbnum) {
+        case 1:
+          SetPinConfig(); // Если файл "pins.ini" не существует, создаем его и
+                          // записываем данные
+          break;
+        case 2:
+          SetSettingsConfig(); // Когда сохраняем форму в файл "setings.ini"
+          break;
+        case 3:
+          SetCronConfig(); // Если файл "cron.ini" не существует, создаем его и
+                           // записываем данные
+          break;
+        case 4:
+          SetPinToPin(); // Если файл "pintopin.ini" не существует, создаем его
+                         // и записываем данные
+          break;
+        case 5:
+          SetOneWireConfig(); // Если файл "onewire.ini" не существует, создаем
+                              // его и записываем данные
+          break;
+        default:
+          printf("xQueueReceive get wrong data! \r\n");
+          break;
+        }
+        //				printf("xQueueReceive number: %u\n",
+        // usbnum);
+      }
+      break;
+    default:
+      // printf("Wrong data! \r\n");
+      break;
+    }
+    osDelay(1);
+  }
   /* USER CODE END 5 */
 }
 
 /* USER CODE BEGIN Header_StartWebServerTask */
 /**
-* @brief Function implementing the WebServerTask thread.
-* @param argument: Not used
-* @retval None
-*/
+ * @brief Function implementing the WebServerTask thread.
+ * @param argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_StartWebServerTask */
-void StartWebServerTask(void *argument)
-{
+void StartWebServerTask(void *argument) {
   /* USER CODE BEGIN StartWebServerTask */
-    ulTaskNotifyTake(0, portMAX_DELAY);
-    mg_log_set(MG_LL_NONE); // Установлен уровень логирования INFO для отладки
-    if (!quick_network_check()) { // Проверка подключен LAN провод или нет.
-        printf("Network link down - Web server not started");
-        vTaskDelete(NULL);
-        return;
+  ulTaskNotifyTake(0, portMAX_DELAY);
+  mg_log_set(MG_LL_NONE); // Установлен уровень логирования INFO для отладки
+  if (!quick_network_check()) { // Проверка подключен LAN провод или нет.
+    printf("Network link down - Web server not started");
+    vTaskDelete(NULL);
+    return;
+  } else {
+    onlineFlg = 1;
+  }
+
+  /* Инициализация настроек HTTPS */
+  if (SetSettings.usehttps == 1) {
+    if (!initialize_https_settings()) {
+      Error_Handler();
+    }
+  }
+
+  // Инициализация TLS параметров
+  struct mg_tcpip_if mif = {.mac = GENERATE_LOCALLY_ADMINISTERED_MAC(),
+                            .ip = 0,
+                            .mask = 0,
+                            .gw = 0,
+                            .driver = &mg_tcpip_driver_stm32f,
+                            .driver_data = NULL};
+
+  MG_INFO(("Initial Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+           mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4],
+           mif.mac[5]));
+
+  struct mg_mgr *mgr =
+      (struct mg_mgr *)malloc(sizeof(struct mg_mgr)); // Выделяем память для mgr
+  mg_mgr_init(mgr);                                   // Инициализируем менеджер
+
+  // Настройка MQTT
+  char mqtt_url[35];
+  if (SetSettings.check_mqtt) {
+    int result = snprintf(mqtt_url, sizeof(mqtt_url), "http://%d.%d.%d.%d:%d",
+                          SetSettings.mqtt_hst0, SetSettings.mqtt_hst1,
+                          SetSettings.mqtt_hst2, SetSettings.mqtt_hst3,
+                          SetSettings.mqtt_prt);
+    if (result < 0 || result >= sizeof(mqtt_url)) {
+      printf("Error: MQTT URL truncated or formatting error\n");
     } else {
-        onlineFlg = 1;
+      set_mqtt_url(mqtt_url);
+      MG_INFO(("MQTT URL set: %s", mqtt_url)); // Добавляем лог для проверки
     }
+  } else {
+    MG_INFO(("MQTT is disabled in settings"));
+  }
+  set_mqtt_topic(SetSettings.txmqttop); // Zagotovka
 
-    /* Инициализация настроек HTTPS */
-	if (SetSettings.usehttps == 1) {
-	    if (!initialize_https_settings()) {
-	        Error_Handler();
-	    }
-	}
+  //    // UUID перед генерацией MAC-адреса
+  //    MG_INFO(("UUID before MAC generation:
+  //    %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X\r\n",
+  //             UUID[0], UUID[1], UUID[2], UUID[3], UUID[4], UUID[5],
+  //             UUID[6], UUID[7], UUID[8], UUID[9], UUID[10], UUID[11]));
 
-    // Инициализация TLS параметров
-    struct mg_tcpip_if mif = {
-        .mac = GENERATE_LOCALLY_ADMINISTERED_MAC(),
-        .ip = 0,
-        .mask = 0,
-        .gw = 0,
-        .driver = &mg_tcpip_driver_stm32f,
-        .driver_data = NULL
-    };
+  // Initialise Mongoose network stack
+  struct mg_tcpip_driver_stm32f_data driver_data = {.mdc_cr = 4};
+  mif.driver_data = &driver_data;
+  MG_INFO(("MAC before static_or_dynamic_ip: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+           mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4],
+           mif.mac[5]));
 
-    MG_INFO(("Initial Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
-             mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]));
-
-    struct mg_mgr *mgr = (struct mg_mgr *)malloc(sizeof(struct mg_mgr)); // Выделяем память для mgr
-    mg_mgr_init(mgr); // Инициализируем менеджер
-
-    // Настройка MQTT
-    char mqtt_url[35];
-    if (SetSettings.check_mqtt) {
-        int result = snprintf(mqtt_url, sizeof(mqtt_url), "http://%d.%d.%d.%d:%d",
-                              SetSettings.mqtt_hst0, SetSettings.mqtt_hst1,
-                              SetSettings.mqtt_hst2, SetSettings.mqtt_hst3,
-                              SetSettings.mqtt_prt);
-        if (result < 0 || result >= sizeof(mqtt_url)) {
-            printf("Error: MQTT URL truncated or formatting error\n");
-        } else {
-            set_mqtt_url(mqtt_url);
-            MG_INFO(("MQTT URL set: %s", mqtt_url)); // Добавляем лог для проверки
-        }
-    } else {
-        MG_INFO(("MQTT is disabled in settings"));
+  void static_or_dynamic_ip(struct mg_tcpip_if * mif,
+                            struct dbSettings * config) {
+    if (config->check_ip == 1) { // DHCP
+      MG_INFO(("2 - Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+               mif->mac[0], mif->mac[1], mif->mac[2], mif->mac[3], mif->mac[4],
+               mif->mac[5]));
+    } else { // Статический IP
+      mif->ip = mg_htonl(MG_U32(config->ip_addr0, config->ip_addr1,
+                                config->ip_addr2, config->ip_addr3));
+      mif->mask = mg_htonl(MG_U32(config->sb_mask0, config->sb_mask1,
+                                  config->sb_mask2, config->sb_mask3));
+      mif->gw = mg_htonl(MG_U32(config->gateway0, config->gateway1,
+                                config->gateway2, config->gateway3));
     }
-    set_mqtt_topic(SetSettings.txmqttop); // Zagotovka
+  }
+  static_or_dynamic_ip(&mif, &SetSettings);
 
-//    // UUID перед генерацией MAC-адреса
-//    MG_INFO(("UUID before MAC generation: %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X\r\n",
-//             UUID[0], UUID[1], UUID[2], UUID[3], UUID[4], UUID[5],
-//             UUID[6], UUID[7], UUID[8], UUID[9], UUID[10], UUID[11]));
+  mg_tcpip_init(mgr, &mif);
 
-    // Initialise Mongoose network stack
-    struct mg_tcpip_driver_stm32f_data driver_data = { .mdc_cr = 4 };
-    mif.driver_data = &driver_data;
-    MG_INFO(("MAC before static_or_dynamic_ip: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
-             mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]));
+  MG_INFO(("MAC: %M. Waiting for IP...", mg_print_mac, mif.mac));
+  while (mif.state != MG_TCPIP_STATE_READY) {
+    mg_mgr_poll(mgr, 0);
+  }
 
-    void static_or_dynamic_ip(struct mg_tcpip_if *mif, struct dbSettings *config) {
-        if (config->check_ip == 1) { // DHCP
-            MG_INFO(("2 - Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
-                     mif->mac[0], mif->mac[1], mif->mac[2], mif->mac[3], mif->mac[4], mif->mac[5]));
-        } else {  // Статический IP
-            mif->ip = mg_htonl(MG_U32(config->ip_addr0, config->ip_addr1, config->ip_addr2, config->ip_addr3));
-            mif->mask = mg_htonl(MG_U32(config->sb_mask0, config->sb_mask1, config->sb_mask2, config->sb_mask3));
-            mif->gw = mg_htonl(MG_U32(config->gateway0, config->gateway1, config->gateway2, config->gateway3));
-        }
-    }
-    static_or_dynamic_ip(&mif, &SetSettings);
+  web_init(mgr);
 
-    mg_tcpip_init(mgr, &mif);
-
-    MG_INFO(("MAC: %M. Waiting for IP...", mg_print_mac, mif.mac));
-    while (mif.state != MG_TCPIP_STATE_READY) {
-        mg_mgr_poll(mgr, 0);
-    }
-
-    web_init(mgr);
-
-    MG_INFO(("Starting event loop"));
-    /* Infinite loop */
-    for (;;) {
-         mg_mgr_poll(mgr, 1000);
-    }
-    mg_mgr_free(mgr);
-    free(mgr);
+  MG_INFO(("Starting event loop"));
+  /* Infinite loop */
+  for (;;) {
+    mg_mgr_poll(mgr, 1000);
+  }
+  mg_mgr_free(mgr);
+  free(mgr);
   /* USER CODE END StartWebServerTask */
 }
 
 /* USER CODE BEGIN Header_StartOutputTask */
 /**
-* @brief Function implementing the OutputTask thread.
-* @param argument: Not used
-* @retval None
-*/
+ * @brief Function implementing the OutputTask thread.
+ * @param argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_StartOutputTask */
-void StartOutputTask(void *argument)
-{
+void StartOutputTask(void *argument) {
   /* USER CODE BEGIN StartOutputTask */
-	ulTaskNotifyTake(0, portMAX_DELAY);
-//	printf("Start 'Output' task \r\n");
-	/* Infinite loop */
-	for (;;) {
-		if (xQueueReceive(outputQueueHandle, &data_pin, portMAX_DELAY) == pdTRUE) {
-			if (data_pin.id >= 0 && data_pin.id < NUMPIN) {// data_pin.id - это ID Devices а не Switch!
-				switch (data_pin.action) {
-				case 0:
-					HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name, PinsInfo[data_pin.id].hal_pin, GPIO_PIN_RESET);
-//					printf("case 0: %d-%d  \r\n", (int) data_pin.id, (int) data_pin.action);
-					break;
-				case 1:
-					HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name, PinsInfo[data_pin.id].hal_pin, GPIO_PIN_SET);
-//					printf("case 1: %d-%d  \r\n", (int) data_pin.id, (int) data_pin.action);
-					break;
-				case 2:
-					HAL_GPIO_TogglePin(PinsInfo[data_pin.id].gpio_name, PinsInfo[data_pin.id].hal_pin);
-//					printf("%d-%d  \r\n", (int) data_pin.id, (int) data_pin.action);
-					break;
-				default:
-					printf("Invalid action: %d\r\n", data_pin.action);
-					break;
-				}
-			} else {
-				printf("Invalid pin number: %d\r\n", data_pin.id);
-			}
-		}
-		osDelay(1);
-	}
+  ulTaskNotifyTake(0, portMAX_DELAY);
+  //	printf("Start 'Output' task \r\n");
+  /* Infinite loop */
+  for (;;) {
+    if (xQueueReceive(outputQueueHandle, &data_pin, portMAX_DELAY) == pdTRUE) {
+      if (data_pin.id >= 0 &&
+          data_pin.id < NUMPIN) { // data_pin.id - это ID Devices а не Switch!
+        switch (data_pin.action) {
+        case 0:
+          HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name,
+                            PinsInfo[data_pin.id].hal_pin, GPIO_PIN_RESET);
+          //					printf("case 0: %d-%d  \r\n",
+          //(int) data_pin.id, (int) data_pin.action);
+          break;
+        case 1:
+          HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name,
+                            PinsInfo[data_pin.id].hal_pin, GPIO_PIN_SET);
+          //					printf("case 1: %d-%d  \r\n",
+          //(int) data_pin.id, (int) data_pin.action);
+          break;
+        case 2:
+          HAL_GPIO_TogglePin(PinsInfo[data_pin.id].gpio_name,
+                             PinsInfo[data_pin.id].hal_pin);
+          //					printf("%d-%d  \r\n", (int)
+          // data_pin.id, (int) data_pin.action);
+          break;
+        default:
+          printf("Invalid action: %d\r\n", data_pin.action);
+          break;
+        }
+      } else {
+        printf("Invalid pin number: %d\r\n", data_pin.id);
+      }
+    }
+    osDelay(1);
+  }
   /* USER CODE END StartOutputTask */
 }
 
 /* USER CODE BEGIN Header_StartCronTask */
 /**
-* @brief Function implementing the CronTask thread.
-* @param argument: Not used
-* @retval None
-*/
+ * @brief Function implementing the CronTask thread.
+ * @param argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_StartCronTask */
-void StartCronTask(void *argument)
-{
+void StartCronTask(void *argument) {
   /* USER CODE BEGIN StartCronTask */
-	ulTaskNotifyTake(0, portMAX_DELAY);
-	init_offline_time();
-	static lwdtc_cron_ctx_t cron_ctxs[MAXSIZE];
-	int i = 0;
-	char str[40] = { 0 };
-	int cfg_tasks = MAXSIZE;  // Количество возможно настроенных cron задач
-	time_t base_timestamp;
-	static uint8_t t_printd = 0;
+  ulTaskNotifyTake(0, portMAX_DELAY);
+  init_offline_time();
+  static lwdtc_cron_ctx_t cron_ctxs[MAXSIZE];
+  int i = 0;
+  char str[40] = {0};
+  int cfg_tasks = MAXSIZE; // Количество возможно настроенных cron задач
+  time_t base_timestamp;
+  static uint8_t t_printd = 0;
 
-	base_timestamp = initializeTime();  // Инициализация базового времени
+  base_timestamp = initializeTime(); // Инициализация базового времени
 
-	/* Define context for CRON, used to parse data to */
-	size_t fail_index = 0;
+  /* Define context for CRON, used to parse data to */
+  size_t fail_index = 0;
 
-	taskENTER_CRITICAL();
-	if (lwdtc_cron_parse_multi(cron_ctxs, dbCrontxt, MAXSIZE, &fail_index) != lwdtcOK) {// Parse all cron strings
-		printf("Failed to parse cron at index %d\r\n", (int) fail_index);
-	}
-	taskEXIT_CRITICAL();
-	printf("CRONs parsed and ready to go\r\n");
-	/* Infinite loop */
-	for (;;) {
-		if (s_boot_timestamp != 0) {
-			cronetime = (time_t) (s_boot_timestamp / 1000) + (mg_millis() / 1000) + (time_t) (SetSettings.timezone * 3600);
+  taskENTER_CRITICAL();
+  if (lwdtc_cron_parse_multi(cron_ctxs, dbCrontxt, MAXSIZE, &fail_index) !=
+      lwdtcOK) { // Parse all cron strings
+    printf("Failed to parse cron at index %d\r\n", (int)fail_index);
+  }
+  taskEXIT_CRITICAL();
+  printf("CRONs parsed and ready to go\r\n");
+  /* Infinite loop */
+  for (;;) {
+    if (s_boot_timestamp != 0) {
+      cronetime = (time_t)(s_boot_timestamp / 1000) + (mg_millis() / 1000) +
+                  (time_t)(SetSettings.timezone * 3600);
 
-			if (!onlineFlg) {  // Оффлайн режим:
-				cronetime = base_timestamp + (mg_millis() / 1000);
-			} else { // Онлайн режим: используем время от NTP
-				cronetime = (time_t) (s_boot_timestamp / 1000) + (mg_millis() / 1000) + (time_t) (SetSettings.timezone * 3600);
-			}
+      if (!onlineFlg) { // Оффлайн режим:
+        cronetime = base_timestamp + (mg_millis() / 1000);
+      } else { // Онлайн режим: используем время от NTP
+        cronetime = (time_t)(s_boot_timestamp / 1000) + (mg_millis() / 1000) +
+                    (time_t)(SetSettings.timezone * 3600);
+      }
 
-			if (!t_printd && cronetime != 0) {
-				timez = localtime(&cronetime);
-				taskENTER_CRITICAL();
-				if (!onlineFlg) {
-					printf( "[OFFLINE MODE] Initial Date:%02d.%02d.%04d Time:%02d:%02d:%02d\r\n",
-							timez->tm_mday, timez->tm_mon + 1,
-							timez->tm_year + 1900, timez->tm_hour,
-							timez->tm_min, timez->tm_sec);
-				} else {
-					printf( "[ONLINE MODE] Initial Date:%02d.%02d.%04d Time:%02d:%02d:%02d\r\n",
-							timez->tm_mday, timez->tm_mon + 1,
-							timez->tm_year + 1900, timez->tm_hour,
-							timez->tm_min, timez->tm_sec);
-				}
-				taskEXIT_CRITICAL();
-				t_printd = 1;
-			}
+      if (!t_printd && cronetime != 0) {
+        timez = localtime(&cronetime);
+        taskENTER_CRITICAL();
+        if (!onlineFlg) {
+          printf("[OFFLINE MODE] Initial Date:%02d.%02d.%04d "
+                 "Time:%02d:%02d:%02d\r\n",
+                 timez->tm_mday, timez->tm_mon + 1, timez->tm_year + 1900,
+                 timez->tm_hour, timez->tm_min, timez->tm_sec);
+        } else {
+          printf("[ONLINE MODE] Initial Date:%02d.%02d.%04d "
+                 "Time:%02d:%02d:%02d\r\n",
+                 timez->tm_mday, timez->tm_mon + 1, timez->tm_year + 1900,
+                 timez->tm_hour, timez->tm_min, timez->tm_sec);
+        }
+        taskEXIT_CRITICAL();
+        t_printd = 1;
+      }
 
-			if (cronetime != cronetime_old) {
-				cronetime_old = cronetime;
-				timez = localtime(&cronetime);
-				timez->tm_mon += 1;
+      if (cronetime != cronetime_old) {
+        cronetime_old = cronetime;
+        timez = localtime(&cronetime);
+        timez->tm_mon += 1;
 
-				// Эти переменные нужны для задачи ServiceTask!
-			    if (timez->tm_mday != day) {  // Если текущий день отличается от сохраненного
-			        year = timez->tm_year + 1900;
-			        month = timez->tm_mon; // Не добавляем 1, так как уже сделано выше
-			        day = timez->tm_mday;
-			    }
+        // Эти переменные нужны для задачи ServiceTask!
+        if (timez->tm_mday !=
+            day) { // Если текущий день отличается от сохраненного
+          year = timez->tm_year + 1900;
+          month = timez->tm_mon; // Не добавляем 1, так как уже сделано выше
+          day = timez->tm_mday;
+        }
 
-//				printf("CronTask: today's date: %02d.%02d.%d\n", day, month, year);
-				// Обработка задач с фиксированным временем
-				i = 0;
-				while (i < cfg_tasks) {
-					if (cronetime >= dbCrontxt[i].ptime && dbCrontxt[i].ptime != 0) {
-						strcpy(str, dbCrontxt[i].activ);
-						parse_string(str, cronetime_old, i, 1);
-						dbCrontxt[i].ptime = 0;
-					}
-					i++;
-				}
-				// Проверка CRON выражений
-				i = 0;
-				while (i < LWDTC_ARRAYSIZE(cron_ctxs)) {
-					if (lwdtc_cron_is_valid_for_time(timez, cron_ctxs, &i) == lwdtcOK) {
-						strcpy(str, dbCrontxt[i].activ);
-						parse_string(str, cronetime_old, i, 0);
-					}
-					i++;
-				}
-				timez->tm_mon -= 1;
-			}
-		}
-		osDelay(1);
-	}
+        //				printf("CronTask: today's date:
+        //%02d.%02d.%d\n", day, month, year);
+        // Обработка задач с фиксированным временем
+        i = 0;
+        while (i < cfg_tasks) {
+          if (cronetime >= dbCrontxt[i].ptime && dbCrontxt[i].ptime != 0) {
+            strcpy(str, dbCrontxt[i].activ);
+            parse_string(str, cronetime_old, i, 1);
+            dbCrontxt[i].ptime = 0;
+          }
+          i++;
+        }
+        // Проверка CRON выражений
+        i = 0;
+        while (i < LWDTC_ARRAYSIZE(cron_ctxs)) {
+          if (lwdtc_cron_is_valid_for_time(timez, cron_ctxs, &i) == lwdtcOK) {
+            strcpy(str, dbCrontxt[i].activ);
+            parse_string(str, cronetime_old, i, 0);
+          }
+          i++;
+        }
+        timez->tm_mon -= 1;
+      }
+    }
+    osDelay(1);
+  }
   /* USER CODE END StartCronTask */
 }
 
 /* USER CODE BEGIN Header_StartInputTask */
 /**
-* @brief Function implementing the InputTask thread.
-* @param argument: Not used
-* @retval None
-*/
+ * @brief Function implementing the InputTask thread.
+ * @param argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_StartInputTask */
-void StartInputTask(void *argument)
-{
+void StartInputTask(void *argument) {
   /* USER CODE BEGIN StartInputTask */
-	ulTaskNotifyTake(0, portMAX_DELAY);
-//	printf("Start 'Input' task \r\n");
-	uint8_t pinStates[NUMPIN] = { 0 };
-	uint32_t pinTimes[NUMPIN] = { 0 };
-	uint32_t millis;
-	uint8_t pinLevel[NUMPIN] = { 0 };
-//    char mqtt_payload[20] = {0};
-//    char mqtt_topic[20] = {0};
-	osDelay(1000);
-	InitMultibutton();
+  ulTaskNotifyTake(0, portMAX_DELAY);
+  //	printf("Start 'Input' task \r\n");
+  uint8_t pinStates[NUMPIN] = {0};
+  uint32_t pinTimes[NUMPIN] = {0};
+  uint32_t millis;
+  uint8_t pinLevel[NUMPIN] = {0};
+  //    char mqtt_payload[20] = {0};
+  //    char mqtt_topic[20] = {0};
+  osDelay(1000);
+  InitMultibutton();
   /* Infinite loop */
-  for(;;)
-  {
-		millis = HAL_GetTick();
-		for (uint8_t i = 0; i < NUMPIN; i++) {
-			if (PinsConf[i].topin == 1 && PinsConf[i].act == 1){// BUTTON
-				if ((millis - pinTimes[i]) >= 5) {
-					pinTimes[i] = millis;
-					button_ticks(&button[i]);
-				}
-			}
-			/*
-			// INPUT Button GPIO_PULLDOWN
-			if (PinsConf[i].topin == 1 && PinsConf[i].ptype == 2) { // Для 'button'
-				pinStates[i] = HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
-				if (pinStates[i] == 1 && (millis - pinTimes[i]) >= 200) {
-					pinTimes[i] = millis;
+  for (;;) {
+    millis = HAL_GetTick();
+    for (uint8_t i = 0; i < NUMPIN; i++) {
+      if (PinsConf[i].topin == 1 && PinsConf[i].act == 1) { // BUTTON
+        if ((millis - pinTimes[i]) >= 5) {
+          pinTimes[i] = millis;
+          button_ticks(&button[i]);
+        }
+      }
+      /*
+      // INPUT Button GPIO_PULLDOWN
+      if (PinsConf[i].topin == 1 && PinsConf[i].ptype == 2) { // Для 'button'
+              pinStates[i] = HAL_GPIO_ReadPin(PinsInfo[i].gpio_name,
+      PinsInfo[i].hal_pin); if (pinStates[i] == 1 && (millis - pinTimes[i]) >=
+      200) { pinTimes[i] = millis;
 
-					// OUTPUT (вынести в отдельную функцию)
-					for (uint8_t a = 0; a < NUMPINLINKS; a++) {
-						if (PinsLinks[a].idin == i) {
-							data_pin.id = PinsLinks[a].idout;
-							data_pin.action = 2;
-							xQueueSend(outputQueueHandle, (void* ) &data_pin, 0);
-						}
-					}
-				}
-			}
-			// INPUT Button GPIO_PULLUP
-			if (PinsConf[i].topin == 1 && PinsConf[i].ptype == 1) { // Для 'button'
-				pinStates[i] = HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
-				if (pinStates[i] == 0 && (millis - pinTimes[i]) >= 200) {
-					pinTimes[i] = millis;
+                      // OUTPUT (вынести в отдельную функцию)
+                      for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+                              if (PinsLinks[a].idin == i) {
+                                      data_pin.id = PinsLinks[a].idout;
+                                      data_pin.action = 2;
+                                      xQueueSend(outputQueueHandle, (void* )
+      &data_pin, 0);
+                              }
+                      }
+              }
+      }
+      // INPUT Button GPIO_PULLUP
+      if (PinsConf[i].topin == 1 && PinsConf[i].ptype == 1) { // Для 'button'
+              pinStates[i] = HAL_GPIO_ReadPin(PinsInfo[i].gpio_name,
+      PinsInfo[i].hal_pin); if (pinStates[i] == 0 && (millis - pinTimes[i]) >=
+      200) { pinTimes[i] = millis;
 
-					// OUTPUT (вынести в отдельную функцию)
-					for (uint8_t a = 0; a < NUMPINLINKS; a++) {
-						if (PinsLinks[a].idin == i) {
-							data_pin.id = PinsLinks[a].idout;
-							data_pin.action = 2;
-							xQueueSend(outputQueueHandle, (void* ) &data_pin, 0);
-						}
-					}
-				}
-			}
+                      // OUTPUT (вынести в отдельную функцию)
+                      for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+                              if (PinsLinks[a].idin == i) {
+                                      data_pin.id = PinsLinks[a].idout;
+                                      data_pin.action = 2;
+                                      xQueueSend(outputQueueHandle, (void* )
+      &data_pin, 0);
+                              }
+                      }
+              }
+      }
 
-			*/
-			// INPUT Switch
-			if (PinsConf[i].topin == 3) {
-				pinStates[i] = HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
-				    if(pinStates[i] != GPIO_PIN_RESET && pinStates[i] != GPIO_PIN_SET) {
-				        printf("Error reading GPIO pin %d\r\n", i);
-				        continue;
-				    }
-				// Инвертируем логику для pull-up выключателей
-				// Когда выключатель замкнут (нажат) - на входе 0
-			    if (pinStates[i] == 0 && (millis - pinTimes[i]) >= 200 && pinLevel[i] != pinStates[i]) {
-			        pinLevel[i] = pinStates[i];
-			        pinTimes[i] = millis;
-			        processPins(i, 1);// Отправляем 1, т.к. выключатель включен
-			        PinsConf[i].onoff = 1;
-			        // Заполняем структуру для отправки в mqtt очередь.
-			        memset(&mqttMsg, 0, sizeof(MqttMessage_t));
-			        mqttMsg.command = 2;
-			        mqttMsg.deviceId = i;
-			        mqttMsg.state = 1;//ON
+      */
+      // INPUT Switch
+      if (PinsConf[i].topin == 3) {
+        pinStates[i] =
+            HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
+        if (pinStates[i] != GPIO_PIN_RESET && pinStates[i] != GPIO_PIN_SET) {
+          printf("Error reading GPIO pin %d\r\n", i);
+          continue;
+        }
+        // Инвертируем логику для pull-up выключателей
+        // Когда выключатель замкнут (нажат) - на входе 0
+        if (pinStates[i] == 0 && (millis - pinTimes[i]) >= 200 &&
+            pinLevel[i] != pinStates[i]) {
+          pinLevel[i] = pinStates[i];
+          pinTimes[i] = millis;
+          processPins(i, 1); // Отправляем 1, т.к. выключатель включен
+          PinsConf[i].onoff = 1;
+          // Заполняем структуру для отправки в mqtt очередь.
+          memset(&mqttMsg, 0, sizeof(MqttMessage_t));
+          mqttMsg.command = 2;
+          mqttMsg.deviceId = i;
+          mqttMsg.state = 1; // ON
 
-//			        printf("InputTask: Before Queue - Command:%d ID:%d State:%d\r\n\n", mqttMsg.command, mqttMsg.deviceId, mqttMsg.state);
+          //			        printf("InputTask: Before Queue -
+          // Command:%d ID:%d State:%d\r\n\n", mqttMsg.command,
+          // mqttMsg.deviceId, mqttMsg.state);
 
-			        // Отправляем в очередь
-			        if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-			            printf("Error sending to MQTT queue!\r\n");
-			        } else {
-//			            printf("InputTask: Successfully sent to queue\r\n");
-			        }
-			    }
-			    // Когда выключатель разомкнут (отжат) - на входе 1
-			    if (pinStates[i] == 1 && (millis - pinTimes[i]) >= 200 && pinLevel[i] != pinStates[i]) {
-			        pinLevel[i] = pinStates[i];
-			        pinTimes[i] = millis;
-			        processPins(i, 0);// Отправляем 0, т.к. выключатель выключен
-			        PinsConf[i].onoff = 0;
-			        // Заполняем структуру для отправки в mqtt очередь.
-			        memset(&mqttMsg, 0, sizeof(MqttMessage_t));  // Очищаем структуру
-			        mqttMsg.command = 2;
-			        mqttMsg.deviceId = i;
-			        mqttMsg.state = 0;//OFF
+          // Отправляем в очередь
+          if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
+            printf("Error sending to MQTT queue!\r\n");
+          } else {
+            //			            printf("InputTask: Successfully sent
+            // to queue\r\n");
+          }
+        }
+        // Когда выключатель разомкнут (отжат) - на входе 1
+        if (pinStates[i] == 1 && (millis - pinTimes[i]) >= 200 &&
+            pinLevel[i] != pinStates[i]) {
+          pinLevel[i] = pinStates[i];
+          pinTimes[i] = millis;
+          processPins(i, 0); // Отправляем 0, т.к. выключатель выключен
+          PinsConf[i].onoff = 0;
+          // Заполняем структуру для отправки в mqtt очередь.
+          memset(&mqttMsg, 0, sizeof(MqttMessage_t)); // Очищаем структуру
+          mqttMsg.command = 2;
+          mqttMsg.deviceId = i;
+          mqttMsg.state = 0; // OFF
 
-//			        printf("InputTask: Before Queue - Command:%d ID:%d State:%d\r\n", mqttMsg.command, mqttMsg.deviceId, mqttMsg.state);
+          //			        printf("InputTask: Before Queue -
+          // Command:%d ID:%d State:%d\r\n", mqttMsg.command, mqttMsg.deviceId,
+          // mqttMsg.state);
 
-			        // Отправляем в очередь
-			        if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-			            printf("Error sending to MQTT queue!\r\n");
-			        } else {
-//			            printf("InputTask: Successfully sent to queue\r\n");
-			        }
-			    }
-			}
-		}
-		osDelay(10);
-	}
+          // Отправляем в очередь
+          if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
+            printf("Error sending to MQTT queue!\r\n");
+          } else {
+            //			            printf("InputTask: Successfully sent
+            // to queue\r\n");
+          }
+        }
+      }
+    }
+    osDelay(10);
+  }
   /* USER CODE END StartInputTask */
 }
 
 /* USER CODE BEGIN Header_StartEncoderTask */
 /**
-* @brief Function implementing the EncoderTask thread.
-* @param argument: Not used
-* @retval None
-*/
+ * @brief Function implementing the EncoderTask thread.
+ * @param argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_StartEncoderTask */
-void StartEncoderTask(void *argument)
-{
+void StartEncoderTask(void *argument) {
   /* USER CODE BEGIN StartEncoderTask */
-    ulTaskNotifyTake(0, portMAX_DELAY);
-    uint8_t idpinb = 0;
-    uint32_t millis;
-    uint32_t pinTimes[NUMPIN] = { 0 };
-    uint8_t prev_A[NUMPIN] = {0,};
-    uint8_t prev_B[NUMPIN] =  {0,};
-    uint8_t id = 0;
-    uint8_t a = 0;
-    uint8_t idpwm = 0;
-    uint16_t lstvalue[NUMPIN] = {0,};  //Ммассив для хранения последних значений dvalue
+  ulTaskNotifyTake(0, portMAX_DELAY);
+  uint8_t idpinb = 0;
+  uint32_t millis;
+  uint32_t pinTimes[NUMPIN] = {0};
+  uint8_t prev_A[NUMPIN] = {
+      0,
+  };
+  uint8_t prev_B[NUMPIN] = {
+      0,
+  };
+  uint8_t id = 0;
+  uint8_t a = 0;
+  uint8_t idpwm = 0;
+  uint16_t lstvalue[NUMPIN] = {
+      0,
+  }; // Ммассив для хранения последних значений dvalue
   /* Infinite loop */
-  for(;;)
-  {
-        millis = HAL_GetTick();
-        for (id = 0; id < NUMPIN; id++) {
-            // INPUT Encoder A
-            if (PinsConf[id].topin == 8) {   // EncodrerA
-                idpinb = PinsConf[id].encoderb;// id EncodrerB
-                if (idpinb != 0) {
-                    if (millis - pinTimes[id] >= DEBOUNCE_DELAY) { // игнорируем дребезг
-                        PinsConf[id].on = HAL_GPIO_ReadPin(PinsInfo[id].gpio_name,PinsInfo[id].hal_pin);// Cчитываем состояние "EncodrerA".
-                        osDelay(3);
-                        PinsConf[idpinb].on = HAL_GPIO_ReadPin(PinsInfo[idpinb].gpio_name,PinsInfo[idpinb].hal_pin);// Cчитываем состояние "EncodrerB".
-                        if (PinsConf[id].on != prev_A[id] || PinsConf[idpinb].on != prev_B[idpinb]) { //Если состояние изменилось
-                            pinTimes[id] = millis; // Сбрасываем дребезг
-                            if (PinsConf[id].on == 1 && PinsConf[idpinb].on == 0) {// Узнаем направление вращения энкодера.
-//                                printf("ID:%d  A = %d & B = %d\r\n",id, PinsConf[id].on, PinsConf[idpinb].on);
-                                for (a = 0; a < NUMPINLINKS; a++) {// Перебираем структуру "PinsLinks" на совпадение!
-                                    if (PinsLinks[a].idin == id) {// Если нашли "EncodrerA".
-                                    	idpwm = PinsLinks[a].idout;// то узнаем id "EncodrerB".
-                                        if (PinsConf[idpwm].topin == 5) {// PWM
-                                            // Проверяем, изменилось ли значение dvalue из модального окна.
-                                            if (PinsConf[idpwm].dvalue != lstvalue[idpwm]) {
-                                            	lstvalue[idpwm] = PinsConf[idpwm].dvalue;
-                                            } else {
-                                                PinsConf[idpwm].dvalue -= 1;
-                                            }
-                                            if(PinsConf[idpwm].dvalue <= 0){
-                                                PinsConf[idpwm].dvalue = 0;
-                                            }
-                                            __HAL_TIM_SET_COMPARE(&htim[idpwm],PinsInfo[idpwm].tim_channel,PinsConf[idpwm].dvalue);
-                                            lstvalue[idpwm] = PinsConf[idpwm].dvalue;
-//                                            printf("PWM = %d\r\n", PinsConf[idpwm].dvalue);
-                                        }
-                                    }
-                                }
-                            } else if (PinsConf[id].on == 0 && PinsConf[idpinb].on == 1) {// Узнаем направление вращения энкодера.
-                                printf("ID:%d  A = %d & B = %d\r\n",id, PinsConf[id].on, PinsConf[idpinb].on);
-                                for (a = 0; a < NUMPINLINKS; a++) {// Перебираем структуру "PinsLinks" на совпадение!
-                                    if (PinsLinks[a].idin == id) {// Если нашли "EncodrerA".
-                                    	idpwm = PinsLinks[a].idout;// то узнаем "EncodrerB".
-                                        if (PinsConf[idpwm].topin == 5) {// PWM
-                                            // Проверяем, изменилось ли значение dvalue из модального окна.
-                                            if (PinsConf[idpwm].dvalue != lstvalue[idpwm]) {
-                                            	lstvalue[idpwm] = PinsConf[idpwm].dvalue;
-                                            } else {
-                                                PinsConf[idpwm].dvalue += 1;
-                                            }
-                                            if(PinsConf[idpwm].dvalue >= 100){
-                                                PinsConf[idpwm].dvalue = 100;
-                                            }
-                                            __HAL_TIM_SET_COMPARE(&htim[idpwm],PinsInfo[idpwm].tim_channel,PinsConf[idpwm].dvalue);
-                                            lstvalue[idpwm] = PinsConf[idpwm].dvalue;
-                                            printf("PWM = %d\r\n", PinsConf[idpwm].dvalue);
-                                        }
-                                    }
-                                }
-                            }
-                            prev_A[id] = PinsConf[id].on; //Сохраняем текущее значение "EncodrerA".
-                            prev_B[idpinb] = PinsConf[idpinb].on; //Сохраняем текущее значение "EncodrerB".
-                        }
+  for (;;) {
+    millis = HAL_GetTick();
+    for (id = 0; id < NUMPIN; id++) {
+      // INPUT Encoder A
+      if (PinsConf[id].topin == 8) {    // EncodrerA
+        idpinb = PinsConf[id].encoderb; // id EncodrerB
+        if (idpinb != 0) {
+          if (millis - pinTimes[id] >= DEBOUNCE_DELAY) { // игнорируем дребезг
+            PinsConf[id].on = HAL_GPIO_ReadPin(
+                PinsInfo[id].gpio_name,
+                PinsInfo[id].hal_pin); // Cчитываем состояние "EncodrerA".
+            osDelay(3);
+            PinsConf[idpinb].on = HAL_GPIO_ReadPin(
+                PinsInfo[idpinb].gpio_name,
+                PinsInfo[idpinb].hal_pin); // Cчитываем состояние "EncodrerB".
+            if (PinsConf[id].on != prev_A[id] ||
+                PinsConf[idpinb].on !=
+                    prev_B[idpinb]) { // Если состояние изменилось
+              pinTimes[id] = millis;  // Сбрасываем дребезг
+              if (PinsConf[id].on == 1 &&
+                  PinsConf[idpinb].on ==
+                      0) { // Узнаем направление вращения энкодера.
+                //                                printf("ID:%d  A = %d & B =
+                //                                %d\r\n",id, PinsConf[id].on,
+                //                                PinsConf[idpinb].on);
+                for (a = 0; a < NUMPINLINKS;
+                     a++) { // Перебираем структуру "PinsLinks" на совпадение!
+                  if (PinsLinks[a].idin == id) { // Если нашли "EncodrerA".
+                    idpwm = PinsLinks[a].idout;  // то узнаем id "EncodrerB".
+                    if (PinsConf[idpwm].topin == 5) { // PWM
+                      // Проверяем, изменилось ли значение dvalue из модального
+                      // окна.
+                      if (PinsConf[idpwm].dvalue != lstvalue[idpwm]) {
+                        lstvalue[idpwm] = PinsConf[idpwm].dvalue;
+                      } else {
+                        PinsConf[idpwm].dvalue -= 1;
+                      }
+                      if (PinsConf[idpwm].dvalue <= 0) {
+                        PinsConf[idpwm].dvalue = 0;
+                      }
+                      __HAL_TIM_SET_COMPARE(&htim[idpwm],
+                                            PinsInfo[idpwm].tim_channel,
+                                            PinsConf[idpwm].dvalue);
+                      lstvalue[idpwm] = PinsConf[idpwm].dvalue;
+                      //                                            printf("PWM
+                      //                                            = %d\r\n",
+                      //                                            PinsConf[idpwm].dvalue);
                     }
+                  }
                 }
+              } else if (PinsConf[id].on == 0 &&
+                         PinsConf[idpinb].on ==
+                             1) { // Узнаем направление вращения энкодера.
+                // printf("ID:%d  A = %d & B = %d\r\n", id, PinsConf[id].on,
+                //        PinsConf[idpinb].on);
+                for (a = 0; a < NUMPINLINKS;
+                     a++) { // Перебираем структуру "PinsLinks" на совпадение!
+                  if (PinsLinks[a].idin == id) {      // Если нашли "EncodrerA".
+                    idpwm = PinsLinks[a].idout;       // то узнаем "EncodrerB".
+                    if (PinsConf[idpwm].topin == 5) { // PWM
+                      // Проверяем, изменилось ли значение dvalue из модального
+                      // окна.
+                      if (PinsConf[idpwm].dvalue != lstvalue[idpwm]) {
+                        lstvalue[idpwm] = PinsConf[idpwm].dvalue;
+                      } else {
+                        PinsConf[idpwm].dvalue += 1;
+                      }
+                      if (PinsConf[idpwm].dvalue >= 100) {
+                        PinsConf[idpwm].dvalue = 100;
+                      }
+                      __HAL_TIM_SET_COMPARE(&htim[idpwm],
+                                            PinsInfo[idpwm].tim_channel,
+                                            PinsConf[idpwm].dvalue);
+                      lstvalue[idpwm] = PinsConf[idpwm].dvalue;
+                      // printf("PWM = %d\r\n", PinsConf[idpwm].dvalue);
+                    }
+                  }
+                }
+              }
+              prev_A[id] =
+                  PinsConf[id].on; // Сохраняем текущее значение "EncodrerA".
+              prev_B[idpinb] =
+                  PinsConf[idpinb]
+                      .on; // Сохраняем текущее значение "EncodrerB".
             }
+          }
         }
+      }
     }
+  }
   /* USER CODE END StartEncoderTask */
 }
 
 /* USER CODE BEGIN Header_StartMqttTask */
 /**
-* @brief Function implementing the mqttTask thread.
-* @param argument: Not used
-* @retval None
-*/
+ * @brief Function implementing the mqttTask thread.
+ * @param argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_StartMqttTask */
-void StartMqttTask(void *argument)
-{
+void StartMqttTask(void *argument) {
   /* USER CODE BEGIN StartMqttTask */
-	ulTaskNotifyTake(0, portMAX_DELAY);
-	MqttMessage_t rxMsg = { 0 };
-	BaseType_t status;
-//	uint8_t messagesWaiting = uxQueueMessagesWaiting(mqttQueueHandle);
-//	uint8_t emptySpaces = uxQueueSpacesAvailable(mqttQueueHandle);
-	/* Infinite loop */
-	for (;;) {
-		// Получаем данные из очереди
-		memset(&rxMsg, 0, sizeof(MqttMessage_t)); // Очищаем структуру перед получением
-		status = xQueueReceive(mqttQueueHandle, &rxMsg, pdMS_TO_TICKS(100));
-		if (status == pdPASS) {
-			switch (rxMsg.command) {
-			case 1:// DEVICE
-			    if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-			        if (check_mqtt_connection(s_conn)) {
-			            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-			            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-			            strcpy(mqtt_topic, "/device/");
+  ulTaskNotifyTake(0, portMAX_DELAY);
+  MqttMessage_t rxMsg = {0};
+  BaseType_t status;
+  //	uint8_t messagesWaiting = uxQueueMessagesWaiting(mqttQueueHandle);
+  //	uint8_t emptySpaces = uxQueueSpacesAvailable(mqttQueueHandle);
+  /* Infinite loop */
+  for (;;) {
+    // Получаем данные из очереди
+    memset(&rxMsg, 0,
+           sizeof(MqttMessage_t)); // Очищаем структуру перед получением
+    status = xQueueReceive(mqttQueueHandle, &rxMsg, pdMS_TO_TICKS(100));
+    if (status == pdPASS) {
+      switch (rxMsg.command) {
+      case 1: // DEVICE
+        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
+          if (check_mqtt_connection(s_conn)) {
+            memset(mqtt_topic, 0, sizeof(mqtt_topic));
+            memset(mqtt_payload, 0, sizeof(mqtt_payload));
+            strcpy(mqtt_topic, "/device/");
 
-//			            printf("Debug: PinsConf[1].sclick in MQTT task = '%s'\n", PinsConf[1].sclick);  // Отладка
+            //			            printf("Debug: PinsConf[1].sclick in
+            // MQTT task = '%s'\n", PinsConf[1].sclick);  // Отладка
 
-			            snprintf(mqtt_payload, sizeof(mqtt_payload), "DEVICE(s)/ACTION=%s", PinsConf[1].sclick);
+            snprintf(mqtt_payload, sizeof(mqtt_payload), "DEVICE(s)/ACTION=%s",
+                     PinsConf[1].sclick);
 
-//			            printf("Debug: Final MQTT payload = '%s'\n", mqtt_payload);  // Отладка
+            //			            printf("Debug: Final MQTT payload =
+            //'%s'\n", mqtt_payload);  // Отладка
 
-			            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-			        } else {
-			            if (onlineFlg != 0) {
-			                printf("Error: MQTT not connected\r\n");
-			            }
-			        }
-			    } else {
-			        printf("Error: MQTT settings not configured\r\n");
-			    }
-			    break;
-			case 2: // Switch
-				if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-					if (check_mqtt_connection(s_conn)) {
-						memset(mqtt_topic, 0, sizeof(mqtt_topic));
-						memset(mqtt_payload, 0, sizeof(mqtt_payload));
-						snprintf(mqtt_topic, sizeof(mqtt_topic), "/switch/"); // Формируем топик
-						snprintf(mqtt_payload, sizeof(mqtt_payload), "ID:%d=%s", rxMsg.deviceId, rxMsg.state ? "ON" : "OFF"); // Формируем payload
-						send_mqtt_message(s_conn, mqtt_topic, mqtt_payload); // Отправляем сообщение
-					} else {
-						if (onlineFlg != 0) {
-							printf("Error: MQTT not connected\r\n");
-						}
-					}
-				} else {
-					printf("Error: MQTT settings not configured\r\n");
-				}
-				break;
-			case 3: // BUTTON LONG_PRESS
-			case 4: // BUTTON SINGLE_CLICK
-			case 5: // BUTTON DOUBLE_CLICK
-				if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-					if (check_mqtt_connection(s_conn)) {
-						memset(mqtt_topic, 0, sizeof(mqtt_topic));
-						memset(mqtt_payload, 0, sizeof(mqtt_payload));
-						snprintf(mqtt_topic, sizeof(mqtt_topic), "/button/");// Формируем топик
-						// Формируем payload в зависимости от команды
-						switch (rxMsg.command) {
-						case 3: // LONG_PRESS
-							snprintf(mqtt_payload, sizeof(mqtt_payload),"ID=%d/LONG_PRESS/%s", rxMsg.deviceId,PinsConf[rxMsg.deviceId].lpress);
-							break;
-						case 4: // SINGLE_CLICK
-							snprintf(mqtt_payload, sizeof(mqtt_payload),"ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId,PinsConf[rxMsg.deviceId].sclick);
-							break;
-						case 5: // DOUBLE_CLICK
-							snprintf(mqtt_payload, sizeof(mqtt_payload),"ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId,PinsConf[rxMsg.deviceId].dclick);
-							break;
-						}
-						send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);// Отправляем сообщение
-					} else {
-						if (onlineFlg != 0) {
-							printf("Error: MQTT not connected\r\n");
-						}
-					}
-				} else {
-					printf("Error: MQTT settings not configured\r\n");
-				}
-				break;
-			case 6:// SECURITY
-//			    printf("Processing SECURITY message, deviceId: %d, state: %d\r\n", rxMsg.deviceId, rxMsg.state);
-			    if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-			        if (check_mqtt_connection(s_conn)) {
-			            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-			            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-			            snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
+            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+          } else {
+            if (onlineFlg != 0) {
+              printf("Error: MQTT not connected\r\n");
+            }
+          }
+        } else {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 2: // Switch
+        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
+          if (check_mqtt_connection(s_conn)) {
+            memset(mqtt_topic, 0, sizeof(mqtt_topic));
+            memset(mqtt_payload, 0, sizeof(mqtt_payload));
+            snprintf(mqtt_topic, sizeof(mqtt_topic),
+                     "/switch/"); // Формируем топик
+            snprintf(mqtt_payload, sizeof(mqtt_payload), "ID:%d=%s",
+                     rxMsg.deviceId,
+                     rxMsg.state ? "ON" : "OFF"); // Формируем payload
+            send_mqtt_message(s_conn, mqtt_topic,
+                              mqtt_payload); // Отправляем сообщение
+          } else {
+            if (onlineFlg != 0) {
+              printf("Error: MQTT not connected\r\n");
+            }
+          }
+        } else {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 3: // BUTTON LONG_PRESS
+      case 4: // BUTTON SINGLE_CLICK
+      case 5: // BUTTON DOUBLE_CLICK
+        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
+          if (check_mqtt_connection(s_conn)) {
+            memset(mqtt_topic, 0, sizeof(mqtt_topic));
+            memset(mqtt_payload, 0, sizeof(mqtt_payload));
+            snprintf(mqtt_topic, sizeof(mqtt_topic),
+                     "/button/"); // Формируем топик
+            // Формируем payload в зависимости от команды
+            switch (rxMsg.command) {
+            case 3: // LONG_PRESS
+              snprintf(mqtt_payload, sizeof(mqtt_payload),
+                       "ID=%d/LONG_PRESS/%s", rxMsg.deviceId,
+                       PinsConf[rxMsg.deviceId].lpress);
+              break;
+            case 4: // SINGLE_CLICK
+              snprintf(mqtt_payload, sizeof(mqtt_payload),
+                       "ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId,
+                       PinsConf[rxMsg.deviceId].sclick);
+              break;
+            case 5: // DOUBLE_CLICK
+              snprintf(mqtt_payload, sizeof(mqtt_payload),
+                       "ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId,
+                       PinsConf[rxMsg.deviceId].dclick);
+              break;
+            }
+            send_mqtt_message(s_conn, mqtt_topic,
+                              mqtt_payload); // Отправляем сообщение
+          } else {
+            if (onlineFlg != 0) {
+              printf("Error: MQTT not connected\r\n");
+            }
+          }
+        } else {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 6: // SECURITY
+              //			    printf("Processing SECURITY message,
+              // deviceId: %d, state: %d\r\n", rxMsg.deviceId, rxMsg.state);
+        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
+          if (check_mqtt_connection(s_conn)) {
+            memset(mqtt_topic, 0, sizeof(mqtt_topic));
+            memset(mqtt_payload, 0, sizeof(mqtt_payload));
+            snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
 
-			            snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick, PinsConf[rxMsg.deviceId].info);
+            snprintf(mqtt_payload, sizeof(mqtt_payload),
+                     "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId,
+                     PinsConf[rxMsg.deviceId].sclick,
+                     PinsConf[rxMsg.deviceId].info);
 
-//			            printf("Sending MQTT message: Topic=%s, Payload=%s\r\n", mqtt_topic, mqtt_payload);
+            //			            printf("Sending MQTT message:
+            // Topic=%s, Payload=%s\r\n", mqtt_topic, mqtt_payload);
 
-			            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-//			            printf("MQTT message sent\r\n");
-			        } else {
-						if (onlineFlg != 0) {
-							printf("Error: MQTT not connected\r\n");
-						}
-					}
-			    } else {
-			        printf("Error: MQTT settings not configured\r\n");
-			    }
-			    break;
-            case 7:// TIMER'S
-            	 if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-						if (check_mqtt_connection(s_conn)) {
+            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+            //			            printf("MQTT message sent\r\n");
+          } else {
+            if (onlineFlg != 0) {
+              printf("Error: MQTT not connected\r\n");
+            }
+          }
+        } else {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 7: // TIMER'S
+        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
+          if (check_mqtt_connection(s_conn)) {
 
-							memset(mqtt_topic, 0, sizeof(mqtt_topic));
-							memset(mqtt_payload, 0, sizeof(mqtt_payload));
+            memset(mqtt_topic, 0, sizeof(mqtt_topic));
+            memset(mqtt_payload, 0, sizeof(mqtt_payload));
 
-							strcpy(mqtt_topic, "/timer/");// Формируем топик
+            strcpy(mqtt_topic, "/timer/"); // Формируем топик
 
-							// Формируем payload по частям
-							strcpy(mqtt_payload, "TIMER/ID=");
-							char temp[16];
-							sprintf(temp, "%d", rxMsg.deviceId);
-							strcat(mqtt_payload, temp);
-							strcat(mqtt_payload, "/ACTION=");
-							strcat(mqtt_payload, dbCrontxt[rxMsg.deviceId].activ);
-							strcat(mqtt_payload, "/");
-							strcat(mqtt_payload, dbCrontxt[rxMsg.deviceId].info);
+            // Формируем payload по частям
+            strcpy(mqtt_payload, "TIMER/ID=");
+            char temp[16];
+            sprintf(temp, "%d", rxMsg.deviceId);
+            strcat(mqtt_payload, temp);
+            strcat(mqtt_payload, "/ACTION=");
+            strcat(mqtt_payload, dbCrontxt[rxMsg.deviceId].activ);
+            strcat(mqtt_payload, "/");
+            strcat(mqtt_payload, dbCrontxt[rxMsg.deviceId].info);
 
-							send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-						} else {
-							if (onlineFlg != 0) {
-								printf("Error: MQTT not connected\r\n");
-							}
-						}
-					} else {
-						printf("Error: MQTT settings not configured\r\n");
-					}
-					break;
-			case 8:// OnOff
-	           	 if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-							if (check_mqtt_connection(s_conn)) {
+            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+          } else {
+            if (onlineFlg != 0) {
+              printf("Error: MQTT not connected\r\n");
+            }
+          }
+        } else {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 8: // OnOff
+        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
+          if (check_mqtt_connection(s_conn)) {
 
-								memset(mqtt_topic, 0, sizeof(mqtt_topic));
-								memset(mqtt_payload, 0, sizeof(mqtt_payload));
+            memset(mqtt_topic, 0, sizeof(mqtt_topic));
+            memset(mqtt_payload, 0, sizeof(mqtt_payload));
 
-								strcpy(mqtt_topic, "/onoff/");// Формируем топик
+            strcpy(mqtt_topic, "/onoff/"); // Формируем топик
 
-								// Формируем payload по частям
-								strcpy(mqtt_payload, "ID=");
-								char temp[16];
-								sprintf(temp, "%d", rxMsg.deviceId);
-								strcat(mqtt_payload, temp);
-								strcat(mqtt_payload, "/OnOff=");
-								strcat(mqtt_payload, PinsConf[rxMsg.deviceId].onoff ? "ON" : "OFF");
-								strcat(mqtt_payload, "/");
-								strcat(mqtt_payload, PinsConf[rxMsg.deviceId].info);
+            // Формируем payload по частям
+            strcpy(mqtt_payload, "ID=");
+            char temp[16];
+            sprintf(temp, "%d", rxMsg.deviceId);
+            strcat(mqtt_payload, temp);
+            strcat(mqtt_payload, "/OnOff=");
+            strcat(mqtt_payload, PinsConf[rxMsg.deviceId].onoff ? "ON" : "OFF");
+            strcat(mqtt_payload, "/");
+            strcat(mqtt_payload, PinsConf[rxMsg.deviceId].info);
 
-								send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-							} else {
-								if (onlineFlg != 0) {
-									printf("Error: MQTT not connected\r\n");
-								}
-							}
-						} else {
-							printf("Error: MQTT settings not configured\r\n");
-						}
-						break;
-			default:
-				printf("mqttnum = %d \r\n", mqttnum);
-				break;
-			}
-//		printf("xQueueReceive number: %u\n", mqttnum);
-		}
-//		if(1){
-//		printf("Messages waiting: %d \r\n", messagesWaiting);
-//		printf("Empty spaces: %d \r\n", emptySpaces);
-//	    osDelay(1000);
-//		}
-		publish_ds18b20_changes(s_conn);
-		publish_dht22_changes(s_conn);
-		osDelay(100);
-	}
+            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+          } else {
+            if (onlineFlg != 0) {
+              printf("Error: MQTT not connected\r\n");
+            }
+          }
+        } else {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      default:
+        printf("mqttnum = %d \r\n", mqttnum);
+        break;
+      }
+      //		printf("xQueueReceive number: %u\n", mqttnum);
+    }
+    //		if(1){
+    //		printf("Messages waiting: %d \r\n", messagesWaiting);
+    //		printf("Empty spaces: %d \r\n", emptySpaces);
+    //	    osDelay(1000);
+    //		}
+    publish_ds18b20_changes(s_conn);
+    publish_dht22_changes(s_conn);
+    osDelay(100);
+  }
   /* USER CODE END StartMqttTask */
 }
 
 /* USER CODE BEGIN Header_StartDs18b20Task */
 /**
-* @brief Function implementing the ds18b20Task thread.
-* @param argument: Not used
-* @retval None
-*/
+ * @brief Function implementing the ds18b20Task thread.
+ * @param argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_StartDs18b20Task */
-void StartDs18b20Task(void *argument)
-{
+void StartDs18b20Task(void *argument) {
   /* USER CODE BEGIN StartDs18b20Task */
-	ulTaskNotifyTake(0, portMAX_DELAY);
-	uint8_t dscount = 0;
-	uint8_t owpinnum = 0;
+  ulTaskNotifyTake(0, portMAX_DELAY);
+  uint8_t dscount = 0;
+  uint8_t owpinnum = 0;
 
-	printf("\r\n[DEBUG] Searching for DS18B20 sensors...\r\n");
-	// Initialize configuration array
-	for (uint8_t i = 0; i < NUMPIN; i++) {
-		if (PinsConf[i].topin == 4) { // OneWire pin found
-			for (uint8_t j = 0; j < MAX_DS18B20_P; j++) {
-				if (ds18b20[j].id == i && ds18b20[j].typsensr == 1) {
-					if (dscount >= MAX_DS18B20_P) {
-						printf("[ERROR] Too many DS18B20 pins! Max: %d\r\n", MAX_DS18B20_P);
-						break;
-					}
-					ow_conf[owpinnum].OneWirePort = PinsInfo[i].gpio_name;
-					ow_conf[owpinnum].OneWirePin = PinsInfo[i].hal_pin;
-					snprintf(ds18b20[j].pin, sizeof(ds18b20[j].pin), "%s", PinsInfo[i].pins);
+  printf("\r\n[DEBUG] Searching for DS18B20 sensors...\r\n");
+  // Initialize configuration array
+  for (uint8_t i = 0; i < NUMPIN; i++) {
+    if (PinsConf[i].topin == 4) { // OneWire pin found
+      for (uint8_t j = 0; j < MAX_DS18B20_P; j++) {
+        if (ds18b20[j].id == i && ds18b20[j].typsensr == 1) {
+          if (dscount >= MAX_DS18B20_P) {
+            printf("[ERROR] Too many DS18B20 pins! Max: %d\r\n", MAX_DS18B20_P);
+            break;
+          }
+          ow_conf[owpinnum].OneWirePort = PinsInfo[i].gpio_name;
+          ow_conf[owpinnum].OneWirePin = PinsInfo[i].hal_pin;
+          snprintf(ds18b20[j].pin, sizeof(ds18b20[j].pin), "%s",
+                   PinsInfo[i].pins);
 
-					init_ds18b20(&ow_conf[owpinnum].OneWire, ow_conf[owpinnum].OneWirePort, ow_conf[owpinnum].OneWirePin, &ow_conf[owpinnum].owflag, &ow_conf[owpinnum].temp_cnt, ds18b20[j].id, j);
+          init_ds18b20(&ow_conf[owpinnum].OneWire,
+                       ow_conf[owpinnum].OneWirePort,
+                       ow_conf[owpinnum].OneWirePin, &ow_conf[owpinnum].owflag,
+                       &ow_conf[owpinnum].temp_cnt, ds18b20[j].id, j);
 
-					if (ow_conf[owpinnum].owflag && ow_conf[owpinnum].temp_cnt > 0) {
-						ds18b20[j].onoff = 1;
-						ds18b20[j].numsens = ow_conf[owpinnum].temp_cnt;
-						for (uint8_t k = 0; k < ds18b20[j].numsens; k++) {
-							ds18b20[j].sensors[k].valid = true;
-						}
-						dscount++;
-						owpinnum++;
-					}
-					break;
-				}
-			}
-		}
-	}
-	if (dscount != 0) {
-		printf("[DEBUG] Found DS18B20 pins: %d\r\n", dscount);
-	} else {
-		printf("[DEBUG] No DS18B20 pins found!\r\n");
-	}
-	/* Infinite loop */
-	for (;;) {
-		if (dscount != 0) {
-			for (uint8_t i = 0; i < MAX_DS18B20_P; i++) {
-				if (ds18b20[i].onoff && ow_conf[i].owflag) {
-					process_ds18b20(&ow_conf[i].OneWire, ow_conf[i].owflag, i);
-				}
-			}
-		}
-		osDelay(10);
-	}
+          if (ow_conf[owpinnum].owflag && ow_conf[owpinnum].temp_cnt > 0) {
+            ds18b20[j].onoff = 1;
+            ds18b20[j].numsens = ow_conf[owpinnum].temp_cnt;
+            for (uint8_t k = 0; k < ds18b20[j].numsens; k++) {
+              ds18b20[j].sensors[k].valid = true;
+            }
+            dscount++;
+            owpinnum++;
+          }
+          break;
+        }
+      }
+    }
+  }
+  if (dscount != 0) {
+    printf("[DEBUG] Found DS18B20 pins: %d\r\n", dscount);
+  } else {
+    printf("[DEBUG] No DS18B20 pins found!\r\n");
+  }
+  /* Infinite loop */
+  for (;;) {
+    if (dscount != 0) {
+      for (uint8_t i = 0; i < MAX_DS18B20_P; i++) {
+        if (ds18b20[i].onoff && ow_conf[i].owflag) {
+          process_ds18b20(&ow_conf[i].OneWire, ow_conf[i].owflag, i);
+        }
+      }
+    }
+    osDelay(10);
+  }
   /* USER CODE END StartDs18b20Task */
 }
 
 /* USER CODE BEGIN Header_StartDht22Task */
 /**
-* @brief Function implementing the dht22Task thread.
-* @param argument: Not used
-* @retval None
-*/
+ * @brief Function implementing the dht22Task thread.
+ * @param argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_StartDht22Task */
-void StartDht22Task(void *argument)
-{
+void StartDht22Task(void *argument) {
   /* USER CODE BEGIN StartDht22Task */
-	ulTaskNotifyTake(0, portMAX_DELAY);
-	uint8_t dhtcount = 0;
-	uint8_t owpinnum = 0;
+  ulTaskNotifyTake(0, portMAX_DELAY);
+  uint8_t dhtcount = 0;
+  uint8_t owpinnum = 0;
 
-	printf("\r\n[DEBUG] Searching for DHT22 sensors...\r\n");
-	// Initialize configuration array
-	for (uint8_t i = 0; i < NUMPIN; i++) {
-		if (PinsConf[i].topin == 4) {
-			for (uint8_t j = 0; j < MAX_DHT22_P; j++) {
-				printf("+++ i = %d j = %d \r\n", i, j);
-				if (dht22[j].id == i && dht22[j].typsensr == 2) {
-					DHT22_Init(j, i);
-					dht22[j].valid = true;
-					dht22[j].onoff = 1;
-					dhtcount++;
-					owpinnum++;
-				}
-			}
-		}
-	}
+  printf("\r\n[DEBUG] Searching for DHT22 sensors...\r\n");
+  // Initialize configuration array
+  for (uint8_t i = 0; i < NUMPIN; i++) {
+    if (PinsConf[i].topin == 4) {
+      for (uint8_t j = 0; j < MAX_DHT22_P; j++) {
+        printf("+++ i = %d j = %d \r\n", i, j);
+        if (dht22[j].id == i && dht22[j].typsensr == 2) {
+          DHT22_Init(j, i);
+          dht22[j].valid = true;
+          dht22[j].onoff = 1;
+          dhtcount++;
+          owpinnum++;
+        }
+      }
+    }
+  }
 
-	if (dhtcount != 0) {
-		printf("[DEBUG] Found DHT22 sensors: %d\r\n", dhtcount);
-	} else {
-		printf("[DEBUG] No DHT22 sensors found!\r\n");
-	}
-	/* Infinite loop */
-	for (;;) {
-		if (dhtcount != 0) {
-			for (uint8_t i = 0; i < MAX_DHT22_P; i++) {
-				if (dht22[i].onoff) {
-					process_dht22(i);
-				}
-			}
-			check_DHT22_limits();// В этой функции откажись от process_actions() в пользуй action_handler()!
-		}
-		osDelay(10);
-	}
+  if (dhtcount != 0) {
+    printf("[DEBUG] Found DHT22 sensors: %d\r\n", dhtcount);
+  } else {
+    printf("[DEBUG] No DHT22 sensors found!\r\n");
+  }
+  /* Infinite loop */
+  for (;;) {
+    if (dhtcount != 0) {
+      for (uint8_t i = 0; i < MAX_DHT22_P; i++) {
+        if (dht22[i].onoff) {
+          process_dht22(i);
+        }
+      }
+      check_DHT22_limits(); // В этой функции откажись от process_actions() в
+                            // пользуй action_handler()!
+    }
+    osDelay(10);
+  }
   /* USER CODE END StartDht22Task */
 }
 
 /* USER CODE BEGIN Header_StartServiceTask */
 /**
-* @brief Function implementing the ServiceTask thread.
-* @param argument: Not used
-* @retval None
-*/
+ * @brief Function implementing the ServiceTask thread.
+ * @param argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_StartServiceTask */
-void StartServiceTask(void *argument)
-{
+void StartServiceTask(void *argument) {
   /* USER CODE BEGIN StartServiceTask */
-	ulTaskNotifyTake(0, portMAX_DELAY);
-//	static uint8_t moonflag = 0; // Счетчик
-	static uint8_t prevday = 0; // Для отслеживания смены дня
-	static uint8_t prevmin = 0xFF; // Для отслеживания смены минуты
-//	DateTime nextfullmoon; // Declare nextFullMoon outside the loop
-	DateTime nextfullmnlcl; // Local time version of nextFullMoon
-	double degToRad(double degree) {
-		return (degree * PI / 180);
-	}
-	// Convert radian to degree
-	double radToDeg(double radian) {
-		return (radian * 180 / PI);
-	}
-	// Calculate the day of the year
-	int dayOfYear(int year, uint8_t month, uint8_t day) {
-		int N1 = floor(275 * month / 9);
-		int N2 = floor((month + 9) / 12);
-		int N3 = (1 + floor((year - 4 * floor(year / 4) + 2) / 3));
-		return N1 - (N2 * N3) + day - 30;
-	}
-	// Calculate sunrise or sunset
-	double calculateSunriseOrSunset(int isSunrise) {
-		int N = dayOfYear(year, month, day);
-		// Convert the SetSettings.lon_de to hour value and calculate an approximate time
-		double lngHour = SetSettings.lon_de / 15.0;
-		double t = N + ((isSunrise ? 6 : 18) - lngHour) / 24;
-		// Calculate the Sun's mean anomaly
-		double M = (0.9856 * t) - 3.289;
-		// Calculate the Sun's true SetSettings.lon_de
-		double L = fmod( M + (1.916 * sin(degToRad(M))) + (0.020 * sin(2 * degToRad(M))) + 282.634, 360.0);
-		// Calculate the Sun's right ascension
-		double RA = fmod(radToDeg(atan(0.91764 * tan(degToRad(L)))), 360.0);
-		// Right ascension value needs to be in the same quadrant as L
-		double Lquadrant = floor(L / 90) * 90;
-		double RAquadrant = floor(RA / 90) * 90;
-		RA = RA + (Lquadrant - RAquadrant);
-		// Right ascension value needs to be converted into hours
-		RA = RA / 15;
-		// Calculate the Sun's declination
-		double sinDec = 0.39782 * sin(degToRad(L));
-		double cosDec = cos(asin(sinDec));
-		// Calculate the Sun's local hour angle
-		double cosH = (sin(degToRad(ZENITH)) - (sinDec * sin(degToRad(SetSettings.lat_de)))) / (cosDec * cos(degToRad(SetSettings.lat_de)));
-		if (cosH > 1 || cosH < -1) {
-			return -1; // The sun never rises/sets on this location on the specified date
-		}
-		// Finish calculating H and convert into hours
-		double H = isSunrise ? 360 - radToDeg(acos(cosH)) : radToDeg(acos(cosH));
-		H = H / 15;
-		// Calculate local mean time of rising/setting
-		double T = H + RA - (0.06571 * t) - 6.622;
-		// Adjust back to UTC
-		double UT = fmod(T - lngHour + 24.0, 24.0);
-		// Convert UT value to local time zone of SetSettings.lat_de/SetSettings.lon_de
-		double localT = fmod(UT + SetSettings.timezone + 24.0, 24.0);
-		return localT;
-	}
-	void printResults() {
-		double sunrise = calculateSunriseOrSunset(1);
-		double sunset = calculateSunriseOrSunset(0);
-		if (sunrise == -1 || sunset == -1) {
-			printf( "The sun doesn't rise or set on this day at this location.\n");
-		} else {
-			int sunriseHour = (int) sunrise;
-			int sunriseMinute = (int) ((sunrise - sunriseHour) * 60);
-			int sunsetHour = (int) sunset;
-			int sunsetMinute = (int) ((sunset - sunsetHour) * 60);
-//			printf("ServiceTask: date: %d-%d-%d\n", year, month, day);
-//			printf("Location: %.4f, %.4f\n", SetSettings.lat_de, SetSettings.lon_de);
-//			printf("SetSettings.timezone: UTC%f\n", SetSettings.timezone);
-//			printf("Sunrise: %02d:%02d\n", sunriseHour, sunriseMinute);
-//			printf("Sunset: %02d:%02d\n", sunsetHour, sunsetMinute);
-			// Сохранение времени восхода солнца
-			sprintf(SetSettings.sunrise, "%02d:%02d", sunriseHour, sunriseMinute);
-			// Сохранение времени заката солнца
-			sprintf(SetSettings.sunset, "%02d:%02d", sunsetHour, sunsetMinute);
-			// Calculate day length
-			double dayLength = sunset - sunrise;
-			if (dayLength < 0)
-				dayLength += 24;
-			int dayLengthHours = (int) dayLength;
-			int dayLengthMinutes = (int) ((dayLength - dayLengthHours) * 60);
-			// Сохранение длины светового дня
-			sprintf(SetSettings.dlength, "%02d:%02d", dayLengthHours, dayLengthMinutes);
-//			printf("Day length: %02d hours and %02d minutes\n", dayLengthHours, dayLengthMinutes);
-//			printf("---SetSettings.lat_de %.4f\n", SetSettings.lat_de);
-//			printf("---SetSettings.lon_de %.4f\n", SetSettings.lon_de);
-//			printf("---SetSettings.timezone: UTC%+.1f\n", SetSettings.timezone);
-//			printf("Today's date: %02d.%02d.%d\n", day, month, year);
-//			printf("Sunrise: %s\n", SetSettings.sunrise);
-//			printf("Sunset: %s\n", SetSettings.sunset);
-//			printf("Day light: %s\n", SetSettings.dlength);
-		}
-	}
-	/* Infinite loop */
-	for (;;) {
-		if (day != prevday) {
-			prevday = day;
-			// Calculate after system reboot
-			printResults();
-			if (year != 0000) { // Ensure year is set
-				calculateMoonPhase( (DateTime ) { year, month, day, timez->tm_hour, timez->tm_min, timez->tm_sec }, &nextfullmnlcl);
-				nextfullmnlcl.hour += SetSettings.timezone; // Adjust for timezone
-				if (nextfullmnlcl.hour >= 24) {
-					nextfullmnlcl.hour -= 24;
-					nextfullmnlcl.day++;
-				}
-				// Store the full moon data in the correct format
-				uint8_t len = snprintf(SetSettings.fullmoon, sizeof(SetSettings.fullmoon), "%02d.%02d.%04d %02d:%02d", nextfullmnlcl.day, nextfullmnlcl.month, nextfullmnlcl.year,
-						nextfullmnlcl.hour, nextfullmnlcl.minute);
-				if (len < 0 || (size_t) len >= sizeof(SetSettings.fullmoon)) {
-					printf("ERROR: len > setsettings.fullmoon! \n");
-				}
-			}
-			if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
-				Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" after system reboot
-			}
-		}
-		if (timez->tm_min != prevmin) { // Проверка раз в минуту
-			prevmin = timez->tm_min;
-			if (timez->tm_hour == 0 && timez->tm_min == 1 && year != 0000) {
-//          if (moonflag < 3) { // Для уверенности 3 раза!
-				if (year != 0000) { // Ensure year is set
-					calculateMoonPhase((DateTime ) { year, month, day, timez->tm_hour, timez->tm_min, timez->tm_sec }, &nextfullmnlcl);
-					nextfullmnlcl.hour += SetSettings.timezone; // Adjust for timezone
-					if (nextfullmnlcl.hour >= 24) {
-						nextfullmnlcl.hour -= 24;
-						nextfullmnlcl.day++;
-					}
-					// Store the full moon data in the correct format
-					uint8_t len = snprintf(SetSettings.fullmoon, sizeof(SetSettings.fullmoon), "%02d.%02d.%04d %02d:%02d", nextfullmnlcl.day,
-							nextfullmnlcl.month, nextfullmnlcl.year, nextfullmnlcl.hour, nextfullmnlcl.minute);
-					if (len < 0 || (size_t) len >= sizeof(SetSettings.fullmoon)) {
-						printf("ERROR: len > setsettings.fullmoon! \n");
-					}
-				}
-			}
-			if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
-				Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" один раз в минуту.
-			}
-		}
-		osDelay(500);
-	}
+  ulTaskNotifyTake(0, portMAX_DELAY);
+  //	static uint8_t moonflag = 0; // Счетчик
+  static uint8_t prevday = 0;    // Для отслеживания смены дня
+  static uint8_t prevmin = 0xFF; // Для отслеживания смены минуты
+  //	DateTime nextfullmoon; // Declare nextFullMoon outside the loop
+  DateTime nextfullmnlcl; // Local time version of nextFullMoon
+  double degToRad(double degree) { return (degree * PI / 180); }
+  // Convert radian to degree
+  double radToDeg(double radian) { return (radian * 180 / PI); }
+  // Calculate the day of the year
+  int dayOfYear(int year, uint8_t month, uint8_t day) {
+    int N1 = floor(275 * month / 9);
+    int N2 = floor((month + 9) / 12);
+    int N3 = (1 + floor((year - 4 * floor(year / 4) + 2) / 3));
+    return N1 - (N2 * N3) + day - 30;
+  }
+  // Calculate sunrise or sunset
+  double calculateSunriseOrSunset(int isSunrise) {
+    int N = dayOfYear(year, month, day);
+    // Convert the SetSettings.lon_de to hour value and calculate an approximate
+    // time
+    double lngHour = SetSettings.lon_de / 15.0;
+    double t = N + ((isSunrise ? 6 : 18) - lngHour) / 24;
+    // Calculate the Sun's mean anomaly
+    double M = (0.9856 * t) - 3.289;
+    // Calculate the Sun's true SetSettings.lon_de
+    double L = fmod(M + (1.916 * sin(degToRad(M))) +
+                        (0.020 * sin(2 * degToRad(M))) + 282.634,
+                    360.0);
+    // Calculate the Sun's right ascension
+    double RA = fmod(radToDeg(atan(0.91764 * tan(degToRad(L)))), 360.0);
+    // Right ascension value needs to be in the same quadrant as L
+    double Lquadrant = floor(L / 90) * 90;
+    double RAquadrant = floor(RA / 90) * 90;
+    RA = RA + (Lquadrant - RAquadrant);
+    // Right ascension value needs to be converted into hours
+    RA = RA / 15;
+    // Calculate the Sun's declination
+    double sinDec = 0.39782 * sin(degToRad(L));
+    double cosDec = cos(asin(sinDec));
+    // Calculate the Sun's local hour angle
+    double cosH =
+        (sin(degToRad(ZENITH)) - (sinDec * sin(degToRad(SetSettings.lat_de)))) /
+        (cosDec * cos(degToRad(SetSettings.lat_de)));
+    if (cosH > 1 || cosH < -1) {
+      return -1; // The sun never rises/sets on this location on the specified
+                 // date
+    }
+    // Finish calculating H and convert into hours
+    double H = isSunrise ? 360 - radToDeg(acos(cosH)) : radToDeg(acos(cosH));
+    H = H / 15;
+    // Calculate local mean time of rising/setting
+    double T = H + RA - (0.06571 * t) - 6.622;
+    // Adjust back to UTC
+    double UT = fmod(T - lngHour + 24.0, 24.0);
+    // Convert UT value to local time zone of
+    // SetSettings.lat_de/SetSettings.lon_de
+    double localT = fmod(UT + SetSettings.timezone + 24.0, 24.0);
+    return localT;
+  }
+  void printResults() {
+    double sunrise = calculateSunriseOrSunset(1);
+    double sunset = calculateSunriseOrSunset(0);
+    if (sunrise == -1 || sunset == -1) {
+      printf("The sun doesn't rise or set on this day at this location.\n");
+    } else {
+      int sunriseHour = (int)sunrise;
+      int sunriseMinute = (int)((sunrise - sunriseHour) * 60);
+      int sunsetHour = (int)sunset;
+      int sunsetMinute = (int)((sunset - sunsetHour) * 60);
+      //			printf("ServiceTask: date: %d-%d-%d\n", year,
+      // month, day); 			printf("Location: %.4f, %.4f\n",
+      // SetSettings.lat_de, SetSettings.lon_de);
+      // printf("SetSettings.timezone: UTC%f\n", SetSettings.timezone);
+      // printf("Sunrise: %02d:%02d\n", sunriseHour, sunriseMinute);
+      // printf("Sunset: %02d:%02d\n", sunsetHour, sunsetMinute);
+      // Сохранение времени восхода солнца
+      sprintf(SetSettings.sunrise, "%02d:%02d", sunriseHour, sunriseMinute);
+      // Сохранение времени заката солнца
+      sprintf(SetSettings.sunset, "%02d:%02d", sunsetHour, sunsetMinute);
+      // Calculate day length
+      double dayLength = sunset - sunrise;
+      if (dayLength < 0)
+        dayLength += 24;
+      int dayLengthHours = (int)dayLength;
+      int dayLengthMinutes = (int)((dayLength - dayLengthHours) * 60);
+      // Сохранение длины светового дня
+      sprintf(SetSettings.dlength, "%02d:%02d", dayLengthHours,
+              dayLengthMinutes);
+      //			printf("Day length: %02d hours and %02d
+      // minutes\n", dayLengthHours, dayLengthMinutes);
+      //			printf("---SetSettings.lat_de %.4f\n",
+      // SetSettings.lat_de); 			printf("---SetSettings.lon_de
+      // %.4f\n", SetSettings.lon_de);
+      // printf("---SetSettings.timezone: UTC%+.1f\n", SetSettings.timezone);
+      // printf("Today's date: %02d.%02d.%d\n", day, month, year);
+      // printf("Sunrise: %s\n", SetSettings.sunrise);
+      // printf("Sunset: %s\n",
+      // SetSettings.sunset); 			printf("Day light: %s\n",
+      // SetSettings.dlength);
+    }
+  }
+  /* Infinite loop */
+  for (;;) {
+    if (day != prevday) {
+      prevday = day;
+      // Calculate after system reboot
+      printResults();
+      if (year != 0000) { // Ensure year is set
+        calculateMoonPhase((DateTime){year, month, day, timez->tm_hour,
+                                      timez->tm_min, timez->tm_sec},
+                           &nextfullmnlcl);
+        nextfullmnlcl.hour += SetSettings.timezone; // Adjust for timezone
+        if (nextfullmnlcl.hour >= 24) {
+          nextfullmnlcl.hour -= 24;
+          nextfullmnlcl.day++;
+        }
+        // Store the full moon data in the correct format
+        uint8_t len = snprintf(
+            SetSettings.fullmoon, sizeof(SetSettings.fullmoon),
+            "%02d.%02d.%04d %02d:%02d", nextfullmnlcl.day, nextfullmnlcl.month,
+            nextfullmnlcl.year, nextfullmnlcl.hour, nextfullmnlcl.minute);
+        if (len < 0 || (size_t)len >= sizeof(SetSettings.fullmoon)) {
+          printf("ERROR: len > setsettings.fullmoon! \n");
+        }
+      }
+      if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
+        Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" after system
+                                       // reboot
+      }
+    }
+    if (timez->tm_min != prevmin) { // Проверка раз в минуту
+      prevmin = timez->tm_min;
+      if (timez->tm_hour == 0 && timez->tm_min == 1 && year != 0000) {
+        //          if (moonflag < 3) { // Для уверенности 3 раза!
+        if (year != 0000) { // Ensure year is set
+          calculateMoonPhase((DateTime){year, month, day, timez->tm_hour,
+                                        timez->tm_min, timez->tm_sec},
+                             &nextfullmnlcl);
+          nextfullmnlcl.hour += SetSettings.timezone; // Adjust for timezone
+          if (nextfullmnlcl.hour >= 24) {
+            nextfullmnlcl.hour -= 24;
+            nextfullmnlcl.day++;
+          }
+          // Store the full moon data in the correct format
+          uint8_t len =
+              snprintf(SetSettings.fullmoon, sizeof(SetSettings.fullmoon),
+                       "%02d.%02d.%04d %02d:%02d", nextfullmnlcl.day,
+                       nextfullmnlcl.month, nextfullmnlcl.year,
+                       nextfullmnlcl.hour, nextfullmnlcl.minute);
+          if (len < 0 || (size_t)len >= sizeof(SetSettings.fullmoon)) {
+            printf("ERROR: len > setsettings.fullmoon! \n");
+          }
+        }
+      }
+      if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
+        Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" один раз в
+                                       // минуту.
+      }
+    }
+    osDelay(500);
+  }
   /* USER CODE END StartServiceTask */
 }
 
 /* USER CODE BEGIN Header_StartSIM800LTask */
 /**
-* @brief Function implementing the SIM800LTask thread.
-* @param argument: Not used
-* @retval None
-*/
+ * @brief Function implementing the SIM800LTask thread.
+ * @param argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_StartSIM800LTask */
-void StartSIM800LTask(void *argument)
-{
+void StartSIM800LTask(void *argument) {
   /* USER CODE BEGIN StartSIM800LTask */
-	ulTaskNotifyTake(0, portMAX_DELAY);
-	init_sim800l_module();
-	xTaskNotify(ConfigTaskHandle, 0, eNoAction); // Уведомляем ConfigTask о завершении инициализации GSM Task!
-//	printf("Hi world! It's from GPS task! \r\n");
-	/* Infinite loop */
-	for (;;) {
-		if (gsm_available()) { //если модуль что-то прислал
-			process_sim800l_data();
-		}
-		osDelay(1);
-	}
+  ulTaskNotifyTake(0, portMAX_DELAY);
+  init_sim800l_module();
+  xTaskNotify(
+      ConfigTaskHandle, 0,
+      eNoAction); // Уведомляем ConfigTask о завершении инициализации GSM Task!
+                  //	printf("Hi world! It's from GPS task! \r\n");
+  /* Infinite loop */
+  for (;;) {
+    if (gsm_available()) { // если модуль что-то прислал
+      process_sim800l_data();
+    }
+    osDelay(1);
+  }
   /* USER CODE END StartSIM800LTask */
 }
 
 /* USER CODE BEGIN Header_StartSecurityTask */
 /**
-* @brief Function implementing the SecurityTask thread.
-* @param argument: Not used
-* @retval None
-*/
+ * @brief Function implementing the SecurityTask thread.
+ * @param argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_StartSecurityTask */
-void StartSecurityTask(void *argument)
-{
+void StartSecurityTask(void *argument) {
   /* USER CODE BEGIN StartSecurityTask */
-	ulTaskNotifyTake(0, portMAX_DELAY);
-	/* Infinite loop */
-	for (;;) {
-        uint32_t currtime = HAL_GetTick();
+  ulTaskNotifyTake(0, portMAX_DELAY);
+  /* Infinite loop */
+  for (;;) {
+    uint32_t currtime = HAL_GetTick();
 
-        for (int i = 0; i < NUMPIN; i++) {
-            if (PinsConf[i].topin != 10)
-                continue;
+    for (int i = 0; i < NUMPIN; i++) {
+      if (PinsConf[i].topin != 10)
+        continue;
 
-            uint8_t current_state = HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
+      uint8_t current_state =
+          HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
 
-            if (current_state != PinsConf[i].prvstate) {
-                if ((currtime - PinsConf[i].deb_tm) >= DEBOUNCE_DELAY) {
-                    bool trigger_event = false;
+      if (current_state != PinsConf[i].prvstate) {
+        if ((currtime - PinsConf[i].deb_tm) >= DEBOUNCE_DELAY) {
+          bool trigger_event = false;
 
-                    switch (PinsConf[i].ptype) {
-					case 0: // PIR датчик движения
-							// Подключение: PIR->pin, None
-							// В покое - 0, при движении - 1
-							// Срабатывание на появление движения (0->1)
-						trigger_event = (PinsConf[i].prvstate == 0 && current_state == 1);
-						break;
+          switch (PinsConf[i].ptype) {
+          case 0: // PIR датчик движения
+                  // Подключение: PIR->pin, None
+                  // В покое - 0, при движении - 1
+                  // Срабатывание на появление движения (0->1)
+            trigger_event = (PinsConf[i].prvstate == 0 && current_state == 1);
+            break;
 
-					case 1: // Геркон NO (нормально разомкнутый)
-							// Подключение: 3.3V->Геркон->pin.
-							// При поднесенном магните - контакты замкнуты - 1
-							// При отсутствии магнита - контакты разомкнуты - 0
-							// Срабатывание на размыкание контактов (1->0)
-						trigger_event = (PinsConf[i].prvstate == 1 && current_state == 0);
-						break;
+          case 1: // Геркон NO (нормально разомкнутый)
+                  // Подключение: 3.3V->Геркон->pin.
+                  // При поднесенном магните - контакты замкнуты - 1
+                  // При отсутствии магнита - контакты разомкнуты - 0
+                  // Срабатывание на размыкание контактов (1->0)
+            trigger_event = (PinsConf[i].prvstate == 1 && current_state == 0);
+            break;
 
-					case 2: // Геркон NC (нормально замкнутый)
-							// Подключение: 3.3V->Геркон->pin.
-							// При поднесенном магните - контакты разомкнуты - 0
-							// При отсутствии магнита - контакты замкнуты - 1
-							// Срабатывание на змыкание контактов (0->1)
-						trigger_event = (PinsConf[i].prvstate == 0 && current_state == 1);
-						break;
-					}
+          case 2: // Геркон NC (нормально замкнутый)
+                  // Подключение: 3.3V->Геркон->pin.
+                  // При поднесенном магните - контакты разомкнуты - 0
+                  // При отсутствии магнита - контакты замкнуты - 1
+                  // Срабатывание на змыкание контактов (0->1)
+            trigger_event = (PinsConf[i].prvstate == 0 && current_state == 1);
+            break;
+          }
 
-                    if (trigger_event) {// Если обнаружено срабатывание
-                        if ((currtime - PinsConf[i].lasttrg) >= 1000) {
-                            if (PinsConf[i].onoff && PinsConf[i].sclick[0] != '\0' && strcmp(PinsConf[i].sclick, "None") != 0) {
-                                action_handler(i, PinsConf[i].sclick, "Security action");
+          if (trigger_event) { // Если обнаружено срабатывание
+            if ((currtime - PinsConf[i].lasttrg) >= 1000) {
+              if (PinsConf[i].onoff && PinsConf[i].sclick[0] != '\0' &&
+                  strcmp(PinsConf[i].sclick, "None") != 0) {
+                action_handler(i, PinsConf[i].sclick, "Security action");
 
-                                // Формируем payload для MQTT
-                                memset(mqtt_payload, 0, sizeof(mqtt_payload));
-                                snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s", i, PinsConf[i].sclick, PinsConf[i].info);
+                // Формируем payload для MQTT
+                memset(mqtt_payload, 0, sizeof(mqtt_payload));
+                snprintf(mqtt_payload, sizeof(mqtt_payload),
+                         "SECURITY/ID=%d/ACTION=%s/%s", i, PinsConf[i].sclick,
+                         PinsConf[i].info);
 
-                                // Подготовка MQTT сообщения
-                                mqttMsg.command = 6;
-                                mqttMsg.deviceId = i;
-                                mqttMsg.state = current_state;
-                                mqttMsg.reserved = 0;
+                // Подготовка MQTT сообщения
+                mqttMsg.command = 6;
+                mqttMsg.deviceId = i;
+                mqttMsg.state = current_state;
+                mqttMsg.reserved = 0;
 
-                                // Отправка в очередь
-                                if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-                                    printf("Error sending SECURITY event to MQTT queue!\r\n");
-                                }
-                            }
-
-                            if (PinsConf[i].onoff && PinsConf[i].send_sms[0] != '\0' && strcmp(PinsConf[i].send_sms, "None") != 0) {
-                                send_sms(i);
-                            }
-
-                            PinsConf[i].lasttrg = currtime;
-                        }
-                    }
-                    PinsConf[i].prvstate = current_state;
-                    PinsConf[i].state = current_state;
-                    PinsConf[i].deb_tm = currtime;
+                // Отправка в очередь
+                if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
+                  printf("Error sending SECURITY event to MQTT queue!\r\n");
                 }
+              }
+
+              if (PinsConf[i].onoff && PinsConf[i].send_sms[0] != '\0' &&
+                  strcmp(PinsConf[i].send_sms, "None") != 0) {
+                send_sms(i);
+              }
+
+              PinsConf[i].lasttrg = currtime;
             }
+          }
+          PinsConf[i].prvstate = current_state;
+          PinsConf[i].state = current_state;
+          PinsConf[i].deb_tm = currtime;
         }
-			osDelay(1);
-	}
+      }
+    }
+    osDelay(1);
+  }
   /* USER CODE END StartSecurityTask */
 }
 
 /**
-  * @brief  Period elapsed callback in non blocking mode
-  * @note   This function is called  when TIM6 interrupt took place, inside
-  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
-  * a global variable "uwTick" used as application time base.
-  * @param  htim : TIM handle
-  * @retval None
-  */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
+ * @brief  Period elapsed callback in non blocking mode
+ * @note   This function is called  when TIM6 interrupt took place, inside
+ * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+ * a global variable "uwTick" used as application time base.
+ * @param  htim : TIM handle
+ * @retval None
+ */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
   /* USER CODE BEGIN Callback 0 */
 
   /* USER CODE END Callback 0 */
@@ -2290,33 +2518,31 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 }
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
-void Error_Handler(void)
-{
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
+void Error_Handler(void) {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
-  while (1)
-  {
+  while (1) {
   }
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
-void assert_failed(uint8_t *file, uint32_t line)
-{
+ * @brief  Reports the name of the source file and the source line number
+ *         where the assert_param error has occurred.
+ * @param  file: pointer to the source file name
+ * @param  line: assert_param error line source number
+ * @retval None
+ */
+void assert_failed(uint8_t *file, uint32_t line) {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* User can add his own implementation to report the file name and line
+     number, ex: printf("Wrong parameters value: file %s on line %d\r\n", file,
+     line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */

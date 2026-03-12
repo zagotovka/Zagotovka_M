@@ -84,48 +84,67 @@ function ModalEncoder({
   const handleSubmit = (e) => {
     e.preventDefault();
     const form = e.target;
-    if (form instanceof HTMLFormElement) {
-      let jsonData = {};
+    if (!(form instanceof HTMLFormElement)) return;
 
-      if (modalType === 'edit') {
-        jsonData = {
-          topin: 8,
-          id: selectedEncoder.id,
-          pins: selectedEncoder.pins,
-          pwm: parseInt(pwmFreq),
-          dvalue: parseInt(dvalue),
-          ponr: parseInt(ponr),
-          info: encoderInfo,
-          onoff: onoff ? 1 : 0
-        };
-      } else if (modalType === 'connection') {
-        jsonData = {
-          id: selectedEncoder.id,
-          pins: selectedEncoder.pins,
-          encoderb: parseInt(encoderB.id),
-          encdrbpin: encoderB.pin,
-          pinact: { [selectedConnection[0]]: parseInt(selectedConnection[1]) }
-        };
+    let jsonData = {};
+
+    if (modalType === 'edit') {
+      // Окно редактирования параметров (Частота, Шаги и т.д.)
+      jsonData = {
+        topin: 8,
+        id: selectedEncoder.id,
+        pins: selectedEncoder.pins,
+        pwm: parseInt(pwmFreq), // Отправляем миллигерцы (10000000)
+        pwmmax: selectedEncoder.pwmmax,
+        dvalue: parseInt(dvalue),
+        ponr: parseInt(ponr),
+        info: encoderInfo,
+        onoff: onoff ? 1 : 0
+      };
+    } else if (modalType === 'connection') {
+      // Окно редактирования связей (Connection)
+
+      // Проверяем, выбрана ли связь (имя пина в [0] и ID в [1])
+      const hasConnection = selectedConnection && selectedConnection[0] && selectedConnection[1] !== undefined;
+
+      // Формируем ОБЪЕКТ-СЛОВАРЬ для STM32: {"pinName": idout}
+      // Бэкенд ожидает cJSON_IsObject + cJSON_ArrayForEach с key=имя_пина и valueint=id
+      const pinactValue = hasConnection
+        ? { [selectedConnection[0]]: parseInt(selectedConnection[1]) }
+        : {};
+
+      jsonData = {
+        id: selectedEncoder.id,
+        pins: selectedEncoder.pins,
+        pwm: parseInt(pwmFreq), // Передаем текущую частоту mHz, чтобы она не стерлась в памяти STM32
+      };
+
+      // Логика для Encoder B
+      if (encoderB && encoderB.id !== undefined && encoderB.id !== '') {
+        jsonData.encoderb = parseInt(encoderB.id);
+        jsonData.encdrbpin = encoderB.pin;
+      } else {
+        jsonData.encoderb = 255;
+        jsonData.encdrbpin = "";
       }
-      console.log('We got a encoder JSON:', JSON.stringify(jsonData));
-      fetch('/api/encoder/set', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(jsonData)
-      })
-        .then((response) => response.json())
-        .then((data) => {
-          handleEncoderChange({ ...selectedEncoder, ...jsonData });
-          hideModal();
-        })
-        .catch((error) => {
-          console.error('Error:', error);
-        });
-    } else {
-      console.error('Form element not found');
+
+      // Добавляем объект связей (пустой объект {} если связь не выбрана)
+      jsonData.pinact = pinactValue;
     }
+
+    console.log('Sending JSON to STM32:', JSON.stringify(jsonData));
+
+    fetch('/api/encoder/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(jsonData)
+    })
+      .then(r => r.json())
+      .then(data => {
+        handleEncoderChange({ ...selectedEncoder, ...jsonData });
+        hideModal();
+      })
+      .catch(err => console.error('Error saving encoder:', err));
   };
 
   const handleEncoderInfoChange = (e) => {
@@ -346,35 +365,32 @@ function ModalEncoder({
 
   const modalContent = html`
     <div
-      class="fixed inset-0 z-[999] bg-black bg-opacity-50"
-      style="margin-top: 7px;"
+      class="fixed inset-0 z-[999] bg-black bg-opacity-50 flex items-center justify-center p-4"
+      onClick=${(e) => closeOnOverlayClick && e.target === e.currentTarget && hideModal()}
     >
-      <div class="flex items-center justify-center min-h-full p-4">
-        <div
-          class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 relative"
-          style="max-height: calc(100vh - 57px); overflow-y: auto;"
-        >
-          <div class="modal-header flex justify-between items-center mb-4">
-            <h2 class="text-xl font-bold">${title}</h2>
-            <button
-              onClick=${hideModal}
-              class="close-button text-gray-500 hover:text-gray-700"
-            >
-              Close
-            </button>
-          </div>
-          ${renderModalContent()}
+      <div
+        class="bg-white rounded-lg p-6 max-w-2xl w-full relative"
+        style="max-height: 90vh; overflow-y: auto;"
+      >
+        <div class="modal-header flex justify-between items-center mb-4">
+          <h2 class="text-xl font-bold">${title}</h2>
+          <button
+            onClick=${hideModal}
+            class="close-button text-gray-500 hover:text-gray-700"
+          >
+            Close
+          </button>
         </div>
+        ${renderModalContent()}
       </div>
     </div>
   `;
-
 
   const portalRef = useRef(null);
 
   useEffect(() => {
     const portalEl = document.createElement('div');
-    portalEl.id = 'modal-portal';
+    portalEl.id = 'encoder-modal-portal';
     document.body.appendChild(portalEl);
     portalRef.current = portalEl;
     return () => {
@@ -390,7 +406,6 @@ function ModalEncoder({
   });
 
   return null;
-
 }
 
 export { ModalEncoder };

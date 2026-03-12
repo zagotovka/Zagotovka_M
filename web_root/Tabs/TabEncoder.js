@@ -16,22 +16,22 @@ function initGlobalTooltip() {
   const tip = document.createElement('div');
   tip.id = '__global_tip';
   Object.assign(tip.style, {
-    position:      'fixed',
-    zIndex:        '99999',
-    maxWidth:      '280px',
-    background:    '#1a2332',
-    color:         '#e8f4f8',
-    padding:       '8px 12px',
-    borderRadius:  '8px',
-    border:        '1px solid rgba(0,188,188,0.35)',
-    fontSize:      '12px',
-    lineHeight:    '1.6',
-    boxShadow:     '0 6px 20px rgba(0,0,0,0.45)',
+    position: 'fixed',
+    zIndex: '99999',
+    maxWidth: '280px',
+    background: '#1a2332',
+    color: '#e8f4f8',
+    padding: '8px 12px',
+    borderRadius: '8px',
+    border: '1px solid rgba(0,188,188,0.35)',
+    fontSize: '12px',
+    lineHeight: '1.6',
+    boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
     pointerEvents: 'none',
-    whiteSpace:    'normal',
-    display:       'none',
-    transition:    'opacity 0.12s ease',
-    opacity:       '0',
+    whiteSpace: 'normal',
+    display: 'none',
+    transition: 'opacity 0.12s ease',
+    opacity: '0',
   });
   document.body.appendChild(tip);
 
@@ -44,13 +44,13 @@ function initGlobalTooltip() {
 
     tip.style.opacity = '0';
     tip.style.left = '0px';
-    tip.style.top  = '0px';
+    tip.style.top = '0px';
 
     requestAnimationFrame(() => {
       const tw = tip.offsetWidth;
       const th = tip.offsetHeight;
       const vw = window.innerWidth;
-      const r  = el.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
 
       let left = r.left + r.width / 2 - tw / 2;
       left = Math.max(8, Math.min(left, vw - tw - 8));
@@ -58,8 +58,8 @@ function initGlobalTooltip() {
       let top = r.top - th - 8;
       if (top < 8) top = r.bottom + 8;
 
-      tip.style.left    = left + 'px';
-      tip.style.top     = top  + 'px';
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
       tip.style.opacity = '1';
     });
   }
@@ -440,15 +440,15 @@ function TabEncoder({ }) {
           </td>
           <td class="px-6 py-2 text-sm text-slate-700 font-mono">
             ${connectedPins.length > 0
-              ? connectedPins.map(
-                  ({ pin, idout }) => html`
+          ? connectedPins.map(
+            ({ pin, idout }) => html`
                     <span class="mr-2 inline-flex items-center">
                       ${pin}(${idout})
                       <button
                         onClick=${(e) => {
-                          e.preventDefault();
-                          onsave(d.id, `${pin}(${idout})`);
-                        }}
+                e.preventDefault();
+                onsave(d.id, `${pin}(${idout})`);
+              }}
                         class="ml-1 text-red-500 hover:text-red-700 transition-colors font-bold"
                         title="Remove connection"
                       >
@@ -456,8 +456,8 @@ function TabEncoder({ }) {
                       </button>
                     </span>
                   `
-                )
-              : 'Not set'}
+          )
+          : 'Not set'}
           </td>
           <td class="px-6 py-2 text-sm">
             <span class="font-mono text-slate-700">${formatPwmFreq(d.pwm)}</span>
@@ -527,9 +527,9 @@ function TabEncoder({ }) {
                     </thead>
                     <tbody id="tab1" class="divide-y divide-white/40">
                       ${varencoder.map(
-                        (d, index) =>
-                          html`<${ArrayEncoder} d=${d} index=${index} key=${d.id} />`
-                      )}
+      (d, index) =>
+        html`<${ArrayEncoder} d=${d} index=${index} key=${d.id} />`
+    )}
                     </tbody>
                   </table>
                 </div>
@@ -545,7 +545,7 @@ function TabEncoder({ }) {
               </div>
 
               ${showHelp &&
-                html`
+      html`
                   <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
                     ${helpContent[language]}
                   </div>
@@ -553,14 +553,14 @@ function TabEncoder({ }) {
             </div>
           </div>
           ${isModalOpen &&
-            html`
+      html`
               <${ModalEncoder}
                 modalType=${modalType}
                 page="TabEncoder"
                 hideModal=${closeModal}
                 title=${modalType === 'connection'
-                  ? 'Edit Connection'
-                  : 'Edit Encoder'}
+          ? 'Edit Connection'
+          : 'Edit Encoder'}
                 selectedEncoder=${selectedEncoder}
                 handleEncoderChange=${handleEncoderChange}
               />

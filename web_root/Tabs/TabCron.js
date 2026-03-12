@@ -1,4 +1,5 @@
 import { ModalCron } from '../Modals/ModalCron.js';
+import { ModalPwmCron } from '../Modals/ModalPwmCron.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -16,22 +17,22 @@ function initGlobalTooltip() {
   const tip = document.createElement('div');
   tip.id = '__global_tip';
   Object.assign(tip.style, {
-    position:      'fixed',
-    zIndex:        '99999',
-    maxWidth:      '280px',
-    background:    '#1a2332',
-    color:         '#e8f4f8',
-    padding:       '8px 12px',
-    borderRadius:  '8px',
-    border:        '1px solid rgba(0,188,188,0.35)',
-    fontSize:      '12px',
-    lineHeight:    '1.6',
-    boxShadow:     '0 6px 20px rgba(0,0,0,0.45)',
+    position: 'fixed',
+    zIndex: '99999',
+    maxWidth: '280px',
+    background: '#1a2332',
+    color: '#e8f4f8',
+    padding: '8px 12px',
+    borderRadius: '8px',
+    border: '1px solid rgba(0,188,188,0.35)',
+    fontSize: '12px',
+    lineHeight: '1.6',
+    boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
     pointerEvents: 'none',
-    whiteSpace:    'normal',
-    display:       'none',
-    transition:    'opacity 0.12s ease',
-    opacity:       '0',
+    whiteSpace: 'normal',
+    display: 'none',
+    transition: 'opacity 0.12s ease',
+    opacity: '0',
   });
   document.body.appendChild(tip);
 
@@ -44,13 +45,13 @@ function initGlobalTooltip() {
 
     tip.style.opacity = '0';
     tip.style.left = '0px';
-    tip.style.top  = '0px';
+    tip.style.top = '0px';
 
     requestAnimationFrame(() => {
       const tw = tip.offsetWidth;
       const th = tip.offsetHeight;
       const vw = window.innerWidth;
-      const r  = el.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
 
       let left = r.left + r.width / 2 - tw / 2;
       left = Math.max(8, Math.min(left, vw - tw - 8));
@@ -58,8 +59,8 @@ function initGlobalTooltip() {
       let top = r.top - th - 8;
       if (top < 8) top = r.bottom + 8;
 
-      tip.style.left    = left + 'px';
-      tip.style.top     = top  + 'px';
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
       tip.style.opacity = '1';
     });
   }
@@ -416,11 +417,21 @@ function TabCron({ }) {
     </th>
   `;
 
-  const ArrayCron = ({ d, index }) => html`
+  const ArrayCron = ({ d, index }) => {
+    const isPwmCron = d.activ && d.activ.startsWith('pwm:');
+    let displayActiv = d.activ;
+    if (isPwmCron) {
+      const parts = d.activ.substring(4).split(',');
+      if (parts.length === 4) {
+        displayActiv = `☀ Pin${parts[0]} | ${parts[1]}s | ${parts[2]}%→${parts[3]}%`;
+      }
+    }
+
+    return html`
     <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
       <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.id}</td>
       <td class="px-6 py-4 text-sm text-slate-700 font-mono tracking-wider">${d.cron}</td>
-      <td class="px-6 py-4 text-sm text-slate-700 font-mono tracking-wider">${d.activ}</td>
+      <td class="px-6 py-4 text-sm text-slate-700 font-mono tracking-wider items-center gap-1 flex justify-start">${displayActiv}</td>
       <td class="px-6 py-4 text-sm text-slate-600">${d.info}</td>
       <td class="px-6 py-4">
         <${MyPolzunok}
@@ -429,15 +440,32 @@ function TabCron({ }) {
         />
       </td>
       <td class="px-6 py-4 text-center">
-        <button
-          onclick=${() => openModal('edit', d)}
-          class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap"
-        >
-          Edit
-        </button>
+        ${!isPwmCron ? html`
+          <button
+            onclick=${() => openModal('edit', d)}
+            class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap mr-3"
+          >
+            Edit
+          </button>
+          <button
+            onclick=${() => openModal('edit_pwm', d)}
+            class="text-violet-600 hover:text-violet-800 font-semibold transition-colors whitespace-nowrap"
+            title="Set as PWM Cron"
+          >
+            ☀ PWM
+          </button>
+        ` : html`
+          <button
+            onclick=${() => openModal('edit_pwm', d)}
+            class="text-violet-600 hover:text-violet-800 font-semibold transition-colors whitespace-nowrap"
+          >
+            Edit PWM
+          </button>
+        `}
       </td>
     </tr>
   `;
+  };
 
   return html`
     <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-center items-center">
@@ -451,7 +479,7 @@ function TabCron({ }) {
         </div>
         <div class="w-full mb-6 relative">
           ${varcron && varcron.length > 0
-            ? html`
+      ? html`
                 <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6">
                   <div class="overflow-x-auto w-full">
                     <table class="w-full text-left border-collapse whitespace-nowrap">
@@ -467,14 +495,14 @@ function TabCron({ }) {
                       </thead>
                       <tbody class="divide-y divide-white/40">
                         ${varcron.slice(0, visibleCrons).map(
-                          (cron, index) => html`<${ArrayCron} d=${cron} index=${index} key=${cron.id} />`
-                        )}
+        (cron, index) => html`<${ArrayCron} d=${cron} index=${index} key=${cron.id} />`
+      )}
                       </tbody>
                     </table>
                   </div>
                 </div>
               `
-            : html`<div class="flex items-center justify-center p-8 text-slate-500 font-medium">No cron jobs available</div>`}
+      : html`<div class="flex items-center justify-center p-8 text-slate-500 font-medium">No cron jobs available</div>`}
         </div>
         <div class="w-full flex justify-between items-center mb-4 mt-2 bg-white/40 backdrop-blur-md border border-white/60 shadow-sm p-4 rounded-2xl">
           <button
@@ -485,28 +513,28 @@ function TabCron({ }) {
           </button>
           <div class="font-semibold text-slate-600 tracking-wide">
             ${varcron && (varcron.length - visibleCrons > 0)
-              ? `Still available: ${varcron.length - visibleCrons} cron jobs`
-              : 'No available: cron jobs!'}
+      ? `Still available: ${varcron.length - visibleCrons} cron jobs`
+      : 'No available: cron jobs!'}
           </div>
           <div class="flex gap-2">
             ${varcron && (visibleCrons < varcron.length)
-              ? html`
+      ? html`
                   <button
                     class="bg-emerald-500 hover:bg-emerald-600 shadow-md text-white font-black text-xl w-10 h-10 rounded-full transition-transform hover:scale-110 active:scale-95 flex items-center justify-center pb-1 shadow-emerald-500/30"
                     onclick=${addCron}
                     title="Add Cron"
                   >+</button>
                 `
-              : null}
+      : null}
             ${visibleCrons > 0
-              ? html`
+      ? html`
                   <button
                     class="bg-rose-500 hover:bg-rose-600 shadow-md text-white font-black text-xl w-10 h-10 rounded-full transition-transform hover:scale-110 active:scale-95 flex items-center justify-center pb-1 shadow-rose-500/30"
                     onclick=${deleteCron}
                     title="Remove Cron"
                   >-</button>
                 `
-              : null}
+      : null}
           </div>
         </div>
       </div>
@@ -517,7 +545,17 @@ function TabCron({ }) {
         </div>
       `}
 
-      ${isModalOpen && html`
+      ${isModalOpen && modalType === 'edit_pwm' ? html`
+        <${ModalPwmCron}
+          modalType=${modalType}
+          page="TabCron"
+          hideModal=${closeModal}
+          title="Edit PWM Timer(s)"
+          selectedCron=${selectedCron}
+          handleCronChange=${handleCronChange}
+          modalClass="mt-24"
+        />
+      ` : isModalOpen ? html`
         <${ModalCron}
           modalType=${modalType}
           page="TabCron"
@@ -528,7 +566,7 @@ function TabCron({ }) {
           connectionOptions=${getCronConnectionOptions()}
           modalClass="mt-24"
         />
-      `}
+      ` : null}
     </div>
   `;
 }

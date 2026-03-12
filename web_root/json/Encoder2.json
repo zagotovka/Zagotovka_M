@@ -1,9 +1,10 @@
 {
   "topin": 8,
-  "id": 3,
-  "pins": "PA5",
-  "pwm": 50000000,
-  "dvalue": 25,
+  "id": 0,
+  "pins": "PA0",
+  "pwm": 10000000,
+  "pwmmax": 1000,
+  "dvalue": 21,
   "ponr": 1,
   "info": "Test 10Hz",
   "onoff": 1
