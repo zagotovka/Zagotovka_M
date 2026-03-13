@@ -1066,25 +1066,52 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
         for (short k = 0; k < NUMPINLINKS; k++) {
           if (PinsLinks[k].idin == id && PinsLinks[k].idout == j) {
             if (cJSON_IsNumber(dvalue_item) && cJSON_IsNumber(pwm_item)) {
-              uint64_t timer_clk_mhz = 216000000ULL * 1000ULL;
+              uint64_t timer_clk_mhz;
+              if (PinsInfo[j].tim == TIM1 || PinsInfo[j].tim == TIM8 ||
+                  PinsInfo[j].tim == TIM9 || PinsInfo[j].tim == TIM10 ||
+                  PinsInfo[j].tim == TIM11) {
+                timer_clk_mhz = 216000000ULL * 1000ULL;
+              } else {
+                timer_clk_mhz = 108000000ULL * 1000ULL;
+              }
               uint32_t target_freq = (uint32_t)pwm_item->valueint;
               if (target_freq == 0 || target_freq > timer_clk_mhz)
                 target_freq = 10000000;
               PinsConf[j].pwm = target_freq;
 
               uint32_t prescaler = 0;
-              uint32_t period = (timer_clk_mhz / target_freq) - 1;
+              uint32_t period =
+                  (uint32_t)((timer_clk_mhz / (uint64_t)target_freq) - 1);
               while (period > 65535) {
                 prescaler++;
-                period = (timer_clk_mhz / (target_freq * (prescaler + 1))) - 1;
+                period = (uint32_t)((timer_clk_mhz / ((uint64_t)target_freq *
+                                                      (prescaler + 1))) -
+                                    1);
               }
               PinsConf[j].pwmmax = period;
 
+              // dvalue из JSON - это ПРОЦЕНТ 0-100
+              int new_dvalue = dvalue_item->valueint;
+              if (new_dvalue < 0)
+                new_dvalue = 0;
+              if (new_dvalue > 100)
+                new_dvalue = 100;
+              PinsConf[j].dvalue = new_dvalue;
+
+              // Применяем prescaler и period
               __HAL_TIM_SET_PRESCALER(&htim[j], prescaler);
               __HAL_TIM_SET_AUTORELOAD(&htim[j], period);
+              // Применяем скважность: CCR = dvalue% * period / 100
+              uint32_t pulse_json =
+                  (uint32_t)((uint64_t)new_dvalue * period / 100ULL);
+              __HAL_TIM_SET_COMPARE(&htim[j], PinsInfo[j].tim_channel,
+                                    pulse_json);
 
-              printf("Updated PWM pin %d: freq=%d, pwmmax=%d\n", j,
-                     PinsConf[j].pwm, PinsConf[j].pwmmax);
+              printf("Updated PWM [%d] %s: freq=%lu mHz, period=%lu, psc=%lu, "
+                     "dvalue=%d%% = %lu steps\r\n",
+                     j, PinsInfo[j].pins, (unsigned long)PinsConf[j].pwm,
+                     (unsigned long)period, (unsigned long)prescaler,
+                     new_dvalue, (unsigned long)pulse_json);
             }
             break;
           }
@@ -2502,9 +2529,20 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
             if (mg_http_get_var(&hm->query, "dvalue", value_str,
                                 sizeof(value_str)) > 0) {
               value = atoi(value_str);
+              if (value < 0)
+                value = 0;
+              if (value > 100)
+                value = 100;
               PinsConf[id].dvalue = value;
+              uint32_t pulse_web =
+                  (uint32_t)((uint64_t)value * PinsConf[id].pwmmax / 100ULL);
+              __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel,
+                                    pulse_web);
+              printf("PWM WEB [%d] %s: %d%% = %lu steps\r\n", id,
+                     PinsInfo[id].pins, value, (unsigned long)pulse_web);
               mg_http_reply(c, 200, "Content-Type: text/plain\r\n",
-                            "PWM %d set to %d\n", id, value);
+                            "PWM %d set to %d%% (%lu steps)\n", id, value,
+                            (unsigned long)pulse_web);
             } else {
               mg_http_reply(c, 400, NULL, "Missing dvalue parameter for pwm\n");
             }
@@ -3272,12 +3310,16 @@ void mqtt_message_handler(const char *topic, const char *payload) {
       if (dvalue_part) {
         int value;
         if (sscanf(dvalue_part + 7, "%d", &value) == 1) {
-          if (value >= 0 && value <= PinsConf[id].pwmmax) {
+          if (value >= 0 && value <= 100) { // dvalue — ПРОЦЕНТ 0-100
             PinsConf[id].dvalue = value;
-            processPins(id, value);
-            printf("PWM %d set to %d by mqtt!\n", id, value);
+            uint32_t pulse_mqtt =
+                (uint32_t)((uint64_t)value * PinsConf[id].pwmmax / 100ULL);
+            __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel,
+                                  pulse_mqtt);
+            printf("PWM MQTT [%d] %s: %d%% = %lu steps\n", id,
+                   PinsInfo[id].pins, value, (unsigned long)pulse_mqtt);
           } else {
-            printf("Invalid dvalue for PWM: %d\n", value);
+            printf("Invalid dvalue for PWM (must be 0-100): %d\n", value);
           }
         } else {
           printf("Invalid dvalue format in payload\n");

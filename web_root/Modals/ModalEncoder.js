@@ -28,9 +28,13 @@ function ModalEncoder({
   const [encoderBOptions, setEncoderBOptions] = useState([]);
   const [pwmOptions, setPwmOptions] = useState([]);
 
+  // dvalue хранится как ПРОЦЕНТ 0-100. C-код сам масштабирует в шаги таймера.
+  const pwmmax = selectedEncoder.pwmmax || 100;
   const [dvalue, setDvalue] = useState(selectedEncoder.dvalue || 0);
   const [ponr, setPonr] = useState(selectedEncoder.ponr || 0);
   const [pwmFreq, setPwmFreq] = useState(selectedEncoder.pwm || 10000000);
+
+  const percentToSteps = (percent) => Math.round((percent * pwmmax) / 100);
 
   useEffect(() => {
     fetch('/api/select/get', {
@@ -96,7 +100,7 @@ function ModalEncoder({
         pins: selectedEncoder.pins,
         pwm: parseInt(pwmFreq), // Отправляем миллигерцы (10000000)
         pwmmax: selectedEncoder.pwmmax,
-        dvalue: parseInt(dvalue),
+        dvalue: parseInt(dvalue),  // 0-100%, C-код масштабирует в шаги
         ponr: parseInt(ponr),
         info: encoderInfo,
         onoff: onoff ? 1 : 0
@@ -300,7 +304,7 @@ function ModalEncoder({
                     </td>
                   </tr>
                   <tr class="bg-gray-200">
-                    <td class="p-2 font-bold">Dimmer value (0-100)</td>
+                    <td class="p-2 font-bold">Dimmer value %</td>
                     <td class="p-2">
                       <input
                         type="number"
@@ -310,6 +314,9 @@ function ModalEncoder({
                         oninput=${handleDvalueChange}
                         class="border rounded p-2 w-full"
                       />
+                      <div class="text-xs text-gray-500">
+                        ${dvalue}% = ${percentToSteps(parseInt(dvalue) || 0)} / ${pwmmax} steps
+                      </div>
                     </td>
                   </tr>
                   <tr class="bg-white">

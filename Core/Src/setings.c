@@ -1472,7 +1472,8 @@ void InitPin() {
       GPIO_InitStruct.Pin = PinsInfo[i].hal_pin; // вход
       GPIO_InitStruct.Mode =
           GPIO_MODE_INPUT; // устанавливаем режим работы порта на вход
-      GPIO_InitStruct.Pull = GPIO_NOPULL;
+      GPIO_InitStruct.Pull =
+          GPIO_PULLUP; // ПРЕДОТВРАЩАЕМ НАВОДКИ ("ШУМ") НА ВИСЯЩИХ ПИНАХ!
       HAL_GPIO_Init(PinsInfo[i].gpio_name, &GPIO_InitStruct); // инициализируем
     }
     // initialization BUTTON & SWITCH
@@ -1500,7 +1501,13 @@ void InitPin() {
     }
     // initialization PWM
     else if (PinsConf[i].topin == 5) {
-      //__HAL_RCC_TIM1_CLK_ENABLE();
+      // Защита от NULL: если у пина нет таймера - пропускаем
+      if (PinsInfo[i].tim == NULL) {
+        printf("PWM ERROR: pin %d (%s) has no timer assigned! Skipping.\r\n", i,
+               PinsInfo[i].pins);
+        PinsConf[i].topin = 0;
+        continue;
+      }
       if (PinsInfo[i].tim == TIM1) {
         __HAL_RCC_TIM1_CLK_ENABLE();
       } else if (PinsInfo[i].tim == TIM2) {
@@ -1534,17 +1541,27 @@ void InitPin() {
       TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
       /* USER CODE BEGIN TIM1_Init 1 */
       /* USER CODE END TIM1_Init 1 */
-      uint64_t timer_clk_mhz = 216000000ULL * 1000ULL;
+      uint64_t timer_clk_mhz;
+      if (PinsInfo[i].tim == TIM1 || PinsInfo[i].tim == TIM8 ||
+          PinsInfo[i].tim == TIM9 || PinsInfo[i].tim == TIM10 ||
+          PinsInfo[i].tim == TIM11) {
+        timer_clk_mhz = 216000000ULL * 1000ULL; // APB2 таймеры: 216 MHz
+      } else {
+        timer_clk_mhz = 108000000ULL * 1000ULL; // APB1 таймеры: 108 MHz
+      }
       uint32_t target_freq = PinsConf[i].pwm;
-      if (target_freq == 0 || target_freq > timer_clk_mhz)
+      if (target_freq == 0 || (uint64_t)target_freq > timer_clk_mhz)
         target_freq = 10000000;
       PinsConf[i].pwm = target_freq;
 
+      // Защита от переполнения: используем uint64 в знаменателе
       uint32_t prescaler = 0;
-      uint32_t period = (timer_clk_mhz / target_freq) - 1;
+      uint32_t period = (uint32_t)((timer_clk_mhz / (uint64_t)target_freq) - 1);
       while (period > 65535) {
         prescaler++;
-        period = (timer_clk_mhz / (target_freq * (prescaler + 1))) - 1;
+        period = (uint32_t)((timer_clk_mhz /
+                             ((uint64_t)target_freq * (prescaler + 1))) -
+                            1);
       }
       PinsConf[i].pwmmax = period;
 
@@ -1566,7 +1583,14 @@ void InitPin() {
         Error_Handler();
       }
       sConfigOC.OCMode = TIM_OCMODE_PWM1;
-      sConfigOC.Pulse = 0;
+      // dvalue хранится как ПРОЦЕНТ 0-100. Пересчитываем в шаги таймера:
+      if (PinsConf[i].dvalue < 0)
+        PinsConf[i].dvalue = 0;
+      if (PinsConf[i].dvalue > 100)
+        PinsConf[i].dvalue = 100;
+      uint32_t pulse =
+          (uint32_t)((uint64_t)PinsConf[i].dvalue * period / 100ULL);
+      sConfigOC.Pulse = pulse;
       sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
       sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
       sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
@@ -1576,20 +1600,27 @@ void InitPin() {
                                     PinsInfo[i].tim_channel) != HAL_OK) {
         Error_Handler();
       }
-      sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
-      sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
-      sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
-      sBreakDeadTimeConfig.DeadTime = 0;
-      sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
-      sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
-      sBreakDeadTimeConfig.BreakFilter = 0;
-      sBreakDeadTimeConfig.Break2State = TIM_BREAK2_DISABLE;
-      sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
-      sBreakDeadTimeConfig.Break2Filter = 0;
-      sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
-      if (HAL_TIMEx_ConfigBreakDeadTime(&htim[i], &sBreakDeadTimeConfig) !=
-          HAL_OK) {
-        Error_Handler();
+      // TIM1 и TIM8 — продвинутые таймеры (Advanced Control).
+      // Им ОБЯЗАТЕЛЬНО нужен MOE (Main Output Enable) бит через AutomaticOutput
+      // = ENABLE, иначе выходной сигнал будет заблокирован, независимо от
+      // остальных настроек!
+      if (PinsInfo[i].tim == TIM1 || PinsInfo[i].tim == TIM8) {
+        sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
+        sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
+        sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
+        sBreakDeadTimeConfig.DeadTime = 0;
+        sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
+        sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
+        sBreakDeadTimeConfig.BreakFilter = 0;
+        sBreakDeadTimeConfig.Break2State = TIM_BREAK2_DISABLE;
+        sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
+        sBreakDeadTimeConfig.Break2Filter = 0;
+        sBreakDeadTimeConfig.AutomaticOutput =
+            TIM_AUTOMATICOUTPUT_ENABLE; // <<< MOE!
+        if (HAL_TIMEx_ConfigBreakDeadTime(&htim[i], &sBreakDeadTimeConfig) !=
+            HAL_OK) {
+          Error_Handler();
+        }
       }
       /* USER CODE BEGIN TIM1_Init 2 */
       /* USER CODE END TIM1_Init 2 */
@@ -1597,12 +1628,40 @@ void InitPin() {
       // GPIO_InitStruct.Pin = GPIO_PIN_9;
       GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
       GPIO_InitStruct.Pull = GPIO_NOPULL;
-      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
       GPIO_InitStruct.Alternate = PinsInfo[i].af;
       // HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
       HAL_GPIO_Init(PinsInfo[i].gpio_name, &GPIO_InitStruct);
       // HAL_TIM_MspPostInit(&htim[i]);
       HAL_TIM_PWM_Start(&htim[i], PinsInfo[i].tim_channel);
+      // === ДИАГНОСТИКА PWM ===
+      printf("\r\n=== PWM INIT [%d] %s ===\r\n", i, PinsInfo[i].pins);
+      printf("  Tim addr : 0x%08lX\r\n", (unsigned long)PinsInfo[i].tim);
+      printf("  Target   : %lu mHz\r\n", (unsigned long)PinsConf[i].pwm);
+      printf("  Period   : %lu  (ARR register)\r\n", (unsigned long)period);
+      printf("  Prescaler: %lu  (PSC register)\r\n", (unsigned long)prescaler);
+      printf("  dvalue   : %d%%  ->  pulse=%lu steps\r\n", PinsConf[i].dvalue,
+             (unsigned long)pulse);
+      printf("  TIM->CR1  : 0x%04lX  (EN=%lu)\r\n",
+             (unsigned long)PinsInfo[i].tim->CR1,
+             (unsigned long)(PinsInfo[i].tim->CR1 & TIM_CR1_CEN));
+      printf("  TIM->CCER : 0x%04lX  <<< Channel Enable!\r\n",
+             (unsigned long)PinsInfo[i].tim->CCER);
+      printf("  TIM->ARR  : %lu\r\n", (unsigned long)PinsInfo[i].tim->ARR);
+      printf("  TIM->PSC : %lu\r\n", (unsigned long)PinsInfo[i].tim->PSC);
+      if (PinsInfo[i].tim_channel == TIM_CHANNEL_1)
+        printf("  TIM->CCR1: %lu\r\n", (unsigned long)PinsInfo[i].tim->CCR1);
+      else if (PinsInfo[i].tim_channel == TIM_CHANNEL_2)
+        printf("  TIM->CCR2: %lu\r\n", (unsigned long)PinsInfo[i].tim->CCR2);
+      else if (PinsInfo[i].tim_channel == TIM_CHANNEL_3)
+        printf("  TIM->CCR3: %lu\r\n", (unsigned long)PinsInfo[i].tim->CCR3);
+      else if (PinsInfo[i].tim_channel == TIM_CHANNEL_4)
+        printf("  TIM->CCR4: %lu\r\n", (unsigned long)PinsInfo[i].tim->CCR4);
+      if (PinsInfo[i].tim == TIM1 || PinsInfo[i].tim == TIM8)
+        printf("  TIM->BDTR: 0x%08lX  (MOE=%lu) <<< must be 1!\r\n",
+               (unsigned long)PinsInfo[i].tim->BDTR,
+               (unsigned long)((PinsInfo[i].tim->BDTR >> 15) & 1));
+      printf("================================\r\n\r\n");
     }
     /******************************************* Security
      ***********************************************/

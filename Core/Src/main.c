@@ -85,15 +85,6 @@ uint8_t mqttnum = 0;
 uint8_t sumowpin = 0;
 data_pin_t data_pin;
 
-/* PWM Fade (sunrise/sunset) */
-typedef struct {
-  uint8_t pwm_id;
-  uint32_t duration_sec;
-  int start_duty;
-  int end_duty;
-} PwmFadeParams_t;
-static TaskHandle_t fade_task_handles[NUMPIN] = {0};
-
 #define HTTP_URL "http://0.0.0.0:8000"
 #define HTTPS_URL "https://0.0.0.0:8443"
 /* USER CODE END PTD */
@@ -254,8 +245,7 @@ extern struct dbPinsInfo PinsInfo[NUMPIN];
 extern struct dbPinToPin PinsLinks[NUMPINLINKS];
 
 extern ApplicationTypeDef Appli_state;
-/**************************** GSM (переменные перенесены в gsm.c) ******/
-/*************************** END GSM ************************************/
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -508,29 +498,22 @@ void pwm_event_handler(Button *handle) {
         //  PWM
         i = PinsLinks[a].idout;
         if (PinsConf[i].topin == 5) {
-          // for (int d = 0; d <= 11; ++d) {
-          PinsConf[i].dvalue =
-              (int)HAL_TIM_ReadCapturedValue(&htim[i], PinsInfo[i].tim_channel);
-
+          // dvalue - ПРОЦЕНТ 0-100, step = 1%
           if (PinsConf[handle->button_id].on == 1) {
             PinsConf[i].dvalue += 1;
-            if (PinsConf[i].dvalue > PinsConf[i].pwmmax) {
-              PinsConf[i].dvalue = PinsConf[i].pwmmax;
-              // pwmflag[handle->button_id] = 0;
-            }
+            if (PinsConf[i].dvalue > 100)
+              PinsConf[i].dvalue = 100;
           }
           if (PinsConf[handle->button_id].on == 0) {
             PinsConf[i].dvalue -= 1;
-            if (PinsConf[i].dvalue < 0) {
+            if (PinsConf[i].dvalue < 0)
               PinsConf[i].dvalue = 0;
-              // pwmflag[handle->button_id] = 1;
-            }
           }
-
-          __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel,
-                                PinsConf[i].dvalue);
-          printf("PWM pwmValue %d %s \r\n", PinsConf[i].dvalue,
-                 PinsInfo[i].pins);
+          uint32_t pulse_lh = (uint32_t)((uint64_t)PinsConf[i].dvalue *
+                                         PinsConf[i].pwmmax / 100ULL);
+          __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, pulse_lh);
+          printf("PWM LONG [%d] %s: %d%% = %lu steps\r\n", i, PinsInfo[i].pins,
+                 PinsConf[i].dvalue, (unsigned long)pulse_lh);
         }
         // 						data_pin.id =
         // PinsLinks[a].idout;
@@ -553,14 +536,11 @@ void pwm_event_handler(Button *handle) {
         //  PWM
         i = PinsLinks[a].idout;
         if (PinsConf[i].topin == 5) {
-          // for (int d = 0; d <= 11; ++d) {
-          PinsConf[i].dvalue =
-              (int)HAL_TIM_ReadCapturedValue(&htim[i], PinsInfo[i].tim_channel);
-          // printf("PWM pwmValue %d \r\n", PinsConf[i].dvalue);
+          // dvalue - ПРОЦЕНТ 0-100, step = 1%
           if (PinsConf[handle->button_id].on == 1) {
             PinsConf[i].dvalue += 1;
-            if (PinsConf[i].dvalue > PinsConf[i].pwmmax) {
-              PinsConf[i].dvalue = PinsConf[i].pwmmax;
+            if (PinsConf[i].dvalue > 100) {
+              PinsConf[i].dvalue = 100;
               PinsConf[handle->button_id].on = 0;
             }
           }
@@ -571,11 +551,11 @@ void pwm_event_handler(Button *handle) {
               PinsConf[handle->button_id].on = 1;
             }
           }
-          __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel,
-                                PinsConf[i].dvalue);
-          printf("PWM pwmValue %d %s \r\n", PinsConf[i].dvalue,
-                 PinsInfo[i].pins);
-          //}
+          uint32_t pulse_sc = (uint32_t)((uint64_t)PinsConf[i].dvalue *
+                                         PinsConf[i].pwmmax / 100ULL);
+          __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, pulse_sc);
+          printf("PWM CLICK [%d] %s: %d%% = %lu steps\r\n", i, PinsInfo[i].pins,
+                 PinsConf[i].dvalue, (unsigned long)pulse_sc);
         }
 
         // 						data_pin.id =
@@ -1090,86 +1070,49 @@ PUTCHAR_PROTOTYPE {
   HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 1, 0xFFFF);
   return ch;
 }
+/************************ PWM Fade *************************************/
+/* PWM Fade state — без динамических задач, без malloc */
+typedef struct {
+    bool     active;
+    float    current_duty;
+    float    delta;
+    uint32_t steps_left;
+    int      end_duty;
+} FadeState_t;
 
-/************************ PWM Fade (sunrise / sunset) *************/
-/* FreeRTOS задача плавного изменения PWM — 1 шаг каждую секунду. */
-static void pwm_fade_task(void *arg) {
-  PwmFadeParams_t *p = (PwmFadeParams_t *)arg;
-  uint8_t id = p->pwm_id;
-  uint32_t steps = p->duration_sec > 0 ? p->duration_sec : 1;
-  float duty = (float)p->start_duty;
-  float delta = (float)(p->end_duty - p->start_duty) / (float)steps;
-  vPortFree(p);
+static FadeState_t fade_state[NUMPIN] = {0};
 
-  for (uint32_t i = 0; i <= steps; i++) {
-    if (PinsConf[id].topin == 5 && PinsConf[id].onoff == 1) {
-      int d = (int)(duty + 0.5f);
-      if (d < 0)
-        d = 0;
-      if (d > 100)
-        d = 100;
-      PinsConf[id].dvalue = d;
-      __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel, (uint32_t)d);
-    }
-    duty += delta;
-    osDelay(1000);
-  }
-  /* Гарантируем установку финального значения */
-  if (PinsConf[id].topin == 5) {
-    float fin = duty - delta;
-    int d = (int)(fin + 0.5f);
-    if (d < 0)
-      d = 0;
-    if (d > 100)
-      d = 100;
-    PinsConf[id].dvalue = d;
-    __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel, (uint32_t)d);
-  }
-  fade_task_handles[id] = NULL;
-  vTaskDelete(NULL);
-}
-
-/* Запускает (или перезапускает) задачу плавного изменения PWM.
+/* Запускает (или перезапускает) плавное изменение PWM.
  * pwm_id       — индекс PWM-пина (topin == 5)
  * duration_sec — длительность перехода в секундах
  * start_duty   — начальная яркость 0–100%
  * end_duty     — конечная яркость   0–100% */
-void start_pwm_fade(uint8_t pwm_id, uint32_t duration_sec, int start_duty,
-                    int end_duty) {
-  if (pwm_id >= NUMPIN || PinsConf[pwm_id].topin != 5) {
-    printf("start_pwm_fade: bad id=%d\r\n", pwm_id);
-    return;
-  }
-  /* Завершаем предыдущий fade для того же пина, если есть */
-  if (fade_task_handles[pwm_id] != NULL) {
-    vTaskDelete(fade_task_handles[pwm_id]);
-    fade_task_handles[pwm_id] = NULL;
-  }
-  PwmFadeParams_t *p = (PwmFadeParams_t *)pvPortMalloc(sizeof(PwmFadeParams_t));
-  if (p == NULL) {
-    printf("start_pwm_fade: malloc fail\r\n");
-    return;
-  }
-  p->pwm_id = pwm_id;
-  p->duration_sec = duration_sec;
-  p->start_duty = start_duty;
-  p->end_duty = end_duty;
-  /* Устанавливаем начальное значение немедленно */
-  PinsConf[pwm_id].dvalue = start_duty;
-  __HAL_TIM_SET_COMPARE(&htim[pwm_id], PinsInfo[pwm_id].tim_channel,
-                        (uint32_t)start_duty);
-  BaseType_t res =
-      xTaskCreate(pwm_fade_task, "pwm_fade", 256, p, tskIDLE_PRIORITY + 1,
-                  &fade_task_handles[pwm_id]);
-  if (res != pdPASS) {
-    printf("start_pwm_fade: xTaskCreate fail\r\n");
-    vPortFree(p);
-  } else {
-    printf("PWM fade: id=%d %ds %d%%->%d%%\r\n", pwm_id, (int)duration_sec,
-           start_duty, end_duty);
-  }
-}
+void start_pwm_fade(uint8_t pwm_id, uint32_t duration_sec,
+                    int start_duty, int end_duty) {
+    if (pwm_id >= NUMPIN || PinsConf[pwm_id].topin != 5) {
+        printf("start_pwm_fade: bad id=%d\r\n", pwm_id);
+        return;
+    }
 
+    uint32_t steps = duration_sec > 0 ? duration_sec : 1;
+
+    fade_state[pwm_id].active       = true;
+    fade_state[pwm_id].current_duty = (float)start_duty;
+    fade_state[pwm_id].delta        = (float)(end_duty - start_duty)
+                                       / (float)steps;
+    fade_state[pwm_id].steps_left   = steps;
+    fade_state[pwm_id].end_duty     = end_duty;
+
+    /* Устанавливаем начальное значение немедленно */
+    PinsConf[pwm_id].dvalue = start_duty;
+    uint32_t pulsef3 =
+        (uint32_t)((uint64_t)start_duty * PinsConf[pwm_id].pwmmax / 100ULL);
+    __HAL_TIM_SET_COMPARE(&htim[pwm_id], PinsInfo[pwm_id].tim_channel, pulsef3);
+
+    printf("PWM fade: id=%d %ds %d%%->%d%%\r\n",
+           pwm_id, (int)duration_sec, start_duty, end_duty);
+}
+/*********************** END PWM Fade **********************************/
 void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
   char *token;
   char *saveptr;
@@ -1245,9 +1188,7 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
     token = strtok_r(NULL, delim, &saveptr);
   }
 }
-/************************ GSM *************************************/
-/* init_sim800l_module и process_sim800l_data перенесены в gsm.c  */
-/*********************** END GSM **********************************/
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartConfigTask */
@@ -1780,9 +1721,9 @@ void StartEncoderTask(void *argument) {
   uint8_t id = 0;
   uint8_t a = 0;
   uint8_t idpwm = 0;
-  uint16_t lstvalue[NUMPIN] = {
-      0,
-  }; // Ммассив для хранения последних значений dvalue
+  //  uint16_t lstvalue[NUMPIN] = {
+  //      0,
+  //  }; // Ммассив для хранения последних значений dvalue
   /* Infinite loop */
   for (;;) {
     millis = HAL_GetTick();
@@ -1814,20 +1755,17 @@ void StartEncoderTask(void *argument) {
                   if (PinsLinks[a].idin == id) { // Если нашли "EncodrerA".
                     idpwm = PinsLinks[a].idout;  // то узнаем id "EncodrerB".
                     if (PinsConf[idpwm].topin == 5) { // PWM
-                      // Проверяем, изменилось ли значение dvalue из модального
-                      // окна.
-                      if (PinsConf[idpwm].dvalue != lstvalue[idpwm]) {
-                        lstvalue[idpwm] = PinsConf[idpwm].dvalue;
-                      } else {
-                        PinsConf[idpwm].dvalue -= 1;
-                      }
-                      if (PinsConf[idpwm].dvalue <= 0) {
+                      // Инкремент/декремент при КАЖДОМ шаге энкодера
+                      PinsConf[idpwm].dvalue -= 1;
+                      if (PinsConf[idpwm].dvalue < 0) {
                         PinsConf[idpwm].dvalue = 0;
                       }
+                      uint32_t pulse_enc1 =
+                          (uint32_t)((uint64_t)PinsConf[idpwm].dvalue *
+                                     PinsConf[idpwm].pwmmax / 100ULL);
                       __HAL_TIM_SET_COMPARE(&htim[idpwm],
                                             PinsInfo[idpwm].tim_channel,
-                                            PinsConf[idpwm].dvalue);
-                      lstvalue[idpwm] = PinsConf[idpwm].dvalue;
+                                            pulse_enc1);
                       //                                            printf("PWM
                       //                                            = %d\r\n",
                       //                                            PinsConf[idpwm].dvalue);
@@ -1844,20 +1782,16 @@ void StartEncoderTask(void *argument) {
                   if (PinsLinks[a].idin == id) {      // Если нашли "EncodrerA".
                     idpwm = PinsLinks[a].idout;       // то узнаем "EncodrerB".
                     if (PinsConf[idpwm].topin == 5) { // PWM
-                      // Проверяем, изменилось ли значение dvalue из модального
-                      // окна.
-                      if (PinsConf[idpwm].dvalue != lstvalue[idpwm]) {
-                        lstvalue[idpwm] = PinsConf[idpwm].dvalue;
-                      } else {
-                        PinsConf[idpwm].dvalue += 1;
-                      }
-                      if (PinsConf[idpwm].dvalue >= 100) {
+                      PinsConf[idpwm].dvalue += 1;
+                      if (PinsConf[idpwm].dvalue > 100) {
                         PinsConf[idpwm].dvalue = 100;
                       }
+                      uint32_t pulse_enc2 =
+                          (uint32_t)((uint64_t)PinsConf[idpwm].dvalue *
+                                     PinsConf[idpwm].pwmmax / 100ULL);
                       __HAL_TIM_SET_COMPARE(&htim[idpwm],
                                             PinsInfo[idpwm].tim_channel,
-                                            PinsConf[idpwm].dvalue);
-                      lstvalue[idpwm] = PinsConf[idpwm].dvalue;
+                                            pulse_enc2);
                       // printf("PWM = %d\r\n", PinsConf[idpwm].dvalue);
                     }
                   }
@@ -1873,6 +1807,7 @@ void StartEncoderTask(void *argument) {
         }
       }
     }
+    osDelay(1);
   }
   /* USER CODE END StartEncoderTask */
 }
@@ -2316,8 +2251,47 @@ void StartServiceTask(void *argument) {
       // SetSettings.dlength);
     }
   }
+  /* ── PWM Fade тик-счётчик ── */
+  static uint32_t fade_tick = 0;
   /* Infinite loop */
   for (;;) {
+/* ═══════════════════════════════════════════════
+ *  БЛОК PWM Fade — каждые 1000 мс (НОВОЕ)
+ * ═══════════════════════════════════════════════ */
+	    if (HAL_GetTick() - fade_tick >= 1000) {
+	      fade_tick = HAL_GetTick();
+	      for (int i = 0; i < NUMPIN; i++) {
+	        if (!fade_state[i].active)   continue;
+	        if (PinsConf[i].topin != 5)  continue;
+
+	        fade_state[i].steps_left--;
+	        fade_state[i].current_duty += fade_state[i].delta;
+
+	        /* Клампинг 0–100% */
+	        if (fade_state[i].current_duty < 0.0f)
+	            fade_state[i].current_duty = 0.0f;
+	        if (fade_state[i].current_duty > 100.0f)
+	            fade_state[i].current_duty = 100.0f;
+
+	        int d = (int)(fade_state[i].current_duty + 0.5f);
+
+	        /* На последнем шаге гарантируем точное финальное значение */
+	        if (fade_state[i].steps_left == 0) {
+	          d = fade_state[i].end_duty;
+	          fade_state[i].active = false;
+	          printf("PWM fade done: id=%d final=%d%%\r\n", i, d);
+	        }
+
+	        PinsConf[i].dvalue = d;
+	        uint32_t pulse = (uint32_t)((uint64_t)d
+	                          * PinsConf[i].pwmmax / 100ULL);
+	        __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, pulse);
+	      }
+	    }
+/* ═══════════════════════════════════════════════
+ *  End PWM Fade
+ * ═══════════════════════════════════════════════ */
+
     if (day != prevday) {
       prevday = day;
       // Calculate after system reboot
@@ -2372,6 +2346,45 @@ void StartServiceTask(void *argument) {
       if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
         Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" один раз в
                                        // минуту.
+      }
+    }
+    // === ПЕРИОДИЧЕСКИЙ ДАМП PWM РЕГИСТРОВ (каждые 10 секунд) ===
+    {
+      static uint32_t pwm_dbg_tick = 0;
+      if (HAL_GetTick() - pwm_dbg_tick >= 10000) {
+        pwm_dbg_tick = HAL_GetTick();
+        bool found_pwm = false;
+        for (int pi = 0; pi < NUMPIN; pi++) {
+          if (PinsConf[pi].topin == 5 && PinsInfo[pi].tim != NULL) {
+            found_pwm = true;
+            printf("\r\n--- PWM [%d] %s (10s tick) ---\r\n", pi,
+                   PinsInfo[pi].pins);
+            printf("  dvalue=%d  pwmmax=%d  pwm=%d mHz\r\n",
+                   PinsConf[pi].dvalue, PinsConf[pi].pwmmax, PinsConf[pi].pwm);
+            printf("  CR1=0x%04lX(EN=%lu)  ARR=%lu  PSC=%lu\r\n",
+                   (unsigned long)PinsInfo[pi].tim->CR1,
+                   (unsigned long)(PinsInfo[pi].tim->CR1 & TIM_CR1_CEN),
+                   (unsigned long)PinsInfo[pi].tim->ARR,
+                   (unsigned long)PinsInfo[pi].tim->PSC);
+            uint32_t ccr = 0;
+            if (PinsInfo[pi].tim_channel == TIM_CHANNEL_1)
+              ccr = PinsInfo[pi].tim->CCR1;
+            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_2)
+              ccr = PinsInfo[pi].tim->CCR2;
+            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_3)
+              ccr = PinsInfo[pi].tim->CCR3;
+            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_4)
+              ccr = PinsInfo[pi].tim->CCR4;
+            printf("  CCR(ch%lu)=%lu\r\n",
+                   (unsigned long)PinsInfo[pi].tim_channel, (unsigned long)ccr);
+            if (PinsInfo[pi].tim == TIM1 || PinsInfo[pi].tim == TIM8)
+              printf("  BDTR=0x%08lX  MOE=%lu  <<< MUST be 1!\r\n",
+                     (unsigned long)PinsInfo[pi].tim->BDTR,
+                     (unsigned long)((PinsInfo[pi].tim->BDTR >> 15) & 1));
+          }
+        }
+        if (!found_pwm)
+          printf("[PWM] No PWM pins configured (topin==5)!\r\n");
       }
     }
     osDelay(500);
