@@ -1,7 +1,7 @@
 {
-  "id": 1,
-  "cron": "",
-  "activ": "222",
-  "info": "2",
-  "onoff": 0
+  "id": 0,
+  "cron": "* * * * * * *",
+  "activ": "pwm:4,900,0,100",
+  "info": "Green",
+  "onoff": 1
 }

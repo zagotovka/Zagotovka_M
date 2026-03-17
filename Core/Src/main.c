@@ -1094,6 +1094,24 @@ void start_pwm_fade(uint8_t pwm_id, uint32_t duration_sec,
         return;
     }
 
+    /* Encoder onoff — ПРИОРИТЕТНЫЙ рубильник */
+    bool enc_on = true;
+    for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+        if (PinsLinks[a].idout == pwm_id) {
+            uint8_t enc_id = PinsLinks[a].idin;
+            if (PinsConf[enc_id].topin == 8 && PinsConf[enc_id].onoff == 0) {
+                enc_on = false;
+                break;
+            }
+        }
+    }
+    if (!enc_on) {
+        // Гасим PWM и блокируем — БЕЗОПАСНОСТЬ
+        __HAL_TIM_SET_COMPARE(&htim[pwm_id], PinsInfo[pwm_id].tim_channel, 0);
+        fade_state[pwm_id].active = false;
+        return;
+    }
+
     uint32_t steps = duration_sec > 0 ? duration_sec : 1;
 
     fade_state[pwm_id].active       = true;
@@ -1109,11 +1127,15 @@ void start_pwm_fade(uint8_t pwm_id, uint32_t duration_sec,
         (uint32_t)((uint64_t)start_duty * PinsConf[pwm_id].pwmmax / 100ULL);
     __HAL_TIM_SET_COMPARE(&htim[pwm_id], PinsInfo[pwm_id].tim_channel, pulsef3);
 
-    printf("PWM fade: id=%d %ds %d%%->%d%%\r\n",
-           pwm_id, (int)duration_sec, start_duty, end_duty);
+//    printf("PWM fade: id=%d %ds %d%%->%d%%\r\n",pwm_id, (int)duration_sec, start_duty, end_duty);
 }
 /*********************** END PWM Fade **********************************/
 void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
+  /* Timer onoff — только управление расписанием */
+  if (cronindex >= 0 && cronindex < MAXSIZE && dbCrontxt[cronindex].onoff == 0) {
+    // Просто не запускаем fade/события, PWM не трогаем
+    return;
+  }
   char *token;
   char *saveptr;
   int flag = 0;
@@ -1709,105 +1731,81 @@ void StartInputTask(void *argument) {
 void StartEncoderTask(void *argument) {
   /* USER CODE BEGIN StartEncoderTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
-  uint8_t idpinb = 0;
-  uint32_t millis;
-  uint32_t pinTimes[NUMPIN] = {0};
-  uint8_t prev_A[NUMPIN] = {
-      0,
+
+  const int8_t enc_states[4][4] = {
+      { 0, -1,  1,  0},
+      { 1,  0,  0, -1},
+      {-1,  0,  0,  1},
+      { 0,  1, -1,  0}
   };
-  uint8_t prev_B[NUMPIN] = {
-      0,
-  };
-  uint8_t id = 0;
-  uint8_t a = 0;
-  uint8_t idpwm = 0;
-  //  uint16_t lstvalue[NUMPIN] = {
-  //      0,
-  //  }; // Ммассив для хранения последних значений dvalue
+
+  uint8_t enc_state[NUMPIN] = {0};
+  int8_t  enc_counter[NUMPIN] = {0};
+
+  /* ── Инициализация реальным состоянием пинов — ОДИН РАЗ до цикла ── */
+  for (uint8_t id = 0; id < NUMPIN; id++) {
+      if (PinsConf[id].topin == 8) {
+          uint8_t idpinb_init = PinsConf[id].encoderb;
+          if (idpinb_init != 0) {
+              uint8_t init_A = HAL_GPIO_ReadPin(PinsInfo[id].gpio_name, PinsInfo[id].hal_pin);
+              uint8_t init_B = HAL_GPIO_ReadPin(PinsInfo[idpinb_init].gpio_name, PinsInfo[idpinb_init].hal_pin);
+              enc_state[id] = (init_A << 1) | init_B;
+//              printf("ENC INIT[%d]: A=%d B=%d -> state=%d\r\n", id, init_A, init_B, enc_state[id]);
+          }
+      }
+  }
+  /* ─────────────────────────────────────────────────────────────────── */
   /* Infinite loop */
   for (;;) {
-    millis = HAL_GetTick();
-    for (id = 0; id < NUMPIN; id++) {
-      // INPUT Encoder A
-      if (PinsConf[id].topin == 8) {    // EncodrerA
-        idpinb = PinsConf[id].encoderb; // id EncodrerB
-        if (idpinb != 0) {
-          if (millis - pinTimes[id] >= DEBOUNCE_DELAY) { // игнорируем дребезг
-            PinsConf[id].on = HAL_GPIO_ReadPin(
-                PinsInfo[id].gpio_name,
-                PinsInfo[id].hal_pin); // Cчитываем состояние "EncodrerA".
-            osDelay(3);
-            PinsConf[idpinb].on = HAL_GPIO_ReadPin(
-                PinsInfo[idpinb].gpio_name,
-                PinsInfo[idpinb].hal_pin); // Cчитываем состояние "EncodrerB".
-            if (PinsConf[id].on != prev_A[id] ||
-                PinsConf[idpinb].on !=
-                    prev_B[idpinb]) { // Если состояние изменилось
-              pinTimes[id] = millis;  // Сбрасываем дребезг
-              if (PinsConf[id].on == 1 &&
-                  PinsConf[idpinb].on ==
-                      0) { // Узнаем направление вращения энкодера.
-                //                                printf("ID:%d  A = %d & B =
-                //                                %d\r\n",id, PinsConf[id].on,
-                //                                PinsConf[idpinb].on);
-                for (a = 0; a < NUMPINLINKS;
-                     a++) { // Перебираем структуру "PinsLinks" на совпадение!
-                  if (PinsLinks[a].idin == id) { // Если нашли "EncodrerA".
-                    idpwm = PinsLinks[a].idout;  // то узнаем id "EncodrerB".
-                    if (PinsConf[idpwm].topin == 5) { // PWM
-                      // Инкремент/декремент при КАЖДОМ шаге энкодера
-                      PinsConf[idpwm].dvalue -= 1;
-                      if (PinsConf[idpwm].dvalue < 0) {
-                        PinsConf[idpwm].dvalue = 0;
-                      }
-                      uint32_t pulse_enc1 =
-                          (uint32_t)((uint64_t)PinsConf[idpwm].dvalue *
-                                     PinsConf[idpwm].pwmmax / 100ULL);
-                      __HAL_TIM_SET_COMPARE(&htim[idpwm],
-                                            PinsInfo[idpwm].tim_channel,
-                                            pulse_enc1);
-                      //                                            printf("PWM
-                      //                                            = %d\r\n",
-                      //                                            PinsConf[idpwm].dvalue);
-                    }
-                  }
-                }
-              } else if (PinsConf[id].on == 0 &&
-                         PinsConf[idpinb].on ==
-                             1) { // Узнаем направление вращения энкодера.
-                // printf("ID:%d  A = %d & B = %d\r\n", id, PinsConf[id].on,
-                //        PinsConf[idpinb].on);
-                for (a = 0; a < NUMPINLINKS;
-                     a++) { // Перебираем структуру "PinsLinks" на совпадение!
-                  if (PinsLinks[a].idin == id) {      // Если нашли "EncodrerA".
-                    idpwm = PinsLinks[a].idout;       // то узнаем "EncodrerB".
-                    if (PinsConf[idpwm].topin == 5) { // PWM
-                      PinsConf[idpwm].dvalue += 1;
-                      if (PinsConf[idpwm].dvalue > 100) {
-                        PinsConf[idpwm].dvalue = 100;
-                      }
-                      uint32_t pulse_enc2 =
-                          (uint32_t)((uint64_t)PinsConf[idpwm].dvalue *
-                                     PinsConf[idpwm].pwmmax / 100ULL);
-                      __HAL_TIM_SET_COMPARE(&htim[idpwm],
-                                            PinsInfo[idpwm].tim_channel,
-                                            pulse_enc2);
-                      // printf("PWM = %d\r\n", PinsConf[idpwm].dvalue);
-                    }
-                  }
-                }
-              }
-              prev_A[id] =
-                  PinsConf[id].on; // Сохраняем текущее значение "EncodrerA".
-              prev_B[idpinb] =
-                  PinsConf[idpinb]
-                      .on; // Сохраняем текущее значение "EncodrerB".
-            }
-          }
-        }
-      }
-    }
-    osDelay(1);
+	  for (uint8_t id = 0; id < NUMPIN; id++) {
+	           if (PinsConf[id].topin == 8) {
+	               uint8_t idpinb = PinsConf[id].encoderb;
+	               if (idpinb == 0) continue;
+
+	               uint8_t curr_A = HAL_GPIO_ReadPin(PinsInfo[id].gpio_name, PinsInfo[id].hal_pin);
+	               uint8_t curr_B = HAL_GPIO_ReadPin(PinsInfo[idpinb].gpio_name, PinsInfo[idpinb].hal_pin);
+	               uint8_t current_state = (curr_A << 1) | curr_B;
+
+	               if (enc_state[id] != current_state) {
+	                   int8_t movement = enc_states[enc_state[id]][current_state];
+	                   enc_state[id] = current_state;
+
+	                   if (movement != 0) {
+	                       enc_counter[id] += movement;
+
+	                       if (enc_counter[id] >= 4 || enc_counter[id] <= -4) {
+	                           int8_t step = (enc_counter[id] > 0) ? 1 : -1;
+	                           enc_counter[id] = 0;
+
+	                           /* Обновляем dvalue для всех связанных PWM, даже если onoff=0 */
+	                           for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+	                               if (PinsLinks[a].idin == id) {
+	                                   uint8_t idpwm = PinsLinks[a].idout;
+	                                   if (PinsConf[idpwm].topin == 5) {
+	                                       // Изменяем значение в памяти
+	                                       int16_t val = PinsConf[idpwm].dvalue + step;
+	                                       if (val < 0)   val = 0;
+	                                       if (val > 100) val = 100;
+	                                       PinsConf[idpwm].dvalue = (int8_t)val;
+
+	                                       /* Применяем к железу только если включено */
+	                                       if (PinsConf[id].onoff != 0) {
+	                                           uint32_t pulse = (uint32_t)((uint64_t)PinsConf[idpwm].dvalue
+	                                                             * PinsConf[idpwm].pwmmax / 100ULL);
+	                                           __HAL_TIM_SET_COMPARE(&htim[idpwm], PinsInfo[idpwm].tim_channel, pulse);
+	                                           printf("ENC[%d] -> PWM[%d]: %d%%\r\n", id, idpwm, PinsConf[idpwm].dvalue);
+	                                       } else {
+	                                           printf("ENC[%d] -> PRESET[%d]: %d%% (OFF)\r\n", id, idpwm, PinsConf[idpwm].dvalue);
+	                                       }
+	                                   }
+	                               }
+	                           }
+	                       }
+	                   }
+	               }
+	           }
+	       }
+	       osDelay(1);
   }
   /* USER CODE END StartEncoderTask */
 }
@@ -2264,6 +2262,49 @@ void StartServiceTask(void *argument) {
 	        if (!fade_state[i].active)   continue;
 	        if (PinsConf[i].topin != 5)  continue;
 
+	        /* Encoder onoff — ПРИОРИТЕТНЫЙ рубильник */
+	        bool enc_on = true;
+	        for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+	            if (PinsLinks[a].idout == i) {
+	                uint8_t enc_id = PinsLinks[a].idin;
+	                if (PinsConf[enc_id].topin == 8 && PinsConf[enc_id].onoff == 0) {
+	                    enc_on = false;
+	                    break;
+	                }
+	            }
+	        }
+	        if (!enc_on) {
+	            // Гасим PWM и блокируем — БЕЗОПАСНОСТЬ
+	            __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, 0);
+	            fade_state[i].active = false;
+	            continue;
+	        }
+
+	        /* ── Timer onoff — останавливаем fade, PWM не трогаем ── */
+	        bool timer_on = false;
+	        for (int t = 0; t < MAXSIZE; t++) {
+	            if (dbCrontxt[t].onoff == 1) {
+	                /* Проверяем что этот cron управляет именно этим PWM */
+	                char tmp[sizeof(dbCrontxt[t].activ)];
+	                strncpy(tmp, dbCrontxt[t].activ, sizeof(tmp) - 1);
+	                tmp[sizeof(tmp) - 1] = '\0';
+	                char needle[12];
+	                snprintf(needle, sizeof(needle), "pwm:%d,", i);
+	                if (strstr(tmp, needle) != NULL) {
+	                    timer_on = true;
+	                    break;
+	                }
+	            }
+	        }
+	        if (!timer_on) {
+	            /* Таймер выключен — останавливаем fade на текущем значении */
+	            fade_state[i].active = false;
+	            printf("PWM fade stopped by Timer OFF: id=%d at %d%%\r\n",
+	                   i, PinsConf[i].dvalue);
+	            continue; /* PWM НЕ трогаем — остаётся на текущем значении */
+	        }
+	        /* ──────────────────────────────────────────────────────── */
+
 	        fade_state[i].steps_left--;
 	        fade_state[i].current_duty += fade_state[i].delta;
 
@@ -2349,44 +2390,44 @@ void StartServiceTask(void *argument) {
       }
     }
     // === ПЕРИОДИЧЕСКИЙ ДАМП PWM РЕГИСТРОВ (каждые 10 секунд) ===
-    {
-      static uint32_t pwm_dbg_tick = 0;
-      if (HAL_GetTick() - pwm_dbg_tick >= 10000) {
-        pwm_dbg_tick = HAL_GetTick();
-        bool found_pwm = false;
-        for (int pi = 0; pi < NUMPIN; pi++) {
-          if (PinsConf[pi].topin == 5 && PinsInfo[pi].tim != NULL) {
-            found_pwm = true;
-            printf("\r\n--- PWM [%d] %s (10s tick) ---\r\n", pi,
-                   PinsInfo[pi].pins);
-            printf("  dvalue=%d  pwmmax=%d  pwm=%d mHz\r\n",
-                   PinsConf[pi].dvalue, PinsConf[pi].pwmmax, PinsConf[pi].pwm);
-            printf("  CR1=0x%04lX(EN=%lu)  ARR=%lu  PSC=%lu\r\n",
-                   (unsigned long)PinsInfo[pi].tim->CR1,
-                   (unsigned long)(PinsInfo[pi].tim->CR1 & TIM_CR1_CEN),
-                   (unsigned long)PinsInfo[pi].tim->ARR,
-                   (unsigned long)PinsInfo[pi].tim->PSC);
-            uint32_t ccr = 0;
-            if (PinsInfo[pi].tim_channel == TIM_CHANNEL_1)
-              ccr = PinsInfo[pi].tim->CCR1;
-            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_2)
-              ccr = PinsInfo[pi].tim->CCR2;
-            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_3)
-              ccr = PinsInfo[pi].tim->CCR3;
-            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_4)
-              ccr = PinsInfo[pi].tim->CCR4;
-            printf("  CCR(ch%lu)=%lu\r\n",
-                   (unsigned long)PinsInfo[pi].tim_channel, (unsigned long)ccr);
-            if (PinsInfo[pi].tim == TIM1 || PinsInfo[pi].tim == TIM8)
-              printf("  BDTR=0x%08lX  MOE=%lu  <<< MUST be 1!\r\n",
-                     (unsigned long)PinsInfo[pi].tim->BDTR,
-                     (unsigned long)((PinsInfo[pi].tim->BDTR >> 15) & 1));
-          }
-        }
-        if (!found_pwm)
-          printf("[PWM] No PWM pins configured (topin==5)!\r\n");
-      }
-    }
+//    {
+//      static uint32_t pwm_dbg_tick = 0;
+//      if (HAL_GetTick() - pwm_dbg_tick >= 10000) {
+//        pwm_dbg_tick = HAL_GetTick();
+//        bool found_pwm = false;
+//        for (int pi = 0; pi < NUMPIN; pi++) {
+//          if (PinsConf[pi].topin == 5 && PinsInfo[pi].tim != NULL) {
+//            found_pwm = true;
+//            printf("\r\n--- PWM [%d] %s (10s tick) ---\r\n", pi,
+//                   PinsInfo[pi].pins);
+//            printf("  dvalue=%d  pwmmax=%d  pwm=%d mHz\r\n",
+//                   PinsConf[pi].dvalue, PinsConf[pi].pwmmax, PinsConf[pi].pwm);
+//            printf("  CR1=0x%04lX(EN=%lu)  ARR=%lu  PSC=%lu\r\n",
+//                   (unsigned long)PinsInfo[pi].tim->CR1,
+//                   (unsigned long)(PinsInfo[pi].tim->CR1 & TIM_CR1_CEN),
+//                   (unsigned long)PinsInfo[pi].tim->ARR,
+//                   (unsigned long)PinsInfo[pi].tim->PSC);
+//            uint32_t ccr = 0;
+//            if (PinsInfo[pi].tim_channel == TIM_CHANNEL_1)
+//              ccr = PinsInfo[pi].tim->CCR1;
+//            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_2)
+//              ccr = PinsInfo[pi].tim->CCR2;
+//            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_3)
+//              ccr = PinsInfo[pi].tim->CCR3;
+//            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_4)
+//              ccr = PinsInfo[pi].tim->CCR4;
+//            printf("  CCR(ch%lu)=%lu\r\n",
+//                   (unsigned long)PinsInfo[pi].tim_channel, (unsigned long)ccr);
+//            if (PinsInfo[pi].tim == TIM1 || PinsInfo[pi].tim == TIM8)
+//              printf("  BDTR=0x%08lX  MOE=%lu  <<< MUST be 1!\r\n",
+//                     (unsigned long)PinsInfo[pi].tim->BDTR,
+//                     (unsigned long)((PinsInfo[pi].tim->BDTR >> 15) & 1));
+//          }
+//        }
+//        if (!found_pwm){
+//          printf("[PWM] No PWM pins configured (topin==5)!\r\n");}
+//      }
+//    }
     osDelay(500);
   }
   /* USER CODE END StartServiceTask */

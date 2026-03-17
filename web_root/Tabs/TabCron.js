@@ -417,13 +417,13 @@ function TabCron({ }) {
     </th>
   `;
 
-  const ArrayCron = ({ d, index }) => {
+const ArrayCron = ({ d, index }) => {
     const isPwmCron = d.activ && d.activ.startsWith('pwm:');
     let displayActiv = d.activ;
     if (isPwmCron) {
       const parts = d.activ.substring(4).split(',');
       if (parts.length === 4) {
-        displayActiv = `☀ Pin${parts[0]} | ${parts[1]}s | ${parts[2]}%→${parts[3]}%`;
+        displayActiv = `pwmID=${parts[0]} | ${parts[1]}s | ${parts[2]}%→${parts[3]}%`;  // 1. убрали ☀ и Pin
       }
     }
 
@@ -439,27 +439,33 @@ function TabCron({ }) {
           onChange=${(value) => handleCronChange({ ...d, onoff: value })}
         />
       </td>
-      <td class="px-6 py-4 text-center">
+     <td class="px-6 py-4 text-center">
         ${!isPwmCron ? html`
-          <button
+       <button
             onclick=${() => openModal('edit', d)}
+            class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap mr-2"
+          >
+            Edit
+          </button>
+          <button
+            onclick=${() => openModal('edit_pwm', d)}
+            class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap ml-3"
+            title="Set as PWM Cron"
+          >
+            PWM
+          </button>
+        ` : html`
+          <button
+            onclick=${() => openModal('edit_pwm', d)}
             class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap mr-3"
           >
             Edit
           </button>
           <button
             onclick=${() => openModal('edit_pwm', d)}
-            class="text-violet-600 hover:text-violet-800 font-semibold transition-colors whitespace-nowrap"
-            title="Set as PWM Cron"
+            class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap ml-1"
           >
-            ☀ PWM
-          </button>
-        ` : html`
-          <button
-            onclick=${() => openModal('edit_pwm', d)}
-            class="text-violet-600 hover:text-violet-800 font-semibold transition-colors whitespace-nowrap"
-          >
-            Edit PWM
+            PWM
           </button>
         `}
       </td>

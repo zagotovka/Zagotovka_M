@@ -356,6 +356,24 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
     if (onoffid >= 0 && onoffid < num_pins) {
       PinsConf[onoffid].onoff = (uint8_t)onoff;
       printf("Updated pin %ld: onoff = %d\n", onoffid, onoff);
+      // Немедленно обновляем PWM если к этому пину привязан PWM-выход
+      for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+        if (PinsLinks[a].idin == (int)onoffid) {
+          uint8_t idpwm = PinsLinks[a].idout;
+          if (PinsConf[idpwm].topin == 5) { // topin==5 — это PWM
+            uint32_t pulse = 0;
+            if (onoff != 0) {
+              // Восстанавливаем сохранённое значение dvalue
+              pulse = (uint32_t)((uint64_t)PinsConf[idpwm].dvalue
+                       * PinsConf[idpwm].pwmmax / 100ULL);
+            }
+            __HAL_TIM_SET_COMPARE(&htim[idpwm],
+                                   PinsInfo[idpwm].tim_channel, pulse);
+            printf("onoff->PWM pin %d: pulse=%lu\n", idpwm,
+                   (unsigned long)pulse);
+          }
+        }
+      }
       /*********************************************************/
       // Формируем payload
       memset(mqtt_payload, 0, sizeof(mqtt_payload));
@@ -937,7 +955,7 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
       }
       offset += snprintf(buffer + offset, buffer_size - offset, "\n    {\n");
       uint8_t encoderb_id = pins_conf[i].encoderb;
-      if (encoderb_id == 0 || encoderb_id > num_pins) {
+      if (encoderb_id == 0 || encoderb_id > num_pins) { // Мы никогда не используем пин с ID=0 (PA0) в качестве входа EncoderB — StartEncoderTask() его ПРОПУСКАЕТ!
         encoderb_id = 255;
       }
       // Найдем связанный PWM-пин и его dvalue
@@ -960,6 +978,9 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
             break;
         }
       }
+      
+      const char *encb_pin_name = (encoderb_id != 255 && encoderb_id < num_pins) ? pins_info[encoderb_id].pins : "";
+
       offset += snprintf(buffer + offset, buffer_size - offset,
                          "      \"topin\": %d,\n"
                          "      \"id\": %d,\n"
@@ -971,7 +992,7 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
                          "      \"pwmmax\": %d,\n"
                          "      \"ponr\": %d,\n",
                          pins_conf[i].topin, i, pins_info[i].pins, encoderb_id,
-                         pins_conf[i].encbpin, pwm_dvalue, pwm_freq, pwm_max,
+                         encb_pin_name, pwm_dvalue, pwm_freq, pwm_max,
                          pins_conf[i].ponr);
       // Обработка pinact
       offset += snprintf(buffer + offset, buffer_size - offset,

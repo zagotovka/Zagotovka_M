@@ -1314,88 +1314,78 @@ void GetPinToPin() {
   FILINFO finfo;
   FRESULT fresult;
   UINT bytesRead;
-  //    char currentChar;
-  char key[64] = {0};
-  char value[64] = {0};
-  size_t keyPos = 0, valuePos = 0;
-  bool inString = false;
-  bool isKey = true;
-  uint8_t pinindex = 0;
+  char *jsonBuf = NULL;
 
   fresult = f_stat("pintopin.ini", &finfo);
   if (fresult != FR_OK) {
     printf("ERROR: pintopin.ini file not found!\r\n");
     return;
   }
+  if (finfo.fsize == 0) {
+    printf("ERROR: pintopin.ini is empty!\r\n");
+    return;
+  }
+
   if (f_open(&USBHFile, "pintopin.ini", FA_READ) != FR_OK) {
     printf("ERROR: Cannot open pintopin.ini!\r\n");
     return;
   }
-  memset(PinsLinks, 0, sizeof(PinsLinks)); // Reset all PinsLinks entries
-  while ((fresult = f_read(&USBHFile, &currentChar, 1, &bytesRead)) == FR_OK &&
-         bytesRead > 0) {
-    if (currentChar == '"') {
-      inString = !inString;
-      if (!inString) {
-        if (isKey) {
-          key[keyPos] = '\0';
-          isKey = false;
-          valuePos = 0;
-        } else {
-          value[valuePos] = '\0';
-          goto process_key_value;
-        }
-      }
-      continue;
-    }
-    if (currentChar == ':' && !inString) {
-      if (!isKey) {
-        valuePos = 0;
-      }
-      continue;
-    }
-    if (!inString && !isKey &&
-        (currentChar == ',' || currentChar == '\n' || currentChar == '}')) {
-      if (valuePos > 0) {
-        value[valuePos] = '\0';
-        goto process_key_value;
-      }
-      continue;
-    }
-    if (!inString &&
-        (currentChar == ' ' || currentChar == '\t' || currentChar == '\r' ||
-         currentChar == '{' || currentChar == '[' || currentChar == ']')) {
-      continue;
-    }
-    if (inString ||
-        (!inString && !isKey &&
-         (isdigit(currentChar) || currentChar == '-' || currentChar == '.'))) {
-      if (isKey) {
-        key[keyPos++] = currentChar;
-      } else {
-        value[valuePos++] = currentChar;
-      }
-    }
-    continue;
-  process_key_value:
-    if (strcmp(key, "idin") == 0) {
-      PinsLinks[pinindex].idin = atoi(value);
-    } else if (strcmp(key, "idout") == 0) {
-      PinsLinks[pinindex].idout = atoi(value);
-    } else if (strcmp(key, "pins") == 0) {
-      strncpy(PinsLinks[pinindex].pins, value,
-              sizeof(PinsLinks[pinindex].pins) - 1);
-      PinsLinks[pinindex].pins[sizeof(PinsLinks[pinindex].pins) - 1] = '\0';
-      pinindex++; // Move to next PinsLinks entry after processing "pins"
-    }
-    keyPos = 0;
-    valuePos = 0;
-    isKey = true;
+
+  // Выделяем память под JSON + 1 байт для \0
+  jsonBuf = (char *)malloc(finfo.fsize + 1);
+  if (jsonBuf == NULL) {
+    printf("ERROR: Not enough memory for pintopin.ini parsing\r\n");
+    f_close(&USBHFile);
+    return;
   }
-  if (fresult != FR_OK) {
-    printf("ERROR: Read failed!\r\n");
-  }
+
+  fresult = f_read(&USBHFile, jsonBuf, finfo.fsize, &bytesRead);
   f_close(&USBHFile);
+
+  if (fresult != FR_OK || bytesRead == 0) {
+    printf("ERROR: Failed to read pintopin.ini\r\n");
+    free(jsonBuf);
+    return;
+  }
+  jsonBuf[bytesRead] = '\0';
+
+  memset(PinsLinks, 0, sizeof(PinsLinks)); // Очищаем массив связей
+
+  cJSON *root = cJSON_Parse(jsonBuf);
+  if (!root) {
+    printf("ERROR: JSON parse failed for pintopin.ini: %s\r\n", cJSON_GetErrorPtr());
+    free(jsonBuf);
+    return;
+  }
+
+  if (cJSON_IsArray(root)) {
+    int count = cJSON_GetArraySize(root);
+    if (count > NUMPINLINKS) count = NUMPINLINKS; // Защита от переполнения
+    
+    for (int i = 0; i < count; i++) {
+      cJSON *item = cJSON_GetArrayItem(root, i);
+      if (!cJSON_IsObject(item)) continue;
+
+      cJSON *idin = cJSON_GetObjectItem(item, "idin");
+      cJSON *idout = cJSON_GetObjectItem(item, "idout");
+      cJSON *pins = cJSON_GetObjectItem(item, "pins");
+
+      if (cJSON_IsNumber(idin) && cJSON_IsNumber(idout)) {
+         PinsLinks[i].idin = idin->valueint;
+         PinsLinks[i].idout = idout->valueint;
+      }
+      if (cJSON_IsString(pins) && pins->valuestring != NULL) {
+         strncpy(PinsLinks[i].pins, pins->valuestring, sizeof(PinsLinks[i].pins) - 1);
+         PinsLinks[i].pins[sizeof(PinsLinks[i].pins) - 1] = '\0';
+      }
+    }
+    printf("GetPinToPin() loaded successfully!\r\n");
+  } else {
+    printf("ERROR: pintopin.ini is not a JSON array!\r\n");
+  }
+
+  cJSON_Delete(root);
+  free(jsonBuf);
 }
 
 // Записываем данные в файл "pintopin.ini", создавая его если его нет.
@@ -1635,36 +1625,31 @@ void InitPin() {
       // HAL_TIM_MspPostInit(&htim[i]);
       HAL_TIM_PWM_Start(&htim[i], PinsInfo[i].tim_channel);
       // === ДИАГНОСТИКА PWM ===
-      printf("\r\n=== PWM INIT [%d] %s ===\r\n", i, PinsInfo[i].pins);
-      printf("  Tim addr : 0x%08lX\r\n", (unsigned long)PinsInfo[i].tim);
-      printf("  Target   : %lu mHz\r\n", (unsigned long)PinsConf[i].pwm);
-      printf("  Period   : %lu  (ARR register)\r\n", (unsigned long)period);
-      printf("  Prescaler: %lu  (PSC register)\r\n", (unsigned long)prescaler);
-      printf("  dvalue   : %d%%  ->  pulse=%lu steps\r\n", PinsConf[i].dvalue,
-             (unsigned long)pulse);
-      printf("  TIM->CR1  : 0x%04lX  (EN=%lu)\r\n",
-             (unsigned long)PinsInfo[i].tim->CR1,
-             (unsigned long)(PinsInfo[i].tim->CR1 & TIM_CR1_CEN));
-      printf("  TIM->CCER : 0x%04lX  <<< Channel Enable!\r\n",
-             (unsigned long)PinsInfo[i].tim->CCER);
-      printf("  TIM->ARR  : %lu\r\n", (unsigned long)PinsInfo[i].tim->ARR);
-      printf("  TIM->PSC : %lu\r\n", (unsigned long)PinsInfo[i].tim->PSC);
-      if (PinsInfo[i].tim_channel == TIM_CHANNEL_1)
-        printf("  TIM->CCR1: %lu\r\n", (unsigned long)PinsInfo[i].tim->CCR1);
-      else if (PinsInfo[i].tim_channel == TIM_CHANNEL_2)
-        printf("  TIM->CCR2: %lu\r\n", (unsigned long)PinsInfo[i].tim->CCR2);
-      else if (PinsInfo[i].tim_channel == TIM_CHANNEL_3)
-        printf("  TIM->CCR3: %lu\r\n", (unsigned long)PinsInfo[i].tim->CCR3);
-      else if (PinsInfo[i].tim_channel == TIM_CHANNEL_4)
-        printf("  TIM->CCR4: %lu\r\n", (unsigned long)PinsInfo[i].tim->CCR4);
-      if (PinsInfo[i].tim == TIM1 || PinsInfo[i].tim == TIM8)
-        printf("  TIM->BDTR: 0x%08lX  (MOE=%lu) <<< must be 1!\r\n",
-               (unsigned long)PinsInfo[i].tim->BDTR,
-               (unsigned long)((PinsInfo[i].tim->BDTR >> 15) & 1));
-      printf("================================\r\n\r\n");
+//      printf("\r\n=== PWM INIT [%d] %s ===\r\n", i, PinsInfo[i].pins);
+//      printf("  Tim addr : 0x%08lX\r\n", (unsigned long)PinsInfo[i].tim);
+//      printf("  Target   : %lu mHz\r\n", (unsigned long)PinsConf[i].pwm);
+//      printf("  Period   : %lu  (ARR register)\r\n", (unsigned long)period);
+//      printf("  Prescaler: %lu  (PSC register)\r\n", (unsigned long)prescaler);
+//      printf("  dvalue   : %d%%  ->  pulse=%lu steps\r\n", PinsConf[i].dvalue, (unsigned long)pulse);
+//      printf("  TIM->CR1  : 0x%04lX  (EN=%lu)\r\n", (unsigned long)PinsInfo[i].tim->CR1, (unsigned long)(PinsInfo[i].tim->CR1 & TIM_CR1_CEN));
+//      printf("  TIM->CCER : 0x%04lX  <<< Channel Enable!\r\n", (unsigned long)PinsInfo[i].tim->CCER);
+//      printf("  TIM->ARR  : %lu\r\n", (unsigned long)PinsInfo[i].tim->ARR);
+//      printf("  TIM->PSC : %lu\r\n", (unsigned long)PinsInfo[i].tim->PSC);
+//      if (PinsInfo[i].tim_channel == TIM_CHANNEL_1)
+//        printf("  TIM->CCR1: %lu\r\n", (unsigned long)PinsInfo[i].tim->CCR1);
+//      else if (PinsInfo[i].tim_channel == TIM_CHANNEL_2)
+//        printf("  TIM->CCR2: %lu\r\n", (unsigned long)PinsInfo[i].tim->CCR2);
+//      else if (PinsInfo[i].tim_channel == TIM_CHANNEL_3)
+//        printf("  TIM->CCR3: %lu\r\n", (unsigned long)PinsInfo[i].tim->CCR3);
+//      else if (PinsInfo[i].tim_channel == TIM_CHANNEL_4)
+//        printf("  TIM->CCR4: %lu\r\n", (unsigned long)PinsInfo[i].tim->CCR4);
+//      if (PinsInfo[i].tim == TIM1 || PinsInfo[i].tim == TIM8)
+//        printf("  TIM->BDTR: 0x%08lX  (MOE=%lu) <<< must be 1!\r\n",
+//               (unsigned long)PinsInfo[i].tim->BDTR,
+//               (unsigned long)((PinsInfo[i].tim->BDTR >> 15) & 1));
+//      printf("================================\r\n\r\n");
     }
-    /******************************************* Security
-     ***********************************************/
+    /********************* Security ****************************/
     else if (PinsConf[i].topin == 10) { // Security
       checkPortClockStatus(PinsInfo[i].gpio_name);
       if (SetSettings.sim800l == 1 &&
