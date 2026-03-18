@@ -230,6 +230,28 @@ function TabCron({ }) {
             </tr>
           </tbody>
         </table>
+        <h2>Примеры PWM (Sunrise / Sunset)</h2>
+        <table>
+          <thead>
+            <tr><th>Тип</th><th>Описание</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Sunrise (Восход)</td>
+              <td>
+                Нажмите кнопку <b>PWM</b> для настройки. Укажите <b>Start Duty</b> (Начальная скважность, например 0) и <b>End Duty</b> (Конечная скважность, например 100).
+                Плавное увеличение скважности (яркости) будет происходить в течение времени, заданного в <b>Duration (Sec)</b> (от 1 до 864000 секунд).
+              </td>
+            </tr>
+            <tr>
+              <td>Sunset (Закат)</td>
+              <td>
+                Для эффекта заката укажите <b>Start Duty</b> = 100, а <b>End Duty</b> = 0.
+                Переход будет плавно уменьшать скважность на протяжении заданного в <b>Duration (Sec)</b> времени.
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
       <div>
         <h2 class="text-xl font-bold mb-2">Отслеживание изменений</h2>
@@ -317,6 +339,28 @@ function TabCron({ }) {
             <tr>
               <td>12:2;p5</td>
               <td>Pin 12 will change its state (TOGGLE) after 5 seconds (p - PAUSE).</td>
+            </tr>
+          </tbody>
+        </table>
+        <h2>Examples of PWM (Sunrise and Sunset)</h2>
+        <table>
+          <thead>
+            <tr><th>Type</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Sunrise</td>
+              <td>
+                Click the <b>PWM</b> button to configure. Set <b>Start Duty</b> (e.g., 0) and <b>End Duty</b> (e.g., 100).
+                The duty cycle (brightness) will smoothly increase over the time specified in <b>Duration (Sec)</b> (from 1 to 864000 seconds).
+              </td>
+            </tr>
+            <tr>
+              <td>Sunset</td>
+              <td>
+                For a sunset effect, set <b>Start Duty</b> = 100 and <b>End Duty</b> = 0.
+                The duty cycle will smoothly decrease over the time specified in <b>Duration (Sec)</b>.
+              </td>
             </tr>
           </tbody>
         </table>
@@ -486,7 +530,7 @@ const ArrayCron = ({ d, index }) => {
         <div class="w-full mb-6 relative">
           ${varcron && varcron.length > 0
       ? html`
-                <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6">
+                <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6 overflow-auto">
                   <div class="overflow-x-auto w-full">
                     <table class="w-full text-left border-collapse whitespace-nowrap">
                       <thead>

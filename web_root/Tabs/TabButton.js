@@ -575,7 +575,7 @@ const TabButton = () => {
 
         <div class="flex-grow flex flex-col justify-center items-center w-full">
           <div class="w-full">
-            <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6">
+            <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6 overflow-auto">
               <div class="overflow-x-auto w-full">
                 <table class="w-full text-left border-collapse whitespace-nowrap">
                   <thead>
@@ -591,7 +591,7 @@ const TabButton = () => {
                       <${Th} title="Action" tooltipIndex=${9} />
                     </tr>
                   </thead>
-                  <tbody id="tab1" class="divide-y divide-white/40">
+                  <tbody class="divide-y divide-white/40">
                     ${varbutton.map(
                       (d, index) => html`<${ArrayButton} d=${d} index=${index} key=${d.id} />`
                     )}

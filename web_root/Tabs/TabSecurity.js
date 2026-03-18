@@ -16,22 +16,22 @@ function initGlobalTooltip() {
   const tip = document.createElement('div');
   tip.id = '__global_tip';
   Object.assign(tip.style, {
-    position:      'fixed',
-    zIndex:        '99999',
-    maxWidth:      '280px',
-    background:    '#1a2332',
-    color:         '#e8f4f8',
-    padding:       '8px 12px',
-    borderRadius:  '8px',
-    border:        '1px solid rgba(0,188,188,0.35)',
-    fontSize:      '12px',
-    lineHeight:    '1.6',
-    boxShadow:     '0 6px 20px rgba(0,0,0,0.45)',
+    position: 'fixed',
+    zIndex: '99999',
+    maxWidth: '280px',
+    background: '#1a2332',
+    color: '#e8f4f8',
+    padding: '8px 12px',
+    borderRadius: '8px',
+    border: '1px solid rgba(0,188,188,0.35)',
+    fontSize: '12px',
+    lineHeight: '1.6',
+    boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
     pointerEvents: 'none',
-    whiteSpace:    'normal',
-    display:       'none',
-    transition:    'opacity 0.12s ease',
-    opacity:       '0',
+    whiteSpace: 'normal',
+    display: 'none',
+    transition: 'opacity 0.12s ease',
+    opacity: '0',
   });
   document.body.appendChild(tip);
 
@@ -44,13 +44,13 @@ function initGlobalTooltip() {
 
     tip.style.opacity = '0';
     tip.style.left = '0px';
-    tip.style.top  = '0px';
+    tip.style.top = '0px';
 
     requestAnimationFrame(() => {
       const tw = tip.offsetWidth;
       const th = tip.offsetHeight;
       const vw = window.innerWidth;
-      const r  = el.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
 
       let left = r.left + r.width / 2 - tw / 2;
       left = Math.max(8, Math.min(left, vw - tw - 8));
@@ -58,8 +58,8 @@ function initGlobalTooltip() {
       let top = r.top - th - 8;
       if (top < 8) top = r.bottom + 8;
 
-      tip.style.left    = left + 'px';
-      tip.style.top     = top  + 'px';
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
       tip.style.opacity = '1';
     });
   }
@@ -173,7 +173,7 @@ const TabSecurity = () => {
           <div className="bg-blue-50 p-4 rounded-lg mb-6">
             <h3 className="font-medium mb-2">Возможности модуля:</h3>
             <ul className="space-y-2 list-disc pl-5">
-              <li>Принимает звонки на номер телефона (указывается в разделе "Mobile phone")</li>
+              <li>Входящие вызовы и SMS принимаются только с номера, указанного в поле «Phone Number». Вызовы с других номеров отклоняются автоматически, SMS — игнорируются.</li>
               <li>Держит вас в курсе происходящего при помощи SMS-уведомлений</li>
               <li>Включается и отключается при помощи ползунка 'OnOFF'</li>
             </ul>
@@ -208,7 +208,7 @@ const TabSecurity = () => {
           <div className="bg-blue-50 p-4 rounded-lg mb-6">
             <h3 className="font-medium mb-2">Module capabilities:</h3>
             <ul className="space-y-2 list-disc pl-5">
-              <li>Receives calls to the phone number (specified in the "Mobile phone" section)</li>
+              <li>Incoming calls and SMS messages are accepted only from the number specified in the “Phone Number” field. Calls from other numbers are automatically rejected, and SMS messages are ignored.</li>
               <li>Keeps you updated using SMS notifications</li>
               <li>Turns ON and OFF using the 'OnOFF' slider</li>
             </ul>
@@ -447,8 +447,8 @@ const TabSecurity = () => {
         <div class=${`w-full p-2 mb-4 text-white text-center rounded-xl shadow-md backdrop-blur-md 
           ${connectionStatus === 'error' ? 'bg-yellow-500/80 border border-yellow-400/50' : 'bg-red-500/80 border border-red-400/50'}`}>
           ${connectionStatus === 'error'
-            ? 'Connection problems. Retrying...'
-            : 'Connection lost. Check your internet connection.'}
+        ? 'Connection problems. Retrying...'
+        : 'Connection lost. Check your internet connection.'}
         </div>
       `}
 
@@ -537,7 +537,7 @@ const TabSecurity = () => {
               </thead>
               <tbody class="divide-y divide-white/40">
                 ${varmonitoring.length > 0
-                  ? varmonitoring.map((d, index) => html`
+      ? varmonitoring.map((d, index) => html`
                       <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
                         <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.id}</td>
                         <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.pins}</td>
@@ -563,7 +563,7 @@ const TabSecurity = () => {
                         </td>
                       </tr>
                     `)
-                  : html`
+      : html`
                       <tr>
                         <td colspan="8" class="px-6 py-4 text-center text-sm text-slate-600 font-medium">
                           No monitoring data available

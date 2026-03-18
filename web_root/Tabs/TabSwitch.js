@@ -559,8 +559,7 @@ function TabSwitch({ }) {
 
         <div class="flex-grow flex flex-col justify-center items-center w-full">
           <div class="w-full">
-            <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6">
-              <!-- overflow-x-auto только здесь, убран overflow-hidden с родителя -->
+            <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6 overflow-auto">
               <div class="overflow-x-auto w-full">
                 <table class="w-full text-left border-collapse whitespace-nowrap">
                   <thead>
@@ -574,7 +573,7 @@ function TabSwitch({ }) {
                       <${Th} title="Action" tooltipIndex=${7} />
                     </tr>
                   </thead>
-                  <tbody id="tab1" class="divide-y divide-white/40">
+                  <tbody class="divide-y divide-white/40">
                     ${varswitch.map(
                       (d, index) =>
                         html`<${ArraySwitch} d=${d} index=${index} key=${d.id} />`

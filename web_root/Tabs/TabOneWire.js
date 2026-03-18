@@ -395,7 +395,7 @@ const TabOneWire = () => {
         </div>
         <div class="justify-center w-full">
           <div class="mb-4">
-            <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6">
+            <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6 overflow-auto">
               <div class="overflow-x-auto w-full">
                 <table class="w-full text-left border-collapse whitespace-nowrap">
                   <thead>

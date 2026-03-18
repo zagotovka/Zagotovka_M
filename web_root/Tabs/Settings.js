@@ -1,6 +1,6 @@
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
-import { MyPolzunok, Chart, DeveloperNote, pageSetting, ipRegex, subnetMaskRegex, Toast } from '../main.js';
+import { MyPolzunok, Chart, DeveloperNote, pageSetting, Toast } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, rulangsettings } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire, enlangsettings } from '../enlang.js';
 
@@ -108,6 +108,40 @@ const SETTINGS_TIP_IDX = {
   'Time':            25,
 };
 
+// ---------------------------------------------------------------------------
+// getTip и FieldRow вынесены ЗА пределы Settings, чтобы их референс не менялся
+// при каждом ре-рендере — иначе Preact размонтирует <tr> и input теряет фокус
+// ---------------------------------------------------------------------------
+const getTip = (label, lang, rulangsettings, enlangsettings) => {
+  const arr = lang === 'ru' ? rulangsettings : enlangsettings;
+  const idx = SETTINGS_TIP_IDX[label];
+  if (!idx || !arr || !arr[idx]) return '';
+  const words = arr[idx].split(' ');
+  const lines = [];
+  for (let i = 0; i < words.length; i += 12) {
+    lines.push(words.slice(i, i + 12).join(' '));
+  }
+  return lines.join('<br>');
+};
+
+const FieldRow = ({ label, tipLabel, index, tip, children }) => {
+  const bg = index % 2 === 0 ? 'bg-white/80' : 'bg-sky-200/40';
+  return html`
+    <tr class="transition-colors border-b border-slate-200 ${bg} hover:bg-slate-200/80">
+      <td
+        class="w-1/3 text-lg font-bold text-slate-700 px-6 border-r border-slate-500 py-4 cursor-help"
+        data-tip=${tip}
+      >
+        ${label}
+      </td>
+      <td class="w-2/3 pl-4 py-4 pr-6">
+        ${children}
+      </td>
+    </tr>
+  `;
+};
+// ---------------------------------------------------------------------------
+
 function Settings({ }) {
   const [settings, setSettings] = useState({});
   const [saveResult, setSaveResult] = useState(null);
@@ -124,44 +158,19 @@ function Settings({ }) {
   const [isLoading, setIsLoading] = useState(true);
 
   // Инициализируем глобальный tooltip один раз при монтировании
-  useEffect(() => { initGlobalTooltip(); }, []);
-
-  // -------------------------------------------------------------------------
-  // Хелпер: получить текст тултипа по label поля
-  // -------------------------------------------------------------------------
-  const getTip = (label) => {
-    const lang = settings.lang || 'ru';
-    const arr  = lang === 'ru' ? rulangsettings : enlangsettings;
-    const idx  = SETTINGS_TIP_IDX[label];
-    if (!idx || !arr || !arr[idx]) return '';
-    const words = arr[idx].split(' ');
-    const lines = [];
-    for (let i = 0; i < words.length; i += 12) {
-      lines.push(words.slice(i, i + 12).join(' '));
+  useEffect(() => {
+    initGlobalTooltip();
+    // Скрываем On/Off подписи у ползунка Network
+    if (!document.getElementById('__network_toggle_style')) {
+      const s = document.createElement('style');
+      s.id = '__network_toggle_style';
+      s.textContent = '.network-toggle span { display: none !important; }';
+      document.head.appendChild(s);
     }
-    return lines.join('<br>');
-  };
+  }, []);
 
-  // -------------------------------------------------------------------------
-  // Компонент-строка с тултипом на названии поля
-  // -------------------------------------------------------------------------
-  const FieldRow = ({ label, tipLabel, index, children }) => {
-    const tip = getTip(tipLabel || label);
-    const bg  = index % 2 === 0 ? 'bg-white/80' : 'bg-sky-200/40';
-    return html`
-      <div class="flex flex-col md:flex-row md:items-center px-6 py-2 transition-colors ${bg} hover:bg-slate-200/80 gap-2 md:gap-0">
-        <div
-          class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2 border-r border-slate-500 py-2 cursor-help"
-          data-tip=${tip}
-        >
-          ${label}
-        </div>
-        <div class="w-full md:w-2/3 pl-4">
-          ${children}
-        </div>
-      </div>
-    `;
-  };
+  // Сокращение для getTip с текущим языком
+  const gt = (label) => getTip(label, settings.lang || 'ru', rulangsettings, enlangsettings);
 
   const languages = [
     { value: 'en', label: 'English' },
@@ -202,6 +211,7 @@ function Settings({ }) {
     [12.0,  '(GMT +12:00) Auckland, Wellington, Fiji, Kamchatka']
   ];
 
+  // FIX: ipRegex и subnetMaskRegex объявлены локально — не полагаемся на экспорт из main.js
   const ipRegex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
   const subnetMaskRegex = /^(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)$/;
 
@@ -383,14 +393,7 @@ function Settings({ }) {
     }
   };
 
-  const handleDelete = (key) => {
-    setSettings(prev => ({ ...prev, [key]: '' }));
-    setErrors(prev => ({ ...prev, [key]: null }));
-    if (key === 'tls_key')       setIsPrivateKeyHidden(false);
-    if (key === 'tls_cert')      setIsPublicKeyHidden(false);
-    if (key === 'tls_ca')        setIsSecretKeyHidden(false);
-    if (key === 'telegram_token') setIsTelegramTokenHidden(false);
-  };
+  // FIX: handleDelete удалён — нигде не вызывается, вместо него везде используется handleChange(key, '')
 
   const refresh = () =>
     fetch('/api/mysett/get')
@@ -402,6 +405,7 @@ function Settings({ }) {
           r.offtime = time;
         }
         setSettings(r);
+        return r;  // FIX: возвращаем r, чтобы useEffect мог его использовать
       })
       .catch(error => {
         console.error('Error fetching settings:', error);
@@ -409,11 +413,12 @@ function Settings({ }) {
       });
 
   useEffect(() => {
-    refresh().then(() => {
-      if (settings?.tls_key)        setIsPrivateKeyHidden(true);
-      if (settings?.tls_cert)       setIsPublicKeyHidden(true);
-      if (settings?.tls_ca)         setIsSecretKeyHidden(true);
-      if (settings?.telegram_token) setIsTelegramTokenHidden(true);
+    refresh().then((r) => {
+      // FIX: используем r из промиса, а не settings из замыкания (stale closure)
+      if (r?.tls_key)        setIsPrivateKeyHidden(true);
+      if (r?.tls_cert)       setIsPublicKeyHidden(true);
+      if (r?.tls_ca)         setIsSecretKeyHidden(true);
+      if (r?.telegram_token) setIsTelegramTokenHidden(true);
       setIsLoading(false);
     });
   }, []);
@@ -443,17 +448,15 @@ function Settings({ }) {
         <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
         <!-- Header -->
-        <div class="w-full mb-6 overflow-hidden rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
-          <div class="bg-teal-600/10 border-b border-slate-500 px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
-            <h2 class="text-3xl font-extrabold text-slate-700 tracking-wide drop-shadow-sm uppercase">Global Settings</h2>
-            <select
-              value=${settings.lang}
-              onChange=${(e) => handleChange('lang', e.target.value)}
-              class="px-3 py-1.5 bg-white/90 text-slate-800 rounded-lg text-sm font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer"
-            >
-              ${languages.map((lang) => html`<option value=${lang.value}>${lang.label}</option>`)}
-            </select>
-          </div>
+        <div class="w-full mb-6 px-2 flex flex-row items-center gap-6">
+          <h2 class="text-3xl font-extrabold text-slate-800 tracking-tight drop-shadow-sm uppercase">Global Settings</h2>
+          <select
+            value=${settings.lang}
+            onChange=${(e) => handleChange('lang', e.target.value)}
+            style="border: 2px solid #22d3ee; border-radius: 8px; padding: 4px 10px; font-size: 14px; font-weight: 600; background: white; color: #1e293b; cursor: pointer; outline: none;"
+          >
+            ${languages.map((lang) => html`<option value=${lang.value}>${lang.label}</option>`)}
+          </select>
         </div>
 
         ${topNotification && html`
@@ -469,17 +472,17 @@ function Settings({ }) {
           <!-- ============================================================
                User data
           ============================================================ -->
-          <div class="w-full border border-slate-500 bg-white/30 backdrop-blur-sm">
-            <div class="bg-teal-600/10 border-b border-slate-500 px-6 py-4">
-              <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm">User data</h3>
-            </div>
-            <div class="flex flex-col divide-y divide-slate-500">
+          <div class="w-full mb-6">
+            <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm mb-4 pl-2">User data</h3>
+            <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+              <table class="w-full table-fixed text-left border-collapse">
+                <tbody>
               ${[
                 { label: 'Login',        key: 'adm_name', type: 'text'     },
                 { label: 'Password',     key: 'adm_pswd', type: 'password' },
                 { label: 'Time zone UTC',key: 'timezone', type: 'select', options: timeZone }
               ].map((item, index) => html`
-                <${FieldRow} label=${item.label} index=${index}>
+                <${FieldRow} label=${item.label} tip=${gt(item.tipLabel || item.label)} index=${index}>
                   <${pageSetting}
                     value=${settings[item.key]}
                     setfn=${(v) => handleChange(item.key, v)}
@@ -490,37 +493,45 @@ function Settings({ }) {
                   />
                 <//>
               `)}
+                </tbody>
+              </table>
             </div>
           </div>
 
           <!-- ============================================================
                Network
           ============================================================ -->
-          <div class="w-full border border-slate-500 bg-white/30 backdrop-blur-sm">
-            <div class="bg-teal-600/10 border-b border-slate-500 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm w-full sm:w-auto text-center sm:text-left">Network</h3>
-              <div class="flex items-center justify-center sm:justify-end gap-3 w-full sm:w-auto">
-                <span class="text-slate-600 font-medium drop-shadow-sm tracking-wide text-lg">${settings.check_ip ? 'DHCP' : 'Static IP'}</span>
+          <div class="w-full mb-6">
+            <div class="flex items-center gap-4 mb-4">
+              <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm pl-2">Network</h3>
+              <div class="network-toggle">
                 <${MyPolzunok} value=${settings.check_ip} onChange=${(v) => handleChange('check_ip', v)} />
               </div>
+              <span class="text-slate-600 font-medium tracking-wide text-lg">
+                ${settings.check_ip ? 'DHCP' : 'Static IP'}
+              </span>
             </div>
             ${!settings.check_ip ? html`
-              <div class="flex flex-col divide-y divide-slate-500">
-                ${[
-                  { label: 'IP address',     key: 'ip_addr',  type: 'text' },
-                  { label: 'Subnet mask',    key: 'sb_mask',  type: 'text' },
-                  { label: 'Default gateway',key: 'gateway',  type: 'text' }
-                ].map((item, index) => html`
-                  <${FieldRow} label=${item.label} index=${index}>
-                    <${pageSetting}
-                      value=${settings[item.key]}
-                      setfn=${(v) => handleChange(item.key, v)}
-                      type=${item.type}
-                      class=${`w-full px-3 py-2 bg-white/50 border ${errors[item.key] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
-                      error=${errors[item.key]}
-                    />
-                  <//>
-                `)}
+              <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+                <table class="w-full table-fixed text-left border-collapse">
+                  <tbody>
+                  ${[
+                    { label: 'IP address',     key: 'ip_addr',  type: 'text' },
+                    { label: 'Subnet mask',    key: 'sb_mask',  type: 'text' },
+                    { label: 'Default gateway',key: 'gateway',  type: 'text' }
+                  ].map((item, index) => html`
+                    <${FieldRow} label=${item.label} tip=${gt(item.tipLabel || item.label)} index=${index}>
+                      <${pageSetting}
+                        value=${settings[item.key]}
+                        setfn=${(v) => handleChange(item.key, v)}
+                        type=${item.type}
+                        class=${`w-full px-3 py-2 bg-white/50 border ${errors[item.key] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                        error=${errors[item.key]}
+                      />
+                    <//>
+                  `)}
+                  </tbody>
+                </table>
               </div>
             ` : null}
           </div>
@@ -528,12 +539,12 @@ function Settings({ }) {
           <!-- ============================================================
                API Settings
           ============================================================ -->
-          <div class="w-full border border-slate-500 bg-white/30 backdrop-blur-sm">
-            <div class="bg-teal-600/10 border-b border-slate-500 px-6 py-4">
-              <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm">API Settings</h3>
-            </div>
-            <div class="flex flex-col divide-y divide-slate-500">
-              <${FieldRow} label="Token" index=${0}>
+          <div class="w-full mb-6">
+            <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm mb-4 pl-2">API Settings</h3>
+            <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+              <table class="w-full table-fixed text-left border-collapse">
+                <tbody>
+              <${FieldRow} label="Token" tip=${gt("Token")} index=${0}>
                 <${pageSetting}
                   value=${settings.token}
                   setfn=${(v) => handleChange('token', v)}
@@ -541,22 +552,23 @@ function Settings({ }) {
                   class="w-full px-3 py-2 bg-white/50 border border-white/50 rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
               <//>
+                </tbody>
+              </table>
             </div>
           </div>
 
           <!-- ============================================================
                MQTT
           ============================================================ -->
-          <div class="w-full border border-slate-500 bg-white/30 backdrop-blur-sm">
-            <div class="bg-teal-600/10 border-b border-slate-500 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm w-full sm:w-auto text-center sm:text-left">MQTT</h3>
-              <div class="flex items-center justify-center sm:justify-end gap-3 w-full sm:w-auto">
-                <span class="text-slate-600 font-medium drop-shadow-sm tracking-wide text-lg">Enabled</span>
-                <${MyPolzunok} value=${settings.check_mqtt} onChange=${(v) => handleChange('check_mqtt', v)} />
-              </div>
+          <div class="w-full mb-6">
+            <div class="flex items-center gap-4 mb-4">
+              <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm pl-2">MQTT</h3>
+              <${MyPolzunok} value=${settings.check_mqtt} onChange=${(v) => handleChange('check_mqtt', v)} />
             </div>
             ${settings.check_mqtt ? html`
-              <div class="flex flex-col divide-y divide-slate-500">
+              <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+                <table class="w-full table-fixed text-left border-collapse">
+                  <tbody>
                 ${[
                   { label: 'Host',     key: 'mqtt_hst',  type: 'text'     },
                   { label: 'Port',     key: 'mqtt_prt',  type: 'number'   },
@@ -566,7 +578,7 @@ function Settings({ }) {
                   { label: 'TX topic', key: 'txmqttop',  type: 'text'     },
                   { label: 'RX topic', key: 'rxmqttop',  type: 'text'     }
                 ].map((item, index) => html`
-                  <${FieldRow} label=${item.label} tipLabel=${item.tipLabel} index=${index}>
+                  <${FieldRow} label=${item.label} tip=${gt(item.tipLabel || item.label)} index=${index}>
                     <${pageSetting}
                       value=${settings[item.key]}
                       setfn=${(v) => handleChange(item.key, v)}
@@ -576,6 +588,8 @@ function Settings({ }) {
                     />
                   <//>
                 `)}
+                </tbody>
+              </table>
               </div>
             ` : null}
           </div>
@@ -583,29 +597,28 @@ function Settings({ }) {
           <!-- ============================================================
                HTTPS
           ============================================================ -->
-          <div class="w-full border border-slate-500 bg-white/30 backdrop-blur-sm">
-            <div class="bg-teal-600/10 border-b border-slate-500 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm w-full sm:w-auto text-center sm:text-left">HTTPS</h3>
-              <div class="flex items-center justify-center sm:justify-end gap-3 w-full sm:w-auto">
-                <span class="text-slate-600 font-medium drop-shadow-sm tracking-wide text-lg">Enabled</span>
-                <${MyPolzunok} value=${settings.usehttps} onChange=${(v) => handleChange('usehttps', v)} />
-              </div>
+          <div class="w-full mb-6">
+            <div class="flex items-center gap-4 mb-4">
+              <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm pl-2">HTTPS</h3>
+              <${MyPolzunok} value=${settings.usehttps} onChange=${(v) => handleChange('usehttps', v)} />
             </div>
             ${settings.usehttps ? html`
-              <div class="flex flex-col divide-y divide-slate-500">
+              <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+                <table class="w-full table-fixed text-left border-collapse">
+                  <tbody>
                 ${[
                   { label: 'HTTPS domain', key: 'domain',   type: 'text'     },
                   { label: 'Private Key',  key: 'tls_key',  type: 'textarea' },
                   { label: 'Public Key',   key: 'tls_cert', type: 'textarea' }
                 ].map((item, index) => html`
-                  <div class="flex flex-col md:flex-row md:items-center px-6 py-2 transition-colors ${index % 2 === 0 ? 'bg-sky-200/40' : 'bg-white/80'} hover:bg-slate-200/80 gap-2 md:gap-0">
-                    <div
-                      class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2 mt-1 md:mt-0 border-r border-slate-500 py-2 cursor-help"
-                      data-tip=${getTip(item.label)}
+                  <tr class="transition-colors border-b border-slate-200 ${index % 2 === 0 ? 'bg-sky-200/40' : 'bg-white/80'} hover:bg-slate-200/80">
+                    <td
+                      class="w-1/3 text-lg font-bold text-slate-700 px-6 border-r border-slate-500 py-4 cursor-help align-top"
+                      data-tip=${gt(item.label)}
                     >
                       ${item.label}
-                    </div>
-                    <div class="w-full md:w-2/3 flex items-start md:items-center">
+                    </td>
+                    <td class="w-2/3 pl-4 py-4 pr-6 align-top">
                       <div class="relative w-full">
                         ${item.type === 'textarea'
                           ? html`
@@ -654,9 +667,11 @@ function Settings({ }) {
                         `}
                       </div>
                       ${errors[item.key] && html`<div class="text-red-500 text-sm mt-1 font-semibold w-full text-left">${errors[item.key]}</div>`}
-                    </div>
-                  </div>
+                    </td>
+                  </tr>
                 `)}
+                </tbody>
+              </table>
               </div>
             ` : null}
           </div>
@@ -664,107 +679,117 @@ function Settings({ }) {
           <!-- ============================================================
                Coordinates & Astronomy
           ============================================================ -->
-          <div class="w-full border border-slate-500 bg-white/30 backdrop-blur-sm">
-            <div class="bg-teal-600/10 border-b border-slate-500 px-6 py-4">
-              <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm">Coordinates & Astronomy</h3>
-            </div>
-            <div class="flex flex-col divide-y divide-slate-500">
+          <div class="w-full mb-6">
+            <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm mb-4 pl-2">Coordinates & Astronomy</h3>
+            <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+              <table class="w-full table-fixed text-left border-collapse">
+                <tbody>
 
-              <${FieldRow} label="Longitude" index=${0}>
+              <${FieldRow} label="Longitude" tip=${gt("Longitude")} index=${0}>
                 <${pageSetting} value=${settings.lon_de} setfn=${(v) => handleChange('lon_de', v)} type="text"
                   class=${`w-full px-3 py-2 bg-white/50 border ${errors.lon_de ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                   error=${errors.lon_de} />
               <//>
 
-              <${FieldRow} label="Latitude" index=${1}>
+              <${FieldRow} label="Latitude" tip=${gt("Latitude")} index=${1}>
                 <${pageSetting} value=${settings.lat_de} setfn=${(v) => handleChange('lat_de', v)} type="text"
                   class=${`w-full px-3 py-2 bg-white/50 border ${errors.lat_de ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                   error=${errors.lat_de} />
               <//>
 
               <!-- Sunrise — нестандартная строка, data-tip вручную -->
-              <div class="flex flex-col md:flex-row md:items-center px-6 py-2 transition-colors bg-white/80 hover:bg-slate-200/80 gap-2 md:gap-0">
-                <div
-                  class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2 border-r border-slate-500 py-2 cursor-help"
-                  data-tip=${getTip('Sunrise')}
+              <tr class="transition-colors border-b border-slate-200 bg-white/80 hover:bg-slate-200/80">
+                <td
+                  class="w-1/3 text-lg font-bold text-slate-700 px-6 border-r border-slate-500 py-4 cursor-help"
+                  data-tip=${gt('Sunrise')}
                 >
                   Sunrise: <span class="text-teal-600 drop-shadow-sm">${settings.sunrise}</span>
-                </div>
-                <div class="w-full md:w-2/3 flex items-center gap-4 pl-4">
-                  <${MyPolzunok} value=${settings.onsunrise} onChange=${(v) => handleChange('onsunrise', v)} />
-                  <input type="text" value=${settings.sunrise_pins || ''} onInput=${(e) => handleChange('sunrise_pins', e.target.value)}
-                    maxlength="20" placeholder="Action for sunrise"
-                    class="flex-grow w-full px-3 py-2 bg-white/50 border border-white/50 rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500" />
-                </div>
-              </div>
+                </td>
+                <td class="w-2/3 pl-4 py-4 pr-6">
+                  <div class="flex items-center gap-4">
+                    <${MyPolzunok} value=${settings.onsunrise} onChange=${(v) => handleChange('onsunrise', v)} />
+                    <input type="text" value=${settings.sunrise_pins || ''} onInput=${(e) => handleChange('sunrise_pins', e.target.value)}
+                      maxlength="20" placeholder="Action for sunrise"
+                      class="flex-grow w-full px-3 py-2 bg-white/50 border border-white/50 rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                  </div>
+                </td>
+              </tr>
 
               <!-- Sunset -->
-              <div class="flex flex-col md:flex-row md:items-center px-6 py-2 transition-colors bg-sky-200/40 hover:bg-slate-200/80 gap-2 md:gap-0">
-                <div
-                  class="w-full md:w-1/3 text-lg font-bold text-slate-700 md:pr-4 drop-shadow-sm pl-2 border-r border-slate-500 py-2 cursor-help"
-                  data-tip=${getTip('Sunset')}
+              <tr class="transition-colors border-b border-slate-200 bg-sky-200/40 hover:bg-slate-200/80">
+                <td
+                  class="w-1/3 text-lg font-bold text-slate-700 px-6 border-r border-slate-500 py-4 cursor-help"
+                  data-tip=${gt('Sunset')}
                 >
                   Sunset: <span class="text-teal-600 drop-shadow-sm">${settings.sunset}</span>
-                </div>
-                <div class="w-full md:w-2/3 flex items-center gap-4 pl-4">
-                  <${MyPolzunok} value=${settings.onsunset} onChange=${(v) => handleChange('onsunset', v)} />
-                  <input type="text" value=${settings.sunset_pins || ''} onInput=${(e) => handleChange('sunset_pins', e.target.value)}
-                    maxlength="20" placeholder="Action for sunset"
-                    class="flex-grow w-full px-3 py-2 bg-white/50 border border-white/50 rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500" />
-                </div>
-              </div>
+                </td>
+                <td class="w-2/3 pl-4 py-4 pr-6">
+                  <div class="flex items-center gap-4">
+                    <${MyPolzunok} value=${settings.onsunset} onChange=${(v) => handleChange('onsunset', v)} />
+                    <input type="text" value=${settings.sunset_pins || ''} onInput=${(e) => handleChange('sunset_pins', e.target.value)}
+                      maxlength="20" placeholder="Action for sunset"
+                      class="flex-grow w-full px-3 py-2 bg-white/50 border border-white/50 rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                  </div>
+                </td>
+              </tr>
 
-              <${FieldRow} label="Day Length" index=${4}>
+              <${FieldRow} label="Day Length" tip=${gt("Day Length")} index=${4}>
                 <span class="text-xl font-medium text-slate-800">${settings.dlength}</span>
               <//>
 
-              <${FieldRow} label="Next full moon" index=${5}>
+              <${FieldRow} label="Next full moon" tip=${gt("Next full moon")} index=${5}>
                 <span class="text-xl font-medium text-slate-800">
                   ${typeof settings.fullmoon === 'string' && settings.fullmoon
                     ? `${settings.fullmoon.split(' ')[0]} at ${settings.fullmoon.split(' ')[1]}`
                     : 'N/A'}
                 </span>
               <//>
+              </tbody>
+            </table>
             </div>
           </div>
 
           <!-- ============================================================
                Offline Mode — Date & Time
           ============================================================ -->
-          <div class="w-full border border-slate-500 bg-white/30 backdrop-blur-sm mb-4">
-            <div class="bg-teal-600/10 border-b border-slate-500 px-6 py-4">
-              <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm">[OFFLINE MODE] Date & Time</h3>
-            </div>
-            <div class="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-slate-500 bg-white/80 items-stretch">
-
+          <div class="w-full mb-6">
+            <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm mb-4 pl-2">[OFFLINE MODE] Date & Time</h3>
+            <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+              <table class="w-full table-fixed text-left border-collapse">
+                <tbody>
               <!-- Date -->
-              <div class="flex-1 flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 hover:bg-slate-200/80 transition-colors">
-                <div
-                  class="font-bold text-slate-700 text-lg sm:w-1/3 flex-shrink-0 border-r border-slate-500 py-3 px-6 cursor-help"
-                  data-tip=${getTip('Date')}
-                >Date</div>
-                <div class="flex-grow flex flex-col w-full pr-4">
+              <tr class="transition-colors border-b border-slate-200 bg-white/80 hover:bg-slate-200/80">
+                <td
+                  class="w-1/3 font-bold text-slate-700 text-lg border-r border-slate-500 py-4 px-6 cursor-help"
+                  data-tip=${gt('Date')}
+                >
+                  Date
+                </td>
+                <td class="w-2/3 pl-4 py-4 pr-6">
                   <input type="text" name="offdate" value=${settings.offdate || ''} onInput=${(e) => handleChange('offdate', e.target.value)}
                     placeholder="dd.mm.yy"
                     class=${`w-full px-3 py-2 bg-white/50 border ${errors.offdate ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`} />
                   ${errors.offdate && html`<div class="text-red-500 text-sm mt-1 font-semibold">${errors.offdate}</div>`}
-                </div>
-              </div>
+                </td>
+              </tr>
 
               <!-- Time -->
-              <div class="flex-1 flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 hover:bg-slate-200/80 transition-colors">
-                <div
-                  class="font-bold text-slate-700 text-lg sm:w-1/3 flex-shrink-0 border-r border-slate-500 py-3 px-6 cursor-help"
-                  data-tip=${getTip('Time')}
-                >Time</div>
-                <div class="flex-grow flex flex-col w-full pr-4">
+              <tr class="transition-colors border-b border-slate-200 bg-sky-200/40 hover:bg-slate-200/80">
+                <td
+                  class="w-1/3 font-bold text-slate-700 text-lg border-r border-slate-500 py-4 px-6 cursor-help"
+                  data-tip=${gt('Time')}
+                >
+                  Time
+                </td>
+                <td class="w-2/3 pl-4 py-4 pr-6">
                   <input type="text" name="offtime" value=${settings.offtime || ''} onInput=${(e) => handleChange('offtime', e.target.value)}
                     placeholder="hh:mm:ss"
                     class=${`w-full px-3 py-2 bg-white/50 border ${errors.offtime ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`} />
                   ${errors.offtime && html`<div class="text-red-500 text-sm mt-1 font-semibold">${errors.offtime}</div>`}
-                </div>
-              </div>
-
+                </td>
+              </tr>
+              </tbody>
+            </table>
             </div>
           </div>
 
@@ -779,6 +804,7 @@ function Settings({ }) {
         </form>
       </div>
     </div>
+    ${toast && html`<${Toast} message=${toast.message} type=${toast.type} />`}
   `;
 }
 

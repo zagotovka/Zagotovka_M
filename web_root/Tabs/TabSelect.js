@@ -327,7 +327,7 @@ function TabSelect({ }) {
             </div>
           `}
 
-          <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner">
+          <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner overflow-auto">
             <div class="overflow-x-auto">
               <table class="w-full text-left border-collapse whitespace-nowrap">
                 <thead>
@@ -338,7 +338,7 @@ function TabSelect({ }) {
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-white/40">
-                  ${varselect && varselect.map((d) => h(ArraySelect, { d }))}
+                  ${varselect && varselect.map((d) => html`<${ArraySelect} d=${d} />`)}
                 </tbody>
               </table>
             </div>

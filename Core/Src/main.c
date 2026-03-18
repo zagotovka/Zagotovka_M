@@ -2320,7 +2320,7 @@ void StartServiceTask(void *argument) {
 	        if (fade_state[i].steps_left == 0) {
 	          d = fade_state[i].end_duty;
 	          fade_state[i].active = false;
-	          printf("PWM fade done: id=%d final=%d%%\r\n", i, d);
+//	          printf("PWM fade done: id=%d final=%d%%\r\n", i, d);
 	        }
 
 	        PinsConf[i].dvalue = d;
