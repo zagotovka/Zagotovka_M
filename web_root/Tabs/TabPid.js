@@ -291,7 +291,7 @@ const addPid = () => {
       <td class="px-4 py-3 text-sm text-slate-700">${getPresetLabel(d.presets)}</td>
       <td class="px-4 py-3 text-sm text-slate-700 font-mono">${d.tmpset}</td>
       <td class="px-4 py-3 text-sm text-slate-700 font-mono">${d.tmpcur}</td>
-      <td class="px-4 py-3 text-sm text-slate-800 font-mono">${d.duty !== undefined ? d.duty : '—'}</td>
+      <td class="px-4 py-3 text-sm text-slate-800 font-mono ${!d.onoff ? 'text-rose-500 font-bold' : ''}">${!d.onoff ? 'OFF' : (d.duty !== undefined ? d.duty : '—')}</td>
       <td class="px-4 py-3 text-sm text-slate-600">${d.info}</td>
       <td class="px-4 py-3">
         <${MyPolzunok}

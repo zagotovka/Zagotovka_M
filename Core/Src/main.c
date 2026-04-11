@@ -2625,17 +2625,30 @@ void StartPIDTask(void *argument)
   for(;;)
   {
     for (int i = 0; i < PID_MAX_SLOTS; i++) {
-      if (!PidConf[i].onoff) continue;
       if (PidConf[i].pwm_pin_id == 0 && PidConf[i].selsens == PID_SENS_NONE) continue;
 
       uint32_t now = HAL_GetTick();
       if ((now - PidConf[i].last_tick) < PidConf[i].Ts_ms) continue;
       PidConf[i].last_tick = now;
 
-      /* 1. Чтение температуры */
+      /* 1. Чтение температуры (читаем всегда, чтобы обновлять UI) */
       float T = pid_read_temperature(i);
-      if (T < -100.0f) continue;  /* датчик не читается */
-      PidConf[i].tmpcur = T;
+      if (T >= -100.0f) {
+          PidConf[i].tmpcur = T;
+      }
+
+      /* Если PID выключен - глушим ШИМ и интегратор, но переходим к следующему слоту */
+      if (!PidConf[i].onoff) {
+          if (PidConf[i].pwm_out > 0 || PidConf[i].integral != 0.0f) {
+              PidConf[i].pwm_out = 0;
+              PidConf[i].integral = 0.0f;
+              pid_set_pwm(i, 0);
+          }
+          continue;
+      }
+
+      /* Если датчик не прочитался, а PID включен - пропускаем расчет (чтобы не было бешеных всплесков) */
+      if (T < -100.0f) continue;
 
       /* 2. Аварийное отключение */
       if (T >= PidConf[i].temp_max) {
