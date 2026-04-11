@@ -1,0 +1,14 @@
+{
+  "id": 0,
+  "pins": "PB10",
+  "selsens": "2",
+  "sernum": "",
+  "presets": "3",
+  "tmpset": "30",
+  "tmpcur": "20",
+  "pinact": {
+    "PB10": 15
+  },
+  "info": "Test DHT22",
+  "onoff": 1
+}

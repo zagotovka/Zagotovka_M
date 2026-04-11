@@ -1,0 +1,30 @@
+{
+  "lang": "ru",
+  "pidline": 2,
+  "pid": [
+    {
+      "id": 1,
+      "pins": "PB15",
+      "selsens": "1",
+      "sernum": "2800291750500598",
+      "presets": "5",
+      "tmpset": "25",
+      "tmpcur": "15",
+      "pinact": { "PB15": 19 },
+      "info": "Test DS18B20",
+      "onoff": 0
+    },
+    {
+      "id": 0,
+      "pins": "PC6",
+      "selsens": "2",
+      "sernum": "",
+      "presets": "3",
+      "tmpset": "30",
+      "tmpcur": "20",
+      "pinact": { "PC6": 23 },
+      "info": "Test DHT22",
+      "onoff": 1
+    }
+  ]
+}
