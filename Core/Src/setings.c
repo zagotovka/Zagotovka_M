@@ -120,6 +120,7 @@ void SetSettingsConfig() {
   writeField("lang", "\"%s\"", SetSettings.lang);
 
   writeField("numline", "%d", SetSettings.numline);
+  writeField("pidline", "%d", SetSettings.pidline);
   writeField("timezone", "%f", SetSettings.timezone);
   writeField("lat_de", "%f", SetSettings.lat_de);
   writeField("lon_de", "%f", SetSettings.lon_de);
@@ -484,6 +485,8 @@ void GetSettingsConfig() {
       SetSettings.numline = atoi(value);
       //			printf("Found key: %s, value: %s\r\n", key,
       // value);
+    } else if (strcmp(key, "pidline") == 0) {
+      SetSettings.pidline = atoi(value);
     } else if (strcmp(key, "timezone") == 0) {
       SetSettings.timezone = atof(value);
       //			printf("Found key: %s, value: %s\r\n", key,
@@ -2266,5 +2269,214 @@ cleanup:
     printf("Error: Failed to write to onewire.ini (error: %d)\n", fresult);
   }
   f_close(&USBHFile);
+}
+/***********************************************************************************************/
+
+/************************** PID Config *********************************/
+void GetPidConfig() {
+  FILINFO finfo;
+  FRESULT fresult;
+
+  fresult = f_stat("pid.ini", &finfo);
+  if (fresult != FR_OK) {
+    printf("pid.ini not found, using defaults\r\n");
+    return;
+  }
+  printf("pid.ini has size: %lu bytes\r\n", finfo.fsize);
+
+  if (f_open(&USBHFile, "pid.ini", FA_READ) != FR_OK) {
+    printf("ERROR: Cannot open pid.ini!\r\n");
+    return;
+  }
+
+  /* Читаем весь файл в буфер */
+  char *buf = (char *)malloc(finfo.fsize + 1);
+  if (!buf) {
+    printf("ERROR: Cannot allocate buffer for pid.ini\r\n");
+    f_close(&USBHFile);
+    return;
+  }
+  UINT bytesRead;
+  fresult = f_read(&USBHFile, buf, finfo.fsize, &bytesRead);
+  f_close(&USBHFile);
+  if (fresult != FR_OK || bytesRead == 0) {
+    free(buf);
+    return;
+  }
+  buf[bytesRead] = '\0';
+
+  /* Парсим JSON */
+  cJSON *root = cJSON_Parse(buf);
+  free(buf);
+  if (!root) {
+    printf("ERROR: pid.ini JSON parse failed\r\n");
+    return;
+  }
+
+  cJSON *j_arr = cJSON_GetObjectItem(root, "pid");
+  if (!j_arr || !cJSON_IsArray(j_arr)) {
+    cJSON_Delete(root);
+    return;
+  }
+
+  memset(PidConf, 0, sizeof(PidConf));
+
+  int idx = 0;
+  cJSON *item;
+  cJSON_ArrayForEach(item, j_arr) {
+    if (idx >= PID_MAX_SLOTS) break;
+
+    cJSON *j;
+    j = cJSON_GetObjectItem(item, "pwm_pin_id");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].pwm_pin_id = (uint8_t)j->valueint;
+
+    j = cJSON_GetObjectItem(item, "selsens");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].selsens = (PidSensorType_e)j->valueint;
+
+    j = cJSON_GetObjectItem(item, "sensor_pin_id");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].sensor_pin_id = (uint8_t)j->valueint;
+
+    j = cJSON_GetObjectItem(item, "sernum");
+    if (j && cJSON_IsString(j)) {
+      strncpy(PidConf[idx].sernum, j->valuestring, sizeof(PidConf[idx].sernum) - 1);
+    }
+
+    j = cJSON_GetObjectItem(item, "sensor_sub_idx");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].sensor_sub_idx = (uint8_t)j->valueint;
+
+    j = cJSON_GetObjectItem(item, "preset");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].preset = (uint8_t)j->valueint;
+
+    j = cJSON_GetObjectItem(item, "tmpset");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].tmpset = (float)j->valuedouble;
+
+    j = cJSON_GetObjectItem(item, "Kp");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].Kp = (float)j->valuedouble;
+
+    j = cJSON_GetObjectItem(item, "Ki");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].Ki = (float)j->valuedouble;
+
+    j = cJSON_GetObjectItem(item, "Kd");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].Kd = (float)j->valuedouble;
+
+    j = cJSON_GetObjectItem(item, "bias");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].bias = (float)j->valuedouble;
+
+    j = cJSON_GetObjectItem(item, "Ts_ms");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].Ts_ms = (uint16_t)j->valueint;
+
+    j = cJSON_GetObjectItem(item, "lambda_factor");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].lambda_factor = (float)j->valuedouble;
+
+    j = cJSON_GetObjectItem(item, "pwm_start");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].pwm_start = (uint8_t)j->valueint;
+
+    j = cJSON_GetObjectItem(item, "pwm_max");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].pwm_max = (uint8_t)j->valueint;
+
+    j = cJSON_GetObjectItem(item, "temp_max");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].temp_max = (float)j->valuedouble;
+
+    j = cJSON_GetObjectItem(item, "temp_min");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].temp_min = (float)j->valuedouble;
+
+    j = cJSON_GetObjectItem(item, "pause_sec");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].pause_sec = (uint16_t)j->valueint;
+
+    j = cJSON_GetObjectItem(item, "tau");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].tau = (float)j->valuedouble;
+
+    j = cJSON_GetObjectItem(item, "K_gain");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].K_gain = (float)j->valuedouble;
+
+    j = cJSON_GetObjectItem(item, "info");
+    if (j && cJSON_IsString(j)) {
+      strncpy(PidConf[idx].info, j->valuestring, sizeof(PidConf[idx].info) - 1);
+    }
+
+    j = cJSON_GetObjectItem(item, "onoff");
+    if (j && cJSON_IsNumber(j)) PidConf[idx].onoff = (uint8_t)j->valueint;
+
+    idx++;
+  }
+  cJSON_Delete(root);
+  printf("[PID] Loaded %d slots from pid.ini\r\n", idx);
+}
+
+
+void SetPidConfig() {
+  FRESULT fresult;
+  UINT byteswritten;
+  char *out_str = NULL;
+
+  fresult = f_open(&USBHFile, (const TCHAR *)"pid.ini",
+                   FA_CREATE_ALWAYS | FA_WRITE);
+  if (fresult != FR_OK) {
+    printf("Error: Could not open pid.ini for writing\n");
+    return;
+  }
+
+  /* Заголовок JSON */
+  const char *start = "{\"pid\":[";
+  fresult = f_write(&USBHFile, start, strlen(start), &byteswritten);
+  if (fresult != FR_OK) goto cleanup;
+
+  bool first = true;
+  for (int i = 0; i < PID_MAX_SLOTS; i++) {
+    /* Сохраняем только слоты с данными (pwm_pin_id назначен или onoff) */
+    if (PidConf[i].pwm_pin_id == 0 && PidConf[i].onoff == 0 &&
+        PidConf[i].selsens == PID_SENS_NONE && PidConf[i].preset == 0) continue;
+
+    if (!first) {
+      fresult = f_write(&USBHFile, ",", 1, &byteswritten);
+      if (fresult != FR_OK) goto cleanup;
+    }
+    first = false;
+
+    cJSON *obj = cJSON_CreateObject();
+    if (!obj) continue;
+
+    cJSON_AddNumberToObject(obj, "pwm_pin_id", PidConf[i].pwm_pin_id);
+    cJSON_AddNumberToObject(obj, "selsens", (int)PidConf[i].selsens);
+    cJSON_AddNumberToObject(obj, "sensor_pin_id", PidConf[i].sensor_pin_id);
+    cJSON_AddStringToObject(obj, "sernum", PidConf[i].sernum);
+    cJSON_AddNumberToObject(obj, "sensor_sub_idx", PidConf[i].sensor_sub_idx);
+    cJSON_AddNumberToObject(obj, "preset", PidConf[i].preset);
+    cJSON_AddNumberToObject(obj, "tmpset", PidConf[i].tmpset);
+    cJSON_AddNumberToObject(obj, "Kp", PidConf[i].Kp);
+    cJSON_AddNumberToObject(obj, "Ki", PidConf[i].Ki);
+    cJSON_AddNumberToObject(obj, "Kd", PidConf[i].Kd);
+    cJSON_AddNumberToObject(obj, "bias", PidConf[i].bias);
+    cJSON_AddNumberToObject(obj, "Ts_ms", PidConf[i].Ts_ms);
+    cJSON_AddNumberToObject(obj, "lambda_factor", PidConf[i].lambda_factor);
+    cJSON_AddNumberToObject(obj, "pwm_start", PidConf[i].pwm_start);
+    cJSON_AddNumberToObject(obj, "pwm_max", PidConf[i].pwm_max);
+    cJSON_AddNumberToObject(obj, "temp_max", PidConf[i].temp_max);
+    cJSON_AddNumberToObject(obj, "temp_min", PidConf[i].temp_min);
+    cJSON_AddNumberToObject(obj, "pause_sec", PidConf[i].pause_sec);
+    cJSON_AddNumberToObject(obj, "tau", PidConf[i].tau);
+    cJSON_AddNumberToObject(obj, "K_gain", PidConf[i].K_gain);
+    cJSON_AddStringToObject(obj, "info", PidConf[i].info);
+    cJSON_AddNumberToObject(obj, "onoff", PidConf[i].onoff);
+
+    out_str = cJSON_PrintUnformatted(obj);
+    cJSON_Delete(obj);
+    if (out_str) {
+      fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
+      free(out_str);
+      if (fresult != FR_OK) goto cleanup;
+    }
+  }
+
+  /* Закрываем массив и объект */
+  const char *end = "]}";
+  fresult = f_write(&USBHFile, end, strlen(end), &byteswritten);
+
+cleanup:
+  if (fresult != FR_OK) {
+    printf("Error: Failed to write pid.ini (error: %d)\n", fresult);
+  }
+  f_close(&USBHFile);
+  printf("[PID] Config saved to pid.ini\r\n");
 }
 /***********************************************************************************************/

@@ -5086,6 +5086,347 @@ bool https_set_connection_mode(uint8_t mode) {
   return update_and_write_settings(new_settings);
 }
 
+
 // Функция проверки наличия действительных настроек во Flash
 bool has_valid_settings(void) { return get_valid_settings() != NULL; }
+
+/************************** PID Controller *********************************/
+
+/* ──── Таблица пресетов (из Plan_PID.txt) ──── */
+typedef struct {
+    uint16_t Ts_ms;
+    float    lambda_factor;
+    uint8_t  pwm_start;
+    uint8_t  pwm_max;
+    float    temp_max;
+    float    temp_min;
+    uint16_t pause_sec;
+    float    Kp;
+    float    Ki;
+    float    Kd;
+} PidPreset_t;
+
+static const PidPreset_t pid_presets[] = {
+  /* 0 - placeholder */  { 1000, 0.5f, 30, 100, 100.0f, -55.0f, 0,   0.0f, 0.0f, 0.0f },
+  /* 1 - Паяльная ст. */ { 200,  0.3f, 30, 100, 125.0f, -55.0f, 0,   10.0f, 0.5f, 1.0f },
+  /* 2 - Кулер        */ { 1000, 0.5f, 20, 100, 70.0f,  -55.0f, 0,  -5.0f, -0.1f, 0.0f },
+  /* 3 - 3D-принтер   */ { 500,  0.4f, 30, 100, 120.0f, 0.0f,   0,   5.0f, 0.2f, 0.5f },
+  /* 4 - Форточка     */ { 2000, 0.5f, 20, 100, 60.0f,  -55.0f, 0,  -2.0f, -0.05f,0.0f },
+  /* 5 - Тёплый пол   */ { 5000, 0.8f, 20, 80,  45.0f,  0.0f,   0,   2.0f, 0.05f, 0.0f },
+  /* 6 - Холодильник  */ { 5000, 1.0f, 40, 100, 100.0f, -55.0f, 180,-10.0f,-0.2f, 0.0f },
+  /* 7 - Аквариум     */ { 3000, 0.6f, 20, 80,  80.0f,  0.0f,   0,   2.0f, 0.05f, 0.0f },
+  /* 8 - Инкубатор    */ { 3000, 0.4f, 20, 60,  45.0f,  0.0f,   0,   5.0f, 0.1f,  0.0f },
+  /* 9 - Теплица      */ { 5000, 0.7f, 20, 80,  50.0f,  -55.0f, 0,   2.0f, 0.05f, 0.0f },
+};
+#define PID_PRESET_COUNT (sizeof(pid_presets) / sizeof(pid_presets[0]))
+
+/* ──── apply_pid_preset: копирует параметры пресета в слот ──── */
+static void apply_pid_preset(int slot, uint8_t preset_idx) {
+    if (preset_idx == 0 || preset_idx >= PID_PRESET_COUNT) return;
+    const PidPreset_t *p = &pid_presets[preset_idx];
+    PidConf[slot].preset       = preset_idx;
+    PidConf[slot].Ts_ms        = p->Ts_ms;
+    PidConf[slot].lambda_factor= p->lambda_factor;
+    PidConf[slot].pwm_start    = p->pwm_start;
+    PidConf[slot].pwm_max      = p->pwm_max;
+    PidConf[slot].temp_max     = p->temp_max;
+    PidConf[slot].temp_min     = p->temp_min;
+    PidConf[slot].pause_sec    = p->pause_sec;
+    /* Устанавливаем типовые Kp/Ki/Kd для проверки работы */
+    PidConf[slot].Kp           = p->Kp;
+    PidConf[slot].Ki           = p->Ki;
+    PidConf[slot].Kd           = p->Kd;
+}
+
+void apply_pid_preset_extern(int slot, uint8_t preset_idx) {
+    apply_pid_preset(slot, preset_idx);
+}
+
+/* ──── gen_pid_json: формирует JSON для /api/pid/get ──── */
+void gen_pid_json(char *buffer, int buffer_size) {
+    int pos = 0;
+    pos += snprintf(buffer + pos, buffer_size - pos,
+        "{\"lang\":\"%s\",\"pidline\":%d,\"pid\":[", SetSettings.lang, SetSettings.pidline);
+
+    for (int i = 0; i < PID_MAX_SLOTS && pos < buffer_size - 100; i++) {
+        if (i > 0) pos += snprintf(buffer + pos, buffer_size - pos, ",");
+
+        /* Имя PWM-пина и его Duty */
+        const char *pin_name = "";
+        uint8_t pin_id = PidConf[i].pwm_pin_id;
+        int current_duty = 0;
+        if (pin_id > 0 && pin_id < NUMPIN) {
+            pin_name = PinsInfo[pin_id].pins;
+            current_duty = PinsConf[pin_id].dvalue;
+        }
+
+        pos += snprintf(buffer + pos, buffer_size - pos,
+            "{\"id\":%d,\"pins\":\"%s\",\"pinact\":",
+            i + 1, pin_name);
+
+        /* pinact объект */
+        if (pin_id > 0 && pin_id < NUMPIN) {
+            pos += snprintf(buffer + pos, buffer_size - pos,
+                "{\"%s\":%d}", pin_name, pin_id);
+        } else {
+            pos += snprintf(buffer + pos, buffer_size - pos, "{}");
+        }
+
+        pos += snprintf(buffer + pos, buffer_size - pos,
+            ",\"selsens\":\"%d\",\"sernum\":\"%s\",\"presets\":\"%d\""
+            ",\"tmpset\":\"%.1f\",\"tmpcur\":\"%.1f\""
+            ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d}",
+            (int)PidConf[i].selsens,
+            PidConf[i].sernum,
+            PidConf[i].preset,
+            PidConf[i].tmpset,
+            PidConf[i].tmpcur,
+            current_duty,
+            PidConf[i].info,
+            PidConf[i].onoff);
+    }
+    pos += snprintf(buffer + pos, buffer_size - pos, "]}");
+}
+
+/* ──── parse_pid_json: парсит JSON от /api/pid/set ──── */
+void parse_pid_json(const char *json) {
+    cJSON *root = cJSON_Parse(json);
+    if (!root) {
+        printf("[PID] JSON parse error\r\n");
+        return;
+    }
+
+    /* id — 1-based */
+    cJSON *j_id = cJSON_GetObjectItem(root, "id");
+    if (!j_id || !cJSON_IsNumber(j_id)) {
+        cJSON_Delete(root);
+        return;
+    }
+    int id = j_id->valueint - 1;  /* 0-based */
+    if (id < 0 || id >= PID_MAX_SLOTS) {
+        cJSON_Delete(root);
+        return;
+    }
+
+    /* pinact → pwm_pin_id */
+    cJSON *j_pinact = cJSON_GetObjectItem(root, "pinact");
+    if (j_pinact && cJSON_IsObject(j_pinact)) {
+        cJSON *child = j_pinact->child;
+        if (child && cJSON_IsNumber(child)) {
+            PidConf[id].pwm_pin_id = (uint8_t)child->valueint;
+        }
+    }
+
+    /* selsens */
+    cJSON *j_selsens = cJSON_GetObjectItem(root, "selsens");
+    if (j_selsens) {
+        int sv = 0;
+        if (cJSON_IsString(j_selsens)) sv = atoi(j_selsens->valuestring);
+        else if (cJSON_IsNumber(j_selsens)) sv = j_selsens->valueint;
+        PidConf[id].selsens = (PidSensorType_e)sv;
+    }
+
+    /* sernum */
+    cJSON *j_sernum = cJSON_GetObjectItem(root, "sernum");
+    if (j_sernum && cJSON_IsString(j_sernum)) {
+        strncpy(PidConf[id].sernum, j_sernum->valuestring, sizeof(PidConf[id].sernum) - 1);
+        PidConf[id].sernum[sizeof(PidConf[id].sernum) - 1] = '\0';
+    }
+
+    /* presets → применяем пресет */
+    cJSON *j_presets = cJSON_GetObjectItem(root, "presets");
+    if (j_presets) {
+        int pv = 0;
+        if (cJSON_IsString(j_presets)) pv = atoi(j_presets->valuestring);
+        else if (cJSON_IsNumber(j_presets)) pv = j_presets->valueint;
+        if (pv > 0 && pv < (int)PID_PRESET_COUNT) {
+            apply_pid_preset(id, (uint8_t)pv);
+        }
+    }
+
+    /* tmpset */
+    cJSON *j_tmpset = cJSON_GetObjectItem(root, "tmpset");
+    if (j_tmpset) {
+        if (cJSON_IsString(j_tmpset)) PidConf[id].tmpset = (float)atof(j_tmpset->valuestring);
+        else if (cJSON_IsNumber(j_tmpset)) PidConf[id].tmpset = (float)j_tmpset->valuedouble;
+    }
+
+    /* info */
+    cJSON *j_info = cJSON_GetObjectItem(root, "info");
+    if (j_info && cJSON_IsString(j_info)) {
+        strncpy(PidConf[id].info, j_info->valuestring, sizeof(PidConf[id].info) - 1);
+        PidConf[id].info[sizeof(PidConf[id].info) - 1] = '\0';
+    }
+
+    /* onoff */
+    cJSON *j_onoff = cJSON_GetObjectItem(root, "onoff");
+    if (j_onoff && cJSON_IsNumber(j_onoff)) {
+        PidConf[id].onoff = (uint8_t)j_onoff->valueint;
+    }
+
+    /* Автоопределение sensor_pin_id для DS18B20 по серийнику */
+    if (PidConf[id].selsens == PID_SENS_DS18B20 && PidConf[id].sernum[0] != '\0') {
+        for (int p = 0; p < MAX_DS18B20_P; p++) {
+            if (ds18b20[p].typsensr != 1) continue;
+            for (int s = 0; s < ds18b20[p].numsens; s++) {
+                char addr_str[17];
+                for (int k = 0; k < 8; k++) {
+                    sprintf(addr_str + (k * 2), "%02X", ds18b20[p].sensors[s].addr[k]);
+                }
+                if (strcmp(addr_str, PidConf[id].sernum) == 0) {
+                    PidConf[id].sensor_pin_id = ds18b20[p].id;
+                    PidConf[id].sensor_sub_idx = (uint8_t)s;
+                    printf("[PID] DS18B20 matched: slot=%d pin_id=%d sub=%d\r\n", id, ds18b20[p].id, s);
+                    goto ds_found;
+                }
+            }
+        }
+        ds_found:;
+    }
+    /* Для DHT22 — sensor_pin_id берётся из pwm_pin_id пока (TODO: отдельный select) */
+
+    cJSON_Delete(root);
+
+    printf("[PID] Slot %d updated: pwm=%d sens=%d preset=%d tmpset=%.1f onoff=%d\r\n",
+           id, PidConf[id].pwm_pin_id, (int)PidConf[id].selsens,
+           PidConf[id].preset, PidConf[id].tmpset, PidConf[id].onoff);
+}
+
+/* ──── parse_pidline_json: парсит { "pidline": N } ──── */
+void parse_pidline_json(char *json_string, struct dbSettings *settings) {
+    cJSON *root = cJSON_Parse(json_string);
+    if (!root) return;
+    cJSON *j_pidline = cJSON_GetObjectItem(root, "pidline");
+    if (j_pidline && cJSON_IsNumber(j_pidline)) {
+        settings->pidline = (uint8_t)j_pidline->valueint;
+        printf("[PID] pidline set to %d\r\n", settings->pidline);
+    }
+    cJSON_Delete(root);
+}
+
+/* ──── handle_pid_get: HTTP GET /api/pid/get ──── */
+void handle_pid_get(struct mg_connection *c) {
+    /* Буфер ~200 байт на слот × 24 = ~4800 + запас */
+    char *buf = (char *)malloc(8192);
+    if (!buf) {
+        mg_http_reply(c, 500, "Content-Type: application/json\r\n",
+                      "{\"error\":\"out of memory\"}");
+        return;
+    }
+    gen_pid_json(buf, 8192);
+    mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", buf);
+    free(buf);
+}
+
+/* ──── handle_pid_set: HTTP POST /api/pid/set ──── */
+void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm) {
+    char *body = (char *)malloc(hm->body.len + 1);
+    if (!body) {
+        mg_http_reply(c, 500, "Content-Type: application/json\r\n",
+                      "{\"error\":\"out of memory\"}");
+        return;
+    }
+    memcpy(body, hm->body.buf, hm->body.len);
+    body[hm->body.len] = '\0';
+
+    parse_pid_json(body);
+    free(body);
+
+    /* Сохранение на Flash */
+    uint8_t num = 6;
+    xQueueSend(usbQueueHandle, &num, 0);
+
+    mg_http_reply(c, 200, "Content-Type: application/json\r\n",
+                  "{\"status\":\"ok\"}");
+}
+
+/* ──── handle_pidline_set: HTTP POST /api/pidline/set ──── */
+void handle_pidline_set(struct mg_connection *c, struct mg_http_message *hm) {
+    char *body = (char *)malloc(hm->body.len + 1);
+    if (!body) {
+        mg_http_reply(c, 500, "Content-Type: application/json\r\n",
+                      "{\"error\":\"out of memory\"}");
+        return;
+    }
+    memcpy(body, hm->body.buf, hm->body.len);
+    body[hm->body.len] = '\0';
+
+    parse_pidline_json(body, &SetSettings);
+    free(body);
+
+    /* Сохранение настроек */
+    uint8_t num = 2;
+    xQueueSend(usbQueueHandle, &num, 0);
+
+    mg_http_reply(c, 200, "Content-Type: application/json\r\n",
+                  "{\"status\":\"ok\"}");
+}
+
+/* ──── pid_read_temperature: читает T из ds18b20[]/dht22[] ──── */
+float pid_read_temperature(int slot) {
+    if (slot < 0 || slot >= PID_MAX_SLOTS) return -999.0f;
+
+    if (PidConf[slot].selsens == PID_SENS_DS18B20) {
+        /* Поиск по серийнику */
+        for (int p = 0; p < MAX_DS18B20_P; p++) {
+            if (ds18b20[p].typsensr != 1 || !ds18b20[p].onoff) continue;
+            for (int s = 0; s < ds18b20[p].numsens; s++) {
+                char addr_str[17];
+                for (int k = 0; k < 8; k++) {
+                    sprintf(addr_str + (k * 2), "%02X", ds18b20[p].sensors[s].addr[k]);
+                }
+                if (strcmp(addr_str, PidConf[slot].sernum) == 0) {
+                    if (ds18b20[p].sensors[s].valid) {
+                        return ds18b20[p].sensors[s].temp;
+                    }
+                    return -999.0f; /* не валидно */
+                }
+            }
+        }
+        return -999.0f; /* не найден */
+    }
+    else if (PidConf[slot].selsens == PID_SENS_DHT22) {
+        /* Поиск по pin ID */
+        for (int p = 0; p < MAX_DHT22_P; p++) {
+            if (dht22[p].typsensr != 2 || !dht22[p].onoff) continue;
+            if (dht22[p].id == PidConf[slot].sensor_pin_id) {
+                if (dht22[p].valid) {
+                    return dht22[p].temp;
+                }
+                return -999.0f;
+            }
+        }
+        return -999.0f;
+    }
+
+    return -999.0f;
+}
+
+/* ──── pid_set_pwm: устанавливает duty% на PWM-пин ──── */
+void pid_set_pwm(int slot, uint8_t duty) {
+    if (slot < 0 || slot >= PID_MAX_SLOTS) return;
+    uint8_t pin_id = PidConf[slot].pwm_pin_id;
+    if (pin_id == 0 || pin_id >= NUMPIN) return;
+    if (PinsConf[pin_id].topin != 5) return; /* не PWM-пин */
+
+    if (duty > 100) duty = 100;
+
+    /* Записываем duty в PinsConf для консистентности */
+    PinsConf[pin_id].dvalue = duty;
+
+    /* Расчёт pulse аналогично InitPin (setings.c) */
+    uint32_t period = PinsConf[pin_id].pwmmax;
+    uint32_t pulse = (uint32_t)((uint64_t)duty * period / 100ULL);
+
+    __HAL_TIM_SET_COMPARE(&htim[pin_id], PinsInfo[pin_id].tim_channel, pulse);
+}
+
+/* ──── pid_autotune_tick: заглушка для авто-тюна ──── */
+void pid_autotune_tick(int slot) {
+    /* TODO: реализация шагового теста, бинарного поиска Bias, расчёта IMC
+     * Будет реализовано на втором этапе.
+     * Пока просто завершаем тест с ошибкой. */
+    printf("[PID] AutoTune stub called for slot=%d, finishing with IDLE\r\n", slot);
+    PidConf[slot].tune_state = PID_TUNE_IDLE;
+}
 /****************** End Zerg section **************************/

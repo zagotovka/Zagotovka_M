@@ -86,6 +86,14 @@ const urlMappings = {
     file: 'json/Timers2.json',
     contentType: 'application/json'
   },
+    '/api/pid/get': {
+    file: 'json/Pid.json',
+    contentType: 'application/json'
+  },
+  '/api/pid/set': {
+    file: 'json/Pid2.json',
+    contentType: 'application/json'
+  },
   '/api/numline/set': {
     file: 'json/Timers3.json',
     contentType: 'application/json'

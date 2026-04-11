@@ -18,9 +18,9 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "string.h"
 #include "cmsis_os.h"
 #include "fatfs.h"
-#include "string.h"
 #include "usb_host.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -84,6 +84,7 @@ uint8_t usbnum = 0;
 uint8_t mqttnum = 0;
 uint8_t sumowpin = 0;
 data_pin_t data_pin;
+dbPidConf PidConf[PID_MAX_SLOTS];
 
 #define HTTP_URL "http://0.0.0.0:8000"
 #define HTTPS_URL "https://0.0.0.0:8443"
@@ -108,27 +109,21 @@ char str[40] = {0};
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-#if defined(__ICCARM__) /*!< IAR Compiler */
-#pragma location = 0x2007c000
-ETH_DMADescTypeDef
-    DMARxDscrTab[ETH_RX_DESC_CNT]; /* Ethernet Rx DMA Descriptors */
-#pragma location = 0x2007c0a0
-ETH_DMADescTypeDef
-    DMATxDscrTab[ETH_TX_DESC_CNT]; /* Ethernet Tx DMA Descriptors */
+#if defined ( __ICCARM__ ) /*!< IAR Compiler */
+#pragma location=0x2007c000
+ETH_DMADescTypeDef  DMARxDscrTab[ETH_RX_DESC_CNT]; /* Ethernet Rx DMA Descriptors */
+#pragma location=0x2007c0a0
+ETH_DMADescTypeDef  DMATxDscrTab[ETH_TX_DESC_CNT]; /* Ethernet Tx DMA Descriptors */
 
-#elif defined(__CC_ARM) /* MDK ARM Compiler */
+#elif defined ( __CC_ARM )  /* MDK ARM Compiler */
 
-__attribute__((at(0x2007c000))) ETH_DMADescTypeDef
-    DMARxDscrTab[ETH_RX_DESC_CNT]; /* Ethernet Rx DMA Descriptors */
-__attribute__((at(0x2007c0a0))) ETH_DMADescTypeDef
-    DMATxDscrTab[ETH_TX_DESC_CNT]; /* Ethernet Tx DMA Descriptors */
+__attribute__((at(0x2007c000))) ETH_DMADescTypeDef  DMARxDscrTab[ETH_RX_DESC_CNT]; /* Ethernet Rx DMA Descriptors */
+__attribute__((at(0x2007c0a0))) ETH_DMADescTypeDef  DMATxDscrTab[ETH_TX_DESC_CNT]; /* Ethernet Tx DMA Descriptors */
 
-#elif defined(__GNUC__) /* GNU Compiler */
+#elif defined ( __GNUC__ ) /* GNU Compiler */
 
-ETH_DMADescTypeDef DMARxDscrTab[ETH_RX_DESC_CNT] __attribute__((
-    section(".RxDecripSection"))); /* Ethernet Rx DMA Descriptors */
-ETH_DMADescTypeDef DMATxDscrTab[ETH_TX_DESC_CNT] __attribute__((
-    section(".TxDecripSection"))); /* Ethernet Tx DMA Descriptors */
+ETH_DMADescTypeDef DMARxDscrTab[ETH_RX_DESC_CNT] __attribute__((section(".RxDecripSection"))); /* Ethernet Rx DMA Descriptors */
+ETH_DMADescTypeDef DMATxDscrTab[ETH_TX_DESC_CNT] __attribute__((section(".TxDecripSection")));   /* Ethernet Tx DMA Descriptors */
 #endif
 
 ETH_TxPacketConfig TxConfig;
@@ -147,96 +142,109 @@ UART_HandleTypeDef huart3;
 /* Definitions for ConfigTask */
 osThreadId_t ConfigTaskHandle;
 const osThreadAttr_t ConfigTask_attributes = {
-    .name = "ConfigTask",
-    .stack_size = 512 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
+  .name = "ConfigTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for WebServerTask */
 osThreadId_t WebServerTaskHandle;
 const osThreadAttr_t WebServerTask_attributes = {
-    .name = "WebServerTask",
-    .stack_size = 3072 * 4, // 2048 + 1024(https)
-    .priority = (osPriority_t)osPriorityNormal,
+  .name = "WebServerTask",
+  .stack_size = 3072 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for OutputTask */
 osThreadId_t OutputTaskHandle;
 const osThreadAttr_t OutputTask_attributes = {
-    .name = "OutputTask",
-    .stack_size = 512 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
+  .name = "OutputTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for CronTask */
 osThreadId_t CronTaskHandle;
 const osThreadAttr_t CronTask_attributes = {
-    .name = "CronTask",
-    .stack_size = 512 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
+  .name = "CronTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for InputTask */
 osThreadId_t InputTaskHandle;
 const osThreadAttr_t InputTask_attributes = {
-    .name = "InputTask",
-    .stack_size = 512 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
+  .name = "InputTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for EncoderTask */
 osThreadId_t EncoderTaskHandle;
 const osThreadAttr_t EncoderTask_attributes = {
-    .name = "EncoderTask",
-    .stack_size = 512 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
+  .name = "EncoderTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for mqttTask */
 osThreadId_t mqttTaskHandle;
 const osThreadAttr_t mqttTask_attributes = {
-    .name = "mqttTask",
-    .stack_size = 512 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
+  .name = "mqttTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ds18b20Task */
 osThreadId_t ds18b20TaskHandle;
 const osThreadAttr_t ds18b20Task_attributes = {
-    .name = "ds18b20Task",
-    .stack_size = 512 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
+  .name = "ds18b20Task",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for dht22Task */
 osThreadId_t dht22TaskHandle;
 const osThreadAttr_t dht22Task_attributes = {
-    .name = "dht22Task",
-    .stack_size = 512 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
+  .name = "dht22Task",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ServiceTask */
 osThreadId_t ServiceTaskHandle;
 const osThreadAttr_t ServiceTask_attributes = {
-    .name = "ServiceTask",
-    .stack_size = 512 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
+  .name = "ServiceTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for SIM800LTask */
 osThreadId_t SIM800LTaskHandle;
 const osThreadAttr_t SIM800LTask_attributes = {
-    .name = "SIM800LTask",
-    .stack_size = 1024 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
+  .name = "SIM800LTask",
+  .stack_size = 1024 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for SecurityTask */
 osThreadId_t SecurityTaskHandle;
 const osThreadAttr_t SecurityTask_attributes = {
-    .name = "SecurityTask",
-    .stack_size = 1024 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
+  .name = "SecurityTask",
+  .stack_size = 1024 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for PIDTask */
+osThreadId_t PIDTaskHandle;
+const osThreadAttr_t PIDTask_attributes = {
+  .name = "PIDTask",
+  .stack_size = 1024 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for outputQueue */
 osMessageQueueId_t outputQueueHandle;
-const osMessageQueueAttr_t outputQueue_attributes = {.name = "outputQueue"};
+const osMessageQueueAttr_t outputQueue_attributes = {
+  .name = "outputQueue"
+};
 /* Definitions for usbQueue */
 osMessageQueueId_t usbQueueHandle;
-const osMessageQueueAttr_t usbQueue_attributes = {.name = "usbQueue"};
+const osMessageQueueAttr_t usbQueue_attributes = {
+  .name = "usbQueue"
+};
 /* Definitions for mqttQueue */
 osMessageQueueId_t mqttQueueHandle;
-const osMessageQueueAttr_t mqttQueue_attributes = {.name = "mqttQueue"};
+const osMessageQueueAttr_t mqttQueue_attributes = {
+  .name = "mqttQueue"
+};
 /* USER CODE BEGIN PV */
 extern struct dbSettings SetSettings;
 extern struct dbCron dbCrontxt[MAXSIZE];
@@ -269,6 +277,7 @@ void StartDht22Task(void *argument);
 void StartServiceTask(void *argument);
 void StartSIM800LTask(void *argument);
 void StartSecurityTask(void *argument);
+void StartPIDTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -602,10 +611,11 @@ uint32_t swarm_t; /* используется в gsm.c через extern */
 /* USER CODE END 0 */
 
 /**
- * @brief  The application entry point.
- * @retval int
- */
-int main(void) {
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
 
   /* USER CODE BEGIN 1 */
 
@@ -613,8 +623,7 @@ int main(void) {
 
   /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick.
-   */
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
   /* USER CODE BEGIN Init */
@@ -662,15 +671,13 @@ int main(void) {
 
   /* Create the queue(s) */
   /* creation of outputQueue */
-  outputQueueHandle =
-      osMessageQueueNew(16, sizeof(struct data_pin_t), &outputQueue_attributes);
+  outputQueueHandle = osMessageQueueNew (16, sizeof(struct data_pin_t), &outputQueue_attributes);
 
   /* creation of usbQueue */
-  usbQueueHandle = osMessageQueueNew(16, sizeof(uint8_t), &usbQueue_attributes);
+  usbQueueHandle = osMessageQueueNew (16, sizeof(uint8_t), &usbQueue_attributes);
 
   /* creation of mqttQueue */
-  mqttQueueHandle =
-      osMessageQueueNew(16, sizeof(MqttMessage_t), &mqttQueue_attributes);
+  mqttQueueHandle = osMessageQueueNew (16, sizeof(MqttMessage_t), &mqttQueue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -681,8 +688,7 @@ int main(void) {
   ConfigTaskHandle = osThreadNew(StartConfigTask, NULL, &ConfigTask_attributes);
 
   /* creation of WebServerTask */
-  WebServerTaskHandle =
-      osThreadNew(StartWebServerTask, NULL, &WebServerTask_attributes);
+  WebServerTaskHandle = osThreadNew(StartWebServerTask, NULL, &WebServerTask_attributes);
 
   /* creation of OutputTask */
   OutputTaskHandle = osThreadNew(StartOutputTask, NULL, &OutputTask_attributes);
@@ -694,30 +700,28 @@ int main(void) {
   InputTaskHandle = osThreadNew(StartInputTask, NULL, &InputTask_attributes);
 
   /* creation of EncoderTask */
-  EncoderTaskHandle =
-      osThreadNew(StartEncoderTask, NULL, &EncoderTask_attributes);
+  EncoderTaskHandle = osThreadNew(StartEncoderTask, NULL, &EncoderTask_attributes);
 
   /* creation of mqttTask */
   mqttTaskHandle = osThreadNew(StartMqttTask, NULL, &mqttTask_attributes);
 
   /* creation of ds18b20Task */
-  ds18b20TaskHandle =
-      osThreadNew(StartDs18b20Task, NULL, &ds18b20Task_attributes);
+  ds18b20TaskHandle = osThreadNew(StartDs18b20Task, NULL, &ds18b20Task_attributes);
 
   /* creation of dht22Task */
   dht22TaskHandle = osThreadNew(StartDht22Task, NULL, &dht22Task_attributes);
 
   /* creation of ServiceTask */
-  ServiceTaskHandle =
-      osThreadNew(StartServiceTask, NULL, &ServiceTask_attributes);
+  ServiceTaskHandle = osThreadNew(StartServiceTask, NULL, &ServiceTask_attributes);
 
   /* creation of SIM800LTask */
-  SIM800LTaskHandle =
-      osThreadNew(StartSIM800LTask, NULL, &SIM800LTask_attributes);
+  SIM800LTaskHandle = osThreadNew(StartSIM800LTask, NULL, &SIM800LTask_attributes);
 
   /* creation of SecurityTask */
-  SecurityTaskHandle =
-      osThreadNew(StartSecurityTask, NULL, &SecurityTask_attributes);
+  SecurityTaskHandle = osThreadNew(StartSecurityTask, NULL, &SecurityTask_attributes);
+
+  /* creation of PIDTask */
+  PIDTaskHandle = osThreadNew(StartPIDTask, NULL, &PIDTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -743,25 +747,26 @@ int main(void) {
 }
 
 /**
- * @brief System Clock Configuration
- * @retval None
- */
-void SystemClock_Config(void) {
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
   /** Configure LSE Drive Capability
-   */
+  */
   HAL_PWR_EnableBkUpAccess();
 
   /** Configure the main internal regulator output voltage
-   */
+  */
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
   /** Initializes the RCC Oscillators according to the specified parameters
-   * in the RCC_OscInitTypeDef structure.
-   */
+  * in the RCC_OscInitTypeDef structure.
+  */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
@@ -771,36 +776,40 @@ void SystemClock_Config(void) {
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 9;
   RCC_OscInitStruct.PLL.PLLR = 2;
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
     Error_Handler();
   }
 
   /** Activate the Over-Drive mode
-   */
-  if (HAL_PWREx_EnableOverDrive() != HAL_OK) {
+  */
+  if (HAL_PWREx_EnableOverDrive() != HAL_OK)
+  {
     Error_Handler();
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
-   */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK |
-                                RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_7) != HAL_OK) {
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_7) != HAL_OK)
+  {
     Error_Handler();
   }
 }
 
 /**
- * @brief CRC Initialization Function
- * @param None
- * @retval None
- */
-static void MX_CRC_Init(void) {
+  * @brief CRC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CRC_Init(void)
+{
 
   /* USER CODE BEGIN CRC_Init 0 */
 
@@ -815,26 +824,29 @@ static void MX_CRC_Init(void) {
   hcrc.Init.InputDataInversionMode = CRC_INPUTDATA_INVERSION_NONE;
   hcrc.Init.OutputDataInversionMode = CRC_OUTPUTDATA_INVERSION_DISABLE;
   hcrc.InputDataFormat = CRC_INPUTDATA_FORMAT_BYTES;
-  if (HAL_CRC_Init(&hcrc) != HAL_OK) {
+  if (HAL_CRC_Init(&hcrc) != HAL_OK)
+  {
     Error_Handler();
   }
   /* USER CODE BEGIN CRC_Init 2 */
 
   /* USER CODE END CRC_Init 2 */
+
 }
 
 /**
- * @brief ETH Initialization Function
- * @param None
- * @retval None
- */
-static void MX_ETH_Init(void) {
+  * @brief ETH Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ETH_Init(void)
+{
 
   /* USER CODE BEGIN ETH_Init 0 */
 
   /* USER CODE END ETH_Init 0 */
 
-  static uint8_t MACAddr[6];
+   static uint8_t MACAddr[6];
 
   /* USER CODE BEGIN ETH_Init 1 */
 
@@ -856,26 +868,28 @@ static void MX_ETH_Init(void) {
 
   /* USER CODE END MACADDRESS */
 
-  if (HAL_ETH_Init(&heth) != HAL_OK) {
+  if (HAL_ETH_Init(&heth) != HAL_OK)
+  {
     Error_Handler();
   }
 
-  memset(&TxConfig, 0, sizeof(ETH_TxPacketConfig));
-  TxConfig.Attributes =
-      ETH_TX_PACKETS_FEATURES_CSUM | ETH_TX_PACKETS_FEATURES_CRCPAD;
+  memset(&TxConfig, 0 , sizeof(ETH_TxPacketConfig));
+  TxConfig.Attributes = ETH_TX_PACKETS_FEATURES_CSUM | ETH_TX_PACKETS_FEATURES_CRCPAD;
   TxConfig.ChecksumCtrl = ETH_CHECKSUM_IPHDR_PAYLOAD_INSERT_PHDR_CALC;
   TxConfig.CRCPadCtrl = ETH_CRC_PAD_INSERT;
   /* USER CODE BEGIN ETH_Init 2 */
 
   /* USER CODE END ETH_Init 2 */
+
 }
 
 /**
- * @brief RNG Initialization Function
- * @param None
- * @retval None
- */
-static void MX_RNG_Init(void) {
+  * @brief RNG Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RNG_Init(void)
+{
 
   /* USER CODE BEGIN RNG_Init 0 */
 
@@ -885,20 +899,23 @@ static void MX_RNG_Init(void) {
 
   /* USER CODE END RNG_Init 1 */
   hrng.Instance = RNG;
-  if (HAL_RNG_Init(&hrng) != HAL_OK) {
+  if (HAL_RNG_Init(&hrng) != HAL_OK)
+  {
     Error_Handler();
   }
   /* USER CODE BEGIN RNG_Init 2 */
 
   /* USER CODE END RNG_Init 2 */
+
 }
 
 /**
- * @brief TIM1 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_TIM1_Init(void) {
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
 
   /* USER CODE BEGIN TIM1_Init 0 */
 
@@ -911,36 +928,41 @@ static void MX_TIM1_Init(void) {
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 216 - 1;
+  htim1.Init.Prescaler = 216-1;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim1.Init.Period = 65535;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim1) != HAL_OK) {
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
     Error_Handler();
   }
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK) {
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
     Error_Handler();
   }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK) {
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
     Error_Handler();
   }
   /* USER CODE BEGIN TIM1_Init 2 */
 
   /* USER CODE END TIM1_Init 2 */
+
 }
 
 /**
- * @brief USART2 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_USART2_UART_Init(void) {
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
 
   /* USER CODE BEGIN USART2_Init 0 */
 
@@ -959,20 +981,23 @@ static void MX_USART2_UART_Init(void) {
   huart2.Init.OverSampling = UART_OVERSAMPLING_16;
   huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
   huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart2) != HAL_OK) {
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
     Error_Handler();
   }
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
+
 }
 
 /**
- * @brief USART3 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_USART3_UART_Init(void) {
+  * @brief USART3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART3_UART_Init(void)
+{
 
   /* USER CODE BEGIN USART3_Init 0 */
 
@@ -991,23 +1016,26 @@ static void MX_USART3_UART_Init(void) {
   huart3.Init.OverSampling = UART_OVERSAMPLING_16;
   huart3.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
   huart3.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart3) != HAL_OK) {
+  if (HAL_UART_Init(&huart3) != HAL_OK)
+  {
     Error_Handler();
   }
   /* USER CODE BEGIN USART3_Init 2 */
 
   /* USER CODE END USART3_Init 2 */
+
 }
 
 /**
- * @brief GPIO Initialization Function
- * @param None
- * @retval None
- */
-static void MX_GPIO_Init(void) {
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPIO_Init(void)
+{
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-  /* USER CODE BEGIN MX_GPIO_Init_1 */
-  /* USER CODE END MX_GPIO_Init_1 */
+/* USER CODE BEGIN MX_GPIO_Init_1 */
+/* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
@@ -1021,11 +1049,10 @@ static void MX_GPIO_Init(void) {
   HAL_GPIO_WritePin(SENSOR_GPIO_Port, SENSOR_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, LD1_Pin | LD3_Pin | LD2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, LD1_Pin|LD3_Pin|LD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(USB_PowerSwitchOn_GPIO_Port, USB_PowerSwitchOn_Pin,
-                    GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(USB_PowerSwitchOn_GPIO_Port, USB_PowerSwitchOn_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : USER_Btn_Pin */
   GPIO_InitStruct.Pin = USER_Btn_Pin;
@@ -1041,7 +1068,7 @@ static void MX_GPIO_Init(void) {
   HAL_GPIO_Init(SENSOR_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LD1_Pin LD3_Pin LD2_Pin */
-  GPIO_InitStruct.Pin = LD1_Pin | LD3_Pin | LD2_Pin;
+  GPIO_InitStruct.Pin = LD1_Pin|LD3_Pin|LD2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -1060,8 +1087,8 @@ static void MX_GPIO_Init(void) {
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(USB_OverCurrent_GPIO_Port, &GPIO_InitStruct);
 
-  /* USER CODE BEGIN MX_GPIO_Init_2 */
-  /* USER CODE END MX_GPIO_Init_2 */
+/* USER CODE BEGIN MX_GPIO_Init_2 */
+/* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
@@ -1220,7 +1247,8 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
  * @retval None
  */
 /* USER CODE END Header_StartConfigTask */
-void StartConfigTask(void *argument) {
+void StartConfigTask(void *argument)
+{
   /* init code for USB_HOST */
   MX_USB_HOST_Init();
   /* USER CODE BEGIN 5 */
@@ -1246,6 +1274,7 @@ void StartConfigTask(void *argument) {
           GetPinToPin(); // если файл "pintopin.ini" существует, открываем его
           GetOneWireConfig(); // если файл "onewire.ini" существует, открываем
                               // его
+          GetPidConfig();     // если файл "pid.ini" существует, открываем его
 
           InitPin(); // Инициализация пинов
 
@@ -1270,6 +1299,7 @@ void StartConfigTask(void *argument) {
           osDelay(100);
           xTaskNotifyGive(ds18b20TaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ ds18b20
           xTaskNotifyGive(dht22TaskHandle);   // И ВКЛЮЧАЕМ ЗАДАЧУ dht22
+          xTaskNotifyGive(PIDTaskHandle);     // И ВКЛЮЧАЕМ ЗАДАЧУ PIDTask
 
         } else { // Файл "pins.ini" не существует, создаем его и записываем
                  // данные
@@ -1287,6 +1317,7 @@ void StartConfigTask(void *argument) {
           xTaskNotifyGive(ds18b20TaskHandle);  // ВКЛЮЧАЕМ ЗАДАЧУ ds18b20
           xTaskNotifyGive(dht22TaskHandle);    // ВКЛЮЧАЕМ ЗАДАЧУ dht22
           xTaskNotifyGive(SecurityTaskHandle); // ВКЛЮЧАЕМ ЗАДАЧУ SecurityTask
+          xTaskNotifyGive(PIDTaskHandle);      // ВКЛЮЧАЕМ ЗАДАЧУ PIDTask
         }
         usbflag = 0;
       }
@@ -1312,6 +1343,9 @@ void StartConfigTask(void *argument) {
           SetOneWireConfig(); // Если файл "onewire.ini" не существует, создаем
                               // его и записываем данные
           break;
+        case 6:
+          SetPidConfig(); // Сохранение PID конфигурации в "pid.ini"
+          break;
         default:
           printf("xQueueReceive get wrong data! \r\n");
           break;
@@ -1336,7 +1370,8 @@ void StartConfigTask(void *argument) {
  * @retval None
  */
 /* USER CODE END Header_StartWebServerTask */
-void StartWebServerTask(void *argument) {
+void StartWebServerTask(void *argument)
+{
   /* USER CODE BEGIN StartWebServerTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
   mg_log_set(MG_LL_NONE); // Установлен уровень логирования INFO для отладки
@@ -1445,7 +1480,8 @@ void StartWebServerTask(void *argument) {
  * @retval None
  */
 /* USER CODE END Header_StartOutputTask */
-void StartOutputTask(void *argument) {
+void StartOutputTask(void *argument)
+{
   /* USER CODE BEGIN StartOutputTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
   //	printf("Start 'Output' task \r\n");
@@ -1493,7 +1529,8 @@ void StartOutputTask(void *argument) {
  * @retval None
  */
 /* USER CODE END Header_StartCronTask */
-void StartCronTask(void *argument) {
+void StartCronTask(void *argument)
+{
   /* USER CODE BEGIN StartCronTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
   init_offline_time();
@@ -1596,7 +1633,8 @@ void StartCronTask(void *argument) {
  * @retval None
  */
 /* USER CODE END Header_StartInputTask */
-void StartInputTask(void *argument) {
+void StartInputTask(void *argument)
+{
   /* USER CODE BEGIN StartInputTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
   //	printf("Start 'Input' task \r\n");
@@ -1728,7 +1766,8 @@ void StartInputTask(void *argument) {
  * @retval None
  */
 /* USER CODE END Header_StartEncoderTask */
-void StartEncoderTask(void *argument) {
+void StartEncoderTask(void *argument)
+{
   /* USER CODE BEGIN StartEncoderTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
 
@@ -1817,7 +1856,8 @@ void StartEncoderTask(void *argument) {
  * @retval None
  */
 /* USER CODE END Header_StartMqttTask */
-void StartMqttTask(void *argument) {
+void StartMqttTask(void *argument)
+{
   /* USER CODE BEGIN StartMqttTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
   MqttMessage_t rxMsg = {0};
@@ -2028,7 +2068,8 @@ void StartMqttTask(void *argument) {
  * @retval None
  */
 /* USER CODE END Header_StartDs18b20Task */
-void StartDs18b20Task(void *argument) {
+void StartDs18b20Task(void *argument)
+{
   /* USER CODE BEGIN StartDs18b20Task */
   ulTaskNotifyTake(0, portMAX_DELAY);
   uint8_t dscount = 0;
@@ -2094,7 +2135,8 @@ void StartDs18b20Task(void *argument) {
  * @retval None
  */
 /* USER CODE END Header_StartDht22Task */
-void StartDht22Task(void *argument) {
+void StartDht22Task(void *argument)
+{
   /* USER CODE BEGIN StartDht22Task */
   ulTaskNotifyTake(0, portMAX_DELAY);
   uint8_t dhtcount = 0;
@@ -2145,7 +2187,8 @@ void StartDht22Task(void *argument) {
  * @retval None
  */
 /* USER CODE END Header_StartServiceTask */
-void StartServiceTask(void *argument) {
+void StartServiceTask(void *argument)
+{
   /* USER CODE BEGIN StartServiceTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
   //	static uint8_t moonflag = 0; // Счетчик
@@ -2440,7 +2483,8 @@ void StartServiceTask(void *argument) {
  * @retval None
  */
 /* USER CODE END Header_StartSIM800LTask */
-void StartSIM800LTask(void *argument) {
+void StartSIM800LTask(void *argument)
+{
   /* USER CODE BEGIN StartSIM800LTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
   init_sim800l_module();
@@ -2465,7 +2509,8 @@ void StartSIM800LTask(void *argument) {
  * @retval None
  */
 /* USER CODE END Header_StartSecurityTask */
-void StartSecurityTask(void *argument) {
+void StartSecurityTask(void *argument)
+{
   /* USER CODE BEGIN StartSecurityTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
   /* Infinite loop */
@@ -2551,15 +2596,122 @@ void StartSecurityTask(void *argument) {
   /* USER CODE END StartSecurityTask */
 }
 
+/* USER CODE BEGIN Header_StartPIDTask */
 /**
- * @brief  Period elapsed callback in non blocking mode
- * @note   This function is called  when TIM6 interrupt took place, inside
- * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
- * a global variable "uwTick" used as application time base.
- * @param  htim : TIM handle
- * @retval None
- */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+* @brief Function implementing the PIDTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartPIDTask */
+void StartPIDTask(void *argument)
+{
+  /* USER CODE BEGIN StartPIDTask */
+  ulTaskNotifyTake(0, portMAX_DELAY);
+  printf("\r\n[PID] Task started\r\n");
+
+  /* Инициализация Ts_ms по умолчанию для слотов без пресета */
+  for (int i = 0; i < PID_MAX_SLOTS; i++) {
+    if (PidConf[i].preset > 0 && PidConf[i].Kp == 0.0f && PidConf[i].Ki == 0.0f) {
+        // Force fully applying preset locally if Kp/Ki is zero (legacy config load fix)
+        extern void apply_pid_preset_extern(int slot, uint8_t preset_idx);
+        apply_pid_preset_extern(i, PidConf[i].preset);
+    }
+    if (PidConf[i].Ts_ms == 0) PidConf[i].Ts_ms = 1000;
+    if (PidConf[i].pwm_max == 0) PidConf[i].pwm_max = 100;
+    if (PidConf[i].temp_max < 1.0f) PidConf[i].temp_max = 100.0f;
+  }
+
+  /* Infinite loop */
+  for(;;)
+  {
+    for (int i = 0; i < PID_MAX_SLOTS; i++) {
+      if (!PidConf[i].onoff) continue;
+      if (PidConf[i].pwm_pin_id == 0 && PidConf[i].selsens == PID_SENS_NONE) continue;
+
+      uint32_t now = HAL_GetTick();
+      if ((now - PidConf[i].last_tick) < PidConf[i].Ts_ms) continue;
+      PidConf[i].last_tick = now;
+
+      /* 1. Чтение температуры */
+      float T = pid_read_temperature(i);
+      if (T < -100.0f) continue;  /* датчик не читается */
+      PidConf[i].tmpcur = T;
+
+      /* 2. Аварийное отключение */
+      if (T >= PidConf[i].temp_max) {
+        pid_set_pwm(i, 0);
+        PidConf[i].pwm_out = 0;
+        printf("[PID] EMERGENCY OFF slot=%d T=%.1f >= Tmax=%.1f\r\n",
+               i, T, PidConf[i].temp_max);
+        continue;
+      }
+
+      /* 3. Авто-тюн (если запущен) */
+      if (PidConf[i].tune_state == PID_TUNE_STEP ||
+          PidConf[i].tune_state == PID_TUNE_BIAS) {
+        pid_autotune_tick(i);
+        continue;
+      }
+
+      /* 4. PID-регулятор */
+      float error = PidConf[i].tmpset - T;
+      float Ts_sec = PidConf[i].Ts_ms / 1000.0f;
+
+      /* P */
+      float P_term = PidConf[i].Kp * error;
+
+      /* I (с anti-windup) */
+      PidConf[i].integral += PidConf[i].Ki * error * Ts_sec;
+      if (PidConf[i].integral > (float)PidConf[i].pwm_max)
+        PidConf[i].integral = (float)PidConf[i].pwm_max;
+      if (PidConf[i].integral < 0.0f)
+        PidConf[i].integral = 0.0f;
+
+      /* D */
+      float D_term = 0.0f;
+      if (Ts_sec > 0.0f) {
+        D_term = PidConf[i].Kd * (error - PidConf[i].prev_error) / Ts_sec;
+      }
+      PidConf[i].prev_error = error;
+
+      float output = PidConf[i].bias + P_term + PidConf[i].integral + D_term;
+
+      /* Клампинг */
+      if (output > (float)PidConf[i].pwm_max) output = (float)PidConf[i].pwm_max;
+      if (output < 0.0f) output = 0.0f;
+
+      /* Пауза реверса (холодильник) */
+      if (PidConf[i].pause_sec > 0) {
+        if (output < 1.0f && PidConf[i].pwm_out > 0) {
+          PidConf[i].last_off_tick = now;
+        }
+        if (output > 0.0f && PidConf[i].pwm_out == 0) {
+          if ((now - PidConf[i].last_off_tick) < (uint32_t)PidConf[i].pause_sec * 1000U) {
+            output = 0.0f;  /* ещё рано включать */
+          }
+        }
+      }
+
+      PidConf[i].pwm_out = (uint8_t)(output + 0.5f);
+      printf("[PID DEBUG] slot=%d, T=%.1f, tmpset=%.1f, err=%.1f, P=%.1f, I=%.1f, out=%.1f => duty=%d\r\n", 
+             i, T, PidConf[i].tmpset, error, P_term, PidConf[i].integral, output, PidConf[i].pwm_out);
+      pid_set_pwm(i, PidConf[i].pwm_out);
+    }
+    osDelay(50);  /* базовый тик 50 мс, реальный Ts контролируется per-slot */
+  }
+  /* USER CODE END StartPIDTask */
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM6 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
   /* USER CODE BEGIN Callback 0 */
 
   /* USER CODE END Callback 0 */
@@ -2572,10 +2724,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 }
 
 /**
- * @brief  This function is executed in case of error occurrence.
- * @retval None
- */
-void Error_Handler(void) {
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
@@ -2584,15 +2737,16 @@ void Error_Handler(void) {
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef USE_FULL_ASSERT
+#ifdef  USE_FULL_ASSERT
 /**
- * @brief  Reports the name of the source file and the source line number
- *         where the assert_param error has occurred.
- * @param  file: pointer to the source file name
- * @param  line: assert_param error line source number
- * @retval None
- */
-void assert_failed(uint8_t *file, uint32_t line) {
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t *file, uint32_t line)
+{
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line
      number, ex: printf("Wrong parameters value: file %s on line %d\r\n", file,

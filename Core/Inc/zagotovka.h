@@ -166,6 +166,19 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info, const struct dbPinsCon
 
 void parse_encoder_json(const char* json, struct dbPinsConf* PinsConf, struct dbPinToPin* PinsLinks, struct dbPinsInfo* PinsInfo, uint8_t count);
 
+/* ─── PID Controller ─── */
+extern dbPidConf PidConf[PID_MAX_SLOTS];
+
+void handle_pid_get(struct mg_connection *c);
+void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_pidline_set(struct mg_connection *c, struct mg_http_message *hm);
+void gen_pid_json(char *buffer, int buffer_size);
+void parse_pid_json(const char *json);
+void parse_pidline_json(char *json_string, struct dbSettings *settings);
+float pid_read_temperature(int slot);
+void pid_set_pwm(int slot, uint8_t duty);
+void pid_autotune_tick(int slot);
+
 void parse_relay_json(char* json_string, struct dbPinsConf* PinsConf,const struct dbPinsInfo* PinsInfo, int count);
 
 void parse_pwm_json(char* json_string, struct dbPinsConf* PinsConf,const struct dbPinsInfo* PinsInfo, int count);

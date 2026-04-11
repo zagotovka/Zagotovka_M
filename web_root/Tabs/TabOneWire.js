@@ -389,7 +389,7 @@ const TabOneWire = () => {
       <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
-      <div class="flex-grow flex flex-col justify-center items-center w-full relative z-10">
+      <div class="w-full relative z-10">
         <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
           OneWire(s) pin(s)
         </div>

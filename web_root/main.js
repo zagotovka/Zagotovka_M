@@ -53,6 +53,7 @@ import { TabSwitch } from './Tabs/TabSwitch.js';
 import { TabButton } from './Tabs/TabButton.js';
 import { TabEncoder } from './Tabs/TabEncoder.js';
 import { TabCron } from './Tabs/TabCron.js';
+import { TabPid } from './Tabs/TabPid.js';
 import { TabOneWire } from './Tabs/TabOneWire.js';
 import { TabSecurity } from './Tabs/TabSecurity.js';
 import { Settings } from './Tabs/Settings.js';
@@ -262,6 +263,12 @@ function Sidebar({ url, show }) {
           title="Encoder pin"
           icon=${Icons.encoderIcon}
           href="/encoder"
+          url=${url}
+        />
+         <${NavLink}
+          title="PID controller"
+          icon=${Icons.cog}
+          href="/pid"
           url=${url}
         />
         <${NavLink}
@@ -954,6 +961,7 @@ const App = function ({ }) {
         <${TabButton} path="button" />
         <${TabEncoder} path="encoder" />
         <${TabCron} path="cron" />
+        <${TabPid} path="pid" />
         <${TabOneWire} path="1wire" />
         <${TabSecurity} path="Security" />
         <${Settings} path="settings" />

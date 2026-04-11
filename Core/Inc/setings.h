@@ -23,6 +23,9 @@ void InitMultibutton(void);
 void GetOneWireConfig();
 void SetOneWireConfig();
 
+void GetPidConfig();
+void SetPidConfig();
+
 #define ADM_NAME "admin"
 #define ADM_PASS "12345678"
 #define LANG "ru"

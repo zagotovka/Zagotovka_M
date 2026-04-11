@@ -575,6 +575,15 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/encoder/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/encoder/set", c->id));
 				handle_encoder_set(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/pid/get"), NULL)) {
+				MG_INFO(("%lu Processing /api/pid/get", c->id));
+				handle_pid_get(c);
+			} else if (mg_match(hm->uri, mg_str("/api/pid/set"), NULL)) {
+				MG_INFO(("%lu Processing /api/pid/set", c->id));
+				handle_pid_set(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/pidline/set"), NULL)) {
+				MG_INFO(("%lu Processing /api/pidline/set", c->id));
+				handle_pidline_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/cron/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/cron/get", c->id));
 				handle_timers_get(c);

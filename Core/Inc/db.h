@@ -9,6 +9,7 @@
 #define INC_DB_H_
 
 #define NUMPIN 89 // количество пинов
+#define PID_MAX_SLOTS 24 // макс. число PID-каналов
 #define NUMPINLINKS 100 // количество pin to pin
 #define NUMTASK 30 // кол-во CRON task
 
@@ -63,6 +64,71 @@ struct dbPinsConf {     // Создали структуру с необходи
 	uint32_t deb_tm;    // debounce time
 	uint32_t lasttrg;   // Last trigger time
 };
+
+/* ─── PID Controller ─── */
+
+/* Тип датчика, привязанного к PID-каналу */
+typedef enum {
+    PID_SENS_NONE    = 0,
+    PID_SENS_DS18B20 = 1,
+    PID_SENS_DHT22   = 2,
+} PidSensorType_e;
+
+/* Состояние авто-тюна */
+typedef enum {
+    PID_TUNE_IDLE  = 0,  // ничего не делаем
+    PID_TUNE_STEP  = 1,  // шаговый тест (ищем τ и K)
+    PID_TUNE_BIAS  = 2,  // бинарный поиск Bias
+    PID_TUNE_DONE  = 3,  // тест завершён
+    PID_TUNE_ERROR = 4,  // ошибка теста
+} PidTuneState_e;
+
+typedef struct {
+    /* ── Привязка ── */
+    uint8_t  pwm_pin_id;           // ID пина в PinsConf[] (topin==5)
+    PidSensorType_e selsens;       // тип датчика: 1=DS18B20, 2=DHT22
+    uint8_t  sensor_pin_id;        // ID пина сенсора в PinsConf[] (topin==4)
+    char     sernum[17];           // серийник DS18B20 (16 hex + '\0'), пусто для DHT22
+    uint8_t  sensor_sub_idx;       // индекс датчика на шине DS18B20 (0-9), 0 для DHT22
+
+    /* ── Пресет ── */
+    uint8_t  preset;               // 1..9 (индекс пресета из таблицы Plan_PID)
+
+    /* ── Уставки ── */
+    float    tmpset;               // целевая температура (°C)
+    float    tmpcur;               // текущая температура (°C) — runtime, не сохраняется
+
+    /* ── PID-коэфф. (заполняются авто-тюном или вручную) ── */
+    float    Kp;
+    float    Ki;
+    float    Kd;
+    float    bias;                 // Bias (рабочая точка PWM%)
+
+    /* ── Параметры из пресета (копируются при выборе) ── */
+    uint16_t Ts_ms;                // период вызова pid_compute() (мс)
+    float    lambda_factor;        // λ коэфф. (0.2..1.0) × τ
+    uint8_t  pwm_start;            // PWM старт %
+    uint8_t  pwm_max;              // PWM макс %
+    float    temp_max;             // T макс (аварийное отключение)
+    float    temp_min;             // T мин (из пресета)
+    uint16_t pause_sec;            // пауза реверса (для холодильника), 0 если нет
+
+    /* ── Авто-тюн ── */
+    PidTuneState_e tune_state;     // текущее состояние авто-тюна
+    float    tau;                  // постоянная времени системы (сек), результат теста
+    float    K_gain;               // коэффициент усиления объекта (°C/%)
+
+    /* ── Рабочее состояние (runtime) ── */
+    float    integral;             // накопленная интегральная составляющая
+    float    prev_error;           // ошибка на предыдущем шаге (для D)
+    uint32_t last_tick;            // HAL_GetTick() последнего вызова pid_compute
+    uint32_t last_off_tick;        // для паузы реверса компрессора
+    uint8_t  pwm_out;              // текущий выход PID (0..100%)
+
+    /* ── Мета ── */
+    char     info[30];             // описание
+    uint8_t  onoff;                // 1=вкл, 0=выкл
+} dbPidConf;
 
 
 struct dbPinsInfo { // Создали структуру с необходимым набором типов элиментов для PIN's.
@@ -158,6 +224,7 @@ struct dbSettings { 	// Cтруктура для setting
 	uint8_t mon;        // OFFLINE Месяц:
 	uint8_t year;       // OFFLINE год (25 = 2025-2000)
 	short usehttps;     // enable/disable HTTPS
+	uint8_t pidline;    // Количество видимых PID-строк
 };
 
 

@@ -473,9 +473,14 @@ function Settings({ }) {
                User data
           ============================================================ -->
           <div class="w-full mb-6">
-            <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm mb-4 pl-2">User data</h3>
             <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
               <table class="w-full table-fixed text-left border-collapse">
+                <thead>
+                  <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">User data</th>
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
+                  </tr>
+                </thead>
                 <tbody>
               ${[
                 { label: 'Login',        key: 'adm_name', type: 'text'     },
@@ -502,18 +507,25 @@ function Settings({ }) {
                Network
           ============================================================ -->
           <div class="w-full mb-6">
-            <div class="flex items-center gap-4 mb-4">
-              <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm pl-2">Network</h3>
-              <div class="network-toggle">
-                <${MyPolzunok} value=${settings.check_ip} onChange=${(v) => handleChange('check_ip', v)} />
-              </div>
-              <span class="text-slate-600 font-medium tracking-wide text-lg">
-                ${settings.check_ip ? 'DHCP' : 'Static IP'}
-              </span>
-            </div>
             ${!settings.check_ip ? html`
               <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
                 <table class="w-full table-fixed text-left border-collapse">
+                  <thead>
+                    <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">
+                        <div class="flex items-center gap-3">
+                          <span>Network</span>
+                          <div class="network-toggle">
+                            <${MyPolzunok} value=${settings.check_ip} onChange=${(v) => handleChange('check_ip', v)} />
+                          </div>
+                          <span class="text-slate-600 font-medium tracking-wide text-lg">
+                            ${settings.check_ip ? 'DHCP' : 'Static IP'}
+                          </span>
+                        </div>
+                      </th>
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
+                    </tr>
+                  </thead>
                   <tbody>
                   ${[
                     { label: 'IP address',     key: 'ip_addr',  type: 'text' },
@@ -533,16 +545,40 @@ function Settings({ }) {
                   </tbody>
                 </table>
               </div>
-            ` : null}
+            ` : html`
+              <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+                <table class="w-full table-fixed text-left border-collapse">
+                  <thead>
+                    <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide" colspan="2">
+                        <div class="flex items-center gap-3">
+                          <span>Network</span>
+                          <div class="network-toggle">
+                            <${MyPolzunok} value=${settings.check_ip} onChange=${(v) => handleChange('check_ip', v)} />
+                          </div>
+                          <span class="text-slate-600 font-medium tracking-wide text-lg">DHCP</span>
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            `}
           </div>
 
           <!-- ============================================================
                API Settings
           ============================================================ -->
           <div class="w-full mb-6">
-            <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm mb-4 pl-2">API Settings</h3>
             <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
               <table class="w-full table-fixed text-left border-collapse">
+                <thead>
+                  <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">API Settings</th>
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
+                  </tr>
+                </thead>
                 <tbody>
               <${FieldRow} label="Token" tip=${gt("Token")} index=${0}>
                 <${pageSetting}
@@ -561,13 +597,20 @@ function Settings({ }) {
                MQTT
           ============================================================ -->
           <div class="w-full mb-6">
-            <div class="flex items-center gap-4 mb-4">
-              <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm pl-2">MQTT</h3>
-              <${MyPolzunok} value=${settings.check_mqtt} onChange=${(v) => handleChange('check_mqtt', v)} />
-            </div>
             ${settings.check_mqtt ? html`
               <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
                 <table class="w-full table-fixed text-left border-collapse">
+                  <thead>
+                    <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">
+                        <div class="flex items-center gap-3">
+                          <span>MQTT</span>
+                          <${MyPolzunok} value=${settings.check_mqtt} onChange=${(v) => handleChange('check_mqtt', v)} />
+                        </div>
+                      </th>
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
+                    </tr>
+                  </thead>
                   <tbody>
                 ${[
                   { label: 'Host',     key: 'mqtt_hst',  type: 'text'     },
@@ -588,23 +631,46 @@ function Settings({ }) {
                     />
                   <//>
                 `)}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
               </div>
-            ` : null}
+            ` : html`
+              <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+                <table class="w-full table-fixed text-left border-collapse">
+                  <thead>
+                    <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide" colspan="2">
+                        <div class="flex items-center gap-3">
+                          <span>MQTT</span>
+                          <${MyPolzunok} value=${settings.check_mqtt} onChange=${(v) => handleChange('check_mqtt', v)} />
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            `}
           </div>
 
           <!-- ============================================================
                HTTPS
           ============================================================ -->
           <div class="w-full mb-6">
-            <div class="flex items-center gap-4 mb-4">
-              <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm pl-2">HTTPS</h3>
-              <${MyPolzunok} value=${settings.usehttps} onChange=${(v) => handleChange('usehttps', v)} />
-            </div>
             ${settings.usehttps ? html`
               <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
                 <table class="w-full table-fixed text-left border-collapse">
+                  <thead>
+                    <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">
+                        <div class="flex items-center gap-3">
+                          <span>HTTPS</span>
+                          <${MyPolzunok} value=${settings.usehttps} onChange=${(v) => handleChange('usehttps', v)} />
+                        </div>
+                      </th>
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
+                    </tr>
+                  </thead>
                   <tbody>
                 ${[
                   { label: 'HTTPS domain', key: 'domain',   type: 'text'     },
@@ -670,19 +736,40 @@ function Settings({ }) {
                     </td>
                   </tr>
                 `)}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
               </div>
-            ` : null}
+            ` : html`
+              <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+                <table class="w-full table-fixed text-left border-collapse">
+                  <thead>
+                    <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide" colspan="2">
+                        <div class="flex items-center gap-3">
+                          <span>HTTPS</span>
+                          <${MyPolzunok} value=${settings.usehttps} onChange=${(v) => handleChange('usehttps', v)} />
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            `}
           </div>
 
           <!-- ============================================================
                Coordinates & Astronomy
           ============================================================ -->
           <div class="w-full mb-6">
-            <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm mb-4 pl-2">Coordinates & Astronomy</h3>
             <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
               <table class="w-full table-fixed text-left border-collapse">
+                <thead>
+                  <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">Coordinates & Astronomy</th>
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
+                  </tr>
+                </thead>
                 <tbody>
 
               <${FieldRow} label="Longitude" tip=${gt("Longitude")} index=${0}>
@@ -753,9 +840,14 @@ function Settings({ }) {
                Offline Mode — Date & Time
           ============================================================ -->
           <div class="w-full mb-6">
-            <h3 class="text-2xl font-bold text-slate-700 tracking-wide drop-shadow-sm mb-4 pl-2">[OFFLINE MODE] Date & Time</h3>
             <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
               <table class="w-full table-fixed text-left border-collapse">
+                <thead>
+                  <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">[OFFLINE MODE] Date & Time</th>
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
+                  </tr>
+                </thead>
                 <tbody>
               <!-- Date -->
               <tr class="transition-colors border-b border-slate-200 bg-white/80 hover:bg-slate-200/80">
