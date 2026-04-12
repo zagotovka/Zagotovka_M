@@ -5175,7 +5175,8 @@ void gen_pid_json(char *buffer, int buffer_size) {
         pos += snprintf(buffer + pos, buffer_size - pos,
             ",\"selsens\":\"%d\",\"sernum\":\"%s\",\"presets\":\"%d\""
             ",\"tmpset\":\"%.1f\",\"tmpcur\":\"%.1f\""
-            ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d}",
+            ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d"
+            ",\"tune_state\":%d,\"tune_progress\":%d}",
             (int)PidConf[i].selsens,
             PidConf[i].sernum,
             PidConf[i].preset,
@@ -5183,7 +5184,9 @@ void gen_pid_json(char *buffer, int buffer_size) {
             PidConf[i].tmpcur,
             current_duty,
             PidConf[i].info,
-            PidConf[i].onoff);
+            PidConf[i].onoff,
+            (int)PidConf[i].tune_state,
+            (int)PidConf[i].tune_progress);
     }
     pos += snprintf(buffer + pos, buffer_size - pos, "]}");
 }
@@ -5421,12 +5424,444 @@ void pid_set_pwm(int slot, uint8_t duty) {
     __HAL_TIM_SET_COMPARE(&htim[pin_id], PinsInfo[pin_id].tim_channel, pulse);
 }
 
-/* ──── pid_autotune_tick: заглушка для авто-тюна ──── */
-void pid_autotune_tick(int slot) {
-    /* TODO: реализация шагового теста, бинарного поиска Bias, расчёта IMC
-     * Будет реализовано на втором этапе.
-     * Пока просто завершаем тест с ошибкой. */
-    printf("[PID] AutoTune stub called for slot=%d, finishing with IDLE\r\n", slot);
+/* ──── pid_set_pwm_f: устанавливает duty% (float) на PWM-пин ──── */
+/* Используется автотюном для дробной точности бинарного поиска.    */
+void pid_set_pwm_f(int slot, float duty) {
+    if (slot < 0 || slot >= PID_MAX_SLOTS) return;
+    uint8_t pin_id = PidConf[slot].pwm_pin_id;
+    if (pin_id == 0 || pin_id >= NUMPIN) return;
+    if (PinsConf[pin_id].topin != 5) return; /* не PWM-пин */
+
+    if (duty < 0.0f) duty = 0.0f;
+    if (duty > 100.0f) duty = 100.0f;
+
+    /* Записываем округлённое значение в dvalue для UI */
+    PinsConf[pin_id].dvalue = (int)(duty + 0.5f);
+
+    /* Расчёт pulse с дробной точностью */
+    uint32_t period = PinsConf[pin_id].pwmmax;
+    uint32_t pulse = (uint32_t)(duty * (float)period / 100.0f + 0.5f);
+
+    __HAL_TIM_SET_COMPARE(&htim[pin_id], PinsInfo[pin_id].tim_channel, pulse);
+}
+
+/* ──── Адаптивная стабилизация: утилита ──── */
+/* Возвращает true когда все 4 критерия выполнены одновременно */
+#define IIR_ALPHA  0.90f
+#define SIGMA_THR  0.15f   // Было 0.02f, cделаем пороги чуть шире шага DS18B20/DHT22 а то, ждать придется более 4х часов!
+#define ERR_THR    0.20f   // Было 0.05f, cделаем пороги чуть шире шага DS18B20/DHT22 а то, ждать придется более 4х часов!
+#define STABLE_MS  30000   // Сократим время "доказательства" стабильности с 60с до 30с
+
+static float tune_calc_sigma(int slot) {
+    float avg = 0.0f;
+    for (int i = 0; i < 10; i++) avg += PidConf[slot].tune_T_samples[i];
+    avg /= 10.0f;
+    float sum_sq = 0.0f;
+    for (int i = 0; i < 10; i++) {
+        float d = PidConf[slot].tune_T_samples[i] - avg;
+        sum_sq += d * d;
+    }
+    return sqrtf(sum_sq / 10.0f);
+}
+
+/* ──── pid_autotune_start: инициализация авто-тюна ──── */
+void pid_autotune_start(int slot) {
+    if (slot < 0 || slot >= PID_MAX_SLOTS) return;
+
+    /* Проверка: датчик и PWM должны быть назначены */
+    if (PidConf[slot].pwm_pin_id == 0 || PidConf[slot].selsens == PID_SENS_NONE) {
+        printf("[PID] AutoTune ERROR: slot=%d not configured (pwm=%d sens=%d)\r\n",
+               slot, PidConf[slot].pwm_pin_id, (int)PidConf[slot].selsens);
+        PidConf[slot].tune_state = PID_TUNE_ERROR;
+        return;
+    }
+
+    /* Инициализация IIR-фильтра текущей температурой */
+    /* Диагностика: выведем параметры датчика */
+    printf("[PID] AutoTune start: slot=%d selsens=%d sernum='%s' sensor_pin_id=%d\r\n",
+           slot, (int)PidConf[slot].selsens, PidConf[slot].sernum, PidConf[slot].sensor_pin_id);
+
+    /* Попытка чтения с ретраем (датчик может ещё не завершить первую конверсию) */
+    float T = -999.0f;
+    for (int attempt = 0; attempt < 3; attempt++) {
+        T = pid_read_temperature(slot);
+        printf("[PID] AutoTune read attempt %d: T=%.2f\r\n", attempt, T);
+        if (T > -900.0f) break; /* Валидное значение */
+        osDelay(500); /* Ждём 500 мс и пробуем снова */
+    }
+
+    if (T < -900.0f) {
+        printf("[PID] AutoTune ERROR: slot=%d sensor not readable (T=%.1f)\r\n", slot, T);
+        PidConf[slot].tune_state = PID_TUNE_ERROR;
+        return;
+    }
+
+    PidConf[slot].T_filtered = T;
+    PidConf[slot].tmpcur = T;
+
+    /* Сброс всех runtime-полей автотюна */
+    PidConf[slot].tune_progress = 0;
+    PidConf[slot].tune_phase_b = 0;
+    PidConf[slot].tune_iter = 0;
+    PidConf[slot].tune_lo = 0.0f;
+    PidConf[slot].tune_hi = 0.0f;
+    memset(PidConf[slot].tune_T_samples, 0, sizeof(PidConf[slot].tune_T_samples));
+    PidConf[slot].tune_sample_idx = 0;
+    PidConf[slot].tune_stab_start = HAL_GetTick();
+    PidConf[slot].tune_in_range_ms = 0;
+    PidConf[slot].tune_T_start = T;
+    PidConf[slot].tune_T_end = T;
+    PidConf[slot].tune_step_start_tick = HAL_GetTick();
+    PidConf[slot].tune_step_pwm = (float)PidConf[slot].pwm_start;
+    PidConf[slot].tune_step_phase = 0; /* фаза 0: ждём стабилизации до шага */
+
+    /* Сброс PID-интегратора и выхода */
+    PidConf[slot].integral = 0.0f;
+    PidConf[slot].prev_error = 0.0f;
+    PidConf[slot].pwm_out = 0;
+
+    /* Предварительная заливка буфера сэмплов текущей T */
+    for (int i = 0; i < 10; i++) PidConf[slot].tune_T_samples[i] = T;
+
+    /* Устанавливаем начальный PWM = pwm_start */
+    pid_set_pwm_f(slot, PidConf[slot].tune_step_pwm);
+
+    PidConf[slot].tune_state = PID_TUNE_STEP;
+    printf("[PID] AutoTune STARTED slot=%d T=%.1f pwm_start=%d\r\n",
+           slot, T, PidConf[slot].pwm_start);
+}
+
+/* ──── pid_autotune_stop: остановка авто-тюна ──── */
+void pid_autotune_stop(int slot) {
+    if (slot < 0 || slot >= PID_MAX_SLOTS) return;
+
     PidConf[slot].tune_state = PID_TUNE_IDLE;
+    PidConf[slot].tune_progress = 0;
+    pid_set_pwm(slot, 0);
+    printf("[PID] AutoTune STOPPED slot=%d\r\n", slot);
+}
+
+/* ──── pid_autotune_tick: главный автомат авто-тюна ──── */
+/* Вызывается из StartPIDTask каждые Ts_ms, когда tune_state == STEP или BIAS */
+void pid_autotune_tick(int slot) {
+    if (slot < 0 || slot >= PID_MAX_SLOTS) return;
+
+    uint32_t now = HAL_GetTick();
+
+    /* 1. Чтение и IIR-фильтрация температуры */
+    float T_raw = pid_read_temperature(slot);
+    if (T_raw < -100.0f) return; /* датчик не валиден — пропускаем тик */
+
+    PidConf[slot].T_filtered = IIR_ALPHA * PidConf[slot].T_filtered
+                              + (1.0f - IIR_ALPHA) * T_raw;
+    float T = PidConf[slot].T_filtered;
+    PidConf[slot].tmpcur = T_raw; /* для UI — реальная T */
+
+    /* 2. Обновляем кольцевой буфер сэмплов */
+    PidConf[slot].tune_T_samples[PidConf[slot].tune_sample_idx] = T;
+    PidConf[slot].tune_sample_idx = (PidConf[slot].tune_sample_idx + 1) % 10;
+
+    /* ═══════════════════════════════════════════════
+     *  ШАГОВЫЙ ТЕСТ (PID_TUNE_STEP)
+     * ═══════════════════════════════════════════════ */
+    if (PidConf[slot].tune_state == PID_TUNE_STEP) {
+        float sigma = tune_calc_sigma(slot);
+
+        switch (PidConf[slot].tune_step_phase) {
+        case 0: /* Фаза 0: ждём стабилизации на pwm_start */
+            /* Прогресс: 0..5% */
+            PidConf[slot].tune_progress = 0;
+
+            if (sigma < SIGMA_THR) {
+                PidConf[slot].tune_in_range_ms += PidConf[slot].Ts_ms;
+            } else {
+                PidConf[slot].tune_in_range_ms = 0;
+            }
+
+            /* Таймаут: 5 минут макс на стабилизацию начальной точки */
+            if (PidConf[slot].tune_in_range_ms >= STABLE_MS ||
+                (now - PidConf[slot].tune_step_start_tick) > 300000U) {
+                /* Запоминаем T_start */
+                PidConf[slot].tune_T_start = T;
+                PidConf[slot].tune_in_range_ms = 0;
+                PidConf[slot].tune_step_start_tick = now;
+
+                /* Подаём шаг: PWM = pwm_max */
+                PidConf[slot].tune_step_pwm = (float)PidConf[slot].pwm_max;
+                pid_set_pwm_f(slot, PidConf[slot].tune_step_pwm);
+
+                PidConf[slot].tune_step_phase = 1;
+                printf("[PID] Step test: phase 0->1, T_start=%.2f, PWM->%d%%\r\n",
+                       PidConf[slot].tune_T_start, PidConf[slot].pwm_max);
+            }
+            break;
+
+        case 1: /* Фаза 1: шаг подан, ждём стабилизации */
+        {
+            /* Прогресс: 5..20% — по времени */
+            float tau_est = PidConf[slot].tau > 1.0f ? PidConf[slot].tau : 60.0f;
+            uint32_t elapsed = now - PidConf[slot].tune_step_start_tick;
+            float time_pct = (float)elapsed / (10.0f * tau_est * 1000.0f);
+            if (time_pct > 1.0f) time_pct = 1.0f;
+            PidConf[slot].tune_progress = (uint8_t)(5.0f + time_pct * 15.0f);
+
+            /* Адаптивная стабилизация: минимум 2*tau_est, σ < порог, 60с подряд */
+            if (elapsed < (uint32_t)(2.0f * tau_est * 1000.0f)) break;
+
+            if (sigma < SIGMA_THR) {
+                PidConf[slot].tune_in_range_ms += PidConf[slot].Ts_ms;
+            } else {
+                PidConf[slot].tune_in_range_ms = 0;
+            }
+
+            /* Таймаут 10*tau */
+            bool timed_out = (elapsed > (uint32_t)(10.0f * tau_est * 1000.0f));
+
+            if (PidConf[slot].tune_in_range_ms >= STABLE_MS || timed_out) {
+                PidConf[slot].tune_T_end = T;
+
+                /* Вычисляем K_gain и tau */
+                float dT = PidConf[slot].tune_T_end - PidConf[slot].tune_T_start;
+                float dPWM = (float)PidConf[slot].pwm_max - (float)PidConf[slot].pwm_start;
+
+                if (fabsf(dPWM) < 1.0f) dPWM = 1.0f; /* защита от деления на 0 */
+                PidConf[slot].K_gain = dT / dPWM;
+
+                /* tau = время до 63.2% отклика */
+                /* tau: грубая оценка ≈ elapsed * 0.3 (эвристика для первого порядка) */
+                PidConf[slot].tau = (float)elapsed / 1000.0f * 0.3f;
+                /* Более точная: если T сейчас ~= T_end и стабильна, tau ≈ elapsed/3 */
+                if (PidConf[slot].tau < 1.0f) PidConf[slot].tau = 5.0f;
+
+                /* Валидация */
+                if (fabsf(PidConf[slot].K_gain) < 0.001f || PidConf[slot].tau < 1.0f) {
+                    printf("[PID] Step test FAILED: K=%.4f tau=%.1f\r\n",
+                           PidConf[slot].K_gain, PidConf[slot].tau);
+                    PidConf[slot].tune_state = PID_TUNE_ERROR;
+                    PidConf[slot].tune_progress = 0;
+                    pid_set_pwm(slot, 0);
+                    return;
+                }
+
+                printf("[PID] Step test DONE: K=%.4f tau=%.1f T_start=%.2f T_end=%.2f\r\n",
+                       PidConf[slot].K_gain, PidConf[slot].tau,
+                       PidConf[slot].tune_T_start, PidConf[slot].tune_T_end);
+
+                /* Переход к бинарному поиску Bias */
+                PidConf[slot].tune_state = PID_TUNE_BIAS;
+                PidConf[slot].tune_phase_b = 0; /* фаза A */
+                PidConf[slot].tune_iter = 0;
+                PidConf[slot].tune_lo = 0.0f;
+                PidConf[slot].tune_hi = (float)PidConf[slot].pwm_max;
+                PidConf[slot].tune_in_range_ms = 0;
+                PidConf[slot].tune_stab_start = now;
+                PidConf[slot].tune_progress = 20;
+
+                /* Устанавливаем первый mid */
+                float mid = (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
+                pid_set_pwm_f(slot, mid);
+            }
+            break;
+        }
+        default:
+            PidConf[slot].tune_step_phase = 0;
+            break;
+        }
+        return;
+    }
+
+    /* ═══════════════════════════════════════════════
+     *  БИНАРНЫЙ ПОИСК BIAS (PID_TUNE_BIAS)
+     * ═══════════════════════════════════════════════ */
+    if (PidConf[slot].tune_state == PID_TUNE_BIAS) {
+        float Tset = PidConf[slot].tmpset;
+        float sigma = tune_calc_sigma(slot);
+        float err = fabsf(T - Tset);
+
+        /* Адаптивная стабилизация: минимум 2*tau */
+        if ((now - PidConf[slot].tune_stab_start) < (uint32_t)(2.0f * PidConf[slot].tau * 1000.0f)) {
+            return;
+        }
+
+        /* Счётчик стабильности */
+        if (err < ERR_THR && sigma < SIGMA_THR) {
+            PidConf[slot].tune_in_range_ms += PidConf[slot].Ts_ms;
+        } else {
+            PidConf[slot].tune_in_range_ms = 0;
+        }
+
+        /* Ждём 60 сек устойчивости */
+        if (PidConf[slot].tune_in_range_ms < STABLE_MS) {
+            /* Таймаут: 10*tau на одну итерацию */
+            uint32_t iter_timeout = (uint32_t)(10.0f * PidConf[slot].tau * 1000.0f);
+            if (iter_timeout < 120000U) iter_timeout = 120000U; /* минимум 2 мин */
+            if ((now - PidConf[slot].tune_stab_start) < iter_timeout) {
+                return; /* ещё ждём */
+            }
+            /* Таймаут — принимаем решение по текущей T */
+            printf("[PID] Bias iter timeout, forcing decision\r\n");
+        }
+        PidConf[slot].tune_in_range_ms = 0;
+
+        /* --- ДОСРОЧНЫЙ ВЫХОД ПО ТОЧНОСТИ --- */
+        if (err < ERR_THR && sigma < SIGMA_THR &&
+            (PidConf[slot].tune_hi - PidConf[slot].tune_lo) < 0.01f) {
+            PidConf[slot].bias = (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
+            printf("[PID] Bias CONVERGED early: bias=%.3f%%\r\n", PidConf[slot].bias);
+            goto tune_done;
+        }
+
+        /* --- БИНАРНЫЙ ШАГ --- */
+        float mid = (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
+        pid_set_pwm_f(slot, mid);
+
+        if (T > Tset) {
+            PidConf[slot].tune_hi = mid;
+        } else {
+            PidConf[slot].tune_lo = mid;
+        }
+
+        PidConf[slot].tune_iter++;
+        PidConf[slot].tune_stab_start = now;
+
+        printf("[PID] Bias iter=%d phase=%c lo=%.3f hi=%.3f mid=%.3f T=%.2f Tset=%.1f\r\n",
+               PidConf[slot].tune_iter,
+               PidConf[slot].tune_phase_b ? 'B' : 'A',
+               PidConf[slot].tune_lo, PidConf[slot].tune_hi, mid, T, Tset);
+
+        /* --- РАСЧЁТ ПРОГРЕССА --- */
+        if (!PidConf[slot].tune_phase_b) {
+            /* Фаза A: 20..70% */
+            float pct = (float)PidConf[slot].tune_iter / 12.0f;
+            if (pct > 1.0f) pct = 1.0f;
+            PidConf[slot].tune_progress = (uint8_t)(20.0f + pct * 50.0f);
+        } else {
+            /* Фаза B: 70..95% */
+            float pct = (float)PidConf[slot].tune_iter / 10.0f;
+            if (pct > 1.0f) pct = 1.0f;
+            PidConf[slot].tune_progress = (uint8_t)(70.0f + pct * 25.0f);
+        }
+
+        /* --- ПЕРЕХОД МЕЖДУ ФАЗАМИ --- */
+        int max_iter = PidConf[slot].tune_phase_b ? 10 : 12;
+        if (PidConf[slot].tune_iter >= max_iter) {
+            if (!PidConf[slot].tune_phase_b) {
+                /* Фаза A → фаза B */
+                float bias_rough = (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
+                PidConf[slot].tune_lo = bias_rough - 1.0f;
+                PidConf[slot].tune_hi = bias_rough + 1.0f;
+                if (PidConf[slot].tune_lo < 0.0f) PidConf[slot].tune_lo = 0.0f;
+                if (PidConf[slot].tune_hi > 100.0f) PidConf[slot].tune_hi = 100.0f;
+                PidConf[slot].tune_iter = 0;
+                PidConf[slot].tune_phase_b = 1;
+                printf("[PID] Bias phase A->B: rough=%.3f range=[%.3f,%.3f]\r\n",
+                       bias_rough, PidConf[slot].tune_lo, PidConf[slot].tune_hi);
+            } else {
+                /* Фаза B завершена */
+                PidConf[slot].bias = (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
+                printf("[PID] Bias phase B DONE: bias=%.3f%%\r\n", PidConf[slot].bias);
+                goto tune_done;
+            }
+        }
+        return;
+
+tune_done:
+        /* IMC расчёт коэффициентов */
+        pid_compute_imc(slot);
+        PidConf[slot].tune_state = PID_TUNE_DONE;
+        PidConf[slot].tune_progress = 100;
+
+        /* Применяем bias на PWM */
+        pid_set_pwm_f(slot, PidConf[slot].bias);
+
+        printf("[PID] AutoTune COMPLETE slot=%d Kp=%.4f Ki=%.4f Kd=%.4f bias=%.2f%%\r\n",
+               slot, PidConf[slot].Kp, PidConf[slot].Ki, PidConf[slot].Kd,
+               PidConf[slot].bias);
+
+        /* Сохранение результатов на USB */
+        uint8_t num = 6;
+        xQueueSend(usbQueueHandle, &num, 0);
+        return;
+    }
+}
+
+/* ──── pid_compute_imc: расчёт коэффициентов по IMC-методу ──── */
+void pid_compute_imc(int slot) {
+    if (slot < 0 || slot >= PID_MAX_SLOTS) return;
+
+    float tau    = PidConf[slot].tau;
+    float K      = PidConf[slot].K_gain;
+    float theta  = tau * 0.1f;  /* задержка транспортирования ~10% τ */
+
+    /* lambda = lambda_factor * tau (из пресета, 0.2..1.0) */
+    float lf = PidConf[slot].lambda_factor;
+    if (lf < 0.1f || lf > 2.0f) lf = 0.5f; /* fallback */
+    float lambda = lf * tau;
+
+    /* Защита от деления на 0 */
+    if (fabsf(K) < 0.0001f) K = 0.0001f;
+    float denom = K * (2.0f * lambda + theta);
+    if (fabsf(denom) < 0.0001f) denom = 0.0001f;
+
+    PidConf[slot].Kp = (2.0f * tau + theta) / denom;
+    PidConf[slot].Ki = PidConf[slot].Kp / (2.0f * tau + theta);
+    PidConf[slot].Kd = PidConf[slot].Kp * tau * theta / (2.0f * tau + theta);
+
+    printf("[PID] IMC: tau=%.1f K=%.4f lambda=%.1f => Kp=%.4f Ki=%.6f Kd=%.4f\r\n",
+           tau, K, lambda, PidConf[slot].Kp, PidConf[slot].Ki, PidConf[slot].Kd);
+}
+
+/* ──── handle_pid_tune_set: HTTP POST /api/pid/tune ──── */
+/* Body: { "id": N, "action": "start"|"stop" } */
+void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
+    char *body = (char *)malloc(hm->body.len + 1);
+    if (!body) {
+        mg_http_reply(c, 500, "Content-Type: application/json\r\n",
+                      "{\"error\":\"out of memory\"}");
+        return;
+    }
+    memcpy(body, hm->body.buf, hm->body.len);
+    body[hm->body.len] = '\0';
+
+    cJSON *root = cJSON_Parse(body);
+    free(body);
+    if (!root) {
+        mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+                      "{\"error\":\"json parse error\"}");
+        return;
+    }
+
+    cJSON *j_id = cJSON_GetObjectItem(root, "id");
+    cJSON *j_action = cJSON_GetObjectItem(root, "action");
+
+    if (!j_id || !cJSON_IsNumber(j_id)) {
+        cJSON_Delete(root);
+        mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+                      "{\"error\":\"missing id\"}");
+        return;
+    }
+
+    int id = j_id->valueint - 1; /* 0-based */
+    if (id < 0 || id >= PID_MAX_SLOTS) {
+        cJSON_Delete(root);
+        mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+                      "{\"error\":\"invalid id\"}");
+        return;
+    }
+
+    const char *action = "start";
+    if (j_action && cJSON_IsString(j_action)) {
+        action = j_action->valuestring;
+    }
+
+    if (strcmp(action, "stop") == 0) {
+        pid_autotune_stop(id);
+    } else {
+        pid_autotune_start(id);
+    }
+
+    cJSON_Delete(root);
+    mg_http_reply(c, 200, "Content-Type: application/json\r\n",
+                  "{\"status\":\"ok\"}");
 }
 /****************** End Zerg section **************************/

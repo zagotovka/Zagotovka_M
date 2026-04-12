@@ -110,6 +110,36 @@ const SENSOR_OPTIONS = [
 // Максимальное число PID-слотов — фиксировано на уровне прошивки
 const PID_MAX_SLOTS = 24;
 
+// Tune state enum — совпадает с PidTuneState_e в прошивке
+const TUNE_IDLE  = 0;
+const TUNE_STEP  = 1;
+const TUNE_BIAS  = 2;
+const TUNE_DONE  = 3;
+const TUNE_ERROR = 4;
+
+// ---------------------------------------------------------------------------
+// Инжект глобальных стилей для анимации мигания прогресс-бара
+// ---------------------------------------------------------------------------
+function initTuneStyles() {
+  if (document.__tuneStylesInited) return;
+  document.__tuneStylesInited = true;
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes tuneBlink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+    .tune-blink {
+      animation: tuneBlink 0.4s ease-in-out 3;
+    }
+    @keyframes tuneProgress {
+      from { width: 0%; }
+      to   { width: 100%; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 function TabPid({ }) {
   const [varpid, setPid] = useState(null);
   const [saveResult, setSaveResult] = useState(null);
@@ -124,7 +154,10 @@ function TabPid({ }) {
 
   const isPendingOnOff = useRef(false);
 
-  useEffect(() => { initGlobalTooltip(); }, []);
+  useEffect(() => {
+    initGlobalTooltip();
+    initTuneStyles();
+  }, []);
 
   const fetchPidData = () => {
     fetch('/api/pid/get')
@@ -171,13 +204,13 @@ function TabPid({ }) {
       .catch((error) => console.error('Error sending PID line to stm32:', error));
   };
 
-const addPid = () => {
-  if (visiblePids < PID_MAX_SLOTS) {
-    const newVisible = visiblePids + 1;
-    setVisiblePids(newVisible);
-    setPidline(newVisible);
-  }
-};
+  const addPid = () => {
+    if (visiblePids < PID_MAX_SLOTS) {
+      const newVisible = visiblePids + 1;
+      setVisiblePids(newVisible);
+      setPidline(newVisible);
+    }
+  };
 
   const deletePid = () => {
     if (visiblePids > 0) {
@@ -238,17 +271,45 @@ const addPid = () => {
       });
   };
 
-  // Отправка команды Auto Tune для конкретной строки
+  // -------------------------------------------------------------------------
+  // Auto Tune: запуск (Run) — отправляет команду на прошивку
+  // -------------------------------------------------------------------------
   const handleRunTune = (d) => {
-    console.log('Run tune for id:', d.id);
+    const id = d.id;
+    // Если уже идёт тюн — игнорируем
+    const ts = d.tune_state || 0;
+    if (ts === TUNE_STEP || ts === TUNE_BIAS) return;
+
+    /* Если была ошибка — сбрасываем состояние, пользователь может попробовать снова */
+    if (ts === TUNE_ERROR) {
+      handleStopTune(id);
+      return;
+    }
+
+    console.log('Run tune for id:', id);
     fetch('/api/pid/tune', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: d.id }),
+      body: JSON.stringify({ id, action: 'start' }),
     })
       .then(response => response.json())
-      .then(data => { console.log('Tune response:', data); })
-      .catch(error => { console.error('Error running tune:', error); });
+      .then(data => { console.log('Tune start response:', data); })
+      .catch(error => { console.error('Error starting tune:', error); });
+  };
+
+  // -------------------------------------------------------------------------
+  // Auto Tune: остановка (Stop) — отправляет команду на прошивку
+  // -------------------------------------------------------------------------
+  const handleStopTune = (id) => {
+    console.log('Stop tune for id:', id);
+    fetch('/api/pid/tune', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action: 'stop' }),
+    })
+      .then(response => response.json())
+      .then(data => { console.log('Tune stop response:', data); })
+      .catch(error => { console.error('Error stopping tune:', error); });
   };
 
   const presets = PRESETS[language] || PRESETS['en'];
@@ -275,48 +336,97 @@ const addPid = () => {
     </th>
   `;
 
-  const ArrayPid = ({ d, index }) => html`
-    <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
-      <td class="px-4 py-3 text-sm text-slate-800 font-medium">${d.id}</td>
-      <td class="px-4 py-3 text-sm text-slate-700 font-mono">
-        ${(() => {
-          const entries = Object.entries(d.pinact || {});
-          if (!entries.length) return '—';
-          const [pinName, pinId] = entries[0];
-          return `${pinName}(${pinId})`;
-        })()}
-      </td>
-      <td class="px-4 py-3 text-sm text-slate-700">${getSensorLabel(d.selsens)}</td>
-      <td class="px-4 py-3 text-sm font-mono ${d.selsens === '1' ? 'text-slate-700' : 'text-slate-400 italic'}">${d.selsens === '1' ? (d.sernum || '—') : 'N/A'}</td>
-      <td class="px-4 py-3 text-sm text-slate-700">${getPresetLabel(d.presets)}</td>
-      <td class="px-4 py-3 text-sm text-slate-700 font-mono">${d.tmpset}</td>
-      <td class="px-4 py-3 text-sm text-slate-700 font-mono">${d.tmpcur}</td>
-      <td class="px-4 py-3 text-sm text-slate-800 font-mono ${!d.onoff ? 'text-rose-500 font-bold' : ''}">${!d.onoff ? 'OFF' : (d.duty !== undefined ? d.duty : '—')}</td>
-      <td class="px-4 py-3 text-sm text-slate-600">${d.info}</td>
-      <td class="px-4 py-3">
-        <${MyPolzunok}
-          value=${d.onoff}
-          onChange=${(value) => handlePidChange({ ...d, onoff: value })}
-        />
-      </td>
-      <td class="px-4 py-3 text-center">
-        <button
-          onclick=${() => openModal('edit', d)}
-          class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap mr-2"
-        >
-          Edit
-        </button>
-      </td>
-      <td class="px-4 py-3 text-center">
-        <button
-          onclick=${() => handleRunTune(d)}
-          class="px-3 py-1 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40 whitespace-nowrap"
-        >
-          Run tune
-        </button>
-      </td>
-    </tr>
-  `;
+  // -------------------------------------------------------------------------
+  // renderPidRow — обычная функция (не компонент!), вызывается напрямую.
+  // Прогресс берётся из реальных данных прошивки (d.tune_state, d.tune_progress)
+  // -------------------------------------------------------------------------
+  const renderPidRow = (d, index) => {
+    const tuneState = d.tune_state || 0;
+    const tuneProgress = d.tune_progress || 0;
+    const isRunning  = (tuneState === TUNE_STEP || tuneState === TUNE_BIAS);
+    const isDone     = (tuneState === TUNE_DONE);
+    const isError    = (tuneState === TUNE_ERROR);
+
+    // Кнопка Run tune / Done / Error
+    const btnStyle = isDone
+      ? 'background:linear-gradient(to right,#4ade80,#10b981);box-shadow:0 4px 14px rgba(16,185,129,0.4);'
+      : isError
+        ? 'background:linear-gradient(to right,#dc2626,#b91c1c);box-shadow:0 4px 14px rgba(220,38,38,0.5);animation:tuneBlink 1s ease-in-out infinite;'
+        : 'background:linear-gradient(to right,#ef4444,#e11d48);box-shadow:0 4px 14px rgba(239,68,68,0.4);';
+    const btnBaseClass = 'px-3 py-1 rounded-full text-sm font-bold text-white transition-all duration-300 transform hover:scale-105 active:scale-95 whitespace-nowrap';
+
+    const btnLabel = isDone ? 'Tuning Done'
+                   : isError ? '⚠ Error!'
+                   : 'Run tune';
+
+    // Если тюн идёт — показываем прогресс-бар вместо строки
+    if (isRunning) {
+      const pctStr  = tuneProgress.toFixed(1);
+      const phaseText = tuneState === TUNE_STEP ? 'Step test' : 'Bias search';
+      const label   = `Auto Tune (${phaseText})… ${tuneProgress}%`;
+      return html`
+        <tr key=${d.id} class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'}">
+          <td colspan="11" class="px-2 py-2">
+            <div style="position:relative;width:100%;height:2.5rem;border-radius:0.75rem;overflow:hidden;background:#d1d5db;box-shadow:inset 0 2px 6px rgba(0,0,0,0.12);">
+              <div
+                style="position:absolute;left:0;top:0;bottom:0;width:${pctStr}%;background:linear-gradient(90deg,#22c55e 0%,#16a34a 60%,#4ade80 100%);border-radius:inherit;transition:width 0.3s ease;box-shadow:0 0 14px rgba(34,197,94,0.55);"
+              ></div>
+              <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;user-select:none;">
+                <span style="font-size:0.875rem;font-weight:700;color:#111827;white-space:nowrap;">${label}</span>
+              </div>
+            </div>
+          </td>
+          <td class="px-4 py-2 text-center">
+            <button
+              onclick=${() => handleStopTune(d.id)}
+              class="px-3 py-1 rounded-full text-sm font-bold text-white whitespace-nowrap transition-all duration-300 hover:scale-105 active:scale-95"
+              style="background:linear-gradient(to right,#f97316,#ef4444);box-shadow:0 4px 14px rgba(239,68,68,0.4);"
+            >Stop</button>
+          </td>
+        </tr>
+      `;
+    }
+
+    return html`
+      <tr key=${d.id} class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
+        <td class="px-4 py-3 text-sm text-slate-800 font-medium">${d.id}</td>
+        <td class="px-4 py-3 text-sm text-slate-700 font-mono">
+          ${(() => {
+            const entries = Object.entries(d.pinact || {});
+            if (!entries.length) return '—';
+            const [pinName, pinId] = entries[0];
+            return `${pinName}(${pinId})`;
+          })()}
+        </td>
+        <td class="px-4 py-3 text-sm text-slate-700">${getSensorLabel(d.selsens)}</td>
+        <td class="px-4 py-3 text-sm font-mono ${d.selsens === '1' ? 'text-slate-700' : 'text-slate-400 italic'}">${d.selsens === '1' ? (d.sernum || '—') : 'N/A'}</td>
+        <td class="px-4 py-3 text-sm text-slate-700">${getPresetLabel(d.presets)}</td>
+        <td class="px-4 py-3 text-sm text-slate-700 font-mono">${d.tmpset}</td>
+        <td class="px-4 py-3 text-sm text-slate-700 font-mono">${d.tmpcur}</td>
+        <td class="px-4 py-3 text-sm text-slate-800 font-mono ${!d.onoff ? 'text-rose-500 font-bold' : ''}">${!d.onoff ? 'OFF' : (d.duty !== undefined ? d.duty : '—')}</td>
+        <td class="px-4 py-3 text-sm text-slate-600">${d.info}</td>
+        <td class="px-4 py-3">
+          <${MyPolzunok}
+            value=${d.onoff}
+            onChange=${(value) => handlePidChange({ ...d, onoff: value })}
+          />
+        </td>
+        <td class="px-4 py-3 text-center">
+          <button
+            onclick=${() => openModal('edit', d)}
+            class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap mr-2"
+          >Edit</button>
+        </td>
+        <td class="px-4 py-3 text-center">
+          <button
+            onclick=${() => handleRunTune(d)}
+            class="${btnBaseClass}"
+            style="${btnStyle}"
+          >${btnLabel}</button>
+        </td>
+      </tr>
+    `;
+  };
 
   return html`
     <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-center items-center">
@@ -352,8 +462,8 @@ const addPid = () => {
                     </thead>
                     <tbody class="divide-y divide-white/40">
                       ${Array.from({ length: visiblePids }, (_, index) => {
-                        const pid = varpid && varpid[index] ? varpid[index] : { id: index + 1, pins: '', pinact: {}, selsens: '', sernum: '', presets: '', tmpset: '', tmpcur: '', info: '', onoff: 0 };
-                        return html`<${ArrayPid} d=${pid} index=${index} key=${pid.id} />`;
+                        const pid = varpid && varpid[index] ? varpid[index] : { id: index + 1, pins: '', pinact: {}, selsens: '', sernum: '', presets: '', tmpset: '', tmpcur: '', info: '', onoff: 0, tune_state: 0, tune_progress: 0 };
+                        return renderPidRow(pid, index);
                       })}
                     </tbody>
                   </table>

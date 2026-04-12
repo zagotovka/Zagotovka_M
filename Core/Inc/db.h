@@ -118,6 +118,23 @@ typedef struct {
     float    tau;                  // постоянная времени системы (сек), результат теста
     float    K_gain;               // коэффициент усиления объекта (°C/%)
 
+    /* ── Авто-тюн: рантайм-данные (не сохраняются на USB) ── */
+    float    T_filtered;           // ИИР-фильтрованная температура
+    uint8_t  tune_progress;        // 0..100 % прогресс автотюна для UI
+    uint8_t  tune_phase_b;         // 0=фаза A, 1=фаза B
+    uint8_t  tune_iter;            // текущая итерация внутри фазы
+    float    tune_lo;              // нижняя граница бинарного поиска
+    float    tune_hi;              // верхняя граница бинарного поиска
+    float    tune_T_samples[10];   // кольцевой буфер температур для σ
+    uint8_t  tune_sample_idx;      // индекс в кольцевом буфере
+    uint32_t tune_stab_start;      // HAL_GetTick() начала ожидания стабилизации
+    uint32_t tune_in_range_ms;     // время непрерывной стабильности (мс)
+    float    tune_T_start;         // T до шагового теста
+    float    tune_T_end;           // T после шагового теста
+    uint32_t tune_step_start_tick; // HAL_GetTick() начала шагового теста
+    float    tune_step_pwm;        // PWM% при шаговом тесте
+    uint8_t  tune_step_phase;      // 0=ждём стабилиз. до шага, 1=шаг подан, 2=ждём стабилиз. после
+
     /* ── Рабочее состояние (runtime) ── */
     float    integral;             // накопленная интегральная составляющая
     float    prev_error;           // ошибка на предыдущем шаге (для D)

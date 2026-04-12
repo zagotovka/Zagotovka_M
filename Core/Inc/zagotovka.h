@@ -178,6 +178,11 @@ void parse_pidline_json(char *json_string, struct dbSettings *settings);
 float pid_read_temperature(int slot);
 void pid_set_pwm(int slot, uint8_t duty);
 void pid_autotune_tick(int slot);
+void pid_autotune_start(int slot);
+void pid_autotune_stop(int slot);
+void pid_set_pwm_f(int slot, float duty);
+void pid_compute_imc(int slot);
+void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm);
 
 void parse_relay_json(char* json_string, struct dbPinsConf* PinsConf,const struct dbPinsInfo* PinsInfo, int count);
 

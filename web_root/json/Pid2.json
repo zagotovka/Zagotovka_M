@@ -1,14 +1,14 @@
 {
-  "id": 0,
-  "pins": "PB10",
-  "selsens": "2",
-  "sernum": "",
-  "presets": "3",
-  "tmpset": "30",
-  "tmpcur": "20",
+  "id": 1,
+  "pins": "PB15",
+  "selsens": "1",
+  "sernum": "2800291750500598",
+  "presets": "5",
+  "tmpset": "25",
+  "tmpcur": "15",
   "pinact": {
-    "PB10": 15
+    "PB15": 19
   },
-  "info": "Test DHT22",
+  "info": "Test DS18B20",
   "onoff": 1
 }

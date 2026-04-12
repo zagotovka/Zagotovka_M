@@ -2637,6 +2637,13 @@ void StartPIDTask(void *argument)
           PidConf[i].tmpcur = T;
       }
 
+      /* 2a. Авто-тюн (если запущен) — работает НЕЗАВИСИМО от onoff */
+      if (PidConf[i].tune_state == PID_TUNE_STEP ||
+          PidConf[i].tune_state == PID_TUNE_BIAS) {
+        pid_autotune_tick(i);
+        continue;
+      }
+
       /* Если PID выключен - глушим ШИМ и интегратор, но переходим к следующему слоту */
       if (!PidConf[i].onoff) {
           if (PidConf[i].pwm_out > 0 || PidConf[i].integral != 0.0f) {
@@ -2650,19 +2657,12 @@ void StartPIDTask(void *argument)
       /* Если датчик не прочитался, а PID включен - пропускаем расчет (чтобы не было бешеных всплесков) */
       if (T < -100.0f) continue;
 
-      /* 2. Аварийное отключение */
+      /* 2b. Аварийное отключение */
       if (T >= PidConf[i].temp_max) {
         pid_set_pwm(i, 0);
         PidConf[i].pwm_out = 0;
         printf("[PID] EMERGENCY OFF slot=%d T=%.1f >= Tmax=%.1f\r\n",
                i, T, PidConf[i].temp_max);
-        continue;
-      }
-
-      /* 3. Авто-тюн (если запущен) */
-      if (PidConf[i].tune_state == PID_TUNE_STEP ||
-          PidConf[i].tune_state == PID_TUNE_BIAS) {
-        pid_autotune_tick(i);
         continue;
       }
 
