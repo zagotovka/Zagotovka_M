@@ -203,6 +203,53 @@ const TabButton = () => {
             </tbody>
           </table>
         </div>
+        <div>
+          <h2 class="text-xl font-bold mb-2">Примеры SMS и DTMF команд</h2>
+          <table class="w-full">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2">Источник</th>
+                <th class="border px-4 py-2">Команда</th>
+                <th class="border px-4 py-2">Описание</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="border px-4 py-2">SMS</td>
+                <td class="border px-4 py-2">30#SL*</td>
+                <td class="border px-4 py-2">Выполняет действие, прописанное в SINGLE CLICK для кнопки с id = 30.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">SMS</td>
+                <td class="border px-4 py-2">30#DC*</td>
+                <td class="border px-4 py-2">Выполняет действие, прописанное в DOUBLE CLICK для кнопки с id = 30.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">SMS</td>
+                <td class="border px-4 py-2">30#LP*</td>
+                <td class="border px-4 py-2">Выполняет действие, прописанное в LONG PRESS для кнопки с id = 30.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">DTMF (Звонок)</td>
+                <td class="border px-4 py-2">30#3*</td>
+                <td class="border px-4 py-2">Аналог 30#SL*. Выполняет SINGLE CLICK. (в тональном режиме букв нет)</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">DTMF (Звонок)</td>
+                <td class="border px-4 py-2">30#4*</td>
+                <td class="border px-4 py-2">Аналог 30#DC*. Выполняет DOUBLE CLICK.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">DTMF (Звонок)</td>
+                <td class="border px-4 py-2">30#5*</td>
+                <td class="border px-4 py-2">Аналог 30#LP*. Выполняет LONG PRESS.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="mt-2 text-sm text-slate-500">
+            Примечание: При желании, вы можете использовать цифровые команды (30#3*, 30#4*, 30#5*) в том числе и в SMS-сообщениях.
+          </div>
+        </div>
       </div>
     `,
     en: html`
@@ -306,6 +353,53 @@ const TabButton = () => {
               </tr>
             </tbody>
           </table>
+        </div>
+        <div>
+          <h2 class="text-xl font-bold mb-2">SMS & DTMF Command Examples</h2>
+          <table class="w-full">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2">Source</th>
+                <th class="border px-4 py-2">Command</th>
+                <th class="border px-4 py-2">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="border px-4 py-2">SMS</td>
+                <td class="border px-4 py-2">30#SL*</td>
+                <td class="border px-4 py-2">Executes the action specified in SINGLE CLICK for button with id = 30.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">SMS</td>
+                <td class="border px-4 py-2">30#DC*</td>
+                <td class="border px-4 py-2">Executes the action specified in DOUBLE CLICK for button with id = 30.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">SMS</td>
+                <td class="border px-4 py-2">30#LP*</td>
+                <td class="border px-4 py-2">Executes the action specified in LONG PRESS for button with id = 30.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">DTMF (Call)</td>
+                <td class="border px-4 py-2">30#3*</td>
+                <td class="border px-4 py-2">Same as 30#SL*. Executes SINGLE CLICK. (since letters are unavailable in DTMF)</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">DTMF (Call)</td>
+                <td class="border px-4 py-2">30#4*</td>
+                <td class="border px-4 py-2">Same as 30#DC*. Executes DOUBLE CLICK.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">DTMF (Call)</td>
+                <td class="border px-4 py-2">30#5*</td>
+                <td class="border px-4 py-2">Same as 30#LP*. Executes LONG PRESS.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="mt-2 text-sm text-slate-500">
+            Note: You can also use the digital commands (30#3*, 30#4*, 30#5*) natively via SMS.
+          </div>
         </div>
       </div>
     `,

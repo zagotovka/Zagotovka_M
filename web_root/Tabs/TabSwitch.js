@@ -381,6 +381,31 @@ function TabSwitch({ }) {
             </tbody>
           </table>
         </div>
+        <div>
+          <h2 class="text-xl font-bold mb-2">Примеры SMS и DTMF команд</h2>
+          <table class="w-full">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2">Команда</th>
+                <th class="border px-4 py-2">Описание</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="border px-4 py-2">14#1*</td>
+                <td class="border px-4 py-2">Данная команда ВКЛючит выключатель с id = 14. Работает как по SMS, так и в тональном наборе (DTMF) во время звонка.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">14#0*</td>
+                <td class="border px-4 py-2">Данная команда ОТКлючит выключатель с id = 14.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">14#2*</td>
+                <td class="border px-4 py-2">Данная команда переключит (TOGGLE) состояние выключателя с id = 14 на противоположное.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     `,
     en: html`
@@ -468,6 +493,31 @@ function TabSwitch({ }) {
                   This page tracks changes in switches and automatically sends each change via MQTT to the topic: Swarm/switch/.
                   Where "Swarm" is your 'RX topic'.
                 </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <h2 class="text-xl font-bold mb-2">SMS & DTMF Command Examples</h2>
+          <table class="w-full">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2">Command</th>
+                <th class="border px-4 py-2">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="border px-4 py-2">14#1*</td>
+                <td class="border px-4 py-2">This command will turn ON the switch with id = 14. Works via SMS and DTMF during a voice call.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">14#0*</td>
+                <td class="border px-4 py-2">This command will turn OFF the switch with id = 14.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">14#2*</td>
+                <td class="border px-4 py-2">This command will TOGGLE the state of the switch with id = 14.</td>
               </tr>
             </tbody>
           </table>

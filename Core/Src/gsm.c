@@ -31,6 +31,7 @@ extern uint32_t swarm_t;
 extern uint8_t read_button_level(uint8_t button_id);
 extern void send_sms(int index);
 extern void Error_Handler(void);
+extern void process_actions(const char *actions);
 /* MX_USART2_UART_Init — static в main.c, недоступна напрямую.
  * check_speed() переинициализирует UART вручную через HAL_UART_Init(). */
 
@@ -300,74 +301,119 @@ void execute_commands(char *cmd_str) {
       cmd++;
     }
 
-    if (*cmd == '#' && (*(cmd + 1) >= '0' && *(cmd + 1) <= '2') &&
-        *(cmd + 2) == '*') {
+    if (*cmd == '#') {
+      int valid_format = 0;
+      char *hash_pos = cmd;
       cmd++; /* пропускаем # */
-      value = *cmd - '0';
-      cmd++; /* пропускаем значение */
-      cmd++; /* пропускаем * */
 
-      if (pin >= 0 && pin < NUMPIN) {
-        if (PinsConf[pin].topin == 2 || PinsConf[pin].topin == 10) {
-          /* Для типа SECURITY (topin==10) управляем onoff */
-          if (PinsConf[pin].topin == 10) {
-            PinsConf[pin].onoff = (value == 1) ? 1 : 0;
-          }
+      if (*cmd >= '0' && *cmd <= '5' && *(cmd + 1) == '*') {
+        value = *cmd - '0';
+        cmd += 2; /* пропускаем значение и * */
+        valid_format = 1;
+      } else if ((*cmd == 'S' || *cmd == 's') && (*(cmd + 1) == 'L' || *(cmd + 1) == 'l') && *(cmd + 2) == '*') {
+        value = 3;
+        cmd += 3;
+        valid_format = 1;
+      } else if ((*cmd == 'D' || *cmd == 'd') && (*(cmd + 1) == 'C' || *(cmd + 1) == 'c') && *(cmd + 2) == '*') {
+        value = 4;
+        cmd += 3;
+        valid_format = 1;
+      } else if ((*cmd == 'L' || *cmd == 'l') && (*(cmd + 1) == 'P' || *(cmd + 1) == 'p') && *(cmd + 2) == '*') {
+        value = 5;
+        cmd += 3;
+        valid_format = 1;
+      }
 
-          /* Формируем строку "pin:value" и добавляем в vldpins */
-          char cmd_msg[16];
-          int cmd_len = snprintf(cmd_msg, sizeof(cmd_msg), "%d:%d", pin, value);
-          if (cmd_len < 0 || cmd_len >= (int)sizeof(cmd_msg)) {
-            HAL_UART_Transmit(myDEBUG, (uint8_t *)"Error: cmd_msg overflow\n",
-                              strlen("Error: cmd_msg overflow\n"), 1000);
-            continue;
-          }
+      if (valid_format) {
+        if (pin >= 0 && pin < NUMPIN) {
+          if ((PinsConf[pin].topin == 2 || PinsConf[pin].topin == 10 || PinsConf[pin].topin == 3) && (value >= 0 && value <= 2)) {
+            /* Для типа SECURITY (topin==10) и SWITCH (topin==3) управляем onoff */
+            if (PinsConf[pin].topin == 10 || PinsConf[pin].topin == 3) {
+              if (value == 1) PinsConf[pin].onoff = 1;
+              else if (value == 0) PinsConf[pin].onoff = 0;
+              else if (value == 2) PinsConf[pin].onoff = !PinsConf[pin].onoff;
+            }
 
-          char pin_str[17];
-          int pin_len;
-          if (validcnt > 0)
-            pin_len = snprintf(pin_str, sizeof(pin_str), ",%s", cmd_msg);
-          else
-            pin_len = snprintf(pin_str, sizeof(pin_str), "%s", cmd_msg);
+            /* Формируем строку "pin:value" и добавляем в vldpins */
+            char cmd_msg[16];
+            int cmd_len = snprintf(cmd_msg, sizeof(cmd_msg), "%d:%d", pin, value);
+            if (cmd_len < 0 || cmd_len >= (int)sizeof(cmd_msg)) {
+              HAL_UART_Transmit(myDEBUG, (uint8_t *)"Error: cmd_msg overflow\n",
+                                strlen("Error: cmd_msg overflow\n"), 1000);
+              continue;
+            }
 
-          if (pin_len < 0 || pin_len >= (int)sizeof(pin_str)) {
-            HAL_UART_Transmit(myDEBUG, (uint8_t *)"Error: pin_str overflow\n",
-                              strlen("Error: pin_str overflow\n"), 1000);
-            continue;
-          }
+            char pin_str[17];
+            int pin_len;
+            if (validcnt > 0)
+              pin_len = snprintf(pin_str, sizeof(pin_str), ",%s", cmd_msg);
+            else
+              pin_len = snprintf(pin_str, sizeof(pin_str), "%s", cmd_msg);
 
-          if (strlen(vldpins) + strlen(pin_str) < sizeof(vldpins)) {
-            strcat(vldpins, pin_str);
-            validcnt++;
+            if (pin_len < 0 || pin_len >= (int)sizeof(pin_str)) {
+              HAL_UART_Transmit(myDEBUG, (uint8_t *)"Error: pin_str overflow\n",
+                                strlen("Error: pin_str overflow\n"), 1000);
+              continue;
+            }
+
+            if (strlen(vldpins) + strlen(pin_str) < sizeof(vldpins)) {
+              strcat(vldpins, pin_str);
+              validcnt++;
+            } else {
+              HAL_UART_Transmit(myDEBUG,
+                                (uint8_t *)"Error: vldpins buffer full\n",
+                                strlen("Error: vldpins buffer full\n"), 1000);
+            }
+
+          } else if (PinsConf[pin].topin == 1 && (value >= 3 && value <= 5)) {
+            /* Для типа BUTTON (topin==1) обрабатываем нажатие */
+            if (value == 3 && PinsConf[pin].sclick[0] != '\0') {
+              process_actions(PinsConf[pin].sclick);
+            } else if (value == 4 && PinsConf[pin].dclick[0] != '\0') {
+              process_actions(PinsConf[pin].dclick);
+            } else if (value == 5 && PinsConf[pin].lpress[0] != '\0') {
+              process_actions(PinsConf[pin].lpress);
+            }
+
+            /* Формируем строку "pin:value" и добавляем в vldpins для отчета */
+            char cmd_msg[16];
+            int cmd_len = snprintf(cmd_msg, sizeof(cmd_msg), "%d:%d", pin, value);
+            if (cmd_len > 0 && cmd_len < (int)sizeof(cmd_msg)) {
+              char pin_str[17];
+              if (validcnt > 0)
+                snprintf(pin_str, sizeof(pin_str), ",%s", cmd_msg);
+              else
+                snprintf(pin_str, sizeof(pin_str), "%s", cmd_msg);
+
+              if (strlen(vldpins) + strlen(pin_str) < sizeof(vldpins)) {
+                strcat(vldpins, pin_str);
+                validcnt++;
+              }
+            }
           } else {
-            HAL_UART_Transmit(myDEBUG,
-                              (uint8_t *)"Error: vldpins buffer full\n",
-                              strlen("Error: vldpins buffer full\n"), 1000);
+            /* Пин не того типа или неверное значение — в невалидные */
+            char inv_str[DTMF_BUF_SIZE];
+            snprintf(inv_str, sizeof(inv_str), "%s%d#%d*",
+                     invldcnt > 0 ? "," : "", pin, value);
+            strcat(invpins, inv_str);
+            invldcnt++;
           }
-
         } else {
-          /* Пин не того типа — в невалидные */
+          /* Пин вне диапазона — в невалидные */
           char inv_str[DTMF_BUF_SIZE];
-          snprintf(inv_str, sizeof(inv_str), "%s%d#%d*",
-                   invldcnt > 0 ? "," : "", pin, value);
+          snprintf(inv_str, sizeof(inv_str), "%s%d#%d*", invldcnt > 0 ? "," : "",
+                   pin, value);
           strcat(invpins, inv_str);
           invldcnt++;
         }
       } else {
-        /* Пин вне диапазона — в невалидные */
-        char inv_str[DTMF_BUF_SIZE];
-        snprintf(inv_str, sizeof(inv_str), "%s%d#%d*", invldcnt > 0 ? "," : "",
-                 pin, value);
-        strcat(invpins, inv_str);
-        invldcnt++;
-      }
-    } else {
-      /* Неверный формат команды */
-      char *end = cmd;
-      while (*end && *end != '*')
-        end++;
-      if (*end == '*')
-        end++;
+        /* Неверный формат команды (восстанавливаем cmd для обработки ошибки) */
+        cmd = hash_pos;
+        char *end = cmd;
+        while (*end && *end != '*')
+          end++;
+        if (*end == '*')
+          end++;
 
       int inv_len = end - cmd_start;
       char invalid_cmd[DTMF_BUF_SIZE] = {0};
@@ -390,7 +436,7 @@ void execute_commands(char *cmd_str) {
       cmd = end;
     }
   }
-
+  }
   /* Выполняем валидные действия */
   action_handler(0, vldpins, "CMD");
 
@@ -441,7 +487,10 @@ void send_command_result_sms(void) {
         k++;
       }
       uint8_t pin_id = atoi(pin_number);
-      uint8_t current_state = read_button_level(pin_id);
+
+      char *colon = strchr(tok, ':');
+      int action_val = -1;
+      if (colon) { action_val = atoi(colon + 1); }
 
       if (PinsConf[pin_id].topin == 10) {
         char entry[32];
@@ -449,7 +498,26 @@ void send_command_result_sms(void) {
                  pin_number, PinsConf[pin_id].onoff == 1 ? "ON" : "OFF");
         strncat(sec_buf, entry, sizeof(sec_buf) - strlen(sec_buf) - 1);
         sec_cnt++;
+      } else if (PinsConf[pin_id].topin == 3) {
+        /* Switch logic */
+        char entry[16];
+        snprintf(entry, sizeof(entry), "%s%s:%s", out_cnt > 0 ? "," : "",
+                 pin_number, PinsConf[pin_id].onoff == 1 ? "ON" : "OFF");
+        strncat(out_buf, entry, sizeof(out_buf) - strlen(out_buf) - 1);
+        out_cnt++;
+      } else if (PinsConf[pin_id].topin == 1) {
+        /* Button logic */
+        char entry[16];
+        const char *btn_act = "SC";
+        if (action_val == 4) btn_act = "DC";
+        else if (action_val == 5) btn_act = "LP";
+        snprintf(entry, sizeof(entry), "%s%s:%s", out_cnt > 0 ? "," : "",
+                 pin_number, btn_act);
+        strncat(out_buf, entry, sizeof(out_buf) - strlen(out_buf) - 1);
+        out_cnt++;
       } else {
+        /* Physical device output */
+        uint8_t current_state = read_button_level(pin_id);
         char entry[16];
         snprintf(entry, sizeof(entry), "%s%s:%s", out_cnt > 0 ? "," : "",
                  pin_number, current_state == GPIO_PIN_SET ? "ON" : "OFF");
