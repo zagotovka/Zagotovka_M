@@ -1827,7 +1827,7 @@ static const HTTPSsettings *get_valid_settings(void) {
     }
   }
   if (valid_settings) {
-    printf("Using settings version: %u\r\n", valid_settings->version);
+//    printf("Using settings version: %u\r\n", valid_settings->version);
   } else {
     printf("No valid settings found\r\n");
   }
@@ -3385,29 +3385,69 @@ void action_handler(uint8_t button_id, const char *action_str,
       //            printf("Parsed action: ID=%d, Action=%d\n", id, action);
       switch (action) {
       case 0:
-        //                    printf("Sending OFF command for ID %d\n", id);
-        data_pin.id = id;
-        data_pin.action = 0;
-        if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) != pdPASS) {
-          printf("Failed to send OFF command to queue\n");
-        }
-        break;
       case 1:
-        //                    printf("Sending ON command for ID %d\n", id);
-        data_pin.id = id;
-        data_pin.action = 1;
-        if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) != pdPASS) {
-          printf("Failed to send ON command to queue\n");
+      case 2:
+        if (id < 0 || id >= NUMPIN) break; // Защита от выхода за пределы массива
+        
+        if (PinsConf[id].topin == 3) {
+          /* Если рубильник (Master Enable) отключен, игнорируем любые команды! */
+          if (PinsConf[id].onoff == 0) {
+              break;
+          }
+          
+          /* Это выключатель (Switch). Команда применяется КО ВСЕМ привязанным устройствам */
+          for (int i = 0; i < NUMPINLINKS; i++) {
+            if (PinsLinks[i].idin == id) {
+              int out_id = PinsLinks[i].idout; // Используем int, чтобы корректно обработать -1
+              
+              /* Защита от мусора или неинициализированных связей (-1) */
+              if (out_id < 0 || out_id >= NUMPIN) {
+                  continue; 
+              }
+              
+              /* Если привязанное устройство это ШИМ (PWM) */
+              if (PinsConf[out_id].topin == 5) {
+                uint32_t pulse = 0;
+                /* Вычисляем новое состояние для ШИМ */
+                uint8_t new_state = action;
+                if (action == 2) {
+                   /* Для TOGGLE ШИМа нужно знать его текущее состояние. 
+                      Поскольку onoff может не отражать реальности, используем логику из onoffid */
+                   new_state = !PinsConf[out_id].onoff; // Инвертируем виртуальное состояние
+                   PinsConf[out_id].onoff = new_state;
+                } else {
+                   PinsConf[out_id].onoff = action;
+                }
+                
+                if (new_state != 0) {
+                  pulse = (uint32_t)((uint64_t)PinsConf[out_id].dvalue * PinsConf[out_id].pwmmax / 100ULL);
+                }
+                __HAL_TIM_SET_COMPARE(&htim[out_id], PinsInfo[out_id].tim_channel, pulse);
+              } 
+              /* Если обычное устройство (Реле и т.д.) */
+              else {
+                data_pin.id = out_id;
+                data_pin.action = action;
+                if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) != pdPASS) {
+                  printf("Failed to send cascaded command %d for ID %d to queue\n", action, out_id);
+                }
+              }
+            }
+          }
+        } else {
+          /* Обычное прямое управление для не-Switch пинов */
+          data_pin.id = id;
+          data_pin.action = action;
+          if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) != pdPASS) {
+            printf("Failed to send command %d for ID %d to queue\n", action, id);
+          }
         }
         break;
-      case 2:
-        //                    printf("Sending TOGGLE command for ID %d\n",
-        //                    id);
-        data_pin.id = id;
-        data_pin.action = 2;
-        if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) != pdPASS) {
-          printf("Failed to send TOGGLE command to queue\n");
-        }
+      case 3:
+      case 4:
+      case 5:
+        /* Кнопочные события (SC, DC, LP) уже выполнены через process_actions в GSM-обработчике.
+           Сюда они попадают только ради отчётов в SMS. Просто игнорируем! */
         break;
       default:
         printf("Unknown action %d for ID %d\n", action, id);
@@ -3487,7 +3527,7 @@ void Check_SunriseSunset_Actions() {
       printf("Invalid sunrise settings \r\n");
     }
   } else if (!SetSettings.onsunrise) {
-    printf("DEBUG: Sunrise actions are disabled \r\n");
+//    printf("DEBUG: Sunrise actions are disabled \r\n");
   }
   if (SetSettings.onsunset && !sset_ok) {
     char offstr[20], acts[100];
@@ -3508,7 +3548,7 @@ void Check_SunriseSunset_Actions() {
       printf("Invalid sunset settings \r\n");
     }
   } else if (!SetSettings.onsunset) {
-    printf("DEBUG: Sunset actions are disabled \r\n");
+//    printf("DEBUG: Sunset actions are disabled \r\n");
   }
 }
 void processPins(
@@ -3882,17 +3922,65 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
   }
 
   if (owflag && ds18b20[pin].onoff) {
+    /* ── 1. Проверяем, жива ли шина (OneWire Reset) ── */
+    uint8_t presence = OneWire_Reset(OneWire);
+    if (presence != 0) {
+      /* Нет ответа от устройств — шина оборвана или датчики не отвечают */
+      ds18b20[pin].error_cnt++;
+      if (ds18b20[pin].error_cnt == 1) {
+        printf("[WARN] DS18B20 bus %s (pin idx %d): no presence pulse!\r\n",
+               ds18b20[pin].pin, pin);
+      }
+      /* Помечаем все сенсоры невалидными */
+      for (uint8_t s = 0; s < ds18b20[pin].numsens && s < MAX_DS18B20_PER_PIN; s++) {
+        ds18b20[pin].sensors[s].valid = false;
+      }
+      /* Авто-отключение шины при DS18B20_MAX_BUS_ERRORS подряд */
+      if (ds18b20[pin].error_cnt >= DS18B20_MAX_BUS_ERRORS) {
+        ds18b20[pin].onoff = 0;
+        ds18b20[pin].auto_disabled = 1;
+        printf("[WARN] DS18B20 bus %s (pin idx %d): AUTO-DISABLED after %d consecutive errors! "
+               "Will retry in %d sec.\r\n",
+               ds18b20[pin].pin, pin, ds18b20[pin].error_cnt,
+               DS18B20_REINIT_INTERVAL_MS / 1000);
+      }
+      osDelay(100);
+      return;
+    }
+
+    /* ── 2. Запускаем конверсию ── */
     DS18B20_StartAll(OneWire);
     uint32_t start_time = HAL_GetTick();
-    while (!DS18B20_AllDone(OneWire)) {
+    bool conversion_ok = false;
+    while ((HAL_GetTick() - start_time) < _DS18B20_CONVERT_TIMEOUT_MS) {
       osDelay(10);
-      if (HAL_GetTick() - start_time > _DS18B20_CONVERT_TIMEOUT_MS) {
-        printf("[ERROR] Conversion timeout on pin %s (index %d)!\r\n",
-               ds18b20[pin].pin, pin);
+      if (DS18B20_AllDone(OneWire)) {
+        conversion_ok = true;
         break;
       }
     }
 
+    if (!conversion_ok) {
+      /* Конверсия не завершилась — НЕ пытаемся читать, чтобы не зависнуть */
+      printf("[ERROR] Conversion timeout on pin %s (index %d)!\r\n",
+             ds18b20[pin].pin, pin);
+      ds18b20[pin].error_cnt++;
+      for (uint8_t s = 0; s < ds18b20[pin].numsens && s < MAX_DS18B20_PER_PIN; s++) {
+        ds18b20[pin].sensors[s].valid = false;
+      }
+      /* Авто-отключение при слишком многих подряд ошибках */
+      if (ds18b20[pin].error_cnt >= DS18B20_MAX_BUS_ERRORS) {
+        ds18b20[pin].onoff = 0;
+        ds18b20[pin].auto_disabled = 1;
+        printf("[WARN] DS18B20 bus %s (pin idx %d): AUTO-DISABLED after %d errors!\r\n",
+               ds18b20[pin].pin, pin, ds18b20[pin].error_cnt);
+      }
+      osDelay(10);
+      return;
+    }
+
+    /* ── 3. Чтение датчиков (только если конверсия успешна) ── */
+    bool any_valid = false;
     for (uint8_t sens = 0;
          sens < ds18b20[pin].numsens && sens < MAX_DS18B20_PER_PIN; sens++) {
       osDelay(5);
@@ -3901,8 +3989,10 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
           DS18B20_Read(OneWire, ds18b20[pin].sensors[sens].addr, &temp);
 
       if (valid) {
+        any_valid = true;
         ds18b20[pin].sensors[sens].temp = temp;
         ds18b20[pin].sensors[sens].valid = true;
+        ds18b20[pin].sensors[sens].errorflg = false; /* сброс флага ошибки */
         check_ds18b20_changes(pin, sens); // Проверка изменений temp для mqtt
         float upt = ds18b20[pin].sensors[sens].upt;
         float lowt = ds18b20[pin].sensors[sens].lowt;
@@ -3912,28 +4002,11 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
           if (!ds18b20[pin].sensors[sens].upflag) {
             ds18b20[pin].sensors[sens].upflag = 1;
             ds18b20[pin].sensors[sens].lowflag = 0;
-            //                        printf("DS18B20 Pin %d, Sensor %d with
-            //                        address:%02X%02X%02X%02X%02X%02X%02X%02X
-            //                        Temperature HIGH trigger for %s: %.4f >=
-            //                        %.4f\n",
-            //                               pin, sens,
-            //                               ds18b20[pin].sensors[sens].addr[0],
-            //                               ds18b20[pin].sensors[sens].addr[1],
-            //                               ds18b20[pin].sensors[sens].addr[2],
-            //                               ds18b20[pin].sensors[sens].addr[3],
-            //                               ds18b20[pin].sensors[sens].addr[4],
-            //                               ds18b20[pin].sensors[sens].addr[5],
-            //                               ds18b20[pin].sensors[sens].addr[6],
-            //                               ds18b20[pin].sensors[sens].addr[7],
-            //                               ds18b20[pin].sensors[sens].info,
-            //                               temp, upt);
 
             // Отправка в очередь при превышении верхнего предела
             action_handler(pin, ds18b20[pin].sensors[sens].actup, "No Data!");
 
             if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) == pdPASS) {
-              //                            printf("Successfully sent HIGH
-              //                            trigger to queue\n");
             } else {
               printf("Failed to send HIGH trigger to queue\n");
             }
@@ -3966,8 +4039,6 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
             action_handler(pin, ds18b20[pin].sensors[sens].actlow, "No Data!");
 
             if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) == pdPASS) {
-              //                            printf("Successfully sent LOW
-              //                            trigger to queue\n");
             } else {
               printf("Failed to send LOW trigger to queue\n");
             }
@@ -3985,6 +4056,19 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
                  sens + 1, ds18b20[pin].pin, valid);
           ds18b20[pin].sensors[sens].errorflg = true;
         }
+      }
+    }
+
+    /* ── 4. Обновление счётчика ошибок ── */
+    if (any_valid) {
+      ds18b20[pin].error_cnt = 0;  /* Сброс — шина работает */
+    } else {
+      ds18b20[pin].error_cnt++;
+      if (ds18b20[pin].error_cnt >= DS18B20_MAX_BUS_ERRORS) {
+        ds18b20[pin].onoff = 0;
+        ds18b20[pin].auto_disabled = 1;
+        printf("[WARN] DS18B20 bus %s (pin idx %d): AUTO-DISABLED - all sensors invalid %d times!\r\n",
+               ds18b20[pin].pin, pin, ds18b20[pin].error_cnt);
       }
     }
     osDelay(1);
@@ -5302,7 +5386,7 @@ void parse_pidline_json(char *json_string, struct dbSettings *settings) {
     cJSON *j_pidline = cJSON_GetObjectItem(root, "pidline");
     if (j_pidline && cJSON_IsNumber(j_pidline)) {
         settings->pidline = (uint8_t)j_pidline->valueint;
-        printf("[PID] pidline set to %d\r\n", settings->pidline);
+//        printf("[PID] pidline set to %d\r\n", settings->pidline);
     }
     cJSON_Delete(root);
 }

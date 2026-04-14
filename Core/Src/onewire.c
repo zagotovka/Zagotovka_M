@@ -26,7 +26,11 @@
 void ONEWIRE_DELAY(uint16_t time_us)
 {
 	_DS18B20_TIMER.Instance->CNT = 0;
-	while(_DS18B20_TIMER.Instance->CNT <= time_us);
+	/* Аварийный счётчик: не более ~2 млн итераций (≈ 10 мс @216 МГц) */
+	volatile uint32_t guard = 2000000;
+	while(_DS18B20_TIMER.Instance->CNT <= time_us) {
+		if (--guard == 0) break;  /* аварийный выход */
+	}
 }
 void ONEWIRE_LOW(OneWire_t *gp)
 {

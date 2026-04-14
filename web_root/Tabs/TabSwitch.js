@@ -403,6 +403,14 @@ function TabSwitch({ }) {
                 <td class="border px-4 py-2">14#2*</td>
                 <td class="border px-4 py-2">Данная команда переключит (TOGGLE) состояние выключателя с id = 14 на противоположное.</td>
               </tr>
+              <tr>
+                <td class="border px-4 py-2">14#1*15#0*#</td>
+                <td class="border px-4 py-2">Можно группировать несколько команд в одну! В конце строки обязательно нужно добавить символ <b>#</b>, чтобы закрыть команду.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">Ответ</td>
+                <td class="border px-4 py-2">Если Главный рубильник (On/Off) на этой странице выключен, то команда будет проигнорирована, а в ответном SMS придет сообщение <b>14:DISABLED</b>.</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -518,6 +526,14 @@ function TabSwitch({ }) {
               <tr>
                 <td class="border px-4 py-2">14#2*</td>
                 <td class="border px-4 py-2">This command will TOGGLE the state of the switch with id = 14.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">14#1*15#0*#</td>
+                <td class="border px-4 py-2">You can chain multiple commands! You must append the <b>#</b> symbol at the very end of the string to terminate the command sequence.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">Response</td>
+                <td class="border px-4 py-2">If the Master switch (On/Off) is disabled, the command will be ignored and the system will explicitly return <b>14:DISABLED</b> in the SMS response.</td>
               </tr>
             </tbody>
           </table>

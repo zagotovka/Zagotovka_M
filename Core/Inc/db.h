@@ -141,6 +141,7 @@ typedef struct {
     uint32_t last_tick;            // HAL_GetTick() последнего вызова pid_compute
     uint32_t last_off_tick;        // для паузы реверса компрессора
     uint8_t  pwm_out;              // текущий выход PID (0..100%)
+    uint8_t  stale_cnt;            // счётчик циклов без валидной температуры (для аварийного отключения)
 
     /* ── Мета ── */
     char     info[30];             // описание

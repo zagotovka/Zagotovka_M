@@ -1894,7 +1894,7 @@ void StartMqttTask(void *argument)
               printf("Error: MQTT not connected\r\n");
             }
           }
-        } else {
+        } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
         break;
@@ -1915,7 +1915,7 @@ void StartMqttTask(void *argument)
               printf("Error: MQTT not connected\r\n");
             }
           }
-        } else {
+        } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
         break;
@@ -1953,7 +1953,7 @@ void StartMqttTask(void *argument)
               printf("Error: MQTT not connected\r\n");
             }
           }
-        } else {
+        } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
         break;
@@ -1981,7 +1981,7 @@ void StartMqttTask(void *argument)
               printf("Error: MQTT not connected\r\n");
             }
           }
-        } else {
+        } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
         break;
@@ -2010,7 +2010,7 @@ void StartMqttTask(void *argument)
               printf("Error: MQTT not connected\r\n");
             }
           }
-        } else {
+        } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
         break;
@@ -2039,7 +2039,7 @@ void StartMqttTask(void *argument)
               printf("Error: MQTT not connected\r\n");
             }
           }
-        } else {
+        } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
         break;
@@ -2114,12 +2114,53 @@ void StartDs18b20Task(void *argument)
   } else {
     printf("[DEBUG] No DS18B20 pins found!\r\n");
   }
+  /* Таймер для периодической переинициализации отключённых шин */
+  uint32_t reinit_tick = HAL_GetTick();
+
   /* Infinite loop */
   for (;;) {
     if (dscount != 0) {
       for (uint8_t i = 0; i < MAX_DS18B20_P; i++) {
         if (ds18b20[i].onoff && ow_conf[i].owflag) {
           process_ds18b20(&ow_conf[i].OneWire, ow_conf[i].owflag, i);
+        }
+      }
+
+      /* ── Авто-переинициализация отключённых шин каждые DS18B20_REINIT_INTERVAL_MS ── */
+      if ((HAL_GetTick() - reinit_tick) >= DS18B20_REINIT_INTERVAL_MS) {
+        reinit_tick = HAL_GetTick();
+        for (uint8_t i = 0; i < MAX_DS18B20_P; i++) {
+          if (ds18b20[i].auto_disabled && ds18b20[i].typsensr == 1) {
+            printf("[INFO] Attempting reinit of auto-disabled DS18B20 bus idx %d (pin %s)...\r\n",
+                   i, ds18b20[i].pin);
+            /* Сброс флагов */
+            ds18b20[i].error_cnt = 0;
+            ds18b20[i].auto_disabled = 0;
+            ow_conf[i].owflag = 0;
+            ow_conf[i].temp_cnt = 0;
+
+            /* Переинициализация */
+            init_ds18b20(&ow_conf[i].OneWire,
+                         ow_conf[i].OneWirePort,
+                         ow_conf[i].OneWirePin, &ow_conf[i].owflag,
+                         &ow_conf[i].temp_cnt, ds18b20[i].id, i);
+
+            if (ow_conf[i].owflag && ow_conf[i].temp_cnt > 0) {
+              ds18b20[i].onoff = 1;
+              ds18b20[i].numsens = ow_conf[i].temp_cnt;
+              for (uint8_t k = 0; k < ds18b20[i].numsens; k++) {
+                ds18b20[i].sensors[k].valid = true;
+                ds18b20[i].sensors[k].errorflg = false;
+              }
+              printf("[INFO] DS18B20 bus idx %d REINIT OK - %d sensors found!\r\n",
+                     i, ds18b20[i].numsens);
+            } else {
+              /* Не удалось — снова отключаем, попробуем через DS18B20_REINIT_INTERVAL_MS */
+              ds18b20[i].auto_disabled = 1;
+              printf("[WARN] DS18B20 bus idx %d reinit FAILED — will retry in %d sec.\r\n",
+                     i, DS18B20_REINIT_INTERVAL_MS / 1000);
+            }
+          }
         }
       }
     }
@@ -2635,6 +2676,9 @@ void StartPIDTask(void *argument)
       float T = pid_read_temperature(i);
       if (T >= -100.0f) {
           PidConf[i].tmpcur = T;
+          PidConf[i].stale_cnt = 0;  /* Сброс — датчик жив */
+      } else {
+          PidConf[i].stale_cnt++;
       }
 
       /* 2a. Авто-тюн (если запущен) — работает НЕЗАВИСИМО от onoff */
@@ -2647,6 +2691,20 @@ void StartPIDTask(void *argument)
       /* Если PID выключен - глушим ШИМ и интегратор, но переходим к следующему слоту */
       if (!PidConf[i].onoff) {
           if (PidConf[i].pwm_out > 0 || PidConf[i].integral != 0.0f) {
+              PidConf[i].pwm_out = 0;
+              PidConf[i].integral = 0.0f;
+              pid_set_pwm(i, 0);
+          }
+          continue;
+      }
+
+      /* ── Аварийное отключение PWM при потере датчика ── */
+      /* Если датчик не прочитался 5 циклов подряд — АВАРИЙНО глушим ШИМ */
+      #define PID_MAX_STALE_CYCLES  5
+      if (PidConf[i].stale_cnt >= PID_MAX_STALE_CYCLES) {
+          if (PidConf[i].pwm_out > 0) {
+              printf("[PID] SENSOR LOST slot=%d - no valid T for %d cycles! "
+                     "EMERGENCY PWM OFF!\r\n", i, PidConf[i].stale_cnt);
               PidConf[i].pwm_out = 0;
               PidConf[i].integral = 0.0f;
               pid_set_pwm(i, 0);

@@ -310,7 +310,9 @@ void execute_commands(char *cmd_str) {
         value = *cmd - '0';
         cmd += 2; /* пропускаем значение и * */
         valid_format = 1;
-      } else if ((*cmd == 'S' || *cmd == 's') && (*(cmd + 1) == 'L' || *(cmd + 1) == 'l') && *(cmd + 2) == '*') {
+      } else if ((*cmd == 'S' || *cmd == 's') && 
+                 (*(cmd + 1) == 'C' || *(cmd + 1) == 'c') && 
+                 *(cmd + 2) == '*') {
         value = 3;
         cmd += 3;
         valid_format = 1;
@@ -327,8 +329,8 @@ void execute_commands(char *cmd_str) {
       if (valid_format) {
         if (pin >= 0 && pin < NUMPIN) {
           if ((PinsConf[pin].topin == 2 || PinsConf[pin].topin == 10 || PinsConf[pin].topin == 3) && (value >= 0 && value <= 2)) {
-            /* Для типа SECURITY (topin==10) и SWITCH (topin==3) управляем onoff */
-            if (PinsConf[pin].topin == 10 || PinsConf[pin].topin == 3) {
+            /* Для типа SECURITY (topin==10) управляем onoff */
+            if (PinsConf[pin].topin == 10) {
               if (value == 1) PinsConf[pin].onoff = 1;
               else if (value == 0) PinsConf[pin].onoff = 0;
               else if (value == 2) PinsConf[pin].onoff = !PinsConf[pin].onoff;
@@ -367,12 +369,14 @@ void execute_commands(char *cmd_str) {
 
           } else if (PinsConf[pin].topin == 1 && (value >= 3 && value <= 5)) {
             /* Для типа BUTTON (topin==1) обрабатываем нажатие */
-            if (value == 3 && PinsConf[pin].sclick[0] != '\0') {
-              process_actions(PinsConf[pin].sclick);
-            } else if (value == 4 && PinsConf[pin].dclick[0] != '\0') {
-              process_actions(PinsConf[pin].dclick);
-            } else if (value == 5 && PinsConf[pin].lpress[0] != '\0') {
-              process_actions(PinsConf[pin].lpress);
+            if (PinsConf[pin].onoff != 0) {
+              if (value == 3 && PinsConf[pin].sclick[0] != '\0') {
+                process_actions(PinsConf[pin].sclick);
+              } else if (value == 4 && PinsConf[pin].dclick[0] != '\0') {
+                process_actions(PinsConf[pin].dclick);
+              } else if (value == 5 && PinsConf[pin].lpress[0] != '\0') {
+                process_actions(PinsConf[pin].lpress);
+              }
             }
 
             /* Формируем строку "pin:value" и добавляем в vldpins для отчета */
@@ -500,17 +504,32 @@ void send_command_result_sms(void) {
         sec_cnt++;
       } else if (PinsConf[pin_id].topin == 3) {
         /* Switch logic */
-        char entry[16];
+        char entry[24];
+        const char *sw_status;
+        if (PinsConf[pin_id].onoff == 0) {
+            sw_status = "DISABLED";
+        } else {
+            if (action_val == 0) sw_status = "OFF";
+            else if (action_val == 1) sw_status = "ON";
+            else if (action_val == 2) sw_status = "TOGGLE";
+            else sw_status = "OK";
+        }
         snprintf(entry, sizeof(entry), "%s%s:%s", out_cnt > 0 ? "," : "",
-                 pin_number, PinsConf[pin_id].onoff == 1 ? "ON" : "OFF");
+                 pin_number, sw_status);
         strncat(out_buf, entry, sizeof(out_buf) - strlen(out_buf) - 1);
         out_cnt++;
       } else if (PinsConf[pin_id].topin == 1) {
         /* Button logic */
-        char entry[16];
-        const char *btn_act = "SC";
-        if (action_val == 4) btn_act = "DC";
-        else if (action_val == 5) btn_act = "LP";
+        char entry[24];
+        const char *btn_act;
+        if (PinsConf[pin_id].onoff == 0) {
+            btn_act = "DISABLED";
+        } else {
+            if (action_val == 3) btn_act = "SC";
+            else if (action_val == 4) btn_act = "DC";
+            else if (action_val == 5) btn_act = "LP";
+            else btn_act = "OK";
+        }
         snprintf(entry, sizeof(entry), "%s%s:%s", out_cnt > 0 ? "," : "",
                  pin_number, btn_act);
         strncat(out_buf, entry, sizeof(out_buf) - strlen(out_buf) - 1);
@@ -776,7 +795,7 @@ void process_sim800l_data(void) {
 
         } else {
           /* ── Команды формата ID#Action*[...] ── */
-          /* Ищем наличие паттерна "цифры#цифра*" */
+          /* Ищем наличие паттерна "цифры#цифра*" или "цифры#БУКВЫ*" */
           char *p = sms_text;
           bool has_cmd = false;
           while (*p) {
@@ -784,16 +803,35 @@ void process_sim800l_data(void) {
               char *q = p;
               while (*q >= '0' && *q <= '9')
                 q++;
-              if (*q == '#' && *(q + 1) >= '0' && *(q + 1) <= '2' &&
-                  *(q + 2) == '*') {
-                has_cmd = true;
-                break;
+              if (*q == '#') {
+                char c1 = *(q + 1);
+                char c2 = *(q + 2);
+                char c3 = *(q + 3);
+                
+                /* Проверяем: цифра 0-2 и звёздочка */
+                if (c1 >= '0' && c1 <= '2' && c2 == '*') {
+                  has_cmd = true;
+                  break;
+                }
+                
+                /* Проверяем: буквы DC, SC, LP и звёздочка */
+                if ( ((c1 == 'd' || c1 == 'D') && (c2 == 'c' || c2 == 'C') && c3 == '*') ||
+                     ((c1 == 's' || c1 == 'S') && (c2 == 'c' || c2 == 'C') && c3 == '*') ||
+                     ((c1 == 'l' || c1 == 'L') && (c2 == 'p' || c2 == 'P') && c3 == '*') ) {
+                  has_cmd = true;
+                  break;
+                }
               }
             }
             p++;
           }
 
           if (has_cmd) {
+            /* Убираем завершающий '#', если пользователь отправил его по привычке от DTMF */
+            int slen = strlen(sms_text);
+            if (slen >= 2 && sms_text[slen - 1] == '#' && sms_text[slen - 2] == '*') {
+              sms_text[slen - 1] = '\0';
+            }
             memset(vldpins, 0, sizeof(vldpins));
             memset(invpins, 0, sizeof(invpins));
             validcnt = 0;

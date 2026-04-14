@@ -27,12 +27,19 @@ extern TIM_HandleTypeDef htim1;
 #define	_DS18B20_TIMER								htim1
 //###################################################################################
 // Структура для пина с DS18B20
+/* Макс. число последовательных ошибок чтения шины перед авто-отключением */
+#define DS18B20_MAX_BUS_ERRORS       10
+/* Интервал (мс) попытки переинициализации отключённой шины */
+#define DS18B20_REINIT_INTERVAL_MS   60000
+
 typedef struct {
     uint8_t id;          // id пина
     char pin[5];         // Название пина ("PA0")
     uint8_t numsens;     // Количество датчиков на шине
     uint8_t onoff;       // 1-On or 0-OFF
     uint8_t typsensr;    // Тип сенсора 0 - None, 1 - ds18b20, 2 - dht22.
+    uint8_t error_cnt;   // Счётчик последовательных ошибок чтения всей шины
+    uint8_t auto_disabled; // 1 = шина отключена автоматически из-за ошибок
     struct {
         uint8_t addr[8]; // Серийный номер ds18b20
         float temp;      // Текущее значение температуры

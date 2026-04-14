@@ -244,6 +244,16 @@ const TabButton = () => {
                 <td class="border px-4 py-2">30#5*</td>
                 <td class="border px-4 py-2">Аналог 30#LP*. Выполняет LONG PRESS.</td>
               </tr>
+              <tr>
+                <td class="border px-4 py-2">SMS</td>
+                <td class="border px-4 py-2">30#SL*31#DC*#</td>
+                <td class="border px-4 py-2">Можно группировать несколько команд в одну! В конце строки обязательно нужно добавить символ <b>#</b>, чтобы закрыть команду.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">Ответ</td>
+                <td class="border px-4 py-2">DISABLED</td>
+                <td class="border px-4 py-2">Если Главный рубильник (On/Off) выключен, то действие игнорируется, а в ответном SMS придет явно <b>30:DISABLED</b>, а не дефолтное действие.</td>
+              </tr>
             </tbody>
           </table>
           <div class="mt-2 text-sm text-slate-500">
@@ -394,6 +404,16 @@ const TabButton = () => {
                 <td class="border px-4 py-2">DTMF (Call)</td>
                 <td class="border px-4 py-2">30#5*</td>
                 <td class="border px-4 py-2">Same as 30#LP*. Executes LONG PRESS.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">SMS</td>
+                <td class="border px-4 py-2">30#SL*31#DC*#</td>
+                <td class="border px-4 py-2">You can chain multiple commands! You must append the <b>#</b> symbol at the very end of the string.</td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">Response</td>
+                <td class="border px-4 py-2">DISABLED</td>
+                <td class="border px-4 py-2">If the Master switch (On/Off) is disabled, the command will be ignored and the system will reply with <b>30:DISABLED</b> in the SMS.</td>
               </tr>
             </tbody>
           </table>
