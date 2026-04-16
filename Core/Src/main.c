@@ -2801,9 +2801,53 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
+  /* Диагностика: кто вызвал Error_Handler? */
   __disable_irq();
+
+  /* Прямой вывод в USART3 — без HAL (HAL может быть сломан) */
+  volatile uint32_t *ISR = (volatile uint32_t *)(0x40004800 + 0x1C);
+  volatile uint32_t *TDR = (volatile uint32_t *)(0x40004800 + 0x28);
+
+  const char *msg = "\r\n\r\n!!! Error_Handler() called !!!\r\n  Caller LR = 0x";
+  while (*msg) {
+    volatile uint32_t t = 2000000;
+    while (!((*ISR) & (1 << 7)) && --t) {}
+    *TDR = (uint32_t)*msg++;
+  }
+
+  /* Выводим адрес вызывающей функции */
+  uint32_t lr = (uint32_t)__builtin_return_address(0);
+  const char hex[] = "0123456789ABCDEF";
+  for (int i = 28; i >= 0; i -= 4) {
+    volatile uint32_t t = 2000000;
+    while (!((*ISR) & (1 << 7)) && --t) {}
+    *TDR = (uint32_t)hex[(lr >> i) & 0xF];
+  }
+
+  const char *msg2 = "\r\n  Use: arm-none-eabi-addr2line -e firmware.elf 0x";
+  while (*msg2) {
+    volatile uint32_t t = 2000000;
+    while (!((*ISR) & (1 << 7)) && --t) {}
+    *TDR = (uint32_t)*msg2++;
+  }
+  for (int i = 28; i >= 0; i -= 4) {
+    volatile uint32_t t = 2000000;
+    while (!((*ISR) & (1 << 7)) && --t) {}
+    *TDR = (uint32_t)hex[(lr >> i) & 0xF];
+  }
+  const char *msg3 = "\r\n  System halted. All 3 LEDs blink.\r\n";
+  while (*msg3) {
+    volatile uint32_t t = 2000000;
+    while (!((*ISR) & (1 << 7)) && --t) {}
+    *TDR = (uint32_t)*msg3++;
+  }
+
+  /* Мигание ВСЕХ 3 LED — паттерн Error_Handler */
   while (1) {
+    HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
+    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+    HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+    for(volatile uint32_t i = 0; i < 500000; i++);
   }
   /* USER CODE END Error_Handler_Debug */
 }
