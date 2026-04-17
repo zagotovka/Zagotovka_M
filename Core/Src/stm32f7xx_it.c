@@ -310,6 +310,12 @@ static void fault_report(const char *fault_name, uint32_t *stack_ptr) {
   fault_puts("══════════════════════════════════════════════════════════════\n\n");
 }
 
+/* C-обработчик для HardFault, вызываемый из ASM-обёртки */
+static void fault_handler_c(uint32_t *sp) __attribute__((used));
+static void fault_handler_c(uint32_t *sp) {
+  fault_report("HardFault (escalated from configurable fault)", sp);
+}
+
 /*
  * ASM-обёртка: извлекает PSP или MSP в зависимости от EXC_RETURN.LR[2]
  * и передаёт как аргумент в C-функцию.
@@ -366,28 +372,6 @@ void NMI_Handler(void)
 /**
   * @brief This function handles Hard fault interrupt.
   */
-/* C-обработчик, вызывается из ASM-обёртки с указателем на стек-фрейм */
-void fault_handler_c(uint32_t *stack_frame);
-void fault_handler_c(uint32_t *stack_frame) {
-  /* Определяем тип fault по регистрам */
-  volatile uint32_t cfsr = *(volatile uint32_t *)0xE000ED28;
-  volatile uint32_t hfsr = *(volatile uint32_t *)0xE000ED2C;
-  const char *name = "HardFault";
-  if (hfsr & (1 << 30)) {
-    /* FORCED — escalated из configurable fault */
-    if (cfsr & 0x000000FF) name = "HardFault (escalated MemManage)";
-    else if (cfsr & 0x0000FF00) name = "HardFault (escalated BusFault)";
-    else if (cfsr & 0x00FF0000) name = "HardFault (escalated UsageFault)";
-    else name = "HardFault (FORCED, unknown sub-fault)";
-  }
-  fault_report(name, stack_frame);
-  /* Мигание LD3 (красный) быстро — паттерн HardFault */
-  while (1) {
-    HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-    for(volatile uint32_t i = 0; i < 200000; i++);
-  }
-}
-
 void HardFault_Handler(void)
 {
   /* USER CODE BEGIN HardFault_IRQn 0 */

@@ -24,6 +24,12 @@
 #include <errno.h>
 #include <stdint.h>
 
+/* 
+ * Отключаем весь системный sysmem.c, 
+ * так как мы реализовали свой _sbrk (через FreeRTOS) в syscalls.c 
+ */
+#if 0
+
 /**
  * Pointer to the current high watermark of the heap usage
  */
@@ -77,3 +83,4 @@ void *_sbrk(ptrdiff_t incr)
 
   return (void *)prev_heap_end;
 }
+#endif

@@ -230,6 +230,13 @@ const osThreadAttr_t PIDTask_attributes = {
   .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+/* Definitions for my_DgnTask */
+osThreadId_t my_DgnTaskHandle;
+const osThreadAttr_t my_DgnTask_attributes = {
+  .name = "my_DgnTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
 /* Definitions for outputQueue */
 osMessageQueueId_t outputQueueHandle;
 const osMessageQueueAttr_t outputQueue_attributes = {
@@ -278,6 +285,7 @@ void StartServiceTask(void *argument);
 void StartSIM800LTask(void *argument);
 void StartSecurityTask(void *argument);
 void StartPIDTask(void *argument);
+void StartDgnTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -722,6 +730,9 @@ int main(void)
 
   /* creation of PIDTask */
   PIDTaskHandle = osThreadNew(StartPIDTask, NULL, &PIDTask_attributes);
+
+  /* creation of my_DgnTask */
+  my_DgnTaskHandle = osThreadNew(StartDgnTask, NULL, &my_DgnTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -1300,6 +1311,7 @@ void StartConfigTask(void *argument)
           xTaskNotifyGive(ds18b20TaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ ds18b20
           xTaskNotifyGive(dht22TaskHandle);   // И ВКЛЮЧАЕМ ЗАДАЧУ dht22
           xTaskNotifyGive(PIDTaskHandle);     // И ВКЛЮЧАЕМ ЗАДАЧУ PIDTask
+          xTaskNotifyGive(my_DgnTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ DgnTask
 
         } else { // Файл "pins.ini" не существует, создаем его и записываем
                  // данные
@@ -1318,6 +1330,7 @@ void StartConfigTask(void *argument)
           xTaskNotifyGive(dht22TaskHandle);    // ВКЛЮЧАЕМ ЗАДАЧУ dht22
           xTaskNotifyGive(SecurityTaskHandle); // ВКЛЮЧАЕМ ЗАДАЧУ SecurityTask
           xTaskNotifyGive(PIDTaskHandle);      // ВКЛЮЧАЕМ ЗАДАЧУ PIDTask
+          xTaskNotifyGive(my_DgnTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ DgnTask
         }
         usbflag = 0;
       }
@@ -2771,6 +2784,55 @@ void StartPIDTask(void *argument)
     osDelay(50);  /* базовый тик 50 мс, реальный Ts контролируется per-slot */
   }
   /* USER CODE END StartPIDTask */
+}
+
+/* USER CODE BEGIN Header_StartDgnTask */
+/**
+* @brief Function implementing the my_DgnTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* Функция диагностики памяти (создана для устранения GNU C nested function) */
+static void heap_diagnostic(void)
+{
+    static unsigned last_free = 0;
+    static unsigned last_min_ever = 0;
+
+    unsigned current_free = (unsigned)xPortGetFreeHeapSize();
+    unsigned current_min = (unsigned)xPortGetMinimumEverFreeHeapSize();
+
+    /* Печатаем только если показатели изменились! */
+    if (current_free != last_free || current_min != last_min_ever) {
+        printf("\r\n=== MEMORY DIAGNOSTIC ===\r\n");
+        printf("FreeRTOS free now:  %u B\r\n", current_free);
+        printf("FreeRTOS min ever:  %u B\r\n", current_min);
+        printf("=========================\r\n");
+
+        /* Запоминаем новые значения */
+        last_free = current_free;
+        last_min_ever = current_min;
+    }
+}
+/* USER CODE END Header_StartDgnTask */
+void StartDgnTask(void *argument)
+{
+  /* USER CODE BEGIN StartDgnTask */
+  /* Немного ждём после загрузки, чтобы сеть успела подняться */
+  osDelay(5000);
+  heap_diagnostic();
+
+  /* Infinite loop */
+  for(;;)
+  {
+      /* 
+       * Ожидаем уведомления от других кусков кода (например HTTP/SMS)
+       * с таймаутом 10000 мс (10 секунд).
+       * Если уведомление пришло — выводим сразу, иначе — раз в 10 секунд.
+       */
+      ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(10000));
+      heap_diagnostic();
+  }
+  /* USER CODE END StartDgnTask */
 }
 
 /**

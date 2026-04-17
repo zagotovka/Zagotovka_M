@@ -30,6 +30,9 @@
 #include <sys/time.h>
 #include <sys/times.h>
 
+#include <stdint.h>
+#include "FreeRTOS.h"
+#include "task.h"
 
 /* Variables */
 extern int __io_putchar(int ch) __attribute__((weak));
@@ -39,6 +42,58 @@ extern int __io_getchar(void) __attribute__((weak));
 char *__env[1] = { 0 };
 char **environ = __env;
 
+/*
+ * _sbrk: перенаправляет newlib-nano heap на FreeRTOS pvPortMalloc.
+ *
+ * newlib-nano вызывает _sbrk(increment) для расширения своей арены.
+ * Вместо статического региона из linker script берём блоки из
+ * FreeRTOS heap_4 (configTOTAL_HEAP_SIZE = 192 КБ).
+ *
+ * Вызывается из: malloc/free/realloc/calloc (newlib-nano),
+ * cJSON_Parse, strdup, Mongoose mg_malloc/mg_calloc/mg_realloc.
+ */
+#define SBRK_BLOCK_SIZE  4096U  /* гранулярность запроса к FreeRTOS heap */
+
+void *_sbrk(ptrdiff_t increment)
+{
+    static uint8_t *heap_ptr   = NULL;
+    static uint8_t *heap_limit = NULL;
+    uint8_t        *prev_ptr;
+
+    taskENTER_CRITICAL();
+
+    if (increment == 0)
+    {
+        taskEXIT_CRITICAL();
+        return (void *)(heap_ptr != NULL ? heap_ptr : (uint8_t *)0);
+    }
+
+    if (heap_ptr == NULL || (heap_ptr + increment) > heap_limit)
+    {
+        size_t request = ((size_t)increment > SBRK_BLOCK_SIZE)
+                         ? (size_t)increment
+                         : SBRK_BLOCK_SIZE;
+
+        uint8_t *block = (uint8_t *)pvPortMalloc(request);
+
+        if (block == NULL)
+        {
+            /* FreeRTOS heap исчерпан — стандартный признак ошибки _sbrk */
+            taskEXIT_CRITICAL();
+            errno = ENOMEM;
+            return (void *)-1;
+        }
+
+        heap_ptr   = block;
+        heap_limit = block + request;
+    }
+
+    prev_ptr  = heap_ptr;
+    heap_ptr += increment;
+
+    taskEXIT_CRITICAL();
+    return (void *)prev_ptr;
+}
 
 /* Functions */
 void initialise_monitor_handles()

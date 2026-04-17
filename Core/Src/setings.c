@@ -17,6 +17,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "FreeRTOS.h"
+#include "cmsis_os2.h"
+extern osThreadId_t my_DgnTaskHandle;
+
 // char fsbuffer[35000] = { 0 };//50500/35500 Размер fsbuffer он должен быть
 // достаточным для хранения всего JSON-файла для GetPinConfig().
 char currentChar; // Альтерантива fsbuffer! Считываем файлы "settings.ini",
@@ -1387,7 +1391,7 @@ void GetPinToPin() {
     printf("ERROR: pintopin.ini is not a JSON array!\r\n");
   }
 
-  cJSON_Delete(root);
+  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
   free(jsonBuf);
 }
 
@@ -2315,7 +2319,7 @@ void GetPidConfig() {
 
   cJSON *j_arr = cJSON_GetObjectItem(root, "pid");
   if (!j_arr || !cJSON_IsArray(j_arr)) {
-    cJSON_Delete(root);
+    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
 
@@ -2399,7 +2403,7 @@ void GetPidConfig() {
 
     idx++;
   }
-  cJSON_Delete(root);
+  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
   printf("[PID] Loaded %d slots from pid.ini\r\n", idx);
 }
 

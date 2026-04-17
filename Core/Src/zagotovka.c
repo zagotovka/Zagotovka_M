@@ -28,6 +28,8 @@ extern int day;
 
 /*********************** delay_us() *****************************/
 #include "FreeRTOS.h"
+#include "cmsis_os2.h"
+extern osThreadId_t my_DgnTaskHandle;
 #include "semphr.h"
 #include "task.h"
 
@@ -310,7 +312,7 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
   // Получаем массив data
   cJSON *data = cJSON_GetObjectItemCaseSensitive(json, "data");
   if (data == NULL || !cJSON_IsArray(data)) {
-    cJSON_Delete(json);
+    cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   // Обрабатываем каждый элемент массива data
@@ -327,7 +329,7 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
     }
     i++;
   }
-  cJSON_Delete(json);
+  cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
   uint8_t usbnum = 1; // Сохраянем в "pins.ini"
   xQueueSend(usbQueueHandle, &usbnum, 0);
   usbnum = 2; // Сохраянем в "setings.ini"
@@ -394,7 +396,7 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
   } else {
     printf("Invalid JSON format\n");
   }
-  cJSON_Delete(json);
+  cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 }
 void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -548,13 +550,13 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
   cJSON *id_item = cJSON_GetObjectItem(root, "id");
   if (!cJSON_IsNumber(id_item)) {
     printf("Error: 'id' is not a number or not found\r\n");
-    cJSON_Delete(root);
+    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   uint8_t id = id_item->valueint;
   if (id < 0 || id >= count) {
     printf("switch ID out of bounds %d\r\n", id);
-    cJSON_Delete(root);
+    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   if (strstr(json, "\"ptype\"") != NULL) {
@@ -671,7 +673,7 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
     printf("Unknown JSON type received: %s\n", json);
   }
 
-  cJSON_Delete(root);
+  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 
   // Вывод обновленных значений PinsConf
   //	printf("UPDATED pin ID[%d]: ", id);
@@ -759,13 +761,13 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
   cJSON *id_item = cJSON_GetObjectItem(root, "id");
   if (!cJSON_IsNumber(id_item)) {
     printf("Error: 'id' is not a number or not found\n");
-    cJSON_Delete(root);
+    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   int id = id_item->valueint;
   if (id < 0 || id >= count) {
     printf("button ID out of bounds %d\r\n", id);
-    cJSON_Delete(root);
+    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   cJSON *setrpins_item =
@@ -904,7 +906,7 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
              pins_item->valuestring, PinsInfo[id].pins);
     }
   }
-  cJSON_Delete(root);
+  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 }
 
 void handle_encoder_get(struct mg_connection *c) {
@@ -1048,13 +1050,13 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
   cJSON *id_item = cJSON_GetObjectItem(root, "id");
   if (!cJSON_IsNumber(id_item)) {
     printf("Error: 'id' is not a number or not found\n");
-    cJSON_Delete(root);
+    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   int id = id_item->valueint;
   if (id < 0 || id >= count) {
     printf("encoder ID out of bounds %d\r\n", id);
-    cJSON_Delete(root);
+    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   cJSON *topin_item = cJSON_GetObjectItem(root, "topin");
@@ -1230,7 +1232,7 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
     usbnum = 4;
     xQueueSend(usbQueueHandle, &usbnum, 0);
   }
-  cJSON_Delete(root);
+  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 }
 
 void handle_timers_get(struct mg_connection *c) {
@@ -1290,7 +1292,7 @@ void parse_numline_json(char *json_string, struct dbSettings *SetSettings) {
   } else {
     fprintf(stderr, "Missing or invalid 'numline' in JSON\n");
   }
-  cJSON_Delete(root); // Освобождение памяти, выделенной для JSON-объекта
+  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle); // Освобождение памяти, выделенной для JSON-объекта
   //    printf("parse_numline_json: numline=%u\n", SetSettings->numline);
   usbnum = 2;
   xQueueSend(usbQueueHandle, &usbnum, 0);
@@ -1362,7 +1364,7 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
   if (!cJSON_IsNumber(id_item) || id_item->valueint < 0 ||
       id_item->valueint >= MAXSIZE) {
     fprintf(stderr, "Invalid or missing 'id' in JSON\n");
-    cJSON_Delete(root);
+    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   int id = id_item->valueint;
@@ -1389,7 +1391,7 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
   if (cJSON_IsNumber(onoff_item)) {
     dbCrontxt[id].onoff = (uint8_t)onoff_item->valueint;
   }
-  cJSON_Delete(root);
+  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
   usbnum = 3;
   xQueueSend(usbQueueHandle, &usbnum, 0);
 
@@ -2145,7 +2147,7 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
     current = get_valid_settings(); // Получаем созданные настройки по умолчанию
     if (current == NULL) {
       fprintf(stderr, "Error: Failed to create default settings\n");
-      cJSON_Delete(json);
+      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
       return;
     }
   }
@@ -2318,7 +2320,7 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
     new_settings->connection_mode = connection_mode_json->valueint;
   }
 
-  cJSON_Delete(json);
+  cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 
   // Записываем обновленные настройки во флеш
   if (settings_changed) {
@@ -2421,7 +2423,7 @@ void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm,
         mg_http_reply(c, 400, extra_headers,
                       "{\"status\":false,\"message\":\"Invalid JSON format\"}");
       }
-      cJSON_Delete(root);
+      cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     } else {
       MG_INFO(("Response headers for connection %ld:", c->id));
       log_headers(extra_headers);
@@ -2774,7 +2776,7 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
   if (!cJSON_IsNumber(id) || !cJSON_IsString(pin) || !cJSON_IsNumber(type) ||
       !cJSON_IsNumber(onoff)) {
     fprintf(stderr, "Error: missing or invalid required fields\n");
-    cJSON_Delete(json);
+    cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return false;
   }
   uint8_t sensrtpe = (uint8_t)type->valueint;
@@ -2802,7 +2804,7 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
       target_slot = free_slot; // Используем свободный слот
     } else {
       fprintf(stderr, "Error: no free slots for DS18B20\n");
-      cJSON_Delete(json);
+      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
     // Записываем данные в выбранный слот
@@ -2819,7 +2821,7 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
     uint8_t usbnum = 5;
     xQueueSend(usbQueueHandle, &usbnum, 0);
 
-    cJSON_Delete(json);
+    cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return true;
   } else if (sensrtpe == 2) { // DHT22
     int free_slot = -1;
@@ -2844,7 +2846,7 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
       target_slot = free_slot; // Используем свободный слот
     } else {
       fprintf(stderr, "Error: no free slots for DHT22\n");
-      cJSON_Delete(json);
+      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
     // Записываем данные в выбранный слот
@@ -2860,12 +2862,12 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
     uint8_t usbnum = 5;
     xQueueSend(usbQueueHandle, &usbnum, 0);
 
-    cJSON_Delete(json);
+    cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return true;
   }
   // Если тип датчика неизвестен
   fprintf(stderr, "Error: unknown sensor type\n");
-  cJSON_Delete(json);
+  cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
   return false;
 }
 
@@ -2885,7 +2887,7 @@ bool parse_sensor_json(const char *json_string) {
   }
   if (!cJSON_IsString(sensorNumber)) {
     fprintf(stderr, "Error: Invalid or missing sensorNumber/s_number\n");
-    cJSON_Delete(json);
+    cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return false;
   }
 
@@ -2897,13 +2899,13 @@ bool parse_sensor_json(const char *json_string) {
     cJSON *pin_id = cJSON_GetObjectItemCaseSensitive(json, "id");
     if (!cJSON_IsNumber(pin_id)) {
       fprintf(stderr, "Error: Invalid or missing id for DHT22\n");
-      cJSON_Delete(json);
+      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
     cJSON *pinName = cJSON_GetObjectItemCaseSensitive(json, "pins");
     if (!cJSON_IsString(pinName)) {
       fprintf(stderr, "Error: Invalid or missing pin for DHT22\n");
-      cJSON_Delete(json);
+      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
 
@@ -2922,7 +2924,7 @@ bool parse_sensor_json(const char *json_string) {
     if (!t_dht22) {
       fprintf(stderr, "Error: DHT22 with id %d and pin %s not found\n",
               pin_id->valueint, pinName->valuestring);
-      cJSON_Delete(json);
+      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
 
@@ -2994,7 +2996,7 @@ bool parse_sensor_json(const char *json_string) {
     if (!t_ds18b20 || sensor_index == -1) {
       fprintf(stderr, "Error: DS18B20 with address %s not found\n",
               sensorNumber->valuestring);
-      cJSON_Delete(json);
+      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
 
@@ -3030,7 +3032,7 @@ bool parse_sensor_json(const char *json_string) {
   uint8_t usbnum = 5;
   xQueueSend(usbQueueHandle, &usbnum, 0);
 
-  cJSON_Delete(json);
+  cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
   return true;
 }
 
@@ -3662,13 +3664,13 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
   cJSON *id_item = cJSON_GetObjectItem(root, "id");
   if (!cJSON_IsNumber(id_item)) {
     printf("Error: 'id' is not a number or not found\n");
-    cJSON_Delete(root);
+    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   int id = id_item->valueint;
   if (id < 0 || id >= count) {
     printf("button ID out of bounds %d\r\n", id);
-    cJSON_Delete(root);
+    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   cJSON *ptype_item = cJSON_GetObjectItem(root, "ptype");
@@ -3715,7 +3717,7 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
     printf("MQTT connection lost! \r\n");
   }
 
-  cJSON_Delete(root);
+  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 }
 
 void handle_monitoring_set(struct mg_connection *c,
@@ -5286,12 +5288,12 @@ void parse_pid_json(const char *json) {
     /* id — 1-based */
     cJSON *j_id = cJSON_GetObjectItem(root, "id");
     if (!j_id || !cJSON_IsNumber(j_id)) {
-        cJSON_Delete(root);
+        cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
         return;
     }
     int id = j_id->valueint - 1;  /* 0-based */
     if (id < 0 || id >= PID_MAX_SLOTS) {
-        cJSON_Delete(root);
+        cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
         return;
     }
 
@@ -5372,7 +5374,7 @@ void parse_pid_json(const char *json) {
     }
     /* Для DHT22 — sensor_pin_id берётся из pwm_pin_id пока (TODO: отдельный select) */
 
-    cJSON_Delete(root);
+    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 
     printf("[PID] Slot %d updated: pwm=%d sens=%d preset=%d tmpset=%.1f onoff=%d\r\n",
            id, PidConf[id].pwm_pin_id, (int)PidConf[id].selsens,
@@ -5388,7 +5390,7 @@ void parse_pidline_json(char *json_string, struct dbSettings *settings) {
         settings->pidline = (uint8_t)j_pidline->valueint;
 //        printf("[PID] pidline set to %d\r\n", settings->pidline);
     }
-    cJSON_Delete(root);
+    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 }
 
 /* ──── handle_pid_get: HTTP GET /api/pid/get ──── */
@@ -5919,7 +5921,7 @@ void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
     cJSON *j_action = cJSON_GetObjectItem(root, "action");
 
     if (!j_id || !cJSON_IsNumber(j_id)) {
-        cJSON_Delete(root);
+        cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
         mg_http_reply(c, 400, "Content-Type: application/json\r\n",
                       "{\"error\":\"missing id\"}");
         return;
@@ -5927,7 +5929,7 @@ void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
 
     int id = j_id->valueint - 1; /* 0-based */
     if (id < 0 || id >= PID_MAX_SLOTS) {
-        cJSON_Delete(root);
+        cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
         mg_http_reply(c, 400, "Content-Type: application/json\r\n",
                       "{\"error\":\"invalid id\"}");
         return;
@@ -5944,7 +5946,7 @@ void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
         pid_autotune_start(id);
     }
 
-    cJSON_Delete(root);
+    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     mg_http_reply(c, 200, "Content-Type: application/json\r\n",
                   "{\"status\":\"ok\"}");
 }
