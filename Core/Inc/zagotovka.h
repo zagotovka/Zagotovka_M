@@ -24,6 +24,7 @@
 #include "queue.h"
 
 #define BUFFER_SIZE 10000 //(max Button = 9835 символов, это не точно!)
+extern char jsonbuf[BUFFER_SIZE]; /* Глобальный буфер — определён в zagotovka.c */
 #define ENTER_CRITICAL() taskENTER_CRITICAL()
 #define EXIT_CRITICAL()  taskEXIT_CRITICAL()
 

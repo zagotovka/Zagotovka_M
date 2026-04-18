@@ -78,19 +78,20 @@ void log_headers(const char *headers) {
   }
 
   // Разбиваем строку на отдельные заголовки по "\r\n"
-  char *header_copy =
-      strdup(headers); // Копируем строку для безопасной обработки
-  if (header_copy == NULL) {
-    MG_INFO(("  Failed to allocate memory for header copy"));
-    return;
-  }
+  // Используем стековый буфер вместо strdup (malloc) для предотвращения
+  // фрагментации кучи
+  char header_copy[256];
+  size_t len = strlen(headers);
+  if (len >= sizeof(header_copy))
+    len = sizeof(header_copy) - 1;
+  memcpy(header_copy, headers, len);
+  header_copy[len] = '\0';
 
   char *line = strtok(header_copy, "\r\n");
   while (line != NULL) {
     MG_INFO(("  %s", line));
     line = strtok(NULL, "\r\n");
   }
-  free(header_copy);
 }
 
 /*********************** End delay_us() **************************/
@@ -312,7 +313,9 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
   // Получаем массив data
   cJSON *data = cJSON_GetObjectItemCaseSensitive(json, "data");
   if (data == NULL || !cJSON_IsArray(data)) {
-    cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(json);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   // Обрабатываем каждый элемент массива data
@@ -329,7 +332,9 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
     }
     i++;
   }
-  cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  cJSON_Delete(json);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
   uint8_t usbnum = 1; // Сохраянем в "pins.ini"
   xQueueSend(usbQueueHandle, &usbnum, 0);
   usbnum = 2; // Сохраянем в "setings.ini"
@@ -366,11 +371,11 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
             uint32_t pulse = 0;
             if (onoff != 0) {
               // Восстанавливаем сохранённое значение dvalue
-              pulse = (uint32_t)((uint64_t)PinsConf[idpwm].dvalue
-                       * PinsConf[idpwm].pwmmax / 100ULL);
+              pulse = (uint32_t)((uint64_t)PinsConf[idpwm].dvalue *
+                                 PinsConf[idpwm].pwmmax / 100ULL);
             }
-            __HAL_TIM_SET_COMPARE(&htim[idpwm],
-                                   PinsInfo[idpwm].tim_channel, pulse);
+            __HAL_TIM_SET_COMPARE(&htim[idpwm], PinsInfo[idpwm].tim_channel,
+                                  pulse);
             printf("onoff->PWM pin %d: pulse=%lu\n", idpwm,
                    (unsigned long)pulse);
           }
@@ -396,7 +401,9 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
   } else {
     printf("Invalid JSON format\n");
   }
-  cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  cJSON_Delete(json);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
 }
 void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -550,13 +557,17 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
   cJSON *id_item = cJSON_GetObjectItem(root, "id");
   if (!cJSON_IsNumber(id_item)) {
     printf("Error: 'id' is not a number or not found\r\n");
-    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(root);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   uint8_t id = id_item->valueint;
   if (id < 0 || id >= count) {
     printf("switch ID out of bounds %d\r\n", id);
-    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(root);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   if (strstr(json, "\"ptype\"") != NULL) {
@@ -673,7 +684,9 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
     printf("Unknown JSON type received: %s\n", json);
   }
 
-  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  cJSON_Delete(root);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
 
   // Вывод обновленных значений PinsConf
   //	printf("UPDATED pin ID[%d]: ", id);
@@ -761,13 +774,17 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
   cJSON *id_item = cJSON_GetObjectItem(root, "id");
   if (!cJSON_IsNumber(id_item)) {
     printf("Error: 'id' is not a number or not found\n");
-    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(root);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   int id = id_item->valueint;
   if (id < 0 || id >= count) {
     printf("button ID out of bounds %d\r\n", id);
-    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(root);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   cJSON *setrpins_item =
@@ -906,7 +923,9 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
              pins_item->valuestring, PinsInfo[id].pins);
     }
   }
-  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  cJSON_Delete(root);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
 }
 
 void handle_encoder_get(struct mg_connection *c) {
@@ -957,7 +976,10 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
       }
       offset += snprintf(buffer + offset, buffer_size - offset, "\n    {\n");
       uint8_t encoderb_id = pins_conf[i].encoderb;
-      if (encoderb_id == 0 || encoderb_id > num_pins) { // Мы никогда не используем пин с ID=0 (PA0) в качестве входа EncoderB — StartEncoderTask() его ПРОПУСКАЕТ!
+      if (encoderb_id == 0 ||
+          encoderb_id > num_pins) { // Мы никогда не используем пин с ID=0 (PA0)
+                                    // в качестве входа EncoderB —
+                                    // StartEncoderTask() его ПРОПУСКАЕТ!
         encoderb_id = 255;
       }
       // Найдем связанный PWM-пин и его dvalue
@@ -980,8 +1002,10 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
             break;
         }
       }
-      
-      const char *encb_pin_name = (encoderb_id != 255 && encoderb_id < num_pins) ? pins_info[encoderb_id].pins : "";
+
+      const char *encb_pin_name = (encoderb_id != 255 && encoderb_id < num_pins)
+                                      ? pins_info[encoderb_id].pins
+                                      : "";
 
       offset += snprintf(buffer + offset, buffer_size - offset,
                          "      \"topin\": %d,\n"
@@ -1050,13 +1074,17 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
   cJSON *id_item = cJSON_GetObjectItem(root, "id");
   if (!cJSON_IsNumber(id_item)) {
     printf("Error: 'id' is not a number or not found\n");
-    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(root);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   int id = id_item->valueint;
   if (id < 0 || id >= count) {
     printf("encoder ID out of bounds %d\r\n", id);
-    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(root);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   cJSON *topin_item = cJSON_GetObjectItem(root, "topin");
@@ -1232,7 +1260,9 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
     usbnum = 4;
     xQueueSend(usbQueueHandle, &usbnum, 0);
   }
-  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  cJSON_Delete(root);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
 }
 
 void handle_timers_get(struct mg_connection *c) {
@@ -1292,7 +1322,10 @@ void parse_numline_json(char *json_string, struct dbSettings *SetSettings) {
   } else {
     fprintf(stderr, "Missing or invalid 'numline' in JSON\n");
   }
-  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle); // Освобождение памяти, выделенной для JSON-объекта
+  cJSON_Delete(root);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(
+        my_DgnTaskHandle); // Освобождение памяти, выделенной для JSON-объекта
   //    printf("parse_numline_json: numline=%u\n", SetSettings->numline);
   usbnum = 2;
   xQueueSend(usbQueueHandle, &usbnum, 0);
@@ -1364,7 +1397,9 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
   if (!cJSON_IsNumber(id_item) || id_item->valueint < 0 ||
       id_item->valueint >= MAXSIZE) {
     fprintf(stderr, "Invalid or missing 'id' in JSON\n");
-    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(root);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   int id = id_item->valueint;
@@ -1391,7 +1426,9 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
   if (cJSON_IsNumber(onoff_item)) {
     dbCrontxt[id].onoff = (uint8_t)onoff_item->valueint;
   }
-  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  cJSON_Delete(root);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
   usbnum = 3;
   xQueueSend(usbQueueHandle, &usbnum, 0);
 
@@ -1829,7 +1866,7 @@ static const HTTPSsettings *get_valid_settings(void) {
     }
   }
   if (valid_settings) {
-//    printf("Using settings version: %u\r\n", valid_settings->version);
+    //    printf("Using settings version: %u\r\n", valid_settings->version);
   } else {
     printf("No valid settings found\r\n");
   }
@@ -2147,7 +2184,9 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
     current = get_valid_settings(); // Получаем созданные настройки по умолчанию
     if (current == NULL) {
       fprintf(stderr, "Error: Failed to create default settings\n");
-      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+      cJSON_Delete(json);
+      if (my_DgnTaskHandle)
+        xTaskNotifyGive(my_DgnTaskHandle);
       return;
     }
   }
@@ -2320,7 +2359,9 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
     new_settings->connection_mode = connection_mode_json->valueint;
   }
 
-  cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  cJSON_Delete(json);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
 
   // Записываем обновленные настройки во флеш
   if (settings_changed) {
@@ -2423,7 +2464,9 @@ void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm,
         mg_http_reply(c, 400, extra_headers,
                       "{\"status\":false,\"message\":\"Invalid JSON format\"}");
       }
-      cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+      cJSON_Delete(root);
+      if (my_DgnTaskHandle)
+        xTaskNotifyGive(my_DgnTaskHandle);
     } else {
       MG_INFO(("Response headers for connection %ld:", c->id));
       log_headers(extra_headers);
@@ -2776,7 +2819,9 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
   if (!cJSON_IsNumber(id) || !cJSON_IsString(pin) || !cJSON_IsNumber(type) ||
       !cJSON_IsNumber(onoff)) {
     fprintf(stderr, "Error: missing or invalid required fields\n");
-    cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(json);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return false;
   }
   uint8_t sensrtpe = (uint8_t)type->valueint;
@@ -2804,7 +2849,9 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
       target_slot = free_slot; // Используем свободный слот
     } else {
       fprintf(stderr, "Error: no free slots for DS18B20\n");
-      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+      cJSON_Delete(json);
+      if (my_DgnTaskHandle)
+        xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
     // Записываем данные в выбранный слот
@@ -2821,7 +2868,9 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
     uint8_t usbnum = 5;
     xQueueSend(usbQueueHandle, &usbnum, 0);
 
-    cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(json);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return true;
   } else if (sensrtpe == 2) { // DHT22
     int free_slot = -1;
@@ -2846,7 +2895,9 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
       target_slot = free_slot; // Используем свободный слот
     } else {
       fprintf(stderr, "Error: no free slots for DHT22\n");
-      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+      cJSON_Delete(json);
+      if (my_DgnTaskHandle)
+        xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
     // Записываем данные в выбранный слот
@@ -2862,12 +2913,16 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
     uint8_t usbnum = 5;
     xQueueSend(usbQueueHandle, &usbnum, 0);
 
-    cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(json);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return true;
   }
   // Если тип датчика неизвестен
   fprintf(stderr, "Error: unknown sensor type\n");
-  cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  cJSON_Delete(json);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
   return false;
 }
 
@@ -2887,7 +2942,9 @@ bool parse_sensor_json(const char *json_string) {
   }
   if (!cJSON_IsString(sensorNumber)) {
     fprintf(stderr, "Error: Invalid or missing sensorNumber/s_number\n");
-    cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(json);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return false;
   }
 
@@ -2899,13 +2956,17 @@ bool parse_sensor_json(const char *json_string) {
     cJSON *pin_id = cJSON_GetObjectItemCaseSensitive(json, "id");
     if (!cJSON_IsNumber(pin_id)) {
       fprintf(stderr, "Error: Invalid or missing id for DHT22\n");
-      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+      cJSON_Delete(json);
+      if (my_DgnTaskHandle)
+        xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
     cJSON *pinName = cJSON_GetObjectItemCaseSensitive(json, "pins");
     if (!cJSON_IsString(pinName)) {
       fprintf(stderr, "Error: Invalid or missing pin for DHT22\n");
-      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+      cJSON_Delete(json);
+      if (my_DgnTaskHandle)
+        xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
 
@@ -2924,7 +2985,9 @@ bool parse_sensor_json(const char *json_string) {
     if (!t_dht22) {
       fprintf(stderr, "Error: DHT22 with id %d and pin %s not found\n",
               pin_id->valueint, pinName->valuestring);
-      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+      cJSON_Delete(json);
+      if (my_DgnTaskHandle)
+        xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
 
@@ -2996,7 +3059,9 @@ bool parse_sensor_json(const char *json_string) {
     if (!t_ds18b20 || sensor_index == -1) {
       fprintf(stderr, "Error: DS18B20 with address %s not found\n",
               sensorNumber->valuestring);
-      cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+      cJSON_Delete(json);
+      if (my_DgnTaskHandle)
+        xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
 
@@ -3032,7 +3097,9 @@ bool parse_sensor_json(const char *json_string) {
   uint8_t usbnum = 5;
   xQueueSend(usbQueueHandle, &usbnum, 0);
 
-  cJSON_Delete(json); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  cJSON_Delete(json);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
   return true;
 }
 
@@ -3370,12 +3437,15 @@ void action_handler(uint8_t button_id, const char *action_str,
     //        specified.\n");
     return;
   }
-  char *str = strdup(action_str);
-  if (str == NULL) {
-    printf("Failed to allocate memory for string duplication.\n");
-    return;
-  }
-  //    printf("Duplicated string: %s\n", str);
+  /* Используем стековый буфер вместо strdup (malloc) — макс. 125 байт из db.h
+   */
+  char str_buf[128];
+  size_t slen = strlen(action_str);
+  if (slen >= sizeof(str_buf))
+    slen = sizeof(str_buf) - 1;
+  memcpy(str_buf, action_str, slen);
+  str_buf[slen] = '\0';
+  char *str = str_buf;
   char *token = strtok(str, ",");
   while (token != NULL) {
     //        printf("Current token: %s\n", token);
@@ -3389,49 +3459,61 @@ void action_handler(uint8_t button_id, const char *action_str,
       case 0:
       case 1:
       case 2:
-        if (id < 0 || id >= NUMPIN) break; // Защита от выхода за пределы массива
-        
+        if (id < 0 || id >= NUMPIN)
+          break; // Защита от выхода за пределы массива
+
         if (PinsConf[id].topin == 3) {
-          /* Если рубильник (Master Enable) отключен, игнорируем любые команды! */
+          /* Если рубильник (Master Enable) отключен, игнорируем любые команды!
+           */
           if (PinsConf[id].onoff == 0) {
-              break;
+            break;
           }
-          
-          /* Это выключатель (Switch). Команда применяется КО ВСЕМ привязанным устройствам */
+
+          /* Это выключатель (Switch). Команда применяется КО ВСЕМ привязанным
+           * устройствам */
           for (int i = 0; i < NUMPINLINKS; i++) {
             if (PinsLinks[i].idin == id) {
-              int out_id = PinsLinks[i].idout; // Используем int, чтобы корректно обработать -1
-              
+              int out_id =
+                  PinsLinks[i]
+                      .idout; // Используем int, чтобы корректно обработать -1
+
               /* Защита от мусора или неинициализированных связей (-1) */
               if (out_id < 0 || out_id >= NUMPIN) {
-                  continue; 
+                continue;
               }
-              
+
               /* Если привязанное устройство это ШИМ (PWM) */
               if (PinsConf[out_id].topin == 5) {
                 uint32_t pulse = 0;
                 /* Вычисляем новое состояние для ШИМ */
                 uint8_t new_state = action;
                 if (action == 2) {
-                   /* Для TOGGLE ШИМа нужно знать его текущее состояние. 
-                      Поскольку onoff может не отражать реальности, используем логику из onoffid */
-                   new_state = !PinsConf[out_id].onoff; // Инвертируем виртуальное состояние
-                   PinsConf[out_id].onoff = new_state;
+                  /* Для TOGGLE ШИМа нужно знать его текущее состояние.
+                     Поскольку onoff может не отражать реальности, используем
+                     логику из onoffid */
+                  new_state = !PinsConf[out_id]
+                                   .onoff; // Инвертируем виртуальное состояние
+                  PinsConf[out_id].onoff = new_state;
                 } else {
-                   PinsConf[out_id].onoff = action;
+                  PinsConf[out_id].onoff = action;
                 }
-                
+
                 if (new_state != 0) {
-                  pulse = (uint32_t)((uint64_t)PinsConf[out_id].dvalue * PinsConf[out_id].pwmmax / 100ULL);
+                  pulse = (uint32_t)((uint64_t)PinsConf[out_id].dvalue *
+                                     PinsConf[out_id].pwmmax / 100ULL);
                 }
-                __HAL_TIM_SET_COMPARE(&htim[out_id], PinsInfo[out_id].tim_channel, pulse);
-              } 
+                __HAL_TIM_SET_COMPARE(&htim[out_id],
+                                      PinsInfo[out_id].tim_channel, pulse);
+              }
               /* Если обычное устройство (Реле и т.д.) */
               else {
                 data_pin.id = out_id;
                 data_pin.action = action;
-                if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) != pdPASS) {
-                  printf("Failed to send cascaded command %d for ID %d to queue\n", action, out_id);
+                if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) !=
+                    pdPASS) {
+                  printf(
+                      "Failed to send cascaded command %d for ID %d to queue\n",
+                      action, out_id);
                 }
               }
             }
@@ -3441,15 +3523,17 @@ void action_handler(uint8_t button_id, const char *action_str,
           data_pin.id = id;
           data_pin.action = action;
           if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) != pdPASS) {
-            printf("Failed to send command %d for ID %d to queue\n", action, id);
+            printf("Failed to send command %d for ID %d to queue\n", action,
+                   id);
           }
         }
         break;
       case 3:
       case 4:
       case 5:
-        /* Кнопочные события (SC, DC, LP) уже выполнены через process_actions в GSM-обработчике.
-           Сюда они попадают только ради отчётов в SMS. Просто игнорируем! */
+        /* Кнопочные события (SC, DC, LP) уже выполнены через process_actions в
+           GSM-обработчике. Сюда они попадают только ради отчётов в SMS. Просто
+           игнорируем! */
         break;
       default:
         printf("Unknown action %d for ID %d\n", action, id);
@@ -3460,7 +3544,6 @@ void action_handler(uint8_t button_id, const char *action_str,
     }
     token = strtok(NULL, ",");
   }
-  free(str);
   //    printf("Finished processing %s actions for button %d\n", press_type,
   //    button_id);
 }
@@ -3529,7 +3612,7 @@ void Check_SunriseSunset_Actions() {
       printf("Invalid sunrise settings \r\n");
     }
   } else if (!SetSettings.onsunrise) {
-//    printf("DEBUG: Sunrise actions are disabled \r\n");
+    //    printf("DEBUG: Sunrise actions are disabled \r\n");
   }
   if (SetSettings.onsunset && !sset_ok) {
     char offstr[20], acts[100];
@@ -3550,7 +3633,7 @@ void Check_SunriseSunset_Actions() {
       printf("Invalid sunset settings \r\n");
     }
   } else if (!SetSettings.onsunset) {
-//    printf("DEBUG: Sunset actions are disabled \r\n");
+    //    printf("DEBUG: Sunset actions are disabled \r\n");
   }
 }
 void processPins(
@@ -3664,13 +3747,17 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
   cJSON *id_item = cJSON_GetObjectItem(root, "id");
   if (!cJSON_IsNumber(id_item)) {
     printf("Error: 'id' is not a number or not found\n");
-    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(root);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   int id = id_item->valueint;
   if (id < 0 || id >= count) {
     printf("button ID out of bounds %d\r\n", id);
-    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    cJSON_Delete(root);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
   cJSON *ptype_item = cJSON_GetObjectItem(root, "ptype");
@@ -3717,7 +3804,9 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
     printf("MQTT connection lost! \r\n");
   }
 
-  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  cJSON_Delete(root);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
 }
 
 void handle_monitoring_set(struct mg_connection *c,
@@ -3759,11 +3848,15 @@ void process_actions(
     printf("No actions to process\n");
     return;
   }
-  char *str = strdup(actions); // Создаем копию строки для безопасного разбора
-  if (str == NULL) {
-    printf("Failed to allocate memory for actions string\n");
-    return;
-  }
+  /* Используем стековый буфер вместо strdup (malloc) — макс. 125 байт из db.h
+   */
+  char str_buf[128];
+  size_t slen = strlen(actions);
+  if (slen >= sizeof(str_buf))
+    slen = sizeof(str_buf) - 1;
+  memcpy(str_buf, actions, slen);
+  str_buf[slen] = '\0';
+  char *str = str_buf;
   data_pin_t data_pin; // Временная структура для отправки в очередь
   char *token =
       strtok(str, ", "); // Разбираем строку действий по разделителю ","
@@ -3795,7 +3888,7 @@ void process_actions(
     }
     token = strtok(NULL, ", ");
   }
-  free(str);
+  /* str — стековый буфер, free не нужен */
 }
 
 void check_DHT22_limits(void) {
@@ -3934,14 +4027,16 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
                ds18b20[pin].pin, pin);
       }
       /* Помечаем все сенсоры невалидными */
-      for (uint8_t s = 0; s < ds18b20[pin].numsens && s < MAX_DS18B20_PER_PIN; s++) {
+      for (uint8_t s = 0; s < ds18b20[pin].numsens && s < MAX_DS18B20_PER_PIN;
+           s++) {
         ds18b20[pin].sensors[s].valid = false;
       }
       /* Авто-отключение шины при DS18B20_MAX_BUS_ERRORS подряд */
       if (ds18b20[pin].error_cnt >= DS18B20_MAX_BUS_ERRORS) {
         ds18b20[pin].onoff = 0;
         ds18b20[pin].auto_disabled = 1;
-        printf("[WARN] DS18B20 bus %s (pin idx %d): AUTO-DISABLED after %d consecutive errors! "
+        printf("[WARN] DS18B20 bus %s (pin idx %d): AUTO-DISABLED after %d "
+               "consecutive errors! "
                "Will retry in %d sec.\r\n",
                ds18b20[pin].pin, pin, ds18b20[pin].error_cnt,
                DS18B20_REINIT_INTERVAL_MS / 1000);
@@ -3967,14 +4062,16 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
       printf("[ERROR] Conversion timeout on pin %s (index %d)!\r\n",
              ds18b20[pin].pin, pin);
       ds18b20[pin].error_cnt++;
-      for (uint8_t s = 0; s < ds18b20[pin].numsens && s < MAX_DS18B20_PER_PIN; s++) {
+      for (uint8_t s = 0; s < ds18b20[pin].numsens && s < MAX_DS18B20_PER_PIN;
+           s++) {
         ds18b20[pin].sensors[s].valid = false;
       }
       /* Авто-отключение при слишком многих подряд ошибках */
       if (ds18b20[pin].error_cnt >= DS18B20_MAX_BUS_ERRORS) {
         ds18b20[pin].onoff = 0;
         ds18b20[pin].auto_disabled = 1;
-        printf("[WARN] DS18B20 bus %s (pin idx %d): AUTO-DISABLED after %d errors!\r\n",
+        printf("[WARN] DS18B20 bus %s (pin idx %d): AUTO-DISABLED after %d "
+               "errors!\r\n",
                ds18b20[pin].pin, pin, ds18b20[pin].error_cnt);
       }
       osDelay(10);
@@ -4063,13 +4160,14 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
 
     /* ── 4. Обновление счётчика ошибок ── */
     if (any_valid) {
-      ds18b20[pin].error_cnt = 0;  /* Сброс — шина работает */
+      ds18b20[pin].error_cnt = 0; /* Сброс — шина работает */
     } else {
       ds18b20[pin].error_cnt++;
       if (ds18b20[pin].error_cnt >= DS18B20_MAX_BUS_ERRORS) {
         ds18b20[pin].onoff = 0;
         ds18b20[pin].auto_disabled = 1;
-        printf("[WARN] DS18B20 bus %s (pin idx %d): AUTO-DISABLED - all sensors invalid %d times!\r\n",
+        printf("[WARN] DS18B20 bus %s (pin idx %d): AUTO-DISABLED - all "
+               "sensors invalid %d times!\r\n",
                ds18b20[pin].pin, pin, ds18b20[pin].error_cnt);
       }
     }
@@ -5172,7 +5270,6 @@ bool https_set_connection_mode(uint8_t mode) {
   return update_and_write_settings(new_settings);
 }
 
-
 // Функция проверки наличия действительных настроек во Flash
 bool has_valid_settings(void) { return get_valid_settings() != NULL; }
 
@@ -5180,774 +5277,842 @@ bool has_valid_settings(void) { return get_valid_settings() != NULL; }
 
 /* ──── Таблица пресетов (из Plan_PID.txt) ──── */
 typedef struct {
-    uint16_t Ts_ms;
-    float    lambda_factor;
-    uint8_t  pwm_start;
-    uint8_t  pwm_max;
-    float    temp_max;
-    float    temp_min;
-    uint16_t pause_sec;
-    float    Kp;
-    float    Ki;
-    float    Kd;
+  uint16_t Ts_ms;
+  float lambda_factor;
+  uint8_t pwm_start;
+  uint8_t pwm_max;
+  float temp_max;
+  float temp_min;
+  uint16_t pause_sec;
+  float Kp;
+  float Ki;
+  float Kd;
 } PidPreset_t;
 
 static const PidPreset_t pid_presets[] = {
-  /* 0 - placeholder */  { 1000, 0.5f, 30, 100, 100.0f, -55.0f, 0,   0.0f, 0.0f, 0.0f },
-  /* 1 - Паяльная ст. */ { 200,  0.3f, 30, 100, 125.0f, -55.0f, 0,   10.0f, 0.5f, 1.0f },
-  /* 2 - Кулер        */ { 1000, 0.5f, 20, 100, 70.0f,  -55.0f, 0,  -5.0f, -0.1f, 0.0f },
-  /* 3 - 3D-принтер   */ { 500,  0.4f, 30, 100, 120.0f, 0.0f,   0,   5.0f, 0.2f, 0.5f },
-  /* 4 - Форточка     */ { 2000, 0.5f, 20, 100, 60.0f,  -55.0f, 0,  -2.0f, -0.05f,0.0f },
-  /* 5 - Тёплый пол   */ { 5000, 0.8f, 20, 80,  45.0f,  0.0f,   0,   2.0f, 0.05f, 0.0f },
-  /* 6 - Холодильник  */ { 5000, 1.0f, 40, 100, 100.0f, -55.0f, 180,-10.0f,-0.2f, 0.0f },
-  /* 7 - Аквариум     */ { 3000, 0.6f, 20, 80,  80.0f,  0.0f,   0,   2.0f, 0.05f, 0.0f },
-  /* 8 - Инкубатор    */ { 3000, 0.4f, 20, 60,  45.0f,  0.0f,   0,   5.0f, 0.1f,  0.0f },
-  /* 9 - Теплица      */ { 5000, 0.7f, 20, 80,  50.0f,  -55.0f, 0,   2.0f, 0.05f, 0.0f },
+    /* 0 - placeholder */ {1000, 0.5f, 30, 100, 100.0f, -55.0f, 0, 0.0f, 0.0f,
+                           0.0f},
+    /* 1 - Паяльная ст. */
+    {200, 0.3f, 30, 100, 125.0f, -55.0f, 0, 10.0f, 0.5f, 1.0f},
+    /* 2 - Кулер        */
+    {1000, 0.5f, 20, 100, 70.0f, -55.0f, 0, -5.0f, -0.1f, 0.0f},
+    /* 3 - 3D-принтер   */
+    {500, 0.4f, 30, 100, 120.0f, 0.0f, 0, 5.0f, 0.2f, 0.5f},
+    /* 4 - Форточка     */
+    {2000, 0.5f, 20, 100, 60.0f, -55.0f, 0, -2.0f, -0.05f, 0.0f},
+    /* 5 - Тёплый пол   */
+    {5000, 0.8f, 20, 80, 45.0f, 0.0f, 0, 2.0f, 0.05f, 0.0f},
+    /* 6 - Холодильник  */
+    {5000, 1.0f, 40, 100, 100.0f, -55.0f, 180, -10.0f, -0.2f, 0.0f},
+    /* 7 - Аквариум     */
+    {3000, 0.6f, 20, 80, 80.0f, 0.0f, 0, 2.0f, 0.05f, 0.0f},
+    /* 8 - Инкубатор    */
+    {3000, 0.4f, 20, 60, 45.0f, 0.0f, 0, 5.0f, 0.1f, 0.0f},
+    /* 9 - Теплица      */
+    {5000, 0.7f, 20, 80, 50.0f, -55.0f, 0, 2.0f, 0.05f, 0.0f},
 };
 #define PID_PRESET_COUNT (sizeof(pid_presets) / sizeof(pid_presets[0]))
 
 /* ──── apply_pid_preset: копирует параметры пресета в слот ──── */
 static void apply_pid_preset(int slot, uint8_t preset_idx) {
-    if (preset_idx == 0 || preset_idx >= PID_PRESET_COUNT) return;
-    const PidPreset_t *p = &pid_presets[preset_idx];
-    PidConf[slot].preset       = preset_idx;
-    PidConf[slot].Ts_ms        = p->Ts_ms;
-    PidConf[slot].lambda_factor= p->lambda_factor;
-    PidConf[slot].pwm_start    = p->pwm_start;
-    PidConf[slot].pwm_max      = p->pwm_max;
-    PidConf[slot].temp_max     = p->temp_max;
-    PidConf[slot].temp_min     = p->temp_min;
-    PidConf[slot].pause_sec    = p->pause_sec;
-    /* Устанавливаем типовые Kp/Ki/Kd для проверки работы */
-    PidConf[slot].Kp           = p->Kp;
-    PidConf[slot].Ki           = p->Ki;
-    PidConf[slot].Kd           = p->Kd;
+  if (preset_idx == 0 || preset_idx >= PID_PRESET_COUNT)
+    return;
+  const PidPreset_t *p = &pid_presets[preset_idx];
+  PidConf[slot].preset = preset_idx;
+  PidConf[slot].Ts_ms = p->Ts_ms;
+  PidConf[slot].lambda_factor = p->lambda_factor;
+  PidConf[slot].pwm_start = p->pwm_start;
+  PidConf[slot].pwm_max = p->pwm_max;
+  PidConf[slot].temp_max = p->temp_max;
+  PidConf[slot].temp_min = p->temp_min;
+  PidConf[slot].pause_sec = p->pause_sec;
+  /* Устанавливаем типовые Kp/Ki/Kd для проверки работы */
+  PidConf[slot].Kp = p->Kp;
+  PidConf[slot].Ki = p->Ki;
+  PidConf[slot].Kd = p->Kd;
 }
 
 void apply_pid_preset_extern(int slot, uint8_t preset_idx) {
-    apply_pid_preset(slot, preset_idx);
+  apply_pid_preset(slot, preset_idx);
 }
 
 /* ──── gen_pid_json: формирует JSON для /api/pid/get ──── */
 void gen_pid_json(char *buffer, int buffer_size) {
-    int pos = 0;
-    pos += snprintf(buffer + pos, buffer_size - pos,
-        "{\"lang\":\"%s\",\"pidline\":%d,\"pid\":[", SetSettings.lang, SetSettings.pidline);
+  int pos = 0;
+  pos += snprintf(buffer + pos, buffer_size - pos,
+                  "{\"lang\":\"%s\",\"pidline\":%d,\"pid\":[", SetSettings.lang,
+                  SetSettings.pidline);
 
-    for (int i = 0; i < PID_MAX_SLOTS && pos < buffer_size - 100; i++) {
-        if (i > 0) pos += snprintf(buffer + pos, buffer_size - pos, ",");
+  for (int i = 0; i < PID_MAX_SLOTS && pos < buffer_size - 100; i++) {
+    if (i > 0)
+      pos += snprintf(buffer + pos, buffer_size - pos, ",");
 
-        /* Имя PWM-пина и его Duty */
-        const char *pin_name = "";
-        uint8_t pin_id = PidConf[i].pwm_pin_id;
-        int current_duty = 0;
-        if (pin_id > 0 && pin_id < NUMPIN) {
-            pin_name = PinsInfo[pin_id].pins;
-            current_duty = PinsConf[pin_id].dvalue;
-        }
-
-        pos += snprintf(buffer + pos, buffer_size - pos,
-            "{\"id\":%d,\"pins\":\"%s\",\"pinact\":",
-            i + 1, pin_name);
-
-        /* pinact объект */
-        if (pin_id > 0 && pin_id < NUMPIN) {
-            pos += snprintf(buffer + pos, buffer_size - pos,
-                "{\"%s\":%d}", pin_name, pin_id);
-        } else {
-            pos += snprintf(buffer + pos, buffer_size - pos, "{}");
-        }
-
-        pos += snprintf(buffer + pos, buffer_size - pos,
-            ",\"selsens\":\"%d\",\"sernum\":\"%s\",\"presets\":\"%d\""
-            ",\"tmpset\":\"%.1f\",\"tmpcur\":\"%.1f\""
-            ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d"
-            ",\"tune_state\":%d,\"tune_progress\":%d}",
-            (int)PidConf[i].selsens,
-            PidConf[i].sernum,
-            PidConf[i].preset,
-            PidConf[i].tmpset,
-            PidConf[i].tmpcur,
-            current_duty,
-            PidConf[i].info,
-            PidConf[i].onoff,
-            (int)PidConf[i].tune_state,
-            (int)PidConf[i].tune_progress);
+    /* Имя PWM-пина и его Duty */
+    const char *pin_name = "";
+    uint8_t pin_id = PidConf[i].pwm_pin_id;
+    int current_duty = 0;
+    if (pin_id > 0 && pin_id < NUMPIN) {
+      pin_name = PinsInfo[pin_id].pins;
+      current_duty = PinsConf[pin_id].dvalue;
     }
-    pos += snprintf(buffer + pos, buffer_size - pos, "]}");
+
+    pos += snprintf(buffer + pos, buffer_size - pos,
+                    "{\"id\":%d,\"pins\":\"%s\",\"pinact\":", i + 1, pin_name);
+
+    /* pinact объект */
+    if (pin_id > 0 && pin_id < NUMPIN) {
+      pos += snprintf(buffer + pos, buffer_size - pos, "{\"%s\":%d}", pin_name,
+                      pin_id);
+    } else {
+      pos += snprintf(buffer + pos, buffer_size - pos, "{}");
+    }
+
+    pos += snprintf(buffer + pos, buffer_size - pos,
+                    ",\"selsens\":\"%d\",\"sernum\":\"%s\",\"presets\":\"%d\""
+                    ",\"tmpset\":\"%.1f\",\"tmpcur\":\"%.1f\""
+                    ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d"
+                    ",\"tune_state\":%d,\"tune_progress\":%d}",
+                    (int)PidConf[i].selsens, PidConf[i].sernum,
+                    PidConf[i].preset, PidConf[i].tmpset, PidConf[i].tmpcur,
+                    current_duty, PidConf[i].info, PidConf[i].onoff,
+                    (int)PidConf[i].tune_state, (int)PidConf[i].tune_progress);
+  }
+  pos += snprintf(buffer + pos, buffer_size - pos, "]}");
 }
 
 /* ──── parse_pid_json: парсит JSON от /api/pid/set ──── */
 void parse_pid_json(const char *json) {
-    cJSON *root = cJSON_Parse(json);
-    if (!root) {
-        printf("[PID] JSON parse error\r\n");
-        return;
-    }
+  cJSON *root = cJSON_Parse(json);
+  if (!root) {
+    printf("[PID] JSON parse error\r\n");
+    return;
+  }
 
-    /* id — 1-based */
-    cJSON *j_id = cJSON_GetObjectItem(root, "id");
-    if (!j_id || !cJSON_IsNumber(j_id)) {
-        cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
-        return;
-    }
-    int id = j_id->valueint - 1;  /* 0-based */
-    if (id < 0 || id >= PID_MAX_SLOTS) {
-        cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
-        return;
-    }
+  /* id — 1-based */
+  cJSON *j_id = cJSON_GetObjectItem(root, "id");
+  if (!j_id || !cJSON_IsNumber(j_id)) {
+    cJSON_Delete(root);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
+    return;
+  }
+  int id = j_id->valueint - 1; /* 0-based */
+  if (id < 0 || id >= PID_MAX_SLOTS) {
+    cJSON_Delete(root);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
+    return;
+  }
 
-    /* pinact → pwm_pin_id */
-    cJSON *j_pinact = cJSON_GetObjectItem(root, "pinact");
-    if (j_pinact && cJSON_IsObject(j_pinact)) {
-        cJSON *child = j_pinact->child;
-        if (child && cJSON_IsNumber(child)) {
-            PidConf[id].pwm_pin_id = (uint8_t)child->valueint;
+  /* pinact → pwm_pin_id */
+  cJSON *j_pinact = cJSON_GetObjectItem(root, "pinact");
+  if (j_pinact && cJSON_IsObject(j_pinact)) {
+    cJSON *child = j_pinact->child;
+    if (child && cJSON_IsNumber(child)) {
+      PidConf[id].pwm_pin_id = (uint8_t)child->valueint;
+    }
+  }
+
+  /* selsens */
+  cJSON *j_selsens = cJSON_GetObjectItem(root, "selsens");
+  if (j_selsens) {
+    int sv = 0;
+    if (cJSON_IsString(j_selsens))
+      sv = atoi(j_selsens->valuestring);
+    else if (cJSON_IsNumber(j_selsens))
+      sv = j_selsens->valueint;
+    PidConf[id].selsens = (PidSensorType_e)sv;
+  }
+
+  /* sernum */
+  cJSON *j_sernum = cJSON_GetObjectItem(root, "sernum");
+  if (j_sernum && cJSON_IsString(j_sernum)) {
+    strncpy(PidConf[id].sernum, j_sernum->valuestring,
+            sizeof(PidConf[id].sernum) - 1);
+    PidConf[id].sernum[sizeof(PidConf[id].sernum) - 1] = '\0';
+  }
+
+  /* presets → применяем пресет */
+  cJSON *j_presets = cJSON_GetObjectItem(root, "presets");
+  if (j_presets) {
+    int pv = 0;
+    if (cJSON_IsString(j_presets))
+      pv = atoi(j_presets->valuestring);
+    else if (cJSON_IsNumber(j_presets))
+      pv = j_presets->valueint;
+    if (pv > 0 && pv < (int)PID_PRESET_COUNT) {
+      apply_pid_preset(id, (uint8_t)pv);
+    }
+  }
+
+  /* tmpset */
+  cJSON *j_tmpset = cJSON_GetObjectItem(root, "tmpset");
+  if (j_tmpset) {
+    if (cJSON_IsString(j_tmpset))
+      PidConf[id].tmpset = (float)atof(j_tmpset->valuestring);
+    else if (cJSON_IsNumber(j_tmpset))
+      PidConf[id].tmpset = (float)j_tmpset->valuedouble;
+  }
+
+  /* info */
+  cJSON *j_info = cJSON_GetObjectItem(root, "info");
+  if (j_info && cJSON_IsString(j_info)) {
+    strncpy(PidConf[id].info, j_info->valuestring,
+            sizeof(PidConf[id].info) - 1);
+    PidConf[id].info[sizeof(PidConf[id].info) - 1] = '\0';
+  }
+
+  /* onoff */
+  cJSON *j_onoff = cJSON_GetObjectItem(root, "onoff");
+  if (j_onoff && cJSON_IsNumber(j_onoff)) {
+    PidConf[id].onoff = (uint8_t)j_onoff->valueint;
+  }
+
+  /* Автоопределение sensor_pin_id для DS18B20 по серийнику */
+  if (PidConf[id].selsens == PID_SENS_DS18B20 &&
+      PidConf[id].sernum[0] != '\0') {
+    for (int p = 0; p < MAX_DS18B20_P; p++) {
+      if (ds18b20[p].typsensr != 1)
+        continue;
+      for (int s = 0; s < ds18b20[p].numsens; s++) {
+        char addr_str[17];
+        for (int k = 0; k < 8; k++) {
+          sprintf(addr_str + (k * 2), "%02X", ds18b20[p].sensors[s].addr[k]);
         }
-    }
-
-    /* selsens */
-    cJSON *j_selsens = cJSON_GetObjectItem(root, "selsens");
-    if (j_selsens) {
-        int sv = 0;
-        if (cJSON_IsString(j_selsens)) sv = atoi(j_selsens->valuestring);
-        else if (cJSON_IsNumber(j_selsens)) sv = j_selsens->valueint;
-        PidConf[id].selsens = (PidSensorType_e)sv;
-    }
-
-    /* sernum */
-    cJSON *j_sernum = cJSON_GetObjectItem(root, "sernum");
-    if (j_sernum && cJSON_IsString(j_sernum)) {
-        strncpy(PidConf[id].sernum, j_sernum->valuestring, sizeof(PidConf[id].sernum) - 1);
-        PidConf[id].sernum[sizeof(PidConf[id].sernum) - 1] = '\0';
-    }
-
-    /* presets → применяем пресет */
-    cJSON *j_presets = cJSON_GetObjectItem(root, "presets");
-    if (j_presets) {
-        int pv = 0;
-        if (cJSON_IsString(j_presets)) pv = atoi(j_presets->valuestring);
-        else if (cJSON_IsNumber(j_presets)) pv = j_presets->valueint;
-        if (pv > 0 && pv < (int)PID_PRESET_COUNT) {
-            apply_pid_preset(id, (uint8_t)pv);
+        if (strcmp(addr_str, PidConf[id].sernum) == 0) {
+          PidConf[id].sensor_pin_id = ds18b20[p].id;
+          PidConf[id].sensor_sub_idx = (uint8_t)s;
+          printf("[PID] DS18B20 matched: slot=%d pin_id=%d sub=%d\r\n", id,
+                 ds18b20[p].id, s);
+          goto ds_found;
         }
+      }
     }
+  ds_found:;
+  }
+  /* Для DHT22 — sensor_pin_id берётся из pwm_pin_id пока (TODO: отдельный
+   * select) */
 
-    /* tmpset */
-    cJSON *j_tmpset = cJSON_GetObjectItem(root, "tmpset");
-    if (j_tmpset) {
-        if (cJSON_IsString(j_tmpset)) PidConf[id].tmpset = (float)atof(j_tmpset->valuestring);
-        else if (cJSON_IsNumber(j_tmpset)) PidConf[id].tmpset = (float)j_tmpset->valuedouble;
-    }
+  cJSON_Delete(root);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
 
-    /* info */
-    cJSON *j_info = cJSON_GetObjectItem(root, "info");
-    if (j_info && cJSON_IsString(j_info)) {
-        strncpy(PidConf[id].info, j_info->valuestring, sizeof(PidConf[id].info) - 1);
-        PidConf[id].info[sizeof(PidConf[id].info) - 1] = '\0';
-    }
-
-    /* onoff */
-    cJSON *j_onoff = cJSON_GetObjectItem(root, "onoff");
-    if (j_onoff && cJSON_IsNumber(j_onoff)) {
-        PidConf[id].onoff = (uint8_t)j_onoff->valueint;
-    }
-
-    /* Автоопределение sensor_pin_id для DS18B20 по серийнику */
-    if (PidConf[id].selsens == PID_SENS_DS18B20 && PidConf[id].sernum[0] != '\0') {
-        for (int p = 0; p < MAX_DS18B20_P; p++) {
-            if (ds18b20[p].typsensr != 1) continue;
-            for (int s = 0; s < ds18b20[p].numsens; s++) {
-                char addr_str[17];
-                for (int k = 0; k < 8; k++) {
-                    sprintf(addr_str + (k * 2), "%02X", ds18b20[p].sensors[s].addr[k]);
-                }
-                if (strcmp(addr_str, PidConf[id].sernum) == 0) {
-                    PidConf[id].sensor_pin_id = ds18b20[p].id;
-                    PidConf[id].sensor_sub_idx = (uint8_t)s;
-                    printf("[PID] DS18B20 matched: slot=%d pin_id=%d sub=%d\r\n", id, ds18b20[p].id, s);
-                    goto ds_found;
-                }
-            }
-        }
-        ds_found:;
-    }
-    /* Для DHT22 — sensor_pin_id берётся из pwm_pin_id пока (TODO: отдельный select) */
-
-    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
-
-    printf("[PID] Slot %d updated: pwm=%d sens=%d preset=%d tmpset=%.1f onoff=%d\r\n",
-           id, PidConf[id].pwm_pin_id, (int)PidConf[id].selsens,
-           PidConf[id].preset, PidConf[id].tmpset, PidConf[id].onoff);
+  printf("[PID] Slot %d updated: pwm=%d sens=%d preset=%d tmpset=%.1f "
+         "onoff=%d\r\n",
+         id, PidConf[id].pwm_pin_id, (int)PidConf[id].selsens,
+         PidConf[id].preset, PidConf[id].tmpset, PidConf[id].onoff);
 }
 
 /* ──── parse_pidline_json: парсит { "pidline": N } ──── */
 void parse_pidline_json(char *json_string, struct dbSettings *settings) {
-    cJSON *root = cJSON_Parse(json_string);
-    if (!root) return;
-    cJSON *j_pidline = cJSON_GetObjectItem(root, "pidline");
-    if (j_pidline && cJSON_IsNumber(j_pidline)) {
-        settings->pidline = (uint8_t)j_pidline->valueint;
-//        printf("[PID] pidline set to %d\r\n", settings->pidline);
-    }
-    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  cJSON *root = cJSON_Parse(json_string);
+  if (!root)
+    return;
+  cJSON *j_pidline = cJSON_GetObjectItem(root, "pidline");
+  if (j_pidline && cJSON_IsNumber(j_pidline)) {
+    settings->pidline = (uint8_t)j_pidline->valueint;
+    //        printf("[PID] pidline set to %d\r\n", settings->pidline);
+  }
+  cJSON_Delete(root);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
 }
 
 /* ──── handle_pid_get: HTTP GET /api/pid/get ──── */
 void handle_pid_get(struct mg_connection *c) {
-    /* Буфер ~200 байт на слот × 24 = ~4800 + запас */
-    char *buf = (char *)malloc(8192);
-    if (!buf) {
-        mg_http_reply(c, 500, "Content-Type: application/json\r\n",
-                      "{\"error\":\"out of memory\"}");
-        return;
-    }
-    gen_pid_json(buf, 8192);
-    mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", buf);
-    free(buf);
+  gen_pid_json(jsonbuf, BUFFER_SIZE);
+  mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", jsonbuf);
 }
 
 /* ──── handle_pid_set: HTTP POST /api/pid/set ──── */
 void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm) {
-    char *body = (char *)malloc(hm->body.len + 1);
-    if (!body) {
-        mg_http_reply(c, 500, "Content-Type: application/json\r\n",
-                      "{\"error\":\"out of memory\"}");
-        return;
-    }
-    memcpy(body, hm->body.buf, hm->body.len);
-    body[hm->body.len] = '\0';
+  if (hm->body.len >= BUFFER_SIZE) {
+    mg_http_reply(c, 413, "Content-Type: application/json\r\n",
+                  "{\"error\":\"payload too large\"}");
+    return;
+  }
+  memcpy(jsonbuf, hm->body.buf, hm->body.len);
+  jsonbuf[hm->body.len] = '\0';
 
-    parse_pid_json(body);
-    free(body);
+  parse_pid_json(jsonbuf);
 
-    /* Сохранение на Flash */
-    uint8_t num = 6;
-    xQueueSend(usbQueueHandle, &num, 0);
+  /* Сохранение на Flash */
+  uint8_t num = 6;
+  xQueueSend(usbQueueHandle, &num, 0);
 
-    mg_http_reply(c, 200, "Content-Type: application/json\r\n",
-                  "{\"status\":\"ok\"}");
+  mg_http_reply(c, 200, "Content-Type: application/json\r\n",
+                "{\"status\":\"ok\"}");
 }
 
 /* ──── handle_pidline_set: HTTP POST /api/pidline/set ──── */
 void handle_pidline_set(struct mg_connection *c, struct mg_http_message *hm) {
-    char *body = (char *)malloc(hm->body.len + 1);
-    if (!body) {
-        mg_http_reply(c, 500, "Content-Type: application/json\r\n",
-                      "{\"error\":\"out of memory\"}");
-        return;
-    }
-    memcpy(body, hm->body.buf, hm->body.len);
-    body[hm->body.len] = '\0';
+  if (hm->body.len >= BUFFER_SIZE) {
+    mg_http_reply(c, 413, "Content-Type: application/json\r\n",
+                  "{\"error\":\"payload too large\"}");
+    return;
+  }
+  memcpy(jsonbuf, hm->body.buf, hm->body.len);
+  jsonbuf[hm->body.len] = '\0';
 
-    parse_pidline_json(body, &SetSettings);
-    free(body);
+  parse_pidline_json(jsonbuf, &SetSettings);
 
-    /* Сохранение настроек */
-    uint8_t num = 2;
-    xQueueSend(usbQueueHandle, &num, 0);
+  /* Сохранение настроек */
+  uint8_t num = 2;
+  xQueueSend(usbQueueHandle, &num, 0);
 
-    mg_http_reply(c, 200, "Content-Type: application/json\r\n",
-                  "{\"status\":\"ok\"}");
+  mg_http_reply(c, 200, "Content-Type: application/json\r\n",
+                "{\"status\":\"ok\"}");
 }
 
 /* ──── pid_read_temperature: читает T из ds18b20[]/dht22[] ──── */
 float pid_read_temperature(int slot) {
-    if (slot < 0 || slot >= PID_MAX_SLOTS) return -999.0f;
+  if (slot < 0 || slot >= PID_MAX_SLOTS)
+    return -999.0f;
 
-    if (PidConf[slot].selsens == PID_SENS_DS18B20) {
-        /* Поиск по серийнику */
-        for (int p = 0; p < MAX_DS18B20_P; p++) {
-            if (ds18b20[p].typsensr != 1 || !ds18b20[p].onoff) continue;
-            for (int s = 0; s < ds18b20[p].numsens; s++) {
-                char addr_str[17];
-                for (int k = 0; k < 8; k++) {
-                    sprintf(addr_str + (k * 2), "%02X", ds18b20[p].sensors[s].addr[k]);
-                }
-                if (strcmp(addr_str, PidConf[slot].sernum) == 0) {
-                    if (ds18b20[p].sensors[s].valid) {
-                        return ds18b20[p].sensors[s].temp;
-                    }
-                    return -999.0f; /* не валидно */
-                }
-            }
+  if (PidConf[slot].selsens == PID_SENS_DS18B20) {
+    /* Поиск по серийнику */
+    for (int p = 0; p < MAX_DS18B20_P; p++) {
+      if (ds18b20[p].typsensr != 1 || !ds18b20[p].onoff)
+        continue;
+      for (int s = 0; s < ds18b20[p].numsens; s++) {
+        char addr_str[17];
+        for (int k = 0; k < 8; k++) {
+          sprintf(addr_str + (k * 2), "%02X", ds18b20[p].sensors[s].addr[k]);
         }
-        return -999.0f; /* не найден */
+        if (strcmp(addr_str, PidConf[slot].sernum) == 0) {
+          if (ds18b20[p].sensors[s].valid) {
+            return ds18b20[p].sensors[s].temp;
+          }
+          return -999.0f; /* не валидно */
+        }
+      }
     }
-    else if (PidConf[slot].selsens == PID_SENS_DHT22) {
-        /* Поиск по pin ID */
-        for (int p = 0; p < MAX_DHT22_P; p++) {
-            if (dht22[p].typsensr != 2 || !dht22[p].onoff) continue;
-            if (dht22[p].id == PidConf[slot].sensor_pin_id) {
-                if (dht22[p].valid) {
-                    return dht22[p].temp;
-                }
-                return -999.0f;
-            }
+    return -999.0f; /* не найден */
+  } else if (PidConf[slot].selsens == PID_SENS_DHT22) {
+    /* Поиск по pin ID */
+    for (int p = 0; p < MAX_DHT22_P; p++) {
+      if (dht22[p].typsensr != 2 || !dht22[p].onoff)
+        continue;
+      if (dht22[p].id == PidConf[slot].sensor_pin_id) {
+        if (dht22[p].valid) {
+          return dht22[p].temp;
         }
         return -999.0f;
+      }
     }
-
     return -999.0f;
+  }
+
+  return -999.0f;
 }
 
 /* ──── pid_set_pwm: устанавливает duty% на PWM-пин ──── */
 void pid_set_pwm(int slot, uint8_t duty) {
-    if (slot < 0 || slot >= PID_MAX_SLOTS) return;
-    uint8_t pin_id = PidConf[slot].pwm_pin_id;
-    if (pin_id == 0 || pin_id >= NUMPIN) return;
-    if (PinsConf[pin_id].topin != 5) return; /* не PWM-пин */
+  if (slot < 0 || slot >= PID_MAX_SLOTS)
+    return;
+  uint8_t pin_id = PidConf[slot].pwm_pin_id;
+  if (pin_id == 0 || pin_id >= NUMPIN)
+    return;
+  if (PinsConf[pin_id].topin != 5)
+    return; /* не PWM-пин */
 
-    if (duty > 100) duty = 100;
+  if (duty > 100)
+    duty = 100;
 
-    /* Записываем duty в PinsConf для консистентности */
-    PinsConf[pin_id].dvalue = duty;
+  /* Записываем duty в PinsConf для консистентности */
+  PinsConf[pin_id].dvalue = duty;
 
-    /* Расчёт pulse аналогично InitPin (setings.c) */
-    uint32_t period = PinsConf[pin_id].pwmmax;
-    uint32_t pulse = (uint32_t)((uint64_t)duty * period / 100ULL);
+  /* Расчёт pulse аналогично InitPin (setings.c) */
+  uint32_t period = PinsConf[pin_id].pwmmax;
+  uint32_t pulse = (uint32_t)((uint64_t)duty * period / 100ULL);
 
-    __HAL_TIM_SET_COMPARE(&htim[pin_id], PinsInfo[pin_id].tim_channel, pulse);
+  __HAL_TIM_SET_COMPARE(&htim[pin_id], PinsInfo[pin_id].tim_channel, pulse);
 }
 
 /* ──── pid_set_pwm_f: устанавливает duty% (float) на PWM-пин ──── */
 /* Используется автотюном для дробной точности бинарного поиска.    */
 void pid_set_pwm_f(int slot, float duty) {
-    if (slot < 0 || slot >= PID_MAX_SLOTS) return;
-    uint8_t pin_id = PidConf[slot].pwm_pin_id;
-    if (pin_id == 0 || pin_id >= NUMPIN) return;
-    if (PinsConf[pin_id].topin != 5) return; /* не PWM-пин */
+  if (slot < 0 || slot >= PID_MAX_SLOTS)
+    return;
+  uint8_t pin_id = PidConf[slot].pwm_pin_id;
+  if (pin_id == 0 || pin_id >= NUMPIN)
+    return;
+  if (PinsConf[pin_id].topin != 5)
+    return; /* не PWM-пин */
 
-    if (duty < 0.0f) duty = 0.0f;
-    if (duty > 100.0f) duty = 100.0f;
+  if (duty < 0.0f)
+    duty = 0.0f;
+  if (duty > 100.0f)
+    duty = 100.0f;
 
-    /* Записываем округлённое значение в dvalue для UI */
-    PinsConf[pin_id].dvalue = (int)(duty + 0.5f);
+  /* Записываем округлённое значение в dvalue для UI */
+  PinsConf[pin_id].dvalue = (int)(duty + 0.5f);
 
-    /* Расчёт pulse с дробной точностью */
-    uint32_t period = PinsConf[pin_id].pwmmax;
-    uint32_t pulse = (uint32_t)(duty * (float)period / 100.0f + 0.5f);
+  /* Расчёт pulse с дробной точностью */
+  uint32_t period = PinsConf[pin_id].pwmmax;
+  uint32_t pulse = (uint32_t)(duty * (float)period / 100.0f + 0.5f);
 
-    __HAL_TIM_SET_COMPARE(&htim[pin_id], PinsInfo[pin_id].tim_channel, pulse);
+  __HAL_TIM_SET_COMPARE(&htim[pin_id], PinsInfo[pin_id].tim_channel, pulse);
 }
 
 /* ──── Адаптивная стабилизация: утилита ──── */
 /* Возвращает true когда все 4 критерия выполнены одновременно */
-#define IIR_ALPHA  0.90f
-#define SIGMA_THR  0.15f   // Было 0.02f, cделаем пороги чуть шире шага DS18B20/DHT22 а то, ждать придется более 4х часов!
-#define ERR_THR    0.20f   // Было 0.05f, cделаем пороги чуть шире шага DS18B20/DHT22 а то, ждать придется более 4х часов!
-#define STABLE_MS  30000   // Сократим время "доказательства" стабильности с 60с до 30с
+#define IIR_ALPHA 0.90f
+#define SIGMA_THR                                                              \
+  0.15f // Было 0.02f, cделаем пороги чуть шире шага DS18B20/DHT22 а то, ждать
+        // придется более 4х часов!
+#define ERR_THR                                                                \
+  0.20f // Было 0.05f, cделаем пороги чуть шире шага DS18B20/DHT22 а то, ждать
+        // придется более 4х часов!
+#define STABLE_MS                                                              \
+  30000 // Сократим время "доказательства" стабильности с 60с до 30с
 
 static float tune_calc_sigma(int slot) {
-    float avg = 0.0f;
-    for (int i = 0; i < 10; i++) avg += PidConf[slot].tune_T_samples[i];
-    avg /= 10.0f;
-    float sum_sq = 0.0f;
-    for (int i = 0; i < 10; i++) {
-        float d = PidConf[slot].tune_T_samples[i] - avg;
-        sum_sq += d * d;
-    }
-    return sqrtf(sum_sq / 10.0f);
+  float avg = 0.0f;
+  for (int i = 0; i < 10; i++)
+    avg += PidConf[slot].tune_T_samples[i];
+  avg /= 10.0f;
+  float sum_sq = 0.0f;
+  for (int i = 0; i < 10; i++) {
+    float d = PidConf[slot].tune_T_samples[i] - avg;
+    sum_sq += d * d;
+  }
+  return sqrtf(sum_sq / 10.0f);
 }
 
 /* ──── pid_autotune_start: инициализация авто-тюна ──── */
 void pid_autotune_start(int slot) {
-    if (slot < 0 || slot >= PID_MAX_SLOTS) return;
+  if (slot < 0 || slot >= PID_MAX_SLOTS)
+    return;
 
-    /* Проверка: датчик и PWM должны быть назначены */
-    if (PidConf[slot].pwm_pin_id == 0 || PidConf[slot].selsens == PID_SENS_NONE) {
-        printf("[PID] AutoTune ERROR: slot=%d not configured (pwm=%d sens=%d)\r\n",
-               slot, PidConf[slot].pwm_pin_id, (int)PidConf[slot].selsens);
-        PidConf[slot].tune_state = PID_TUNE_ERROR;
-        return;
-    }
+  /* Проверка: датчик и PWM должны быть назначены */
+  if (PidConf[slot].pwm_pin_id == 0 || PidConf[slot].selsens == PID_SENS_NONE) {
+    printf("[PID] AutoTune ERROR: slot=%d not configured (pwm=%d sens=%d)\r\n",
+           slot, PidConf[slot].pwm_pin_id, (int)PidConf[slot].selsens);
+    PidConf[slot].tune_state = PID_TUNE_ERROR;
+    return;
+  }
 
-    /* Инициализация IIR-фильтра текущей температурой */
-    /* Диагностика: выведем параметры датчика */
-    printf("[PID] AutoTune start: slot=%d selsens=%d sernum='%s' sensor_pin_id=%d\r\n",
-           slot, (int)PidConf[slot].selsens, PidConf[slot].sernum, PidConf[slot].sensor_pin_id);
+  /* Инициализация IIR-фильтра текущей температурой */
+  /* Диагностика: выведем параметры датчика */
+  printf("[PID] AutoTune start: slot=%d selsens=%d sernum='%s' "
+         "sensor_pin_id=%d\r\n",
+         slot, (int)PidConf[slot].selsens, PidConf[slot].sernum,
+         PidConf[slot].sensor_pin_id);
 
-    /* Попытка чтения с ретраем (датчик может ещё не завершить первую конверсию) */
-    float T = -999.0f;
-    for (int attempt = 0; attempt < 3; attempt++) {
-        T = pid_read_temperature(slot);
-        printf("[PID] AutoTune read attempt %d: T=%.2f\r\n", attempt, T);
-        if (T > -900.0f) break; /* Валидное значение */
-        osDelay(500); /* Ждём 500 мс и пробуем снова */
-    }
+  /* Попытка чтения с ретраем (датчик может ещё не завершить первую конверсию)
+   */
+  float T = -999.0f;
+  for (int attempt = 0; attempt < 3; attempt++) {
+    T = pid_read_temperature(slot);
+    printf("[PID] AutoTune read attempt %d: T=%.2f\r\n", attempt, T);
+    if (T > -900.0f)
+      break;      /* Валидное значение */
+    osDelay(500); /* Ждём 500 мс и пробуем снова */
+  }
 
-    if (T < -900.0f) {
-        printf("[PID] AutoTune ERROR: slot=%d sensor not readable (T=%.1f)\r\n", slot, T);
-        PidConf[slot].tune_state = PID_TUNE_ERROR;
-        return;
-    }
+  if (T < -900.0f) {
+    printf("[PID] AutoTune ERROR: slot=%d sensor not readable (T=%.1f)\r\n",
+           slot, T);
+    PidConf[slot].tune_state = PID_TUNE_ERROR;
+    return;
+  }
 
-    PidConf[slot].T_filtered = T;
-    PidConf[slot].tmpcur = T;
+  PidConf[slot].T_filtered = T;
+  PidConf[slot].tmpcur = T;
 
-    /* Сброс всех runtime-полей автотюна */
-    PidConf[slot].tune_progress = 0;
-    PidConf[slot].tune_phase_b = 0;
-    PidConf[slot].tune_iter = 0;
-    PidConf[slot].tune_lo = 0.0f;
-    PidConf[slot].tune_hi = 0.0f;
-    memset(PidConf[slot].tune_T_samples, 0, sizeof(PidConf[slot].tune_T_samples));
-    PidConf[slot].tune_sample_idx = 0;
-    PidConf[slot].tune_stab_start = HAL_GetTick();
-    PidConf[slot].tune_in_range_ms = 0;
-    PidConf[slot].tune_T_start = T;
-    PidConf[slot].tune_T_end = T;
-    PidConf[slot].tune_step_start_tick = HAL_GetTick();
-    PidConf[slot].tune_step_pwm = (float)PidConf[slot].pwm_start;
-    PidConf[slot].tune_step_phase = 0; /* фаза 0: ждём стабилизации до шага */
+  /* Сброс всех runtime-полей автотюна */
+  PidConf[slot].tune_progress = 0;
+  PidConf[slot].tune_phase_b = 0;
+  PidConf[slot].tune_iter = 0;
+  PidConf[slot].tune_lo = 0.0f;
+  PidConf[slot].tune_hi = 0.0f;
+  memset(PidConf[slot].tune_T_samples, 0, sizeof(PidConf[slot].tune_T_samples));
+  PidConf[slot].tune_sample_idx = 0;
+  PidConf[slot].tune_stab_start = HAL_GetTick();
+  PidConf[slot].tune_in_range_ms = 0;
+  PidConf[slot].tune_T_start = T;
+  PidConf[slot].tune_T_end = T;
+  PidConf[slot].tune_step_start_tick = HAL_GetTick();
+  PidConf[slot].tune_step_pwm = (float)PidConf[slot].pwm_start;
+  PidConf[slot].tune_step_phase = 0; /* фаза 0: ждём стабилизации до шага */
 
-    /* Сброс PID-интегратора и выхода */
-    PidConf[slot].integral = 0.0f;
-    PidConf[slot].prev_error = 0.0f;
-    PidConf[slot].pwm_out = 0;
+  /* Сброс PID-интегратора и выхода */
+  PidConf[slot].integral = 0.0f;
+  PidConf[slot].prev_error = 0.0f;
+  PidConf[slot].pwm_out = 0;
 
-    /* Предварительная заливка буфера сэмплов текущей T */
-    for (int i = 0; i < 10; i++) PidConf[slot].tune_T_samples[i] = T;
+  /* Предварительная заливка буфера сэмплов текущей T */
+  for (int i = 0; i < 10; i++)
+    PidConf[slot].tune_T_samples[i] = T;
 
-    /* Устанавливаем начальный PWM = pwm_start */
-    pid_set_pwm_f(slot, PidConf[slot].tune_step_pwm);
+  /* Устанавливаем начальный PWM = pwm_start */
+  pid_set_pwm_f(slot, PidConf[slot].tune_step_pwm);
 
-    PidConf[slot].tune_state = PID_TUNE_STEP;
-    printf("[PID] AutoTune STARTED slot=%d T=%.1f pwm_start=%d\r\n",
-           slot, T, PidConf[slot].pwm_start);
+  PidConf[slot].tune_state = PID_TUNE_STEP;
+  printf("[PID] AutoTune STARTED slot=%d T=%.1f pwm_start=%d\r\n", slot, T,
+         PidConf[slot].pwm_start);
 }
 
 /* ──── pid_autotune_stop: остановка авто-тюна ──── */
 void pid_autotune_stop(int slot) {
-    if (slot < 0 || slot >= PID_MAX_SLOTS) return;
+  if (slot < 0 || slot >= PID_MAX_SLOTS)
+    return;
 
-    PidConf[slot].tune_state = PID_TUNE_IDLE;
-    PidConf[slot].tune_progress = 0;
-    pid_set_pwm(slot, 0);
-    printf("[PID] AutoTune STOPPED slot=%d\r\n", slot);
+  PidConf[slot].tune_state = PID_TUNE_IDLE;
+  PidConf[slot].tune_progress = 0;
+  pid_set_pwm(slot, 0);
+  printf("[PID] AutoTune STOPPED slot=%d\r\n", slot);
 }
 
 /* ──── pid_autotune_tick: главный автомат авто-тюна ──── */
 /* Вызывается из StartPIDTask каждые Ts_ms, когда tune_state == STEP или BIAS */
 void pid_autotune_tick(int slot) {
-    if (slot < 0 || slot >= PID_MAX_SLOTS) return;
+  if (slot < 0 || slot >= PID_MAX_SLOTS)
+    return;
 
-    uint32_t now = HAL_GetTick();
+  uint32_t now = HAL_GetTick();
 
-    /* 1. Чтение и IIR-фильтрация температуры */
-    float T_raw = pid_read_temperature(slot);
-    if (T_raw < -100.0f) return; /* датчик не валиден — пропускаем тик */
+  /* 1. Чтение и IIR-фильтрация температуры */
+  float T_raw = pid_read_temperature(slot);
+  if (T_raw < -100.0f)
+    return; /* датчик не валиден — пропускаем тик */
 
-    PidConf[slot].T_filtered = IIR_ALPHA * PidConf[slot].T_filtered
-                              + (1.0f - IIR_ALPHA) * T_raw;
-    float T = PidConf[slot].T_filtered;
-    PidConf[slot].tmpcur = T_raw; /* для UI — реальная T */
+  PidConf[slot].T_filtered =
+      IIR_ALPHA * PidConf[slot].T_filtered + (1.0f - IIR_ALPHA) * T_raw;
+  float T = PidConf[slot].T_filtered;
+  PidConf[slot].tmpcur = T_raw; /* для UI — реальная T */
 
-    /* 2. Обновляем кольцевой буфер сэмплов */
-    PidConf[slot].tune_T_samples[PidConf[slot].tune_sample_idx] = T;
-    PidConf[slot].tune_sample_idx = (PidConf[slot].tune_sample_idx + 1) % 10;
+  /* 2. Обновляем кольцевой буфер сэмплов */
+  PidConf[slot].tune_T_samples[PidConf[slot].tune_sample_idx] = T;
+  PidConf[slot].tune_sample_idx = (PidConf[slot].tune_sample_idx + 1) % 10;
 
-    /* ═══════════════════════════════════════════════
-     *  ШАГОВЫЙ ТЕСТ (PID_TUNE_STEP)
-     * ═══════════════════════════════════════════════ */
-    if (PidConf[slot].tune_state == PID_TUNE_STEP) {
-        float sigma = tune_calc_sigma(slot);
+  /* ═══════════════════════════════════════════════
+   *  ШАГОВЫЙ ТЕСТ (PID_TUNE_STEP)
+   * ═══════════════════════════════════════════════ */
+  if (PidConf[slot].tune_state == PID_TUNE_STEP) {
+    float sigma = tune_calc_sigma(slot);
 
-        switch (PidConf[slot].tune_step_phase) {
-        case 0: /* Фаза 0: ждём стабилизации на pwm_start */
-            /* Прогресс: 0..5% */
-            PidConf[slot].tune_progress = 0;
+    switch (PidConf[slot].tune_step_phase) {
+    case 0: /* Фаза 0: ждём стабилизации на pwm_start */
+      /* Прогресс: 0..5% */
+      PidConf[slot].tune_progress = 0;
 
-            if (sigma < SIGMA_THR) {
-                PidConf[slot].tune_in_range_ms += PidConf[slot].Ts_ms;
-            } else {
-                PidConf[slot].tune_in_range_ms = 0;
-            }
-
-            /* Таймаут: 5 минут макс на стабилизацию начальной точки */
-            if (PidConf[slot].tune_in_range_ms >= STABLE_MS ||
-                (now - PidConf[slot].tune_step_start_tick) > 300000U) {
-                /* Запоминаем T_start */
-                PidConf[slot].tune_T_start = T;
-                PidConf[slot].tune_in_range_ms = 0;
-                PidConf[slot].tune_step_start_tick = now;
-
-                /* Подаём шаг: PWM = pwm_max */
-                PidConf[slot].tune_step_pwm = (float)PidConf[slot].pwm_max;
-                pid_set_pwm_f(slot, PidConf[slot].tune_step_pwm);
-
-                PidConf[slot].tune_step_phase = 1;
-                printf("[PID] Step test: phase 0->1, T_start=%.2f, PWM->%d%%\r\n",
-                       PidConf[slot].tune_T_start, PidConf[slot].pwm_max);
-            }
-            break;
-
-        case 1: /* Фаза 1: шаг подан, ждём стабилизации */
-        {
-            /* Прогресс: 5..20% — по времени */
-            float tau_est = PidConf[slot].tau > 1.0f ? PidConf[slot].tau : 60.0f;
-            uint32_t elapsed = now - PidConf[slot].tune_step_start_tick;
-            float time_pct = (float)elapsed / (10.0f * tau_est * 1000.0f);
-            if (time_pct > 1.0f) time_pct = 1.0f;
-            PidConf[slot].tune_progress = (uint8_t)(5.0f + time_pct * 15.0f);
-
-            /* Адаптивная стабилизация: минимум 2*tau_est, σ < порог, 60с подряд */
-            if (elapsed < (uint32_t)(2.0f * tau_est * 1000.0f)) break;
-
-            if (sigma < SIGMA_THR) {
-                PidConf[slot].tune_in_range_ms += PidConf[slot].Ts_ms;
-            } else {
-                PidConf[slot].tune_in_range_ms = 0;
-            }
-
-            /* Таймаут 10*tau */
-            bool timed_out = (elapsed > (uint32_t)(10.0f * tau_est * 1000.0f));
-
-            if (PidConf[slot].tune_in_range_ms >= STABLE_MS || timed_out) {
-                PidConf[slot].tune_T_end = T;
-
-                /* Вычисляем K_gain и tau */
-                float dT = PidConf[slot].tune_T_end - PidConf[slot].tune_T_start;
-                float dPWM = (float)PidConf[slot].pwm_max - (float)PidConf[slot].pwm_start;
-
-                if (fabsf(dPWM) < 1.0f) dPWM = 1.0f; /* защита от деления на 0 */
-                PidConf[slot].K_gain = dT / dPWM;
-
-                /* tau = время до 63.2% отклика */
-                /* tau: грубая оценка ≈ elapsed * 0.3 (эвристика для первого порядка) */
-                PidConf[slot].tau = (float)elapsed / 1000.0f * 0.3f;
-                /* Более точная: если T сейчас ~= T_end и стабильна, tau ≈ elapsed/3 */
-                if (PidConf[slot].tau < 1.0f) PidConf[slot].tau = 5.0f;
-
-                /* Валидация */
-                if (fabsf(PidConf[slot].K_gain) < 0.001f || PidConf[slot].tau < 1.0f) {
-                    printf("[PID] Step test FAILED: K=%.4f tau=%.1f\r\n",
-                           PidConf[slot].K_gain, PidConf[slot].tau);
-                    PidConf[slot].tune_state = PID_TUNE_ERROR;
-                    PidConf[slot].tune_progress = 0;
-                    pid_set_pwm(slot, 0);
-                    return;
-                }
-
-                printf("[PID] Step test DONE: K=%.4f tau=%.1f T_start=%.2f T_end=%.2f\r\n",
-                       PidConf[slot].K_gain, PidConf[slot].tau,
-                       PidConf[slot].tune_T_start, PidConf[slot].tune_T_end);
-
-                /* Переход к бинарному поиску Bias */
-                PidConf[slot].tune_state = PID_TUNE_BIAS;
-                PidConf[slot].tune_phase_b = 0; /* фаза A */
-                PidConf[slot].tune_iter = 0;
-                PidConf[slot].tune_lo = 0.0f;
-                PidConf[slot].tune_hi = (float)PidConf[slot].pwm_max;
-                PidConf[slot].tune_in_range_ms = 0;
-                PidConf[slot].tune_stab_start = now;
-                PidConf[slot].tune_progress = 20;
-
-                /* Устанавливаем первый mid */
-                float mid = (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
-                pid_set_pwm_f(slot, mid);
-            }
-            break;
-        }
-        default:
-            PidConf[slot].tune_step_phase = 0;
-            break;
-        }
-        return;
-    }
-
-    /* ═══════════════════════════════════════════════
-     *  БИНАРНЫЙ ПОИСК BIAS (PID_TUNE_BIAS)
-     * ═══════════════════════════════════════════════ */
-    if (PidConf[slot].tune_state == PID_TUNE_BIAS) {
-        float Tset = PidConf[slot].tmpset;
-        float sigma = tune_calc_sigma(slot);
-        float err = fabsf(T - Tset);
-
-        /* Адаптивная стабилизация: минимум 2*tau */
-        if ((now - PidConf[slot].tune_stab_start) < (uint32_t)(2.0f * PidConf[slot].tau * 1000.0f)) {
-            return;
-        }
-
-        /* Счётчик стабильности */
-        if (err < ERR_THR && sigma < SIGMA_THR) {
-            PidConf[slot].tune_in_range_ms += PidConf[slot].Ts_ms;
-        } else {
-            PidConf[slot].tune_in_range_ms = 0;
-        }
-
-        /* Ждём 60 сек устойчивости */
-        if (PidConf[slot].tune_in_range_ms < STABLE_MS) {
-            /* Таймаут: 10*tau на одну итерацию */
-            uint32_t iter_timeout = (uint32_t)(10.0f * PidConf[slot].tau * 1000.0f);
-            if (iter_timeout < 120000U) iter_timeout = 120000U; /* минимум 2 мин */
-            if ((now - PidConf[slot].tune_stab_start) < iter_timeout) {
-                return; /* ещё ждём */
-            }
-            /* Таймаут — принимаем решение по текущей T */
-            printf("[PID] Bias iter timeout, forcing decision\r\n");
-        }
+      if (sigma < SIGMA_THR) {
+        PidConf[slot].tune_in_range_ms += PidConf[slot].Ts_ms;
+      } else {
         PidConf[slot].tune_in_range_ms = 0;
+      }
 
-        /* --- ДОСРОЧНЫЙ ВЫХОД ПО ТОЧНОСТИ --- */
-        if (err < ERR_THR && sigma < SIGMA_THR &&
-            (PidConf[slot].tune_hi - PidConf[slot].tune_lo) < 0.01f) {
-            PidConf[slot].bias = (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
-            printf("[PID] Bias CONVERGED early: bias=%.3f%%\r\n", PidConf[slot].bias);
-            goto tune_done;
+      /* Таймаут: 5 минут макс на стабилизацию начальной точки */
+      if (PidConf[slot].tune_in_range_ms >= STABLE_MS ||
+          (now - PidConf[slot].tune_step_start_tick) > 300000U) {
+        /* Запоминаем T_start */
+        PidConf[slot].tune_T_start = T;
+        PidConf[slot].tune_in_range_ms = 0;
+        PidConf[slot].tune_step_start_tick = now;
+
+        /* Подаём шаг: PWM = pwm_max */
+        PidConf[slot].tune_step_pwm = (float)PidConf[slot].pwm_max;
+        pid_set_pwm_f(slot, PidConf[slot].tune_step_pwm);
+
+        PidConf[slot].tune_step_phase = 1;
+        printf("[PID] Step test: phase 0->1, T_start=%.2f, PWM->%d%%\r\n",
+               PidConf[slot].tune_T_start, PidConf[slot].pwm_max);
+      }
+      break;
+
+    case 1: /* Фаза 1: шаг подан, ждём стабилизации */
+    {
+      /* Прогресс: 5..20% — по времени */
+      float tau_est = PidConf[slot].tau > 1.0f ? PidConf[slot].tau : 60.0f;
+      uint32_t elapsed = now - PidConf[slot].tune_step_start_tick;
+      float time_pct = (float)elapsed / (10.0f * tau_est * 1000.0f);
+      if (time_pct > 1.0f)
+        time_pct = 1.0f;
+      PidConf[slot].tune_progress = (uint8_t)(5.0f + time_pct * 15.0f);
+
+      /* Адаптивная стабилизация: минимум 2*tau_est, σ < порог, 60с подряд */
+      if (elapsed < (uint32_t)(2.0f * tau_est * 1000.0f))
+        break;
+
+      if (sigma < SIGMA_THR) {
+        PidConf[slot].tune_in_range_ms += PidConf[slot].Ts_ms;
+      } else {
+        PidConf[slot].tune_in_range_ms = 0;
+      }
+
+      /* Таймаут 10*tau */
+      bool timed_out = (elapsed > (uint32_t)(10.0f * tau_est * 1000.0f));
+
+      if (PidConf[slot].tune_in_range_ms >= STABLE_MS || timed_out) {
+        PidConf[slot].tune_T_end = T;
+
+        /* Вычисляем K_gain и tau */
+        float dT = PidConf[slot].tune_T_end - PidConf[slot].tune_T_start;
+        float dPWM =
+            (float)PidConf[slot].pwm_max - (float)PidConf[slot].pwm_start;
+
+        if (fabsf(dPWM) < 1.0f)
+          dPWM = 1.0f; /* защита от деления на 0 */
+        PidConf[slot].K_gain = dT / dPWM;
+
+        /* tau = время до 63.2% отклика */
+        /* tau: грубая оценка ≈ elapsed * 0.3 (эвристика для первого порядка) */
+        PidConf[slot].tau = (float)elapsed / 1000.0f * 0.3f;
+        /* Более точная: если T сейчас ~= T_end и стабильна, tau ≈ elapsed/3 */
+        if (PidConf[slot].tau < 1.0f)
+          PidConf[slot].tau = 5.0f;
+
+        /* Валидация */
+        if (fabsf(PidConf[slot].K_gain) < 0.001f || PidConf[slot].tau < 1.0f) {
+          printf("[PID] Step test FAILED: K=%.4f tau=%.1f\r\n",
+                 PidConf[slot].K_gain, PidConf[slot].tau);
+          PidConf[slot].tune_state = PID_TUNE_ERROR;
+          PidConf[slot].tune_progress = 0;
+          pid_set_pwm(slot, 0);
+          return;
         }
 
-        /* --- БИНАРНЫЙ ШАГ --- */
+        printf(
+            "[PID] Step test DONE: K=%.4f tau=%.1f T_start=%.2f T_end=%.2f\r\n",
+            PidConf[slot].K_gain, PidConf[slot].tau, PidConf[slot].tune_T_start,
+            PidConf[slot].tune_T_end);
+
+        /* Переход к бинарному поиску Bias */
+        PidConf[slot].tune_state = PID_TUNE_BIAS;
+        PidConf[slot].tune_phase_b = 0; /* фаза A */
+        PidConf[slot].tune_iter = 0;
+        PidConf[slot].tune_lo = 0.0f;
+        PidConf[slot].tune_hi = (float)PidConf[slot].pwm_max;
+        PidConf[slot].tune_in_range_ms = 0;
+        PidConf[slot].tune_stab_start = now;
+        PidConf[slot].tune_progress = 20;
+
+        /* Устанавливаем первый mid */
         float mid = (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
         pid_set_pwm_f(slot, mid);
-
-        if (T > Tset) {
-            PidConf[slot].tune_hi = mid;
-        } else {
-            PidConf[slot].tune_lo = mid;
-        }
-
-        PidConf[slot].tune_iter++;
-        PidConf[slot].tune_stab_start = now;
-
-        printf("[PID] Bias iter=%d phase=%c lo=%.3f hi=%.3f mid=%.3f T=%.2f Tset=%.1f\r\n",
-               PidConf[slot].tune_iter,
-               PidConf[slot].tune_phase_b ? 'B' : 'A',
-               PidConf[slot].tune_lo, PidConf[slot].tune_hi, mid, T, Tset);
-
-        /* --- РАСЧЁТ ПРОГРЕССА --- */
-        if (!PidConf[slot].tune_phase_b) {
-            /* Фаза A: 20..70% */
-            float pct = (float)PidConf[slot].tune_iter / 12.0f;
-            if (pct > 1.0f) pct = 1.0f;
-            PidConf[slot].tune_progress = (uint8_t)(20.0f + pct * 50.0f);
-        } else {
-            /* Фаза B: 70..95% */
-            float pct = (float)PidConf[slot].tune_iter / 10.0f;
-            if (pct > 1.0f) pct = 1.0f;
-            PidConf[slot].tune_progress = (uint8_t)(70.0f + pct * 25.0f);
-        }
-
-        /* --- ПЕРЕХОД МЕЖДУ ФАЗАМИ --- */
-        int max_iter = PidConf[slot].tune_phase_b ? 10 : 12;
-        if (PidConf[slot].tune_iter >= max_iter) {
-            if (!PidConf[slot].tune_phase_b) {
-                /* Фаза A → фаза B */
-                float bias_rough = (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
-                PidConf[slot].tune_lo = bias_rough - 1.0f;
-                PidConf[slot].tune_hi = bias_rough + 1.0f;
-                if (PidConf[slot].tune_lo < 0.0f) PidConf[slot].tune_lo = 0.0f;
-                if (PidConf[slot].tune_hi > 100.0f) PidConf[slot].tune_hi = 100.0f;
-                PidConf[slot].tune_iter = 0;
-                PidConf[slot].tune_phase_b = 1;
-                printf("[PID] Bias phase A->B: rough=%.3f range=[%.3f,%.3f]\r\n",
-                       bias_rough, PidConf[slot].tune_lo, PidConf[slot].tune_hi);
-            } else {
-                /* Фаза B завершена */
-                PidConf[slot].bias = (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
-                printf("[PID] Bias phase B DONE: bias=%.3f%%\r\n", PidConf[slot].bias);
-                goto tune_done;
-            }
-        }
-        return;
-
-tune_done:
-        /* IMC расчёт коэффициентов */
-        pid_compute_imc(slot);
-        PidConf[slot].tune_state = PID_TUNE_DONE;
-        PidConf[slot].tune_progress = 100;
-
-        /* Применяем bias на PWM */
-        pid_set_pwm_f(slot, PidConf[slot].bias);
-
-        printf("[PID] AutoTune COMPLETE slot=%d Kp=%.4f Ki=%.4f Kd=%.4f bias=%.2f%%\r\n",
-               slot, PidConf[slot].Kp, PidConf[slot].Ki, PidConf[slot].Kd,
-               PidConf[slot].bias);
-
-        /* Сохранение результатов на USB */
-        uint8_t num = 6;
-        xQueueSend(usbQueueHandle, &num, 0);
-        return;
+      }
+      break;
     }
+    default:
+      PidConf[slot].tune_step_phase = 0;
+      break;
+    }
+    return;
+  }
+
+  /* ═══════════════════════════════════════════════
+   *  БИНАРНЫЙ ПОИСК BIAS (PID_TUNE_BIAS)
+   * ═══════════════════════════════════════════════ */
+  if (PidConf[slot].tune_state == PID_TUNE_BIAS) {
+    float Tset = PidConf[slot].tmpset;
+    float sigma = tune_calc_sigma(slot);
+    float err = fabsf(T - Tset);
+
+    /* Адаптивная стабилизация: минимум 2*tau */
+    if ((now - PidConf[slot].tune_stab_start) <
+        (uint32_t)(2.0f * PidConf[slot].tau * 1000.0f)) {
+      return;
+    }
+
+    /* Счётчик стабильности */
+    if (err < ERR_THR && sigma < SIGMA_THR) {
+      PidConf[slot].tune_in_range_ms += PidConf[slot].Ts_ms;
+    } else {
+      PidConf[slot].tune_in_range_ms = 0;
+    }
+
+    /* Ждём 60 сек устойчивости */
+    if (PidConf[slot].tune_in_range_ms < STABLE_MS) {
+      /* Таймаут: 10*tau на одну итерацию */
+      uint32_t iter_timeout = (uint32_t)(10.0f * PidConf[slot].tau * 1000.0f);
+      if (iter_timeout < 120000U)
+        iter_timeout = 120000U; /* минимум 2 мин */
+      if ((now - PidConf[slot].tune_stab_start) < iter_timeout) {
+        return; /* ещё ждём */
+      }
+      /* Таймаут — принимаем решение по текущей T */
+      printf("[PID] Bias iter timeout, forcing decision\r\n");
+    }
+    PidConf[slot].tune_in_range_ms = 0;
+
+    /* --- ДОСРОЧНЫЙ ВЫХОД ПО ТОЧНОСТИ --- */
+    if (err < ERR_THR && sigma < SIGMA_THR &&
+        (PidConf[slot].tune_hi - PidConf[slot].tune_lo) < 0.01f) {
+      PidConf[slot].bias =
+          (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
+      printf("[PID] Bias CONVERGED early: bias=%.3f%%\r\n", PidConf[slot].bias);
+      goto tune_done;
+    }
+
+    /* --- БИНАРНЫЙ ШАГ --- */
+    float mid = (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
+    pid_set_pwm_f(slot, mid);
+
+    if (T > Tset) {
+      PidConf[slot].tune_hi = mid;
+    } else {
+      PidConf[slot].tune_lo = mid;
+    }
+
+    PidConf[slot].tune_iter++;
+    PidConf[slot].tune_stab_start = now;
+
+    printf("[PID] Bias iter=%d phase=%c lo=%.3f hi=%.3f mid=%.3f T=%.2f "
+           "Tset=%.1f\r\n",
+           PidConf[slot].tune_iter, PidConf[slot].tune_phase_b ? 'B' : 'A',
+           PidConf[slot].tune_lo, PidConf[slot].tune_hi, mid, T, Tset);
+
+    /* --- РАСЧЁТ ПРОГРЕССА --- */
+    if (!PidConf[slot].tune_phase_b) {
+      /* Фаза A: 20..70% */
+      float pct = (float)PidConf[slot].tune_iter / 12.0f;
+      if (pct > 1.0f)
+        pct = 1.0f;
+      PidConf[slot].tune_progress = (uint8_t)(20.0f + pct * 50.0f);
+    } else {
+      /* Фаза B: 70..95% */
+      float pct = (float)PidConf[slot].tune_iter / 10.0f;
+      if (pct > 1.0f)
+        pct = 1.0f;
+      PidConf[slot].tune_progress = (uint8_t)(70.0f + pct * 25.0f);
+    }
+
+    /* --- ПЕРЕХОД МЕЖДУ ФАЗАМИ --- */
+    int max_iter = PidConf[slot].tune_phase_b ? 10 : 12;
+    if (PidConf[slot].tune_iter >= max_iter) {
+      if (!PidConf[slot].tune_phase_b) {
+        /* Фаза A → фаза B */
+        float bias_rough =
+            (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
+        PidConf[slot].tune_lo = bias_rough - 1.0f;
+        PidConf[slot].tune_hi = bias_rough + 1.0f;
+        if (PidConf[slot].tune_lo < 0.0f)
+          PidConf[slot].tune_lo = 0.0f;
+        if (PidConf[slot].tune_hi > 100.0f)
+          PidConf[slot].tune_hi = 100.0f;
+        PidConf[slot].tune_iter = 0;
+        PidConf[slot].tune_phase_b = 1;
+        printf("[PID] Bias phase A->B: rough=%.3f range=[%.3f,%.3f]\r\n",
+               bias_rough, PidConf[slot].tune_lo, PidConf[slot].tune_hi);
+      } else {
+        /* Фаза B завершена */
+        PidConf[slot].bias =
+            (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
+        printf("[PID] Bias phase B DONE: bias=%.3f%%\r\n", PidConf[slot].bias);
+        goto tune_done;
+      }
+    }
+    return;
+
+  tune_done:
+    /* IMC расчёт коэффициентов */
+    pid_compute_imc(slot);
+    PidConf[slot].tune_state = PID_TUNE_DONE;
+    PidConf[slot].tune_progress = 100;
+
+    /* Применяем bias на PWM */
+    pid_set_pwm_f(slot, PidConf[slot].bias);
+
+    printf("[PID] AutoTune COMPLETE slot=%d Kp=%.4f Ki=%.4f Kd=%.4f "
+           "bias=%.2f%%\r\n",
+           slot, PidConf[slot].Kp, PidConf[slot].Ki, PidConf[slot].Kd,
+           PidConf[slot].bias);
+
+    /* Сохранение результатов на USB */
+    uint8_t num = 6;
+    xQueueSend(usbQueueHandle, &num, 0);
+    return;
+  }
 }
 
 /* ──── pid_compute_imc: расчёт коэффициентов по IMC-методу ──── */
 void pid_compute_imc(int slot) {
-    if (slot < 0 || slot >= PID_MAX_SLOTS) return;
+  if (slot < 0 || slot >= PID_MAX_SLOTS)
+    return;
 
-    float tau    = PidConf[slot].tau;
-    float K      = PidConf[slot].K_gain;
-    float theta  = tau * 0.1f;  /* задержка транспортирования ~10% τ */
+  float tau = PidConf[slot].tau;
+  float K = PidConf[slot].K_gain;
+  float theta = tau * 0.1f; /* задержка транспортирования ~10% τ */
 
-    /* lambda = lambda_factor * tau (из пресета, 0.2..1.0) */
-    float lf = PidConf[slot].lambda_factor;
-    if (lf < 0.1f || lf > 2.0f) lf = 0.5f; /* fallback */
-    float lambda = lf * tau;
+  /* lambda = lambda_factor * tau (из пресета, 0.2..1.0) */
+  float lf = PidConf[slot].lambda_factor;
+  if (lf < 0.1f || lf > 2.0f)
+    lf = 0.5f; /* fallback */
+  float lambda = lf * tau;
 
-    /* Защита от деления на 0 */
-    if (fabsf(K) < 0.0001f) K = 0.0001f;
-    float denom = K * (2.0f * lambda + theta);
-    if (fabsf(denom) < 0.0001f) denom = 0.0001f;
+  /* Защита от деления на 0 */
+  if (fabsf(K) < 0.0001f)
+    K = 0.0001f;
+  float denom = K * (2.0f * lambda + theta);
+  if (fabsf(denom) < 0.0001f)
+    denom = 0.0001f;
 
-    PidConf[slot].Kp = (2.0f * tau + theta) / denom;
-    PidConf[slot].Ki = PidConf[slot].Kp / (2.0f * tau + theta);
-    PidConf[slot].Kd = PidConf[slot].Kp * tau * theta / (2.0f * tau + theta);
+  PidConf[slot].Kp = (2.0f * tau + theta) / denom;
+  PidConf[slot].Ki = PidConf[slot].Kp / (2.0f * tau + theta);
+  PidConf[slot].Kd = PidConf[slot].Kp * tau * theta / (2.0f * tau + theta);
 
-    printf("[PID] IMC: tau=%.1f K=%.4f lambda=%.1f => Kp=%.4f Ki=%.6f Kd=%.4f\r\n",
-           tau, K, lambda, PidConf[slot].Kp, PidConf[slot].Ki, PidConf[slot].Kd);
+  printf(
+      "[PID] IMC: tau=%.1f K=%.4f lambda=%.1f => Kp=%.4f Ki=%.6f Kd=%.4f\r\n",
+      tau, K, lambda, PidConf[slot].Kp, PidConf[slot].Ki, PidConf[slot].Kd);
 }
 
 /* ──── handle_pid_tune_set: HTTP POST /api/pid/tune ──── */
 /* Body: { "id": N, "action": "start"|"stop" } */
 void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
-    char *body = (char *)malloc(hm->body.len + 1);
-    if (!body) {
-        mg_http_reply(c, 500, "Content-Type: application/json\r\n",
-                      "{\"error\":\"out of memory\"}");
-        return;
-    }
-    memcpy(body, hm->body.buf, hm->body.len);
-    body[hm->body.len] = '\0';
+  if (hm->body.len >= BUFFER_SIZE) {
+    mg_http_reply(c, 413, "Content-Type: application/json\r\n",
+                  "{\"error\":\"payload too large\"}");
+    return;
+  }
+  memcpy(jsonbuf, hm->body.buf, hm->body.len);
+  jsonbuf[hm->body.len] = '\0';
 
-    cJSON *root = cJSON_Parse(body);
-    free(body);
-    if (!root) {
-        mg_http_reply(c, 400, "Content-Type: application/json\r\n",
-                      "{\"error\":\"json parse error\"}");
-        return;
-    }
+  cJSON *root = cJSON_Parse(jsonbuf);
+  if (!root) {
+    mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+                  "{\"error\":\"json parse error\"}");
+    return;
+  }
 
-    cJSON *j_id = cJSON_GetObjectItem(root, "id");
-    cJSON *j_action = cJSON_GetObjectItem(root, "action");
+  cJSON *j_id = cJSON_GetObjectItem(root, "id");
+  cJSON *j_action = cJSON_GetObjectItem(root, "action");
 
-    if (!j_id || !cJSON_IsNumber(j_id)) {
-        cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
-        mg_http_reply(c, 400, "Content-Type: application/json\r\n",
-                      "{\"error\":\"missing id\"}");
-        return;
-    }
+  if (!j_id || !cJSON_IsNumber(j_id)) {
+    cJSON_Delete(root);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
+    mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+                  "{\"error\":\"missing id\"}");
+    return;
+  }
 
-    int id = j_id->valueint - 1; /* 0-based */
-    if (id < 0 || id >= PID_MAX_SLOTS) {
-        cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
-        mg_http_reply(c, 400, "Content-Type: application/json\r\n",
-                      "{\"error\":\"invalid id\"}");
-        return;
-    }
+  int id = j_id->valueint - 1; /* 0-based */
+  if (id < 0 || id >= PID_MAX_SLOTS) {
+    cJSON_Delete(root);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
+    mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+                  "{\"error\":\"invalid id\"}");
+    return;
+  }
 
-    const char *action = "start";
-    if (j_action && cJSON_IsString(j_action)) {
-        action = j_action->valuestring;
-    }
+  const char *action = "start";
+  if (j_action && cJSON_IsString(j_action)) {
+    action = j_action->valuestring;
+  }
 
-    if (strcmp(action, "stop") == 0) {
-        pid_autotune_stop(id);
-    } else {
-        pid_autotune_start(id);
-    }
+  if (strcmp(action, "stop") == 0) {
+    pid_autotune_stop(id);
+  } else {
+    pid_autotune_start(id);
+  }
 
-    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
-    mg_http_reply(c, 200, "Content-Type: application/json\r\n",
-                  "{\"status\":\"ok\"}");
+  cJSON_Delete(root);
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
+  mg_http_reply(c, 200, "Content-Type: application/json\r\n",
+                "{\"status\":\"ok\"}");
 }
 /****************** End Zerg section **************************/

@@ -454,7 +454,7 @@ void button_event_handler(
     } else {
       printf("Invalid button ID: %d\n", handle->button_id);
     }
-    printf("Button %d: SINGLE_CLICK!\r\n", handle->button_id);
+//    printf("Button %d: SINGLE_CLICK!\r\n", handle->button_id);
     break;
   case DOUBLE_CLICK: // Двойное нажатие кнопки
     //		printf("Button %d: DOUBLE_CLICK!\r\n", handle->button_id);
@@ -1273,6 +1273,12 @@ void StartConfigTask(void *argument)
         osDelay(1000);
         printf("APPLICATION_READY! \r\n");
 
+        /* Перенаправляем cJSON на pvPortMalloc/vPortFree напрямую,
+           минуя newlib _sbrk. Это гарантирует, что cJSON_Delete()
+           возвращает память ПРЯМО в FreeRTOS heap. */
+        cJSON_Hooks cjson_hooks = { pvPortMalloc, vPortFree };
+        cJSON_InitHooks(&cjson_hooks);
+
         FRESULT fresult = f_stat(
             "settings.ini", &finfo); // Проверяем существует ли файл или нет!?
         if (fresult == FR_OK) {
@@ -1416,7 +1422,7 @@ void StartWebServerTask(void *argument)
            mif.mac[5]));
 
   struct mg_mgr *mgr =
-      (struct mg_mgr *)malloc(sizeof(struct mg_mgr)); // Выделяем память для mgr
+      (struct mg_mgr *)pvPortMalloc(sizeof(struct mg_mgr)); // Одноразовый при загрузке, живёт весь runtime
   mg_mgr_init(mgr);                                   // Инициализируем менеджер
 
   // Настройка MQTT
@@ -1845,9 +1851,9 @@ void StartEncoderTask(void *argument)
 	                                           uint32_t pulse = (uint32_t)((uint64_t)PinsConf[idpwm].dvalue
 	                                                             * PinsConf[idpwm].pwmmax / 100ULL);
 	                                           __HAL_TIM_SET_COMPARE(&htim[idpwm], PinsInfo[idpwm].tim_channel, pulse);
-	                                           printf("ENC[%d] -> PWM[%d]: %d%%\r\n", id, idpwm, PinsConf[idpwm].dvalue);
+//	                                           printf("ENC[%d] -> PWM[%d]: %d%%\r\n", id, idpwm, PinsConf[idpwm].dvalue);
 	                                       } else {
-	                                           printf("ENC[%d] -> PRESET[%d]: %d%% (OFF)\r\n", id, idpwm, PinsConf[idpwm].dvalue);
+//	                                           printf("ENC[%d] -> PRESET[%d]: %d%% (OFF)\r\n", id, idpwm, PinsConf[idpwm].dvalue);
 	                                       }
 	                                   }
 	                               }

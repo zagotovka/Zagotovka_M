@@ -1321,7 +1321,6 @@ void GetPinToPin() {
   FILINFO finfo;
   FRESULT fresult;
   UINT bytesRead;
-  char *jsonBuf = NULL;
 
   fresult = f_stat("pintopin.ini", &finfo);
   if (fresult != FR_OK) {
@@ -1332,36 +1331,31 @@ void GetPinToPin() {
     printf("ERROR: pintopin.ini is empty!\r\n");
     return;
   }
+  if (finfo.fsize >= BUFFER_SIZE) {
+    printf("ERROR: pintopin.ini too large (%lu >= %d)!\r\n", finfo.fsize, BUFFER_SIZE);
+    return;
+  }
 
   if (f_open(&USBHFile, "pintopin.ini", FA_READ) != FR_OK) {
     printf("ERROR: Cannot open pintopin.ini!\r\n");
     return;
   }
 
-  // Выделяем память под JSON + 1 байт для \0
-  jsonBuf = (char *)malloc(finfo.fsize + 1);
-  if (jsonBuf == NULL) {
-    printf("ERROR: Not enough memory for pintopin.ini parsing\r\n");
-    f_close(&USBHFile);
-    return;
-  }
-
-  fresult = f_read(&USBHFile, jsonBuf, finfo.fsize, &bytesRead);
+  /* Используем глобальный jsonbuf вместо malloc */
+  fresult = f_read(&USBHFile, jsonbuf, finfo.fsize, &bytesRead);
   f_close(&USBHFile);
 
   if (fresult != FR_OK || bytesRead == 0) {
     printf("ERROR: Failed to read pintopin.ini\r\n");
-    free(jsonBuf);
     return;
   }
-  jsonBuf[bytesRead] = '\0';
+  jsonbuf[bytesRead] = '\0';
 
   memset(PinsLinks, 0, sizeof(PinsLinks)); // Очищаем массив связей
 
-  cJSON *root = cJSON_Parse(jsonBuf);
+  cJSON *root = cJSON_Parse(jsonbuf);
   if (!root) {
     printf("ERROR: JSON parse failed for pintopin.ini: %s\r\n", cJSON_GetErrorPtr());
-    free(jsonBuf);
     return;
   }
 
@@ -1392,7 +1386,6 @@ void GetPinToPin() {
   }
 
   cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
-  free(jsonBuf);
 }
 
 // Записываем данные в файл "pintopin.ini", создавая его если его нет.
@@ -2070,7 +2063,7 @@ void SetOneWireConfig() {
   UINT byteswritten;
   const uint8_t CHUNK_SIZE =
       1; // Обработка по одному сенсору за раз для экономии памяти
-  char *out_str = NULL;
+  char *out_str = NULL; /* указатель на jsonbuf для совместимости с существующим кодом */
   bool first_pin = true;
 
   //    printf("Starting chunked SetOneWireConfig\n");
@@ -2122,12 +2115,15 @@ void SetOneWireConfig() {
       cJSON_Delete(pin_obj);
       continue;
     }
-    out_str = cJSON_PrintUnformatted(pin_obj);
+    if (!cJSON_PrintPreallocated(pin_obj, jsonbuf, BUFFER_SIZE, 0)) {
+      cJSON_Delete(pin_obj);
+      continue;
+    }
     cJSON_Delete(pin_obj);
+    out_str = jsonbuf;
     // Remove closing brace to add sensors array
     out_str[strlen(out_str) - 1] = '\0';
     fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
-    free(out_str);
     if (fresult != FR_OK)
       goto cleanup;
     // Start sensors array
@@ -2176,10 +2172,13 @@ void SetOneWireConfig() {
           cJSON_Delete(sensor_obj);
           continue;
         }
-        out_str = cJSON_PrintUnformatted(sensor_obj);
+        if (!cJSON_PrintPreallocated(sensor_obj, jsonbuf, BUFFER_SIZE, 0)) {
+          cJSON_Delete(sensor_obj);
+          continue;
+        }
         cJSON_Delete(sensor_obj);
+        out_str = jsonbuf;
         fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
-        free(out_str);
         if (fresult != FR_OK)
           goto cleanup;
       }
@@ -2220,12 +2219,15 @@ void SetOneWireConfig() {
         cJSON_Delete(pin_obj);
         continue;
       }
-      out_str = cJSON_PrintUnformatted(pin_obj);
+      if (!cJSON_PrintPreallocated(pin_obj, jsonbuf, BUFFER_SIZE, 0)) {
+        cJSON_Delete(pin_obj);
+        continue;
+      }
       cJSON_Delete(pin_obj);
+      out_str = jsonbuf;
       // Remove closing brace to add sensors array
       out_str[strlen(out_str) - 1] = '\0';
       fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
-      free(out_str);
       if (fresult != FR_OK)
         goto cleanup;
       // Start sensors array
@@ -2253,10 +2255,13 @@ void SetOneWireConfig() {
         cJSON_Delete(sensor_obj);
         goto cleanup;
       }
-      out_str = cJSON_PrintUnformatted(sensor_obj);
+      if (!cJSON_PrintPreallocated(sensor_obj, jsonbuf, BUFFER_SIZE, 0)) {
+        cJSON_Delete(sensor_obj);
+        goto cleanup;
+      }
       cJSON_Delete(sensor_obj);
+      out_str = jsonbuf;
       fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
-      free(out_str);
       if (fresult != FR_OK)
         goto cleanup;
       // Close sensors array and pin object
@@ -2287,31 +2292,27 @@ void GetPidConfig() {
     return;
   }
   printf("pid.ini has size: %lu bytes\r\n", finfo.fsize);
+  if (finfo.fsize >= BUFFER_SIZE) {
+    printf("ERROR: pid.ini too large (%lu >= %d)!\r\n", finfo.fsize, BUFFER_SIZE);
+    return;
+  }
 
   if (f_open(&USBHFile, "pid.ini", FA_READ) != FR_OK) {
     printf("ERROR: Cannot open pid.ini!\r\n");
     return;
   }
 
-  /* Читаем весь файл в буфер */
-  char *buf = (char *)malloc(finfo.fsize + 1);
-  if (!buf) {
-    printf("ERROR: Cannot allocate buffer for pid.ini\r\n");
-    f_close(&USBHFile);
-    return;
-  }
+  /* Читаем весь файл в глобальный jsonbuf вместо malloc */
   UINT bytesRead;
-  fresult = f_read(&USBHFile, buf, finfo.fsize, &bytesRead);
+  fresult = f_read(&USBHFile, jsonbuf, finfo.fsize, &bytesRead);
   f_close(&USBHFile);
   if (fresult != FR_OK || bytesRead == 0) {
-    free(buf);
     return;
   }
-  buf[bytesRead] = '\0';
+  jsonbuf[bytesRead] = '\0';
 
   /* Парсим JSON */
-  cJSON *root = cJSON_Parse(buf);
-  free(buf);
+  cJSON *root = cJSON_Parse(jsonbuf);
   if (!root) {
     printf("ERROR: pid.ini JSON parse failed\r\n");
     return;
@@ -2411,7 +2412,7 @@ void GetPidConfig() {
 void SetPidConfig() {
   FRESULT fresult;
   UINT byteswritten;
-  char *out_str = NULL;
+  char *out_str = NULL; /* указатель на jsonbuf */
 
   fresult = f_open(&USBHFile, (const TCHAR *)"pid.ini",
                    FA_CREATE_ALWAYS | FA_WRITE);
@@ -2463,11 +2464,14 @@ void SetPidConfig() {
     cJSON_AddStringToObject(obj, "info", PidConf[i].info);
     cJSON_AddNumberToObject(obj, "onoff", PidConf[i].onoff);
 
-    out_str = cJSON_PrintUnformatted(obj);
+    if (!cJSON_PrintPreallocated(obj, jsonbuf, BUFFER_SIZE, 0)) {
+      cJSON_Delete(obj);
+      continue;
+    }
     cJSON_Delete(obj);
+    out_str = jsonbuf;
     if (out_str) {
       fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
-      free(out_str);
       if (fresult != FR_OK) goto cleanup;
     }
   }
