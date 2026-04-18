@@ -43,56 +43,41 @@ char *__env[1] = { 0 };
 char **environ = __env;
 
 /*
- * _sbrk: перенаправляет newlib-nano heap на FreeRTOS pvPortMalloc.
- *
- * newlib-nano вызывает _sbrk(increment) для расширения своей арены.
- * Вместо статического региона из linker script берём блоки из
- * FreeRTOS heap_4 (configTOTAL_HEAP_SIZE = 192 КБ).
- *
- * Вызывается из: malloc/free/realloc/calloc (newlib-nano),
- * cJSON_Parse, strdup, Mongoose mg_malloc/mg_calloc/mg_realloc.
+ * _sbrk: Standard linear STM32 implementation.
+ * It allocates from the linker-defined heap area instead of FreeRTOS heap,
+ * because newlib's sbrk strictly requires physically contiguous memory!
  */
-#define SBRK_BLOCK_SIZE  4096U  /* гранулярность запроса к FreeRTOS heap */
-
-void *_sbrk(ptrdiff_t increment)
+void *_sbrk(ptrdiff_t incr)
 {
-    static uint8_t *heap_ptr   = NULL;
-    static uint8_t *heap_limit = NULL;
-    uint8_t        *prev_ptr;
+    extern uint8_t _end; /* Symbol defined in the linker script */
+    extern uint8_t _estack; /* Symbol defined in the linker script */
+    extern uint32_t _Min_Stack_Size; /* Symbol defined in the linker script */
+    const uint32_t stack_limit = (uint32_t)&_estack - (uint32_t)&_Min_Stack_Size;
+    const uint8_t *max_heap = (uint8_t *)stack_limit;
+    static uint8_t *__sbrk_heap_end = NULL;
+    uint8_t *prev_heap_end;
 
-    taskENTER_CRITICAL();
+    taskENTER_CRITICAL(); /* Thread safety */
 
-    if (increment == 0)
+    /* Initialize heap end at first call */
+    if (NULL == __sbrk_heap_end)
+    {
+        __sbrk_heap_end = &_end;
+    }
+
+    /* Protect heap from growing into the reserved MSP stack */
+    if (__sbrk_heap_end + incr > max_heap)
     {
         taskEXIT_CRITICAL();
-        return (void *)(heap_ptr != NULL ? heap_ptr : (uint8_t *)0);
+        errno = ENOMEM;
+        return (void *)-1;
     }
 
-    if (heap_ptr == NULL || (heap_ptr + increment) > heap_limit)
-    {
-        size_t request = ((size_t)increment > SBRK_BLOCK_SIZE)
-                         ? (size_t)increment
-                         : SBRK_BLOCK_SIZE;
-
-        uint8_t *block = (uint8_t *)pvPortMalloc(request);
-
-        if (block == NULL)
-        {
-            /* FreeRTOS heap исчерпан — стандартный признак ошибки _sbrk */
-            taskEXIT_CRITICAL();
-            errno = ENOMEM;
-            return (void *)-1;
-        }
-
-        heap_ptr   = block;
-        heap_limit = block + request;
-    }
-
-    prev_ptr  = heap_ptr;
-    heap_ptr += increment;
+    prev_heap_end = __sbrk_heap_end;
+    __sbrk_heap_end += incr;
 
     taskEXIT_CRITICAL();
-    return (void *)prev_ptr;
+    return (void *)prev_heap_end;
 }
 
 /* Functions */
