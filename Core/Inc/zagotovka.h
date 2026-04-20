@@ -183,6 +183,7 @@ void pid_autotune_start(int slot);
 void pid_autotune_stop(int slot);
 void pid_set_pwm_f(int slot, float duty);
 void pid_compute_imc(int slot);
+bool is_pin_in_autotune(uint8_t pin_id);
 void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm);
 
 void parse_relay_json(char* json_string, struct dbPinsConf* PinsConf,const struct dbPinsInfo* PinsInfo, int count);

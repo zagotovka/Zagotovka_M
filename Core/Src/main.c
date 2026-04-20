@@ -515,6 +515,7 @@ void pwm_event_handler(Button *handle) {
         //  PWM
         i = PinsLinks[a].idout;
         if (PinsConf[i].topin == 5) {
+          if (is_pin_in_autotune(i)) break; /* AutoTune lock */
           // dvalue - ПРОЦЕНТ 0-100, step = 1%
           if (PinsConf[handle->button_id].on == 1) {
             PinsConf[i].dvalue += 1;
@@ -553,6 +554,7 @@ void pwm_event_handler(Button *handle) {
         //  PWM
         i = PinsLinks[a].idout;
         if (PinsConf[i].topin == 5) {
+          if (is_pin_in_autotune(i)) break; /* AutoTune lock */
           // dvalue - ПРОЦЕНТ 0-100, step = 1%
           if (PinsConf[handle->button_id].on == 1) {
             PinsConf[i].dvalue += 1;
@@ -1129,6 +1131,10 @@ void start_pwm_fade(uint8_t pwm_id, uint32_t duration_sec,
                     int start_duty, int end_duty) {
     if (pwm_id >= NUMPIN || PinsConf[pwm_id].topin != 5) {
         printf("start_pwm_fade: bad id=%d\r\n", pwm_id);
+        return;
+    }
+    if (is_pin_in_autotune(pwm_id)) {
+        printf("[FADE] BLOCKED by AutoTune: pwm_id=%d\r\n", pwm_id);
         return;
     }
 
@@ -1840,6 +1846,7 @@ void StartEncoderTask(void *argument)
 	                               if (PinsLinks[a].idin == id) {
 	                                   uint8_t idpwm = PinsLinks[a].idout;
 	                                   if (PinsConf[idpwm].topin == 5) {
+	                                       if (is_pin_in_autotune(idpwm)) continue; /* AutoTune lock */
 	                                       // Изменяем значение в памяти
 	                                       int16_t val = PinsConf[idpwm].dvalue + step;
 	                                       if (val < 0)   val = 0;
@@ -2364,6 +2371,7 @@ void StartServiceTask(void *argument)
 	      for (int i = 0; i < NUMPIN; i++) {
 	        if (!fade_state[i].active)   continue;
 	        if (PinsConf[i].topin != 5)  continue;
+	        if (is_pin_in_autotune(i))   continue; /* AutoTune lock */
 
 	        /* Encoder onoff — ПРИОРИТЕТНЫЙ рубильник */
 	        bool enc_on = true;

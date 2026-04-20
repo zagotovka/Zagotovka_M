@@ -368,6 +368,7 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
         if (PinsLinks[a].idin == (int)onoffid) {
           uint8_t idpwm = PinsLinks[a].idout;
           if (PinsConf[idpwm].topin == 5) { // topin==5 — это PWM
+            if (is_pin_in_autotune(idpwm)) continue; /* AutoTune lock */
             uint32_t pulse = 0;
             if (onoff != 0) {
               // Восстанавливаем сохранённое значение dvalue
@@ -1116,6 +1117,7 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
       if (PinsConf[j].topin == 5) { // Это PWM
         for (short k = 0; k < NUMPINLINKS; k++) {
           if (PinsLinks[k].idin == id && PinsLinks[k].idout == j) {
+            if (is_pin_in_autotune(j)) break; /* AutoTune lock */
             if (cJSON_IsNumber(dvalue_item) && cJSON_IsNumber(pwm_item)) {
               uint64_t timer_clk_mhz;
               if (PinsInfo[j].tim == TIM1 || PinsInfo[j].tim == TIM8 ||
@@ -2592,7 +2594,10 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
           }
         } else if (strncmp(command, "pwm", cmdlen) == 0) {
           if (PinsConf[id].topin == 5) { // PWM
-            if (mg_http_get_var(&hm->query, "dvalue", value_str,
+            if (is_pin_in_autotune(id)) { /* AutoTune lock */
+              mg_http_reply(c, 409, "Content-Type: text/plain\r\n",
+                            "PWM %d locked by AutoTune\n", id);
+            } else if (mg_http_get_var(&hm->query, "dvalue", value_str,
                                 sizeof(value_str)) > 0) {
               value = atoi(value_str);
               if (value < 0)
@@ -3396,26 +3401,30 @@ void mqtt_message_handler(const char *topic, const char *payload) {
     }
   } else if (strcmp(command, "pwm") == 0) {
     if (PinsConf[id].topin == 5) { // PWM
-      const char *dvalue_part = strstr(command_start, "dvalue=");
-      if (dvalue_part) {
-        int value;
-        if (sscanf(dvalue_part + 7, "%d", &value) == 1) {
-          if (value >= 0 && value <= 100) { // dvalue — ПРОЦЕНТ 0-100
-            PinsConf[id].dvalue = value;
-            uint32_t pulse_mqtt =
-                (uint32_t)((uint64_t)value * PinsConf[id].pwmmax / 100ULL);
-            __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel,
-                                  pulse_mqtt);
-            printf("PWM MQTT [%d] %s: %d%% = %lu steps\n", id,
-                   PinsInfo[id].pins, value, (unsigned long)pulse_mqtt);
+      if (is_pin_in_autotune(id)) { /* AutoTune lock */
+        printf("[MQTT] PWM %d BLOCKED by AutoTune\r\n", id);
+      } else {
+        const char *dvalue_part = strstr(command_start, "dvalue=");
+        if (dvalue_part) {
+          int value;
+          if (sscanf(dvalue_part + 7, "%d", &value) == 1) {
+            if (value >= 0 && value <= 100) { // dvalue — ПРОЦЕНТ 0-100
+              PinsConf[id].dvalue = value;
+              uint32_t pulse_mqtt =
+                  (uint32_t)((uint64_t)value * PinsConf[id].pwmmax / 100ULL);
+              __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel,
+                                    pulse_mqtt);
+              printf("PWM MQTT [%d] %s: %d%% = %lu steps\n", id,
+                     PinsInfo[id].pins, value, (unsigned long)pulse_mqtt);
+            } else {
+              printf("Invalid dvalue for PWM (must be 0-100): %d\n", value);
+            }
           } else {
-            printf("Invalid dvalue for PWM (must be 0-100): %d\n", value);
+            printf("Invalid dvalue format in payload\n");
           }
         } else {
-          printf("Invalid dvalue format in payload\n");
+          printf("No dvalue found in payload\n");
         }
-      } else {
-        printf("No dvalue found in payload\n");
       }
     } else {
       printf("Error, pwm with id = %d doesn't exist or has incorrect topin "
@@ -3484,6 +3493,7 @@ void action_handler(uint8_t button_id, const char *action_str,
 
               /* Если привязанное устройство это ШИМ (PWM) */
               if (PinsConf[out_id].topin == 5) {
+                if (is_pin_in_autotune(out_id)) continue; /* AutoTune lock */
                 uint32_t pulse = 0;
                 /* Вычисляем новое состояние для ШИМ */
                 uint8_t new_state = action;
@@ -5604,6 +5614,18 @@ float pid_read_temperature(int slot) {
   }
 
   return -999.0f;
+}
+
+/* ──── is_pin_in_autotune: true если pin_id занят автотюном PID ──── */
+bool is_pin_in_autotune(uint8_t pin_id) {
+  for (int i = 0; i < PID_MAX_SLOTS; i++) {
+    if (PidConf[i].pwm_pin_id == pin_id &&
+        (PidConf[i].tune_state == PID_TUNE_STEP ||
+         PidConf[i].tune_state == PID_TUNE_BIAS)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /* ──── pid_set_pwm: устанавливает duty% на PWM-пин ──── */
