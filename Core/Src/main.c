@@ -2791,8 +2791,8 @@ void StartPIDTask(void *argument)
       }
 
       PidConf[i].pwm_out = (uint8_t)(output + 0.5f);
-      printf("[PID DEBUG] slot=%d, T=%.1f, tmpset=%.1f, err=%.1f, P=%.1f, I=%.1f, out=%.1f => duty=%d\r\n", 
-             i, T, PidConf[i].tmpset, error, P_term, PidConf[i].integral, output, PidConf[i].pwm_out);
+//      printf("[PID DEBUG] slot=%d, T=%.1f, tmpset=%.1f, err=%.1f, P=%.1f, I=%.1f, out=%.1f => duty=%d\r\n",
+//             i, T, PidConf[i].tmpset, error, P_term, PidConf[i].integral, output, PidConf[i].pwm_out);
       pid_set_pwm(i, PidConf[i].pwm_out);
     }
     osDelay(50);  /* базовый тик 50 мс, реальный Ts контролируется per-slot */

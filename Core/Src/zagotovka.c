@@ -5299,27 +5299,92 @@ typedef struct {
   float Kd;
 } PidPreset_t;
 
+/* ──── Таблица пресетов (безопасная версия) ──── */
+/*
+ * temp_max  — аварийный порог останова автотюна и PID
+ * temp_min  — нижний аварийный порог
+ * pwm_max   — ограничение мощности во время автотюна
+ * pwm_start — начальная мощность (рабочая точка до тюна)
+ * Ts_ms     — период: DS18B20 min=750ms, DHT22 min=2000ms
+ *
+ * SAFETY: автотюн обязан проверять T < temp_max каждый тик
+ *         и T > temp_min для охлаждающих контуров
+ */
+
 static const PidPreset_t pid_presets[] = {
-    /* 0 - placeholder */ {1000, 0.5f, 30, 100, 100.0f, -55.0f, 0, 0.0f, 0.0f,
-                           0.0f},
-    /* 1 - Паяльная ст. */
-    {200, 0.3f, 30, 100, 125.0f, -55.0f, 0, 10.0f, 0.5f, 1.0f},
-    /* 2 - Кулер        */
-    {1000, 0.5f, 20, 100, 70.0f, -55.0f, 0, -5.0f, -0.1f, 0.0f},
-    /* 3 - 3D-принтер   */
-    {500, 0.4f, 30, 100, 120.0f, 0.0f, 0, 5.0f, 0.2f, 0.5f},
-    /* 4 - Форточка     */
-    {2000, 0.5f, 20, 100, 60.0f, -55.0f, 0, -2.0f, -0.05f, 0.0f},
-    /* 5 - Тёплый пол   */
-    {5000, 0.8f, 20, 80, 45.0f, 0.0f, 0, 2.0f, 0.05f, 0.0f},
-    /* 6 - Холодильник  */
-    {5000, 1.0f, 40, 100, 100.0f, -55.0f, 180, -10.0f, -0.2f, 0.0f},
-    /* 7 - Аквариум     */
-    {3000, 0.6f, 20, 80, 80.0f, 0.0f, 0, 2.0f, 0.05f, 0.0f},
-    /* 8 - Инкубатор    */
-    {3000, 0.4f, 20, 60, 45.0f, 0.0f, 0, 5.0f, 0.1f, 0.0f},
-    /* 9 - Теплица      */
-    {5000, 0.7f, 20, 80, 50.0f, -55.0f, 0, 2.0f, 0.05f, 0.0f},
+
+  /* ──────────────────────────────────────────────────────────────────
+   * Idx  Ts_ms   lf     ps   pm   Tmax   Tmin    pause  Kp     Ki      Kd
+   * ────────────────────────────────────────────────────────────────── */
+
+  /* 0 - Placeholder (не использовать) */
+  { 1000, 0.5f,   30, 100, 100.0f,  -55.0f,    0, 0.0f,  0.0f,   0.0f },
+
+  /* 1 - Паяльная станция
+   * DS18B20 only — DHT22 слишком медленный для этого объекта
+   * Ts=1000ms — минимум для DS18B20
+   * temp_max=150°C — типичный предел жала/платформы
+   * pwm_max=100% — допустимо, объект металл, инерция низкая
+   * ВНИМАНИЕ: пользователь должен убедиться что Tset < 125°C        */
+  { 1000, 0.3f,   30, 100, 150.0f,  -55.0f,    0, 10.0f, 0.5f,   1.0f },
+
+  /* 2 - Кулер (охлаждение, вентилятор)
+   * Инверсный контур: Kp/Ki отрицательные
+   * temp_max=70°C — порог перегрева охлаждаемого объекта
+   * pwm_max=100% — вентилятор, нет риска перегрева от PWM           */
+  { 1000, 0.5f,   20, 100,  70.0f,  -55.0f,    0, -5.0f, -0.1f,  0.0f },
+
+  /* 3 - 3D-принтер (хотэнд/стол)
+   * Ts=1000ms — DS18B20 минимум
+   * temp_max=120°C — PLA/PETG, для ABS пользователь меняет Tset
+   * pwm_max=100% — хотэнд допускает полную мощность
+   * safety_margin встроен: temp_max на 20-30°C выше типичного Tset  */
+  { 1000, 0.4f,   30, 100, 120.0f,   0.0f,     0, 5.0f,  0.2f,   0.5f },
+
+  /* 4 - Форточка/вентиляция (инверсный, сервопривод или вентилятор)
+   * Ts=2000ms — совместим и с DS18B20 и с DHT22
+   * temp_max=60°C — помещение, нет риска
+   * pwm_max=100% — привод форточки                                   */
+  { 2000, 0.5f,   20, 100,  60.0f,  -55.0f,    0, -2.0f, -0.05f, 0.0f },
+
+  /* 5 - Тёплый пол
+   * Ts=5000ms — медленный объект, DHT22 совместим
+   * temp_max=40°C — защита стяжки/покрытия (типичный Tset=28-35°C)
+   * pwm_max=70%  — ограничение мощности, исключает перегрев стяжки
+   * ВНИМАНИЕ: если Tset > 35°C — пользователь меняет temp_max сам   */
+  { 5000, 0.8f,   20,  70,  40.0f,   0.0f,     0, 2.0f,  0.05f,  0.0f },
+
+  /* 6 - Холодильник
+   * Ts=5000ms — компрессор, быстрый цикл вреден
+   * pause_sec=180 — защита компрессора: минимум 3 мин между включ.
+   * temp_max=10°C — верхний порог (инверсный контур охлаждения)
+   * temp_min=-25°C — защита от заморозки обычного холодильника
+   * pwm_max=100% — компрессор on/off                                 */
+  { 5000, 1.0f,   40, 100,  10.0f,  -25.0f,  180, -10.0f,-0.2f,  0.0f },
+
+  /* 7 - Аквариум
+   * Ts=3000ms — DS18B20 и DHT22 совместимы
+   * temp_max=32°C — критический порог для большинства рыб
+   *                 типичный Tset=24-26°C, запас ~6°C
+   * pwm_max=60%  — нагреватель аквариума, малая инерция воды
+   * ВНИМАНИЕ: temp_max=32°C жёстко, пользователь не должен
+   *           ставить Tset > 28°C для этого пресета                 */
+  { 3000, 0.6f,   20,  60,  32.0f,   15.0f,   0, 2.0f,  0.05f,  0.0f },
+
+  /* 8 - Инкубатор
+   * Ts=3000ms — DS18B20 и DHT22 совместимы
+   * temp_max=40°C — критично: выше 40°C гибель эмбрионов
+   *                 типичный Tset=37-38°C, запас всего 2°C
+   * pwm_max=50%  — малая мощность нагревателя, точное регулирование
+   * lambda=0.4   — более агрессивное регулирование для точности      */
+  { 3000, 0.4f,   20,  50,  40.0f,   35.0f,   0, 5.0f,  0.1f,   0.0f },
+
+  /* 9 - Теплица
+   * Ts=5000ms — медленный объект, DHT22 совместим
+   * temp_max=35°C — защита растений
+   * pwm_max=80%  — обогреватель теплицы
+   * temp_min=5°C — защита от заморозки                               */
+  { 5000, 0.7f,   20,  80,  35.0f,   5.0f,    0, 2.0f,  0.05f,  0.0f },
 };
 #define PID_PRESET_COUNT (sizeof(pid_presets) / sizeof(pid_presets[0]))
 
@@ -5678,16 +5743,9 @@ void pid_set_pwm_f(int slot, float duty) {
 }
 
 /* ──── Адаптивная стабилизация: утилита ──── */
-/* Возвращает true когда все 4 критерия выполнены одновременно */
 #define IIR_ALPHA 0.90f
-#define SIGMA_THR                                                              \
-  0.15f // Было 0.02f, cделаем пороги чуть шире шага DS18B20/DHT22 а то, ждать
-        // придется более 4х часов!
-#define ERR_THR                                                                \
-  0.20f // Было 0.05f, cделаем пороги чуть шире шага DS18B20/DHT22 а то, ждать
-        // придется более 4х часов!
-#define STABLE_MS                                                              \
-  30000 // Сократим время "доказательства" стабильности с 60с до 30с
+/* Пороги σ/err и счётчик стабильности теперь в PidConf[slot] — зависят от датчика.
+ * Инициализируются в pid_autotune_start(). */
 
 static float tune_calc_sigma(int slot) {
   float avg = 0.0f;
@@ -5715,15 +5773,78 @@ void pid_autotune_start(int slot) {
     return;
   }
 
-  /* Инициализация IIR-фильтра текущей температурой */
+  /* ── 1. Адаптивные пороги под тип датчика ── */
+  if (PidConf[slot].selsens == PID_SENS_DS18B20) {
+    PidConf[slot].tune_sigma_thr = 0.10f;  /* DS18B20 шум ~0.05-0.08°C */
+    PidConf[slot].tune_sigma_thr = 0.10f;  /* DS18B20 шум ~0.05-0.08°C */
+    PidConf[slot].tune_err_thr   = 0.50f;  /* ⚠️ Исправлено: ±0.5°C точность DS18B20 */
+  } else {
+    PidConf[slot].tune_sigma_thr = 0.30f;  /* DHT22 шум ~0.15-0.25°C   */
+    PidConf[slot].tune_err_thr   = 0.50f;  /* DHT22 точность ±0.5°C    */
+  }
+
+  /* ── 2. Счётчик стабильности в тиках ── */
+  /* При Ts=1000ms → 30 сек, при Ts=3000ms → 30 сек, при Ts=5000ms → 50 сек */
+  PidConf[slot].tune_stable_req =
+      (PidConf[slot].Ts_ms > 0)
+          ? (uint16_t)(30000U / PidConf[slot].Ts_ms)
+          : 30;
+  if (PidConf[slot].tune_stable_req < 10)
+    PidConf[slot].tune_stable_req = 10; /* минимум 10 тиков */
+  PidConf[slot].tune_stable_cnt = 0;
+
+  /* ── 3. Валидация уставок vs пределов ── */
+  if (PidConf[slot].tmpset >= PidConf[slot].temp_max) {
+    printf("[PID] AutoTune ERROR: Tset=%.1f >= temp_max=%.1f\r\n",
+           PidConf[slot].tmpset, PidConf[slot].temp_max);
+    PidConf[slot].tune_state = PID_TUNE_ERROR;
+    return;
+  }
+  if ((PidConf[slot].temp_max - PidConf[slot].tmpset) < 2.0f) {
+    printf("[PID] AutoTune ERROR: margin to temp_max < 2C (%.1f)\r\n",
+           PidConf[slot].temp_max - PidConf[slot].tmpset);
+    PidConf[slot].tune_state = PID_TUNE_ERROR;
+    return;
+  }
+  if (PidConf[slot].tmpset <= PidConf[slot].temp_min) {
+    printf("[PID] AutoTune ERROR: Tset=%.1f <= temp_min=%.1f\r\n",
+           PidConf[slot].tmpset, PidConf[slot].temp_min);
+    PidConf[slot].tune_state = PID_TUNE_ERROR;
+    return;
+  }
+
+  /* ── 4. Безопасный step_delta ── */
+  {
+    float safe_dT = (PidConf[slot].temp_max - PidConf[slot].tmpset) * 0.5f;
+    if (safe_dT < 5.0f)
+      safe_dT = 5.0f; /* минимум для различимого отклика */
+
+    if (fabsf(PidConf[slot].K_gain) > 0.001f) {
+      /* Повторный тюн — K_gain известен */
+      PidConf[slot].tune_step_delta = safe_dT / PidConf[slot].K_gain;
+    } else {
+      /* Первый тюн — консервативная оценка 30% от диапазона */
+      PidConf[slot].tune_step_delta =
+          0.3f * ((float)PidConf[slot].pwm_max - (float)PidConf[slot].pwm_start);
+    }
+    /* Жёсткие границы */
+    float max_delta =
+        0.6f * ((float)PidConf[slot].pwm_max - (float)PidConf[slot].pwm_start);
+    if (PidConf[slot].tune_step_delta < 10.0f)
+      PidConf[slot].tune_step_delta = 10.0f;
+    if (PidConf[slot].tune_step_delta > max_delta)
+      PidConf[slot].tune_step_delta = max_delta;
+    if (PidConf[slot].tune_step_delta > 40.0f)
+      PidConf[slot].tune_step_delta = 40.0f;
+  }
+
   /* Диагностика: выведем параметры датчика */
   printf("[PID] AutoTune start: slot=%d selsens=%d sernum='%s' "
          "sensor_pin_id=%d\r\n",
          slot, (int)PidConf[slot].selsens, PidConf[slot].sernum,
          PidConf[slot].sensor_pin_id);
 
-  /* Попытка чтения с ретраем (датчик может ещё не завершить первую конверсию)
-   */
+  /* Попытка чтения с ретраем (датчик может ещё не завершить первую конверсию) */
   float T = -999.0f;
   for (int attempt = 0; attempt < 3; attempt++) {
     T = pid_read_temperature(slot);
@@ -5743,16 +5864,16 @@ void pid_autotune_start(int slot) {
   PidConf[slot].T_filtered = T;
   PidConf[slot].tmpcur = T;
 
-  /* Сброс всех runtime-полей автотюна */
+  /* ── 5. Сброс всех runtime-полей автотюна ── */
   PidConf[slot].tune_progress = 0;
   PidConf[slot].tune_phase_b = 0;
   PidConf[slot].tune_iter = 0;
   PidConf[slot].tune_lo = 0.0f;
   PidConf[slot].tune_hi = 0.0f;
-  memset(PidConf[slot].tune_T_samples, 0, sizeof(PidConf[slot].tune_T_samples));
-  PidConf[slot].tune_sample_idx = 0;
+  PidConf[slot].tune_tau_sum = 0.0f;
+  PidConf[slot].tune_tau_n = 0;
   PidConf[slot].tune_stab_start = HAL_GetTick();
-  PidConf[slot].tune_in_range_ms = 0;
+  PidConf[slot].tune_stable_cnt = 0;
   PidConf[slot].tune_T_start = T;
   PidConf[slot].tune_T_end = T;
   PidConf[slot].tune_step_start_tick = HAL_GetTick();
@@ -5772,8 +5893,11 @@ void pid_autotune_start(int slot) {
   pid_set_pwm_f(slot, PidConf[slot].tune_step_pwm);
 
   PidConf[slot].tune_state = PID_TUNE_STEP;
-  printf("[PID] AutoTune STARTED slot=%d T=%.1f pwm_start=%d\r\n", slot, T,
-         PidConf[slot].pwm_start);
+  printf("[PID] AutoTune STARTED slot=%d T=%.1f pwm_start=%d "
+         "sigma_thr=%.2f err_thr=%.2f stable_req=%d step_delta=%.1f%%\r\n",
+         slot, T, PidConf[slot].pwm_start,
+         PidConf[slot].tune_sigma_thr, PidConf[slot].tune_err_thr,
+         PidConf[slot].tune_stable_req, PidConf[slot].tune_step_delta);
 }
 
 /* ──── pid_autotune_stop: остановка авто-тюна ──── */
@@ -5795,11 +5919,22 @@ void pid_autotune_tick(int slot) {
 
   uint32_t now = HAL_GetTick();
 
-  /* 1. Чтение и IIR-фильтрация температуры */
+  /* 1. Чтение температуры */
   float T_raw = pid_read_temperature(slot);
   if (T_raw < -100.0f)
     return; /* датчик не валиден — пропускаем тик */
 
+  /* ── SAFETY: аварийный останов при перегреве ── */
+  if (T_raw >= PidConf[slot].temp_max) {
+    pid_set_pwm(slot, 0);
+    PidConf[slot].tune_state = PID_TUNE_ERROR;
+    PidConf[slot].tune_progress = 0;
+    printf("[PID] SAFETY TRIP slot=%d T=%.2f >= temp_max=%.2f\r\n",
+           slot, T_raw, PidConf[slot].temp_max);
+    return;
+  }
+
+  /* 2. IIR-фильтрация */
   PidConf[slot].T_filtered =
       IIR_ALPHA * PidConf[slot].T_filtered + (1.0f - IIR_ALPHA) * T_raw;
   float T = PidConf[slot].T_filtered;
@@ -5820,27 +5955,30 @@ void pid_autotune_tick(int slot) {
       /* Прогресс: 0..5% */
       PidConf[slot].tune_progress = 0;
 
-      if (sigma < SIGMA_THR) {
-        PidConf[slot].tune_in_range_ms += PidConf[slot].Ts_ms;
+      if (sigma < PidConf[slot].tune_sigma_thr) {
+        PidConf[slot].tune_stable_cnt++;
       } else {
-        PidConf[slot].tune_in_range_ms = 0;
+        PidConf[slot].tune_stable_cnt = 0;
       }
 
       /* Таймаут: 5 минут макс на стабилизацию начальной точки */
-      if (PidConf[slot].tune_in_range_ms >= STABLE_MS ||
+      if (PidConf[slot].tune_stable_cnt >= PidConf[slot].tune_stable_req ||
           (now - PidConf[slot].tune_step_start_tick) > 300000U) {
         /* Запоминаем T_start */
         PidConf[slot].tune_T_start = T;
-        PidConf[slot].tune_in_range_ms = 0;
+        PidConf[slot].tune_stable_cnt = 0;
         PidConf[slot].tune_step_start_tick = now;
 
-        /* Подаём шаг: PWM = pwm_max */
-        PidConf[slot].tune_step_pwm = (float)PidConf[slot].pwm_max;
+        /* Подаём шаг: PWM = pwm_start + step_delta */
+        PidConf[slot].tune_step_pwm =
+            (float)PidConf[slot].pwm_start + PidConf[slot].tune_step_delta;
+        if (PidConf[slot].tune_step_pwm > (float)PidConf[slot].pwm_max)
+          PidConf[slot].tune_step_pwm = (float)PidConf[slot].pwm_max;
         pid_set_pwm_f(slot, PidConf[slot].tune_step_pwm);
 
         PidConf[slot].tune_step_phase = 1;
-        printf("[PID] Step test: phase 0->1, T_start=%.2f, PWM->%d%%\r\n",
-               PidConf[slot].tune_T_start, PidConf[slot].pwm_max);
+        printf("[PID] Step test: phase 0->1, T_start=%.2f, PWM->%.1f%%\r\n",
+               PidConf[slot].tune_T_start, PidConf[slot].tune_step_pwm);
       }
       break;
 
@@ -5854,37 +5992,55 @@ void pid_autotune_tick(int slot) {
         time_pct = 1.0f;
       PidConf[slot].tune_progress = (uint8_t)(5.0f + time_pct * 15.0f);
 
+      /* Накопление интеграла для расчёта tau (Метод площадей / Area Method) */
+      PidConf[slot].tune_tau_sum += T;
+      PidConf[slot].tune_tau_n++;
+
       /* Адаптивная стабилизация: минимум 2*tau_est, σ < порог, 60с подряд */
       if (elapsed < (uint32_t)(2.0f * tau_est * 1000.0f))
         break;
 
-      if (sigma < SIGMA_THR) {
-        PidConf[slot].tune_in_range_ms += PidConf[slot].Ts_ms;
+      if (sigma < PidConf[slot].tune_sigma_thr) {
+        PidConf[slot].tune_stable_cnt++;
       } else {
-        PidConf[slot].tune_in_range_ms = 0;
+        PidConf[slot].tune_stable_cnt = 0;
       }
 
       /* Таймаут 10*tau */
       bool timed_out = (elapsed > (uint32_t)(10.0f * tau_est * 1000.0f));
 
-      if (PidConf[slot].tune_in_range_ms >= STABLE_MS || timed_out) {
+      if (PidConf[slot].tune_stable_cnt >= PidConf[slot].tune_stable_req || timed_out) {
         PidConf[slot].tune_T_end = T;
 
         /* Вычисляем K_gain и tau */
         float dT = PidConf[slot].tune_T_end - PidConf[slot].tune_T_start;
-        float dPWM =
-            (float)PidConf[slot].pwm_max - (float)PidConf[slot].pwm_start;
+        float dPWM = PidConf[slot].tune_step_pwm - (float)PidConf[slot].pwm_start;
 
         if (fabsf(dPWM) < 1.0f)
           dPWM = 1.0f; /* защита от деления на 0 */
         PidConf[slot].K_gain = dT / dPWM;
 
-        /* tau = время до 63.2% отклика */
-        /* tau: грубая оценка ≈ elapsed * 0.3 (эвристика для первого порядка) */
-        PidConf[slot].tau = (float)elapsed / 1000.0f * 0.3f;
-        /* Более точная: если T сейчас ~= T_end и стабильна, tau ≈ elapsed/3 */
+        /* tau = расчёт методом площадей (Area Method) */
+        /* Формула: tau = интеграл(T_end - T(t)) dt / (T_end - T_start) */
+        if (PidConf[slot].tune_tau_n > 0) {
+            float dt_sec = (float)elapsed / 1000.0f / (float)PidConf[slot].tune_tau_n;
+            float area = 0.0f;
+            /* Так как мы накопили сумму T: область = Сумма(T_end - T) * dt */
+            area = (PidConf[slot].tune_T_end * PidConf[slot].tune_tau_n - PidConf[slot].tune_tau_sum) * dt_sec;
+            if (fabsf(dT) > 0.1f) {
+                PidConf[slot].tau = area / dT;
+            } else {
+                PidConf[slot].tau = 5.0f; /* Fallback если нет дельты */
+            }
+        } else {
+            PidConf[slot].tau = 5.0f;
+        }
+
+        /* Ограничиваем tau разумными пределами */
         if (PidConf[slot].tau < 1.0f)
-          PidConf[slot].tau = 5.0f;
+          PidConf[slot].tau = 1.0f;
+        if (PidConf[slot].tau > 500.0f)
+            PidConf[slot].tau = 500.0f;
 
         /* Валидация */
         if (fabsf(PidConf[slot].K_gain) < 0.001f || PidConf[slot].tau < 1.0f) {
@@ -5907,7 +6063,7 @@ void pid_autotune_tick(int slot) {
         PidConf[slot].tune_iter = 0;
         PidConf[slot].tune_lo = 0.0f;
         PidConf[slot].tune_hi = (float)PidConf[slot].pwm_max;
-        PidConf[slot].tune_in_range_ms = 0;
+        PidConf[slot].tune_stable_cnt = 0;
         PidConf[slot].tune_stab_start = now;
         PidConf[slot].tune_progress = 20;
 
@@ -5939,14 +6095,14 @@ void pid_autotune_tick(int slot) {
     }
 
     /* Счётчик стабильности */
-    if (err < ERR_THR && sigma < SIGMA_THR) {
-      PidConf[slot].tune_in_range_ms += PidConf[slot].Ts_ms;
+    if (err < PidConf[slot].tune_err_thr && sigma < PidConf[slot].tune_sigma_thr) {
+      PidConf[slot].tune_stable_cnt++;
     } else {
-      PidConf[slot].tune_in_range_ms = 0;
+      PidConf[slot].tune_stable_cnt = 0;
     }
 
     /* Ждём 60 сек устойчивости */
-    if (PidConf[slot].tune_in_range_ms < STABLE_MS) {
+    if (PidConf[slot].tune_stable_cnt < PidConf[slot].tune_stable_req) {
       /* Таймаут: 10*tau на одну итерацию */
       uint32_t iter_timeout = (uint32_t)(10.0f * PidConf[slot].tau * 1000.0f);
       if (iter_timeout < 120000U)
@@ -5957,10 +6113,10 @@ void pid_autotune_tick(int slot) {
       /* Таймаут — принимаем решение по текущей T */
       printf("[PID] Bias iter timeout, forcing decision\r\n");
     }
-    PidConf[slot].tune_in_range_ms = 0;
+    PidConf[slot].tune_stable_cnt = 0;
 
     /* --- ДОСРОЧНЫЙ ВЫХОД ПО ТОЧНОСТИ --- */
-    if (err < ERR_THR && sigma < SIGMA_THR &&
+    if (err < PidConf[slot].tune_err_thr && sigma < PidConf[slot].tune_sigma_thr &&
         (PidConf[slot].tune_hi - PidConf[slot].tune_lo) < 0.01f) {
       PidConf[slot].bias =
           (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
@@ -5969,22 +6125,24 @@ void pid_autotune_tick(int slot) {
     }
 
     /* --- БИНАРНЫЙ ШАГ --- */
-    float mid = (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
-    pid_set_pwm_f(slot, mid);
+    {
+      float mid = (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
+      pid_set_pwm_f(slot, mid);
 
-    if (T > Tset) {
-      PidConf[slot].tune_hi = mid;
-    } else {
-      PidConf[slot].tune_lo = mid;
+      if (T > Tset) {
+        PidConf[slot].tune_hi = mid;
+      } else {
+        PidConf[slot].tune_lo = mid;
+      }
+
+      printf("[PID] Bias iter=%d phase=%c lo=%.3f hi=%.3f mid=%.3f T=%.2f "
+             "Tset=%.1f\r\n",
+             PidConf[slot].tune_iter, PidConf[slot].tune_phase_b ? 'B' : 'A',
+             PidConf[slot].tune_lo, PidConf[slot].tune_hi, mid, T, Tset);
     }
 
     PidConf[slot].tune_iter++;
     PidConf[slot].tune_stab_start = now;
-
-    printf("[PID] Bias iter=%d phase=%c lo=%.3f hi=%.3f mid=%.3f T=%.2f "
-           "Tset=%.1f\r\n",
-           PidConf[slot].tune_iter, PidConf[slot].tune_phase_b ? 'B' : 'A',
-           PidConf[slot].tune_lo, PidConf[slot].tune_hi, mid, T, Tset);
 
     /* --- РАСЧЁТ ПРОГРЕССА --- */
     if (!PidConf[slot].tune_phase_b) {
@@ -6067,12 +6225,12 @@ void pid_compute_imc(int slot) {
   /* Защита от деления на 0 */
   if (fabsf(K) < 0.0001f)
     K = 0.0001f;
-  float denom = K * (2.0f * lambda + theta);
+  float denom = 2.0f * K * (lambda + theta);
   if (fabsf(denom) < 0.0001f)
     denom = 0.0001f;
 
   PidConf[slot].Kp = (2.0f * tau + theta) / denom;
-  PidConf[slot].Ki = PidConf[slot].Kp / (2.0f * tau + theta);
+  PidConf[slot].Ki = PidConf[slot].Kp / (tau + theta / 2.0f);
   PidConf[slot].Kd = PidConf[slot].Kp * tau * theta / (2.0f * tau + theta);
 
   printf(

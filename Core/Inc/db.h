@@ -14,6 +14,7 @@
 #define NUMTASK 30 // кол-во CRON task
 
 #include "stdio.h"
+#include <stdbool.h>
 #include "stm32f7xx_hal.h"
 #define MAXSIZE 89
 #define PINPAIRS 10 // ПОКА 10 пар {ID:Pin}.
@@ -128,7 +129,13 @@ typedef struct {
     float    tune_T_samples[10];   // кольцевой буфер температур для σ
     uint8_t  tune_sample_idx;      // индекс в кольцевом буфере
     uint32_t tune_stab_start;      // HAL_GetTick() начала ожидания стабилизации
-    uint32_t tune_in_range_ms;     // время непрерывной стабильности (мс)
+    float    tune_sigma_thr;       // адаптивный порог σ (зависит от датчика)
+    float    tune_err_thr;         // адаптивный порог ошибки (зависит от датчика)
+    uint16_t tune_stable_cnt;      // счётчик тиков непрерывной стабильности
+    uint16_t tune_stable_req;      // требуемое кол-во тиков для признания стабильности
+    float    tune_step_delta;      // безопасный шаг PWM для step-теста (%)
+    float    tune_tau_sum;         // накопитель суммы T для area-метода расчёта tau
+    uint16_t tune_tau_n;            // кол-во тиков накопления (для area-метода)
     float    tune_T_start;         // T до шагового теста
     float    tune_T_end;           // T после шагового теста
     uint32_t tune_step_start_tick; // HAL_GetTick() начала шагового теста
