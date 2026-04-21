@@ -5968,6 +5968,8 @@ void pid_autotune_tick(int slot) {
         PidConf[slot].tune_T_start = T;
         PidConf[slot].tune_stable_cnt = 0;
         PidConf[slot].tune_step_start_tick = now;
+        PidConf[slot].tune_tau_sum = 0.0f;
+        PidConf[slot].tune_tau_n = 0;
 
         /* Подаём шаг: PWM = pwm_start + step_delta */
         PidConf[slot].tune_step_pwm =
