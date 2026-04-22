@@ -409,7 +409,7 @@ function TabSwitch({ }) {
               </tr>
               <tr>
                 <td class="border px-4 py-2">Ответ</td>
-                <td class="border px-4 py-2">Если Главный рубильник (On/Off) на этой странице выключен, то команда будет проигнорирована, а в ответном SMS придет сообщение <b>14:DISABLED</b>.</td>
+                <td class="border px-4 py-2">Если (On/Off) в какой-либо строке таблицы выключен, то команда будет проигнорирована для этой строки, а в ответном SMS придет подобное сообщение <b>14:DISABLED</b>.</td>
               </tr>
             </tbody>
           </table>
@@ -533,7 +533,7 @@ function TabSwitch({ }) {
               </tr>
               <tr>
                 <td class="border px-4 py-2">Response</td>
-                <td class="border px-4 py-2">If the Master switch (On/Off) is disabled, the command will be ignored and the system will explicitly return <b>14:DISABLED</b> in the SMS response.</td>
+                <td class="border px-4 py-2">If (On/Off) in any row of the table, the command will be ignored for this row, and a similar message <b>14:DISABLED</b> in the SMS response.</td>
               </tr>
             </tbody>
           </table>

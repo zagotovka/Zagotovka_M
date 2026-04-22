@@ -252,7 +252,7 @@ const TabButton = () => {
               <tr>
                 <td class="border px-4 py-2">Ответ</td>
                 <td class="border px-4 py-2">DISABLED</td>
-                <td class="border px-4 py-2">Если Главный рубильник (On/Off) выключен, то действие игнорируется, а в ответном SMS придет явно <b>30:DISABLED</b>, а не дефолтное действие.</td>
+                <td class="border px-4 py-2">Если Главный рубильник (On/Off) на этой странице выключен, то команда будет проигнорирована, а в ответном SMS придет сообщение<b>30:DISABLED</b>, а не дефолтное действие.</td>
               </tr>
             </tbody>
           </table>
@@ -413,7 +413,7 @@ const TabButton = () => {
               <tr>
                 <td class="border px-4 py-2">Response</td>
                 <td class="border px-4 py-2">DISABLED</td>
-                <td class="border px-4 py-2">If the Master switch (On/Off) is disabled, the command will be ignored and the system will reply with <b>30:DISABLED</b> in the SMS.</td>
+                <td class="border px-4 py-2">If (On/Off) in any row of the table, the command will be ignored for this row, and a similar message <b>30:DISABLED</b> in the SMS.</td>
               </tr>
             </tbody>
           </table>

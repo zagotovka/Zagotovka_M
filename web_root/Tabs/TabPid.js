@@ -107,6 +107,27 @@ const SENSOR_OPTIONS = [
   { value: '2', label: 'DHT-22' },
 ];
 
+const HELP_CONTENT = {
+  ru: html`
+    <div class="mytext space-y-6">
+      <div>
+        <p class="mb-4">
+Сначала выберите параметр «PWM pin». Затем укажите тип температурного датчика: DS18B20 или DHT22. После этого выберите один из доступных пресетов, который максимально соответствует нужным температурным и временным параметрам. И задайте целевую температуру, которую должен поддерживать PID-контроллер.
+        </p>
+      </div>
+    </div>
+  `,
+  en: html`
+    <div class="mytext space-y-6">
+      <div>
+        <p class="mb-4">
+First, select the «PWM pin» parameter. Then specify the type of temperature sensor: DS18B20 or DHT22. After that, select one of the available presets that closely matches the required temperature and timing parameters. Finally, set the target temperature that the PID controller should maintain.
+        </p>
+      </div>
+    </div>
+  `
+};
+
 // Максимальное число PID-слотов — фиксировано на уровне прошивки
 const PID_MAX_SLOTS = 24;
 
@@ -507,7 +528,7 @@ function TabPid({ }) {
 
       ${showHelp && html`
         <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700 w-full">
-          <p class="text-slate-600">Help content for PID controller.</p>
+          ${HELP_CONTENT[language] || HELP_CONTENT['en']}
         </div>
       `}
 

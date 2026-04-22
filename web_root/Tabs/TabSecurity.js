@@ -164,33 +164,33 @@ const TabSecurity = () => {
 
   const helpContentSim800L = {
     ru: html`
-      <div className="space-y-6 max-w-2xl mx-auto p-4">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-xl font-semibold mb-4 text-blue-600">Модуль SIM800L📱</h2>
-          <p className="text-gray-600 mb-4">
+      <div class="mytext space-y-6">
+        <div>
+          <h2 class="text-xl font-bold mb-4 text-blue-600">Модуль SIM800L📱</h2>
+          <p class="mb-4">
             Модуль позволяет управлять "Заготовкой" при помощи мобильной связи - интернет не нужен!
           </p>
-          <div className="bg-blue-50 p-4 rounded-lg mb-6">
-            <h3 className="font-medium mb-2">Возможности модуля:</h3>
-            <ul className="space-y-2 list-disc pl-5">
+          <div class="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 class="font-bold mb-2">Возможности модуля:</h3>
+            <ul class="space-y-2 list-disc pl-5">
               <li>Входящие вызовы и SMS принимаются только с номера, указанного в поле «Phone Number». Вызовы с других номеров отклоняются автоматически, SMS — игнорируются.</li>
               <li>Держит вас в курсе происходящего при помощи SMS-уведомлений</li>
               <li>Включается и отключается при помощи ползунка 'OnOFF'</li>
             </ul>
           </div>
-          <div className="space-y-4">
-            <div className="p-3 bg-green-50 rounded">
-              <p className="font-medium">✅ Когда ползунок 'OnOFF' ВКЛючен:</p>
+          <div class="space-y-4">
+            <div class="p-3 bg-green-50 rounded">
+              <p class="font-bold">✅ Когда ползунок 'OnOFF' ВКЛючен:</p>
               <p>SMS-уведомления работают по вашим настройкам из таблицы 'Security Pins'</p>
             </div>
-            <div className="p-3 bg-gray-50 rounded">
-              <p className="font-medium">⭕ Когда ползунок 'OnOFF' ОТКлючен:</p>
+            <div class="p-3 bg-gray-50 rounded">
+              <p class="font-bold">⭕ Когда ползунок 'OnOFF' ОТКлючен:</p>
               <p>Все SMS-уведомления отключены, настройки из таблицы 'Security Pins' не учитываются</p>
             </div>
           </div>
-          <div className="mt-6 bg-red-50 p-4 rounded-lg">
-            <h3 className="text-red-600 font-semibold mb-2">📍 ВАЖНО!</h3>
-            <ul className="space-y-2 list-disc pl-5 text-red-700">
+          <div class="mt-6 bg-red-50 p-4 rounded-lg">
+            <h3 class="text-red-600 font-bold mb-2">📍 ВАЖНО!</h3>
+            <ul class="space-y-2 list-disc pl-5 text-red-700">
               <li>Установить SIM-карту в модуль SIM800L</li>
               <li>Включить SIM800L → Дождаться подключения к GSM → Включить STM32</li>
             </ul>
@@ -199,33 +199,33 @@ const TabSecurity = () => {
       </div>
     `,
     en: html`
-      <div className="space-y-6 max-w-2xl mx-auto p-4">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-xl font-semibold mb-4 text-blue-600">SIM800L Module📱</h2>
-          <p className="text-gray-600 mb-4">
+      <div class="mytext space-y-6">
+        <div>
+          <h2 class="text-xl font-bold mb-4 text-blue-600">SIM800L Module📱</h2>
+          <p class="mb-4">
             The module controls your "Template" using mobile network - no internet required!
           </p>
-          <div className="bg-blue-50 p-4 rounded-lg mb-6">
-            <h3 className="font-medium mb-2">Module capabilities:</h3>
-            <ul className="space-y-2 list-disc pl-5">
+          <div class="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 class="font-bold mb-2">Module capabilities:</h3>
+            <ul class="space-y-2 list-disc pl-5">
               <li>Incoming calls and SMS messages are accepted only from the number specified in the “Phone Number” field. Calls from other numbers are automatically rejected, and SMS messages are ignored.</li>
               <li>Keeps you updated using SMS notifications</li>
               <li>Turns ON and OFF using the 'OnOFF' slider</li>
             </ul>
           </div>
-          <div className="space-y-4">
-            <div className="p-3 bg-green-50 rounded">
-              <p className="font-medium">✅ When 'OnOFF' slider is ON:</p>
+          <div class="space-y-4">
+            <div class="p-3 bg-green-50 rounded">
+              <p class="font-bold">✅ When 'OnOFF' slider is ON:</p>
               <p>SMS notifications work according to your settings in the 'Security Pins' table</p>
             </div>
-            <div className="p-3 bg-gray-50 rounded">
-              <p className="font-medium">⭕ When 'OnOFF' slider is OFF:</p>
+            <div class="p-3 bg-gray-50 rounded">
+              <p class="font-bold">⭕ When 'OnOFF' slider is OFF:</p>
               <p>All SMS notifications are disabled, settings in the 'Security Pins' table are ignored</p>
             </div>
           </div>
-          <div className="mt-6 bg-red-50 p-4 rounded-lg">
-            <h3 className="text-red-600 font-semibold mb-2">📍 IMPORTANT!</h3>
-            <ul className="space-y-2 list-disc pl-5 text-red-700">
+          <div class="mt-6 bg-red-50 p-4 rounded-lg">
+            <h3 class="text-red-600 font-bold mb-2">📍 IMPORTANT!</h3>
+            <ul class="space-y-2 list-disc pl-5 text-red-700">
               <li>Insert SIM card into the SIM800L module</li>
               <li>Turn ON SIM800L → Wait for GSM connection → Turn ON STM32</li>
             </ul>
@@ -237,101 +237,101 @@ const TabSecurity = () => {
 
   const helpContentSecurity = {
     ru: html`
-      <div className="space-y-6 max-w-2xl mx-auto p-4">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-xl font-semibold mb-4 text-blue-600">Подключение датчиков 🔌</h2>
-          <div className="bg-blue-50 p-4 rounded-lg mb-6">
-            <h3 className="font-medium mb-3">Нормально открытый геркон <span className="text-blue-500 font-bold">(Normal open)</span></h3>
-            <ul className="space-y-2">
+      <div class="mytext space-y-6">
+        <div>
+          <h2 class="text-xl font-bold mb-4 text-blue-600">Подключение датчиков 🔌</h2>
+          <div class="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 class="font-bold mb-3">Нормально открытый геркон <span class="text-blue-500 font-bold">(Normal open)</span></h3>
+            <ul class="space-y-2">
               <li>• Контакты разомкнуты без магнитного поля</li>
               <li>• Контакты замыкаются при поднесении магнита</li>
-              <li>• Подключение: один провод к пину STM32, второй к <span className="text-red-500 font-bold">+3.3V</span></li>
+              <li>• Подключение: один провод к пину STM32, второй к <span class="text-red-500 font-bold">+3.3V</span></li>
             </ul>
           </div>
-          <div className="bg-blue-50 p-4 rounded-lg mb-6">
-            <h3 className="font-medium mb-3">Нормально закрытый геркон <span className="text-blue-500 font-bold">(Normal close)</span></h3>
-            <ul className="space-y-2">
+          <div class="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 class="font-bold mb-3">Нормально закрытый геркон <span class="text-blue-500 font-bold">(Normal close)</span></h3>
+            <ul class="space-y-2">
               <li>• Контакты замкнуты без магнитного поля</li>
               <li>• Контакты размыкаются при поднесении магнита</li>
-              <li>• Подключение: один провод к пину STM32, второй к <span className="text-red-500 font-bold">+3.3V</span></li>
+              <li>• Подключение: один провод к пину STM32, второй к <span class="text-red-500 font-bold">+3.3V</span></li>
             </ul>
           </div>
-          <div className="bg-blue-50 p-4 rounded-lg mb-6">
-            <h3 className="font-medium mb-3">Датчики движения <span className="text-blue-500 font-bold">(PIR)</span></h3>
-            <ul className="space-y-2">
+          <div class="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 class="font-bold mb-3">Датчики движения <span class="text-blue-500 font-bold">(PIR)</span></h3>
+            <ul class="space-y-2">
               <li>• В покое: выход LOW (логический 0)</li>
-              <li>• При движении: выход HIGH (логическая 1, максимум <span className="text-red-500 font-bold">+3.3V</span>)</li>
+              <li>• При движении: выход HIGH (логическая 1, максимум <span class="text-red-500 font-bold">+3.3V</span>)</li>
             </ul>
           </div>
-          <div className="mt-6">
-            <h2 className="text-lg font-semibold mb-4 text-blue-600">Настройка SMS-уведомлений 📱</h2>
-            <div className="space-y-4">
-              <div className="p-3 bg-green-50 rounded">
-                <p className="font-medium">✅ Значение <span className="text-blue-500 font-bold">'YES'</span> в столбце "Send SMS":</p>
-                <p>SMS-уведомление будет отправлено</p>
-              </div>
-              <div className="p-3 bg-gray-50 rounded">
-                <p className="font-medium">⭕ Значение <span className="text-blue-500 font-bold">'NO'</span> в столбце "Send SMS":</p>
-                <p>SMS-уведомление не будет отправлено</p>
-              </div>
+        </div>
+        <div>
+          <h2 class="text-xl font-bold mb-4 text-blue-600">Настройка SMS-уведомлений 📱</h2>
+          <div class="space-y-4">
+            <div class="p-3 bg-green-50 rounded">
+              <p class="font-bold">✅ Значение <span class="text-blue-500 font-bold">'YES'</span> в столбце "Send SMS":</p>
+              <p>SMS-уведомление будет отправлено</p>
             </div>
-            <div className="mt-4 bg-yellow-50 p-4 rounded-lg">
-              <h3 className="font-medium mb-2">📍 Примечание:</h3>
-              <ul className="space-y-2">
-                <li>• Действия в столбце 'Action' зависят от ползунка 'OnOff' выбранного пина.</li>
-                <li>• Данная страница отправляет изменения по MQTT на топик: <span className="text-blue-500 font-bold">Swarm/security/</span></li>
-              </ul>
+            <div class="p-3 bg-gray-50 rounded">
+              <p class="font-bold">⭕ Значение <span class="text-blue-500 font-bold">'NO'</span> в столбце "Send SMS":</p>
+              <p>SMS-уведомление не будет отправлено</p>
             </div>
+          </div>
+          <div class="mt-4 bg-yellow-50 p-4 rounded-lg">
+            <h3 class="font-bold mb-2">📍 Примечание:</h3>
+            <ul class="space-y-2">
+              <li>• Действия в столбце 'Action' зависят от ползунка 'OnOff' выбранного пина.</li>
+              <li>• Данная страница отправляет изменения по MQTT на топик: <span class="text-blue-500 font-bold">Swarm/security/</span></li>
+            </ul>
           </div>
         </div>
       </div>
     `,
     en: html`
-      <div className="space-y-6 max-w-2xl mx-auto p-4">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-xl font-semibold mb-4 text-blue-600">Sensor Connection 🔌</h2>
-          <div className="bg-blue-50 p-4 rounded-lg mb-6">
-            <h3 className="font-medium mb-3">Normally Open Reed Switch <span className="text-blue-500 font-bold">(Normal open)</span></h3>
-            <ul className="space-y-2">
+      <div class="mytext space-y-6">
+        <div>
+          <h2 class="text-xl font-bold mb-4 text-blue-600">Sensor Connection 🔌</h2>
+          <div class="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 class="font-bold mb-3">Normally Open Reed Switch <span class="text-blue-500 font-bold">(Normal open)</span></h3>
+            <ul class="space-y-2">
               <li>• Contacts are open without magnetic field</li>
               <li>• Contacts close when magnet is nearby</li>
-              <li>• Connection: one wire to STM32 pin, another to <span className="text-red-500 font-bold">+3.3V</span></li>
+              <li>• Connection: one wire to STM32 pin, another to <span class="text-red-500 font-bold">+3.3V</span></li>
             </ul>
           </div>
-          <div className="bg-blue-50 p-4 rounded-lg mb-6">
-            <h3 className="font-medium mb-3">Normally Closed Reed Switch <span className="text-blue-500 font-bold">(Normal close)</span></h3>
-            <ul className="space-y-2">
+          <div class="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 class="font-bold mb-3">Normally Closed Reed Switch <span class="text-blue-500 font-bold">(Normal close)</span></h3>
+            <ul class="space-y-2">
               <li>• Contacts are closed without magnetic field</li>
               <li>• Contacts open when magnet is nearby</li>
-              <li>• Connection: one wire to STM32 pin, another to <span className="text-red-500 font-bold">+3.3V</span></li>
+              <li>• Connection: one wire to STM32 pin, another to <span class="text-red-500 font-bold">+3.3V</span></li>
             </ul>
           </div>
-          <div className="bg-blue-50 p-4 rounded-lg mb-6">
-            <h3 className="font-medium mb-3">Motion Sensors <span className="text-blue-500 font-bold">(PIR)</span></h3>
-            <ul className="space-y-2">
+          <div class="bg-blue-50 p-4 rounded-lg mb-6">
+            <h3 class="font-bold mb-3">Motion Sensors <span class="text-blue-500 font-bold">(PIR)</span></h3>
+            <ul class="space-y-2">
               <li>• At rest: output LOW (logical 0)</li>
-              <li>• When motion detected: output HIGH (logical 1, max <span className="text-red-500 font-bold">+3.3V</span>)</li>
+              <li>• When motion detected: output HIGH (logical 1, max <span class="text-red-500 font-bold">+3.3V</span>)</li>
             </ul>
           </div>
-          <div className="mt-6">
-            <h2 className="text-lg font-semibold mb-4 text-blue-600">SMS Notification Settings 📱</h2>
-            <div className="space-y-4">
-              <div className="p-3 bg-green-50 rounded">
-                <p className="font-medium">✅ Value <span className="text-blue-500 font-bold">'YES'</span> in "Send SMS" column:</p>
-                <p>SMS notification will be sent</p>
-              </div>
-              <div className="p-3 bg-gray-50 rounded">
-                <p className="font-medium">⭕ Value <span className="text-blue-500 font-bold">'NO'</span> in "Send SMS" column:</p>
-                <p>SMS notification will not be sent</p>
-              </div>
+        </div>
+        <div>
+          <h2 class="text-xl font-bold mb-4 text-blue-600">SMS Notification Settings 📱</h2>
+          <div class="space-y-4">
+            <div class="p-3 bg-green-50 rounded">
+              <p class="font-bold">✅ Value <span class="text-blue-500 font-bold">'YES'</span> in "Send SMS" column:</p>
+              <p>SMS notification will be sent</p>
             </div>
-            <div className="mt-4 bg-yellow-50 p-4 rounded-lg">
-              <h3 className="font-medium mb-2">📍 Note:</h3>
-              <ul className="space-y-2">
-                <li>• Actions in the 'Action' column depend on the 'OnOff' slider of the selected pin.</li>
-                <li>• This page sends changes via MQTT to topic: <span className="text-blue-500 font-bold">Swarm/security/</span></li>
-              </ul>
+            <div class="p-3 bg-gray-50 rounded">
+              <p class="font-bold">⭕ Value <span class="text-blue-500 font-bold">'NO'</span> in "Send SMS" column:</p>
+              <p>SMS notification will not be sent</p>
             </div>
+          </div>
+          <div class="mt-4 bg-yellow-50 p-4 rounded-lg">
+            <h3 class="font-bold mb-2">📍 Note:</h3>
+            <ul class="space-y-2">
+              <li>• Actions in the 'Action' column depend on the 'OnOff' slider of the selected pin.</li>
+              <li>• This page sends changes via MQTT to topic: <span class="text-blue-500 font-bold">Swarm/security/</span></li>
+            </ul>
           </div>
         </div>
       </div>
@@ -504,15 +504,19 @@ const TabSecurity = () => {
             </table>
           </div>
 
-          <div class="flex justify-end w-full">
+          <div class="flex justify-end mt-6 w-full">
             <button
-              onClick=${() => setShowHelpSim800L(!showHelpSim800L)}
-              class="relative inline-flex items-center justify-center px-6 py-2.5 overflow-hidden font-medium text-white transition-all duration-300 bg-gradient-to-r from-teal-500 to-cyan-600 rounded-xl hover:from-teal-400 hover:to-cyan-500 shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_25px_rgba(20,184,166,0.5)] hover:-translate-y-0.5 active:translate-y-0"
+              onclick=${() => setShowHelpSim800L(!showHelpSim800L)}
+              class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
             >
               ${showHelpSim800L ? 'Hide Help' : 'Show Help'}
             </button>
           </div>
-          ${showHelpSim800L && helpContentSim800L[language]}
+          ${showHelpSim800L && html`
+            <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
+              ${helpContentSim800L[language]}
+            </div>
+          `}
         </div>
 
         <!-- ================================================================
@@ -574,15 +578,19 @@ const TabSecurity = () => {
             </table>
           </div>
 
-          <div class="flex justify-end mt-4">
+          <div class="flex justify-end mt-6 w-full">
             <button
-              onClick=${() => setShowHlp(!showHelpSecurity)}
-              class="relative inline-flex items-center justify-center px-6 py-2.5 overflow-hidden font-medium text-white transition-all duration-300 bg-gradient-to-r from-teal-500 to-cyan-600 rounded-xl hover:from-teal-400 hover:to-cyan-500 shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_25px_rgba(20,184,166,0.5)] hover:-translate-y-0.5 active:translate-y-0"
+              onclick=${() => setShowHlp(!showHelpSecurity)}
+              class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
             >
               ${showHelpSecurity ? 'Hide Help' : 'Show Help'}
             </button>
           </div>
-          ${showHelpSecurity && helpContentSecurity[language]}
+          ${showHelpSecurity && html`
+            <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
+              ${helpContentSecurity[language]}
+            </div>
+          `}
         </div>
 
         ${isModalOpenSim800L && html`
