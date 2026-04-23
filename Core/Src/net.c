@@ -22,6 +22,7 @@ struct settings {
   char *device_name;
 };
 
+static const char default_name[] = "My Device";
 static struct settings s_settings = {true, 1, 57, NULL};
 
 const char *s_json_header =
@@ -178,10 +179,14 @@ void handle_settings_set(struct mg_connection *c, struct mg_str body) {
   settings.log_level = mg_json_get_long(body, "$.log_level", 0);
   settings.brightness = mg_json_get_long(body, "$.brightness", 0);
   if (s && strlen(s) < MAX_DEVICE_NAME) {
-    free(settings.device_name);
     settings.device_name = s;
   } else {
     free(s);
+    settings.device_name = (char *)default_name;  // fallback на sentinel
+  }
+  /* A1 fix: освобождаем старый device_name если он был выделен через malloc */
+  if (s_settings.device_name != NULL && s_settings.device_name != default_name) {
+    free(s_settings.device_name);
   }
   s_settings = settings; // Save to the device flash
   mg_http_reply(c, 200, s_json_header,
@@ -778,7 +783,7 @@ void timer_fn_mqtt(void *arg) {
 //}
 void web_init(struct mg_mgr *mgr) {
     // Инициализация настроек устройства
-    s_settings.device_name = strdup("My Device");
+    s_settings.device_name = (char *)default_name;
 
     // Формируем URL для HTTP, HTTPS и MQTT
     char http_url[32], https_url[32], mqtt_url[32];

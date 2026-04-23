@@ -98,7 +98,7 @@ void log_headers(const char *headers) {
 extern uint64_t s_boot_timestamp;
 char jsonbuf[BUFFER_SIZE];
 extern osMessageQueueId_t outputQueueHandle;
-extern struct data_pin_t data_pin;
+/* A3: global data_pin removed — each function uses a local copy */
 extern MqttMessage_t mqttMsg;
 extern osMessageQueueId_t outputQueueHandle;
 extern char mqtt_payload[300];
@@ -3219,8 +3219,8 @@ void handle_sim800l_get(struct mg_connection *c) {
   mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 
-void parse_sim800l_json(char *buffer) {
-  char *p = buffer;
+void parse_sim800l_json(const char *buffer) {
+  const char *p = buffer;
   char value[32];
   int i = 0;
 
@@ -3283,8 +3283,12 @@ void handle_sim800l_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
       "Connection: keep-alive\r\nContent-Type: application/json\r\n";
 
-  if (hm->body.len > 0) {
-    parse_sim800l_json(hm->body.buf);
+  if (hm->body.len > 0 && hm->body.len < 512) {
+    /* A5 fix: копируем body в локальный null-terminated буфер */
+    char body_buf[512];
+    memcpy(body_buf, hm->body.buf, hm->body.len);
+    body_buf[hm->body.len] = '\0';
+    parse_sim800l_json(body_buf);
     char response[256];
     snprintf(
         response, sizeof(response),
@@ -3517,6 +3521,7 @@ void action_handler(uint8_t button_id, const char *action_str,
               }
               /* Если обычное устройство (Реле и т.д.) */
               else {
+                data_pin_t data_pin = {0}; /* A3: локальная копия */
                 data_pin.id = out_id;
                 data_pin.action = action;
                 if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) !=
@@ -3530,6 +3535,7 @@ void action_handler(uint8_t button_id, const char *action_str,
           }
         } else {
           /* Обычное прямое управление для не-Switch пинов */
+          data_pin_t data_pin = {0}; /* A3: локальная копия */
           data_pin.id = id;
           data_pin.action = action;
           if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) != pdPASS) {
@@ -3653,6 +3659,7 @@ void processPins(
   //	printf("processPins called with i=%d, action=%d\r\n", i, action);
   for (uint8_t a = 0; a < NUMPINLINKS; a++) {
     if (PinsLinks[a].idin == i) {
+      data_pin_t data_pin = {0}; /* A3: локальная копия */
       data_pin.id = PinsLinks[a].idout; // ID устройства (пина)
       data_pin.action = action;         // Действие (0, 1, 2)
       data_pin.cntrlid =
@@ -4114,11 +4121,6 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
 
             // Отправка в очередь при превышении верхнего предела
             action_handler(pin, ds18b20[pin].sensors[sens].actup, "No Data!");
-
-            if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) == pdPASS) {
-            } else {
-              printf("Failed to send HIGH trigger to queue\n");
-            }
           }
         }
         // Сброс верхнего флага при достижении нижнего предела T
@@ -4146,11 +4148,6 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
 
             // Отправка в очередь при достижении нижнего предела
             action_handler(pin, ds18b20[pin].sensors[sens].actlow, "No Data!");
-
-            if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) == pdPASS) {
-            } else {
-              printf("Failed to send LOW trigger to queue\n");
-            }
           }
         }
         // Сброс нижнего флага при достижении верхнего предела T

@@ -83,7 +83,7 @@ TIM_HandleTypeDef htim[NUMPIN];
 uint8_t usbnum = 0;
 uint8_t mqttnum = 0;
 uint8_t sumowpin = 0;
-data_pin_t data_pin;
+/* A3: global data_pin removed — each producer/consumer uses a local copy */
 dbPidConf PidConf[PID_MAX_SLOTS];
 
 #define HTTP_URL "http://0.0.0.0:8000"
@@ -1188,6 +1188,7 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
   char delim[] = ",";
   MqttMessage_t mqttMsg = {0};
   int mqtt_sent = 0; // Флаг отправки MQTT сообщения
+  data_pin_t data_pin = {0}; /* A3: локальная копия */
   //    printf("Debug: Parsing string for cronindex=%d, pause=%d\n", cronindex,
   //    pause); printf("Debug: Input string: %s\n", str);
   token = strtok_r(str, delim, &saveptr);
@@ -1512,6 +1513,7 @@ void StartOutputTask(void *argument)
   //	printf("Start 'Output' task \r\n");
   /* Infinite loop */
   for (;;) {
+    data_pin_t data_pin = {0}; /* A3: локальная копия для xQueueReceive */
     if (xQueueReceive(outputQueueHandle, &data_pin, portMAX_DELAY) == pdTRUE) {
       if (data_pin.id >= 0 &&
           data_pin.id < NUMPIN) { // data_pin.id - это ID Devices а не Switch!
@@ -2214,7 +2216,7 @@ void StartDht22Task(void *argument)
   for (uint8_t i = 0; i < NUMPIN; i++) {
     if (PinsConf[i].topin == 4) {
       for (uint8_t j = 0; j < MAX_DHT22_P; j++) {
-        printf("+++ i = %d j = %d \r\n", i, j);
+//        printf("+++ i = %d j = %d \r\n", i, j);
         if (dht22[j].id == i && dht22[j].typsensr == 2) {
           DHT22_Init(j, i);
           dht22[j].valid = true;

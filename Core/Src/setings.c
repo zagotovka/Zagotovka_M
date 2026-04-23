@@ -345,6 +345,8 @@ void GetSettingsConfig() {
   size_t keyPos = 0, valuePos = 0;
   bool inString = false;
   bool isKey = true;
+  char *trimmed_key;
+  char *end;
   //	bool startValue = false;
   //	printf("\r\n=== Starting GetSetingsConfig() ===\r\n");
   fresult = f_stat("settings.ini", &finfo);
@@ -410,10 +412,17 @@ void GetSettingsConfig() {
 
   process_key_value:
     // Очистка пробелов в начале и конце ключа
-    char *trimmed_key = key;
+    trimmed_key = key;
     while (*trimmed_key == ' ')
       trimmed_key++;
-    char *end = trimmed_key + strlen(trimmed_key) - 1;
+    /* A2 fix: пустой ключ → strlen=0 → end уходит перед буфером → UB */
+    if (*trimmed_key == '\0') {
+      keyPos = 0;
+      valuePos = 0;
+      isKey = true;
+      continue;
+    }
+    end = trimmed_key + strlen(trimmed_key) - 1;
     while (end > trimmed_key && *end == ' ')
       end--;
     *(end + 1) = '\0';
@@ -691,6 +700,8 @@ void GetCronConfig() {
   size_t keyPos = 0, valuePos = 0;
   bool inString = false;
   bool isKey = true;
+  char *trimmed_key;
+  char *end;
   int currentIndex = 0;
   bool recordComplete = false;
   //    printf("Starting GetCronConfig()\r\n");
@@ -762,10 +773,17 @@ void GetCronConfig() {
     }
     continue;
   process_key_value:
-    char *trimmed_key = key;
+    trimmed_key = key;
     while (*trimmed_key == ' ')
       trimmed_key++;
-    char *end = trimmed_key + strlen(trimmed_key) - 1;
+    /* A2 fix: пустой ключ → strlen=0 → end уходит перед буфером → UB */
+    if (*trimmed_key == '\0') {
+      keyPos = 0;
+      valuePos = 0;
+      isKey = true;
+      continue;
+    }
+    end = trimmed_key + strlen(trimmed_key) - 1;
     while (end > trimmed_key && *end == ' ')
       end--;
     *(end + 1) = '\0';

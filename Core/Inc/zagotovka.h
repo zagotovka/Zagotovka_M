@@ -227,7 +227,7 @@ void handle_temp_get(struct mg_connection *c);
 void handle_sim800l_get(struct mg_connection *c);
 int gen_sim800l_json(char *buffer, int buffer_size);
 void handle_sim800l_set(struct mg_connection *c, struct mg_http_message *hm);
-void parse_sim800l_json(char *buffer);
+void parse_sim800l_json(const char *buffer);
 
 void mqtt_message_handler(const char* topic, const char* payload);
 
