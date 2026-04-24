@@ -412,18 +412,16 @@ void button_event_handler(
       //        handle->button_id, PinsConf[handle->button_id].lpress);
       action_handler(handle->button_id, PinsConf[handle->button_id].lpress,
                      "long press");
-      // Формируем payload
-      memset(mqtt_payload, 0, sizeof(mqtt_payload));
-      snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s",
-               handle->button_id, PinsConf[handle->button_id].lpress);
-      // Подготовка MQTT сообщения
-      mqttMsg.command = 3; // Команда для LONG_PRESS
-      mqttMsg.deviceId = handle->button_id;
-      mqttMsg.state = 1; // Для long press
-      mqttMsg.reserved = 0;
-      // Отправка в очередь
-      if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-        printf("Error sending LONG_PRESS to MQTT queue!\r\n");
+      // Подготовка MQTT сообщения (локальная копия — без гонки данных)
+      {
+        MqttMessage_t msg = {0};
+        msg.command = 3; // Команда для LONG_PRESS
+        msg.deviceId = handle->button_id;
+        msg.state = 1; // Для long press
+        msg.reserved = 0;
+        if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
+          printf("Error sending LONG_PRESS to MQTT queue!\r\n");
+        }
       }
     } else {
       printf("Invalid button ID: %d\n", handle->button_id);
@@ -438,18 +436,16 @@ void button_event_handler(
       // PinsConf[handle->button_id].sclick);
       action_handler(handle->button_id, PinsConf[handle->button_id].sclick,
                      "sclick press");
-      // Формируем payload
-      memset(mqtt_payload, 0, sizeof(mqtt_payload));
-      snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/SINGLE_CLICK/%s",
-               handle->button_id, PinsConf[handle->button_id].sclick);
-      // Подготовка MQTT сообщения
-      mqttMsg.command = 4; // Команда для SINGLE_CLICK
-      mqttMsg.deviceId = handle->button_id;
-      mqttMsg.state = 2; // Для single click
-      mqttMsg.reserved = 0;
-      // Отправка в очередь
-      if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-        printf("Error sending SINGLE_CLICK to MQTT queue!\r\n");
+      // Подготовка MQTT сообщения (локальная копия — без гонки данных)
+      {
+        MqttMessage_t msg = {0};
+        msg.command = 4; // Команда для SINGLE_CLICK
+        msg.deviceId = handle->button_id;
+        msg.state = 2; // Для single click
+        msg.reserved = 0;
+        if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
+          printf("Error sending SINGLE_CLICK to MQTT queue!\r\n");
+        }
       }
     } else {
       printf("Invalid button ID: %d\n", handle->button_id);
@@ -463,18 +459,16 @@ void button_event_handler(
       //        handle->button_id, PinsConf[handle->button_id].lpress);
       action_handler(handle->button_id, PinsConf[handle->button_id].dclick,
                      "double press");
-      // Формируем payload
-      memset(mqtt_payload, 0, sizeof(mqtt_payload));
-      snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s",
-               handle->button_id, PinsConf[handle->button_id].dclick);
-      // Подготовка MQTT сообщения
-      mqttMsg.command = 5; // Команда для DOUBLE_CLICK
-      mqttMsg.deviceId = handle->button_id;
-      mqttMsg.state = 3; // Для double click
-      mqttMsg.reserved = 0;
-      // Отправка в очередь
-      if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-        printf("Error sending DOUBLE_CLICK to MQTT queue!\r\n");
+      // Подготовка MQTT сообщения (локальная копия — без гонки данных)
+      {
+        MqttMessage_t msg = {0};
+        msg.command = 5; // Команда для DOUBLE_CLICK
+        msg.deviceId = handle->button_id;
+        msg.state = 3; // Для double click
+        msg.reserved = 0;
+        if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
+          printf("Error sending DOUBLE_CLICK to MQTT queue!\r\n");
+        }
       }
     } else {
       printf("Invalid button ID: %d\n", handle->button_id);
@@ -1186,7 +1180,6 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
   int k = 0;
   int pin = 0;
   char delim[] = ",";
-  MqttMessage_t mqttMsg = {0};
   int mqtt_sent = 0; // Флаг отправки MQTT сообщения
   data_pin_t data_pin = {0}; /* A3: локальная копия */
   //    printf("Debug: Parsing string for cronindex=%d, pause=%d\n", cronindex,
@@ -1239,16 +1232,16 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
       if (k == 2) {
         xQueueSend(outputQueueHandle, (void *)&data_pin, 0);
         if (!mqtt_sent) {
-          //                    printf("Debug: Sending MQTT message for
-          //                    cronindex=%d\n", cronindex);
-          mqttMsg.command = 7;
-          mqttMsg.deviceId = cronindex;
-          mqttMsg.state = data_pin.action;
-          mqttMsg.reserved = 0;
-          if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-            printf("Error sending TIMER event to MQTT queue!\r\n");
-          }
-          mqtt_sent = 1; // Устанавливаем флаг отправки
+            // Локальная копия — без гонки данных на глобальной mqttMsg
+            MqttMessage_t msg = {0};
+            msg.command = 7;
+            msg.deviceId = cronindex;
+            msg.state = data_pin.action;
+            msg.reserved = 0;
+            if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
+              printf("Error sending TIMER event to MQTT queue!\r\n");
+            }
+            mqtt_sent = 1; // Устанавливаем флаг отправки
         }
       }
     }
@@ -1489,10 +1482,155 @@ void StartWebServerTask(void *argument)
 
   web_init(mgr);
 
+  MqttMessage_t rxMsg = {0};
+  BaseType_t status;
+  uint32_t last_pub_tick = HAL_GetTick();
+
   MG_INFO(("Starting event loop"));
   /* Infinite loop */
   for (;;) {
-    mg_mgr_poll(mgr, 1000);
+    mg_mgr_poll(mgr, 10);
+
+    // Получаем данные из очереди (не блокируем поток Mongoose)
+    memset(&rxMsg, 0, sizeof(MqttMessage_t));
+    status = xQueueReceive(mqttQueueHandle, &rxMsg, 0);
+    if (status == pdPASS) {
+      /* Защита от повреждённых сообщений в очереди */
+      if (rxMsg.deviceId >= NUMPIN && rxMsg.command != 1) {
+        printf("MQTT queue: invalid deviceId=%d, cmd=%d — skipped\r\n", rxMsg.deviceId, rxMsg.command);
+      } else {
+      switch (rxMsg.command) {
+      case 1: // DEVICE
+        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
+          if (check_mqtt_connection(s_conn)) {
+            memset(mqtt_topic, 0, sizeof(mqtt_topic));
+            memset(mqtt_payload, 0, sizeof(mqtt_payload));
+            strcpy(mqtt_topic, "/device/");
+            snprintf(mqtt_payload, sizeof(mqtt_payload), "DEVICE(s)/ACTION=%s", PinsConf[1].sclick);
+            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+          } else {
+            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+          }
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 2: // Switch
+        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
+          if (check_mqtt_connection(s_conn)) {
+            memset(mqtt_topic, 0, sizeof(mqtt_topic));
+            memset(mqtt_payload, 0, sizeof(mqtt_payload));
+            snprintf(mqtt_topic, sizeof(mqtt_topic), "/switch/");
+            snprintf(mqtt_payload, sizeof(mqtt_payload), "ID:%d=%s", rxMsg.deviceId, rxMsg.state ? "ON" : "OFF");
+            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+          } else {
+            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+          }
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 3: // BUTTON LONG_PRESS
+      case 4: // BUTTON SINGLE_CLICK
+      case 5: // BUTTON DOUBLE_CLICK
+        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
+          if (check_mqtt_connection(s_conn)) {
+            memset(mqtt_topic, 0, sizeof(mqtt_topic));
+            memset(mqtt_payload, 0, sizeof(mqtt_payload));
+            snprintf(mqtt_topic, sizeof(mqtt_topic), "/button/");
+            switch (rxMsg.command) {
+            case 3: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].lpress); break;
+            case 4: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick); break;
+            case 5: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].dclick); break;
+            }
+            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+          } else {
+            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+          }
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 6: // SECURITY
+        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
+          if (check_mqtt_connection(s_conn)) {
+            memset(mqtt_topic, 0, sizeof(mqtt_topic));
+            memset(mqtt_payload, 0, sizeof(mqtt_payload));
+            snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
+            snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick, PinsConf[rxMsg.deviceId].info);
+            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+          } else {
+            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+          }
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 7: // TIMER'S
+        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
+          if (check_mqtt_connection(s_conn)) {
+            memset(mqtt_topic, 0, sizeof(mqtt_topic));
+            memset(mqtt_payload, 0, sizeof(mqtt_payload));
+            strcpy(mqtt_topic, "/timer/");
+            strcpy(mqtt_payload, "TIMER/ID=");
+            char temp[16];
+            sprintf(temp, "%d", rxMsg.deviceId);
+            strcat(mqtt_payload, temp);
+            strcat(mqtt_payload, "/ACTION=");
+            strcat(mqtt_payload, dbCrontxt[rxMsg.deviceId].activ);
+            strcat(mqtt_payload, "/");
+            strcat(mqtt_payload, dbCrontxt[rxMsg.deviceId].info);
+            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+          } else {
+            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+          }
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 8: // OnOff
+        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
+          if (check_mqtt_connection(s_conn)) {
+            memset(mqtt_topic, 0, sizeof(mqtt_topic));
+            memset(mqtt_payload, 0, sizeof(mqtt_payload));
+            strcpy(mqtt_topic, "/onoff/");
+            strcpy(mqtt_payload, "ID=");
+            char temp[16];
+            sprintf(temp, "%d", rxMsg.deviceId);
+            strcat(mqtt_payload, temp);
+            strcat(mqtt_payload, "/OnOff=");
+            strcat(mqtt_payload, PinsConf[rxMsg.deviceId].onoff ? "ON" : "OFF");
+            strcat(mqtt_payload, "/");
+            strcat(mqtt_payload, PinsConf[rxMsg.deviceId].info);
+            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+          } else {
+            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+          }
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      default:
+        printf("mqttnum = %d \r\n", mqttnum);
+        break;
+      }
+      } /* end of deviceId bounds guard */
+    }
+
+    if (HAL_GetTick() - last_pub_tick >= 100) {
+      last_pub_tick = HAL_GetTick();
+      publish_ds18b20_changes(s_conn);
+      publish_dht22_changes(s_conn);
+    }
+
+    /* Диагностический heartbeat — каждые 30 секунд */
+    {
+      static uint32_t hb_tick = 0;
+      if (HAL_GetTick() - hb_tick >= 30000) {
+        hb_tick = HAL_GetTick();
+        printf("[WebServerTask] alive, heap=%lu\r\n", (unsigned long)xPortGetFreeHeapSize());
+      }
+    }
   }
   mg_mgr_free(mgr);
   free(mgr);
@@ -1736,22 +1874,15 @@ void StartInputTask(void *argument)
           pinTimes[i] = millis;
           processPins(i, 1); // Отправляем 1, т.к. выключатель включен
           PinsConf[i].onoff = 1;
-          // Заполняем структуру для отправки в mqtt очередь.
-          memset(&mqttMsg, 0, sizeof(MqttMessage_t));
-          mqttMsg.command = 2;
-          mqttMsg.deviceId = i;
-          mqttMsg.state = 1; // ON
-
-          //			        printf("InputTask: Before Queue -
-          // Command:%d ID:%d State:%d\r\n\n", mqttMsg.command,
-          // mqttMsg.deviceId, mqttMsg.state);
-
-          // Отправляем в очередь
-          if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-            printf("Error sending to MQTT queue!\r\n");
-          } else {
-            //			            printf("InputTask: Successfully sent
-            // to queue\r\n");
+          // Локальная копия — без гонки данных на глобальной mqttMsg
+          {
+            MqttMessage_t msg = {0};
+            msg.command = 2;
+            msg.deviceId = i;
+            msg.state = 1; // ON
+            if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
+              printf("Error sending to MQTT queue!\r\n");
+            }
           }
         }
         // Когда выключатель разомкнут (отжат) - на входе 1
@@ -1761,22 +1892,15 @@ void StartInputTask(void *argument)
           pinTimes[i] = millis;
           processPins(i, 0); // Отправляем 0, т.к. выключатель выключен
           PinsConf[i].onoff = 0;
-          // Заполняем структуру для отправки в mqtt очередь.
-          memset(&mqttMsg, 0, sizeof(MqttMessage_t)); // Очищаем структуру
-          mqttMsg.command = 2;
-          mqttMsg.deviceId = i;
-          mqttMsg.state = 0; // OFF
-
-          //			        printf("InputTask: Before Queue -
-          // Command:%d ID:%d State:%d\r\n", mqttMsg.command, mqttMsg.deviceId,
-          // mqttMsg.state);
-
-          // Отправляем в очередь
-          if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-            printf("Error sending to MQTT queue!\r\n");
-          } else {
-            //			            printf("InputTask: Successfully sent
-            // to queue\r\n");
+          // Локальная копия — без гонки данных на глобальной mqttMsg
+          {
+            MqttMessage_t msg = {0};
+            msg.command = 2;
+            msg.deviceId = i;
+            msg.state = 0; // OFF
+            if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
+              printf("Error sending to MQTT queue!\r\n");
+            }
           }
         }
       }
@@ -1887,204 +2011,13 @@ void StartEncoderTask(void *argument)
 void StartMqttTask(void *argument)
 {
   /* USER CODE BEGIN StartMqttTask */
-  ulTaskNotifyTake(0, portMAX_DELAY);
-  MqttMessage_t rxMsg = {0};
-  BaseType_t status;
-  //	uint8_t messagesWaiting = uxQueueMessagesWaiting(mqttQueueHandle);
-  //	uint8_t emptySpaces = uxQueueSpacesAvailable(mqttQueueHandle);
-  /* Infinite loop */
+  /* 
+   * MQTT logic has been moved to StartWebServerTask to prevent 
+   * race conditions and memory corruption inside Mongoose.
+   * This task is intentionally left empty but running so CubeMX doesn't complain.
+   */
   for (;;) {
-    // Получаем данные из очереди
-    memset(&rxMsg, 0,
-           sizeof(MqttMessage_t)); // Очищаем структуру перед получением
-    status = xQueueReceive(mqttQueueHandle, &rxMsg, pdMS_TO_TICKS(100));
-    if (status == pdPASS) {
-      switch (rxMsg.command) {
-      case 1: // DEVICE
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            strcpy(mqtt_topic, "/device/");
-
-            //			            printf("Debug: PinsConf[1].sclick in
-            // MQTT task = '%s'\n", PinsConf[1].sclick);  // Отладка
-
-            snprintf(mqtt_payload, sizeof(mqtt_payload), "DEVICE(s)/ACTION=%s",
-                     PinsConf[1].sclick);
-
-            //			            printf("Debug: Final MQTT payload =
-            //'%s'\n", mqtt_payload);  // Отладка
-
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            if (onlineFlg != 0) {
-              printf("Error: MQTT not connected\r\n");
-            }
-          }
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
-      case 2: // Switch
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            snprintf(mqtt_topic, sizeof(mqtt_topic),
-                     "/switch/"); // Формируем топик
-            snprintf(mqtt_payload, sizeof(mqtt_payload), "ID:%d=%s",
-                     rxMsg.deviceId,
-                     rxMsg.state ? "ON" : "OFF"); // Формируем payload
-            send_mqtt_message(s_conn, mqtt_topic,
-                              mqtt_payload); // Отправляем сообщение
-          } else {
-            if (onlineFlg != 0) {
-              printf("Error: MQTT not connected\r\n");
-            }
-          }
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
-      case 3: // BUTTON LONG_PRESS
-      case 4: // BUTTON SINGLE_CLICK
-      case 5: // BUTTON DOUBLE_CLICK
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            snprintf(mqtt_topic, sizeof(mqtt_topic),
-                     "/button/"); // Формируем топик
-            // Формируем payload в зависимости от команды
-            switch (rxMsg.command) {
-            case 3: // LONG_PRESS
-              snprintf(mqtt_payload, sizeof(mqtt_payload),
-                       "ID=%d/LONG_PRESS/%s", rxMsg.deviceId,
-                       PinsConf[rxMsg.deviceId].lpress);
-              break;
-            case 4: // SINGLE_CLICK
-              snprintf(mqtt_payload, sizeof(mqtt_payload),
-                       "ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId,
-                       PinsConf[rxMsg.deviceId].sclick);
-              break;
-            case 5: // DOUBLE_CLICK
-              snprintf(mqtt_payload, sizeof(mqtt_payload),
-                       "ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId,
-                       PinsConf[rxMsg.deviceId].dclick);
-              break;
-            }
-            send_mqtt_message(s_conn, mqtt_topic,
-                              mqtt_payload); // Отправляем сообщение
-          } else {
-            if (onlineFlg != 0) {
-              printf("Error: MQTT not connected\r\n");
-            }
-          }
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
-      case 6: // SECURITY
-              //			    printf("Processing SECURITY message,
-              // deviceId: %d, state: %d\r\n", rxMsg.deviceId, rxMsg.state);
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
-
-            snprintf(mqtt_payload, sizeof(mqtt_payload),
-                     "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId,
-                     PinsConf[rxMsg.deviceId].sclick,
-                     PinsConf[rxMsg.deviceId].info);
-
-            //			            printf("Sending MQTT message:
-            // Topic=%s, Payload=%s\r\n", mqtt_topic, mqtt_payload);
-
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-            //			            printf("MQTT message sent\r\n");
-          } else {
-            if (onlineFlg != 0) {
-              printf("Error: MQTT not connected\r\n");
-            }
-          }
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
-      case 7: // TIMER'S
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-
-            strcpy(mqtt_topic, "/timer/"); // Формируем топик
-
-            // Формируем payload по частям
-            strcpy(mqtt_payload, "TIMER/ID=");
-            char temp[16];
-            sprintf(temp, "%d", rxMsg.deviceId);
-            strcat(mqtt_payload, temp);
-            strcat(mqtt_payload, "/ACTION=");
-            strcat(mqtt_payload, dbCrontxt[rxMsg.deviceId].activ);
-            strcat(mqtt_payload, "/");
-            strcat(mqtt_payload, dbCrontxt[rxMsg.deviceId].info);
-
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            if (onlineFlg != 0) {
-              printf("Error: MQTT not connected\r\n");
-            }
-          }
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
-      case 8: // OnOff
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-
-            strcpy(mqtt_topic, "/onoff/"); // Формируем топик
-
-            // Формируем payload по частям
-            strcpy(mqtt_payload, "ID=");
-            char temp[16];
-            sprintf(temp, "%d", rxMsg.deviceId);
-            strcat(mqtt_payload, temp);
-            strcat(mqtt_payload, "/OnOff=");
-            strcat(mqtt_payload, PinsConf[rxMsg.deviceId].onoff ? "ON" : "OFF");
-            strcat(mqtt_payload, "/");
-            strcat(mqtt_payload, PinsConf[rxMsg.deviceId].info);
-
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            if (onlineFlg != 0) {
-              printf("Error: MQTT not connected\r\n");
-            }
-          }
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
-      default:
-        printf("mqttnum = %d \r\n", mqttnum);
-        break;
-      }
-      //		printf("xQueueReceive number: %u\n", mqttnum);
-    }
-    //		if(1){
-    //		printf("Messages waiting: %d \r\n", messagesWaiting);
-    //		printf("Empty spaces: %d \r\n", emptySpaces);
-    //	    osDelay(1000);
-    //		}
-    publish_ds18b20_changes(s_conn);
-    publish_dht22_changes(s_conn);
-    osDelay(100);
+    osDelay(1000);
   }
   /* USER CODE END StartMqttTask */
 }
@@ -2629,21 +2562,16 @@ void StartSecurityTask(void *argument)
                   strcmp(PinsConf[i].sclick, "None") != 0) {
                 action_handler(i, PinsConf[i].sclick, "Security action");
 
-                // Формируем payload для MQTT
-                memset(mqtt_payload, 0, sizeof(mqtt_payload));
-                snprintf(mqtt_payload, sizeof(mqtt_payload),
-                         "SECURITY/ID=%d/ACTION=%s/%s", i, PinsConf[i].sclick,
-                         PinsConf[i].info);
-
-                // Подготовка MQTT сообщения
-                mqttMsg.command = 6;
-                mqttMsg.deviceId = i;
-                mqttMsg.state = current_state;
-                mqttMsg.reserved = 0;
-
-                // Отправка в очередь
-                if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-                  printf("Error sending SECURITY event to MQTT queue!\r\n");
+                // Локальная копия — без гонки данных на глобальной mqttMsg/mqtt_payload
+                {
+                  MqttMessage_t msg = {0};
+                  msg.command = 6;
+                  msg.deviceId = i;
+                  msg.state = current_state;
+                  msg.reserved = 0;
+                  if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
+                    printf("Error sending SECURITY event to MQTT queue!\r\n");
+                  }
                 }
               }
 

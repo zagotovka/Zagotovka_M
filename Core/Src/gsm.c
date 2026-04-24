@@ -287,7 +287,33 @@ void init_sim800l_module(void) {
  *  Результат записывается в глобальные vldpins / invpins.
  *  Подходит как для DTMF, так и для SMS.
  * ════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════
+ *  sanitize_cmd_str — фильтр входной строки команд
+ *
+ *  Удаляет все символы, не входящие в допустимый алфавит:
+ *  цифры 0-9, #, *, S, C, D, L, P (без учёта регистра).
+ *  Модифицирует строку in-place.
+ * ════════════════════════════════════════════════════════════ */
+void sanitize_cmd_str(char *s) {
+    if (!s) return;
+    char *r = s, *w = s;
+    while (*r) {
+        char c = toupper((unsigned char)*r);
+        if ((c >= '0' && c <= '9') || c == '#' || c == '*' ||
+            c == 'S' || c == 'C' || c == 'D' || c == 'L' || c == 'P') {
+            *w++ = *r;
+        }
+        r++;
+    }
+    *w = '\0';
+}
+
 void execute_commands(char *cmd_str) {
+  if (!cmd_str || *cmd_str == '\0') return;
+
+  /* Санитизация на входе — убираем мусор до парсинга */
+  sanitize_cmd_str(cmd_str);
+
   char *cmd = cmd_str;
 
   while (*cmd) {
@@ -396,19 +422,23 @@ void execute_commands(char *cmd_str) {
             }
           } else {
             /* Пин не того типа или неверное значение — в невалидные */
-            char inv_str[DTMF_BUF_SIZE];
+            char inv_str[32];
             snprintf(inv_str, sizeof(inv_str), "%s%d#%d*",
                      invldcnt > 0 ? "," : "", pin, value);
-            strcat(invpins, inv_str);
-            invldcnt++;
+            if (strlen(invpins) + strlen(inv_str) < sizeof(invpins)) {
+              strcat(invpins, inv_str);
+              invldcnt++;
+            }
           }
         } else {
           /* Пин вне диапазона — в невалидные */
-          char inv_str[DTMF_BUF_SIZE];
+          char inv_str[32];
           snprintf(inv_str, sizeof(inv_str), "%s%d#%d*", invldcnt > 0 ? "," : "",
                    pin, value);
-          strcat(invpins, inv_str);
-          invldcnt++;
+          if (strlen(invpins) + strlen(inv_str) < sizeof(invpins)) {
+            strcat(invpins, inv_str);
+            invldcnt++;
+          }
         }
       } else {
         /* Неверный формат команды (восстанавливаем cmd для обработки ошибки) */
@@ -419,36 +449,44 @@ void execute_commands(char *cmd_str) {
         if (*end == '*')
           end++;
 
-      int inv_len = end - cmd_start;
-      char invalid_cmd[DTMF_BUF_SIZE] = {0};
-      strncpy(invalid_cmd, cmd_start, inv_len);
+        int inv_len = end - cmd_start;
+        if (inv_len > 0) {
+          int cp_len = inv_len < 31 ? inv_len : 31;
+          char invalid_cmd[32] = {0};
+          strncpy(invalid_cmd, cmd_start, cp_len);
 
-      if (strlen(invalid_cmd) > 0) {
-        char inv_str[DTMF_BUF_SIZE];
-        snprintf(inv_str, sizeof(inv_str), "%s%s", invldcnt > 0 ? "," : "",
-                 invalid_cmd);
-        strcat(invpins, inv_str);
-        invldcnt++;
+          char inv_str[64];
+          snprintf(inv_str, sizeof(inv_str), "%s%s", invldcnt > 0 ? "," : "",
+                   invalid_cmd);
+          if (strlen(invpins) + strlen(inv_str) < sizeof(invpins)) {
+            strcat(invpins, inv_str);
+            invldcnt++;
+          }
+
+          char err_msg[64];
+          snprintf(err_msg, sizeof(err_msg), "Error %s\n", invalid_cmd);
+          HAL_UART_Transmit(myDEBUG, (uint8_t *)err_msg, strlen(err_msg), 1000);
+        }
+        cmd = end;
       }
-
-      char err_msg[DTMF_BUF_SIZE];
-      strcpy(err_msg, "Error ");
-      size_t prefix_len = strlen(err_msg);
-      size_t max_cmd_len = sizeof(err_msg) - prefix_len - 2;
-      strncat(err_msg, invalid_cmd, max_cmd_len);
-      strcat(err_msg, "\n");
-      cmd = end;
+    } else {
+      /* ═══════════════════════════════════════════════════
+       *  ЗАЩИТА ОТ INFINITE LOOP
+       *  Сдвигаем указатель вперед, чтобы пропустить мусорный
+       *  символ и продолжить парсинг следующей команды.
+       * ═══════════════════════════════════════════════════ */
+      if (*cmd) cmd++;
     }
   }
-  }
+
   /* Выполняем валидные действия */
   action_handler(0, vldpins, "CMD");
 
   /* Отладочный вывод */
-  char valid_msg[DTMF_BUF_SIZE];
-  char invalid_msg[DTMF_BUF_SIZE];
-  snprintf(valid_msg, sizeof(valid_msg), "Valid pins: %s\n", vldpins);
-  snprintf(invalid_msg, sizeof(invalid_msg), "Invld pins/cmd: %s\n", invpins);
+  char valid_msg[128];
+  char invalid_msg[128];
+  snprintf(valid_msg, sizeof(valid_msg), "Parsed cmds: %.100s\n", vldpins);
+  snprintf(invalid_msg, sizeof(invalid_msg), "Invld pins/cmd: %.100s\n", invpins);
   HAL_UART_Transmit(myDEBUG, (uint8_t *)valid_msg, strlen(valid_msg), 1000);
   HAL_UART_Transmit(myDEBUG, (uint8_t *)invalid_msg, strlen(invalid_msg), 1000);
 }
@@ -459,29 +497,27 @@ void execute_commands(char *cmd_str) {
  *  Логика идентична DTMF-блоку "NO CARRIER" из оригинального main.c.
  * ════════════════════════════════════════════════════════════ */
 void send_command_result_sms(void) {
-  char mqtt_pins[240];
-  char formatted_vldpins[GSM_RX_BUFFER_SIZE];
-
+  /* Минимизируем использование стека, т.к. функция вызывается из задач FreeRTOS */
+  char message[256];
+  message[0] = '\0';
+  
   const char valid_prefix[] = "Valid pins: ";
   const char invalid_prefix[] = " Invld pins/cmd: ";
-
-  /* Форматируем vldpins: заменяем "pin:value" на "pin:ON/OFF" */
+  
+  bool has_type_10 = false;
+  uint8_t type_10_pin = 0;
+  
+  /* Обрабатываем валидные пины */
   if (strlen(vldpins) > 0) {
-    /*
-     * Формат результата:
-     *   SEC-TY:86:OFF,87:ON   — для topin==10, префикс один раз
-     *   2:ON,3:OFF            — для topin==2, без префикса
-     */
-    /* "SEC-TY:" = 7 символов, оставляем место в formatted_vldpins */
-    char sec_buf[GSM_RX_BUFFER_SIZE - 8] = {0}; /* пины типа 10 (SECURITY) */
-    char out_buf[GSM_RX_BUFFER_SIZE - 8] = {0}; /* пины типа 2  (OUTPUT)   */
+    char sec_buf[128] = {0};
+    char out_buf[128] = {0};
     int sec_cnt = 0;
     int out_cnt = 0;
-
-    char vldpins_fmt[sizeof(vldpins)];
+    
+    char vldpins_fmt[128];
     strncpy(vldpins_fmt, vldpins, sizeof(vldpins_fmt) - 1);
     vldpins_fmt[sizeof(vldpins_fmt) - 1] = '\0';
-
+    
     char *tok = strtok(vldpins_fmt, ",");
     while (tok != NULL) {
       char pin_number[4] = {0};
@@ -491,157 +527,113 @@ void send_command_result_sms(void) {
         k++;
       }
       uint8_t pin_id = atoi(pin_number);
-
+      
       char *colon = strchr(tok, ':');
       int action_val = -1;
       if (colon) { action_val = atoi(colon + 1); }
-
+      
       if (PinsConf[pin_id].topin == 10) {
-        char entry[32];
+        has_type_10 = true;
+        type_10_pin = pin_id;
+        char entry[24];
         snprintf(entry, sizeof(entry), "%s%s:%s", sec_cnt > 0 ? "," : "",
                  pin_number, PinsConf[pin_id].onoff == 1 ? "ON" : "OFF");
         strncat(sec_buf, entry, sizeof(sec_buf) - strlen(sec_buf) - 1);
         sec_cnt++;
       } else if (PinsConf[pin_id].topin == 3) {
-        /* Switch logic */
         char entry[24];
-        const char *sw_status;
-        if (PinsConf[pin_id].onoff == 0) {
-            sw_status = "DISABLED";
-        } else {
+        const char *sw_status = "OK";
+        if (PinsConf[pin_id].onoff == 0) sw_status = "DISABLED";
+        else {
             if (action_val == 0) sw_status = "OFF";
             else if (action_val == 1) sw_status = "ON";
             else if (action_val == 2) sw_status = "TOGGLE";
-            else sw_status = "OK";
         }
-        snprintf(entry, sizeof(entry), "%s%s:%s", out_cnt > 0 ? "," : "",
-                 pin_number, sw_status);
+        snprintf(entry, sizeof(entry), "%s%s:%s", out_cnt > 0 ? "," : "", pin_number, sw_status);
         strncat(out_buf, entry, sizeof(out_buf) - strlen(out_buf) - 1);
         out_cnt++;
       } else if (PinsConf[pin_id].topin == 1) {
-        /* Button logic */
         char entry[24];
-        const char *btn_act;
-        if (PinsConf[pin_id].onoff == 0) {
-            btn_act = "DISABLED";
-        } else {
+        const char *btn_act = "OK";
+        if (PinsConf[pin_id].onoff == 0) btn_act = "DISABLED";
+        else {
             if (action_val == 3) btn_act = "SC";
             else if (action_val == 4) btn_act = "DC";
             else if (action_val == 5) btn_act = "LP";
-            else btn_act = "OK";
         }
-        snprintf(entry, sizeof(entry), "%s%s:%s", out_cnt > 0 ? "," : "",
-                 pin_number, btn_act);
+        snprintf(entry, sizeof(entry), "%s%s:%s", out_cnt > 0 ? "," : "", pin_number, btn_act);
         strncat(out_buf, entry, sizeof(out_buf) - strlen(out_buf) - 1);
         out_cnt++;
       } else {
-        /* Physical device output */
-        uint8_t current_state = read_button_level(pin_id);
-        char entry[16];
-        snprintf(entry, sizeof(entry), "%s%s:%s", out_cnt > 0 ? "," : "",
-                 pin_number, current_state == GPIO_PIN_SET ? "ON" : "OFF");
+        char entry[24];
+        if (PinsConf[pin_id].topin != 5 && PinsConf[pin_id].onoff == 0) {
+            snprintf(entry, sizeof(entry), "%s%s:DISABLED", out_cnt > 0 ? "," : "", pin_number);
+        } else {
+            uint8_t current_state = read_button_level(pin_id);
+            snprintf(entry, sizeof(entry), "%s%s:%s", out_cnt > 0 ? "," : "",
+                     pin_number, current_state == GPIO_PIN_SET ? "ON" : "OFF");
+        }
         strncat(out_buf, entry, sizeof(out_buf) - strlen(out_buf) - 1);
         out_cnt++;
       }
       tok = strtok(NULL, ",");
     }
-
-    /* Собираем итоговую строку */
-    formatted_vldpins[0] = '\0';
-    if (sec_cnt > 0)
-      snprintf(formatted_vldpins, GSM_RX_BUFFER_SIZE, "SEC-TY:%s", sec_buf);
+    
+    if (sec_cnt > 0) snprintf(message, sizeof(message), "SEC-TY:%s", sec_buf);
     if (out_cnt > 0) {
-      if (sec_cnt > 0)
-        strncat(formatted_vldpins, " ",
-                GSM_RX_BUFFER_SIZE - strlen(formatted_vldpins) - 1);
-      strncat(formatted_vldpins, out_buf,
-              GSM_RX_BUFFER_SIZE - strlen(formatted_vldpins) - 1);
+      if (sec_cnt > 0) strncat(message, " ", sizeof(message) - strlen(message) - 1);
+      strncat(message, out_buf, sizeof(message) - strlen(message) - 1);
     }
-    if (strlen(formatted_vldpins) == 0)
-      strcpy(formatted_vldpins, "None");
-  } else {
-    strcpy(formatted_vldpins, "None");
-  }
-
-  /* Вычисляем доступное место */
-  int remaining_space =
-      GSM_RX_BUFFER_SIZE - strlen(valid_prefix) - strlen(invalid_prefix) - 5;
-  int max_per_section = remaining_space - 128;
-
-  /* Проверяем, есть ли пин типа 10 (SECURITY) в валидных */
-  bool has_type_10 = false;
-  uint8_t type_10_pin = 0;
-  char vldpins_copy[sizeof(vldpins)];
-  strncpy(vldpins_copy, vldpins, sizeof(vldpins_copy));
-  vldpins_copy[sizeof(vldpins_copy) - 1] = '\0';
-
-  char *token = strtok(vldpins_copy, ",");
-  while (token != NULL) {
-    char pin_str[4] = {0};
-    int pi = 0;
-    while (token[pi] != ':' && pi < (int)sizeof(pin_str) - 1) {
-      pin_str[pi] = token[pi];
-      pi++;
-    }
-    uint8_t pin = atoi(pin_str);
-    if (PinsConf[pin].topin == 10) {
-      has_type_10 = true;
-      type_10_pin = pin;
-      break;
-    }
-    token = strtok(NULL, ",");
-  }
-
-  /* Условие отправки — то же, что в DTMF-блоке */
-  if ((has_type_10 && PinsConf[1].onoff == 1 &&
-       PinsConf[type_10_pin].onoff == 1) ||
-      (validcnt > 0 && PinsConf[1].onoff == 1)) {
-    if ((strlen(vldpins) > 0 && strcmp(formatted_vldpins, "None") != 0) ||
-        (strlen(invpins) > 0 && strcmp(invpins, "None") != 0)) {
-      char message[GSM_RX_BUFFER_SIZE];
-      message[0] = '\0';
-      mqtt_pins[0] = '\0';
-
-      if (strlen(formatted_vldpins) > 0 &&
-          strcmp(formatted_vldpins, "None") != 0) {
-        snprintf(message, GSM_RX_BUFFER_SIZE, "%s%.*s", valid_prefix,
-                 max_per_section, formatted_vldpins);
-        strncpy(mqtt_pins, formatted_vldpins, sizeof(mqtt_pins) - 1);
-        mqtt_pins[sizeof(mqtt_pins) - 1] = '\0';
-      }
-
-      if (strlen(invpins) > 0 && strcmp(invpins, "None") != 0) {
-        int current_len = strlen(message);
-        const char *pfx =
-            (current_len > 0) ? invalid_prefix : "Invld pins/cmd: ";
-        snprintf(message + current_len, GSM_RX_BUFFER_SIZE - current_len,
-                 "%s%.*s", pfx, max_per_section, invpins);
-      }
-
-      /* Отправляем SMS */
-      char str[GSM_RX_BUFFER_SIZE];
-      snprintf(str, GSM_RX_BUFFER_SIZE, "AT+CMGS=\"%s\"\r\n", SetSettings.tel);
-      HAL_UART_Transmit(GSM, (uint8_t *)str, strlen(str), 1000);
-      osDelay(100);
-      HAL_UART_Transmit(GSM, (uint8_t *)message, strlen(message), 1000);
-      osDelay(100);
-      uint8_t ctrlZ = 26;
-      HAL_UART_Transmit(GSM, &ctrlZ, 1, 1000);
-
-      /* Отправляем в MQTT только если есть валидные пины */
-      if (strlen(mqtt_pins) > 0) {
-        strncpy(PinsConf[1].sclick, mqtt_pins, sizeof(PinsConf[1].sclick) - 1);
+    
+    if (strlen(message) > 0 && strcmp(message, "None") != 0) {
+        /* Сохраняем в MQTT */
+        strncpy(PinsConf[1].sclick, message, sizeof(PinsConf[1].sclick) - 1);
         PinsConf[1].sclick[sizeof(PinsConf[1].sclick) - 1] = '\0';
-
-        MqttMessage_t mqttMsg;
-        mqttMsg.command = 1;
-        mqttMsg.deviceId = 1;
-        mqttMsg.state = 0;
-        mqttMsg.reserved = 0;
-        if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-          printf("Error sending DEVICE event to MQTT queue!\r\n");
+        
+        /* Добавляем префикс валидных пинов */
+        char temp_msg[280]; /* Увеличен размер, чтобы вместить префикс + message */
+        snprintf(temp_msg, sizeof(temp_msg), "%s%s", valid_prefix, message);
+        strncpy(message, temp_msg, sizeof(message) - 1);
+        message[sizeof(message) - 1] = '\0';
+    } else {
+        message[0] = '\0';
+    }
+  }
+  
+  if ((has_type_10 && PinsConf[1].onoff == 1 && PinsConf[type_10_pin].onoff == 1) ||
+      (validcnt > 0 && PinsConf[1].onoff == 1)) {
+      
+    if (strlen(invpins) > 0 && strcmp(invpins, "None") != 0) {
+        int current_len = strlen(message);
+        const char *pfx = (current_len > 0) ? invalid_prefix : "Invld pins/cmd: ";
+        snprintf(message + current_len, sizeof(message) - current_len, "%s%.80s", pfx, invpins);
+    }
+    
+    if (strlen(message) > 0) {
+        /* Выводим финальное сообщение в консоль отладки */
+        char dbg_msg[300];
+        snprintf(dbg_msg, sizeof(dbg_msg), "Final SMS: %.250s\n", message);
+        HAL_UART_Transmit(myDEBUG, (uint8_t *)dbg_msg, strlen(dbg_msg), 1000);
+        
+        char str[128];
+        snprintf(str, sizeof(str), "AT+CMGS=\"%s\"\r\n", SetSettings.tel);
+        HAL_UART_Transmit(GSM, (uint8_t *)str, strlen(str), 1000);
+        osDelay(100);
+        HAL_UART_Transmit(GSM, (uint8_t *)message, strlen(message), 1000);
+        osDelay(100);
+        uint8_t ctrlZ = 26;
+        HAL_UART_Transmit(GSM, &ctrlZ, 1, 1000);
+        
+        if (validcnt > 0) {
+            MqttMessage_t mqttMsg;
+            mqttMsg.command = 1;
+            mqttMsg.deviceId = 1;
+            mqttMsg.state = 0;
+            mqttMsg.reserved = 0;
+            if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
+              printf("Error sending DEVICE event to MQTT queue!\r\n");
+            }
         }
-      }
     }
   }
 }
@@ -690,7 +682,7 @@ void process_sim800l_data(void) {
          * После заголовка идёт \r\n, затем тело SMS.
          * Ищем конец заголовка по последней кавычке перед телом.
          * НЕ используем маркер "+08\"" — он зависит от часового пояса. */
-        char sms_text[GSM_RX_BUFFER_SIZE] = {0};
+        char sms_text[256] = {0};
 
         /* ─────────────────────────────────────────────────────────
          *  ВАЖНО: clear_string(buf) уже вызвана выше и заменила
@@ -721,8 +713,8 @@ void process_sim800l_data(void) {
         }
 
         if (body_start != NULL && *body_start != '\0') {
-          strncpy(sms_text, body_start, GSM_RX_BUFFER_SIZE - 1);
-          sms_text[GSM_RX_BUFFER_SIZE - 1] = '\0';
+          strncpy(sms_text, body_start, sizeof(sms_text) - 1);
+          sms_text[sizeof(sms_text) - 1] = '\0';
           /* Обрезаем по первому пробелу-терминатору
            * (пробел = бывший \r\n конца тела SMS).         */
           char *tail = sms_text;
@@ -743,7 +735,7 @@ void process_sim800l_data(void) {
           if (c == '\r' || c == '\n')
             break; /* конец тела */
           sms_text[j++] = c;
-          if (j >= GSM_RX_BUFFER_SIZE - 1)
+          if (j >= sizeof(sms_text) - 1)
             break;
           osDelay(1);
         }
@@ -808,8 +800,8 @@ void process_sim800l_data(void) {
                 char c2 = *(q + 2);
                 char c3 = *(q + 3);
                 
-                /* Проверяем: цифра 0-2 и звёздочка */
-                if (c1 >= '0' && c1 <= '2' && c2 == '*') {
+                /* Проверяем: цифра 0-5 и звёздочка (поддержка цифровых команд кнопок) */
+                if (c1 >= '0' && c1 <= '5' && c2 == '*') {
                   has_cmd = true;
                   break;
                 }

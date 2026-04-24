@@ -3535,6 +3535,14 @@ void action_handler(uint8_t button_id, const char *action_str,
           }
         } else {
           /* Обычное прямое управление для не-Switch пинов */
+          /* Блокируем выполнение, если устройство отключено (onoff == 0),
+             НО только если команда пришла извне (CMD), и это не PWM (у ШИМ onoff хранит текущее состояние) */
+          if (PinsConf[id].topin != 5 && PinsConf[id].onoff == 0) {
+             if (press_type && strcmp(press_type, "CMD") == 0) {
+                 break;
+             }
+          }
+
           data_pin_t data_pin = {0}; /* A3: локальная копия */
           data_pin.id = id;
           data_pin.action = action;
