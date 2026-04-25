@@ -1,4 +1,4 @@
-(function(){const k=document.createElement("link").relList;if(k&&k.supports&&k.supports("modulepreload"))return;for(const dt of document.querySelectorAll('link[rel="modulepreload"]'))ct(dt);new MutationObserver(dt=>{for(const _ of dt)if(_.type==="childList")for(const pt of _.addedNodes)pt.tagName==="LINK"&&pt.rel==="modulepreload"&&ct(pt)}).observe(document,{childList:!0,subtree:!0});function st(dt){const _={};return dt.integrity&&(_.integrity=dt.integrity),dt.referrerPolicy&&(_.referrerPolicy=dt.referrerPolicy),dt.crossOrigin==="use-credentials"?_.credentials="include":dt.crossOrigin==="anonymous"?_.credentials="omit":_.credentials="same-origin",_}function ct(dt){if(dt.ep)return;dt.ep=!0;const _=st(dt);fetch(dt.href,_)}})();var t,n,e,r,o,u,i,l,c,a,s,f={},p=[],h=/acit|ex(?:s|g|n|p|$)|rph|grid|ows|mnc|ntw|ine[ch]|zoo|^ord|itera/i,d=Array.isArray;function v($,k){for(var st in k)$[st]=k[st];return $}function m($){var k=$.parentNode;k&&k.removeChild($)}function y($,k,st){var ct,dt,_,pt={};for(_ in k)_=="key"?ct=k[_]:_=="ref"?dt=k[_]:pt[_]=k[_];if(arguments.length>2&&(pt.children=arguments.length>3?t.call(arguments,2):st),typeof $=="function"&&$.defaultProps!=null)for(_ in $.defaultProps)pt[_]===void 0&&(pt[_]=$.defaultProps[_]);return g($,pt,ct,dt,null)}function g($,k,st,ct,dt){var _={type:$,props:k,key:st,ref:ct,__k:null,__:null,__b:0,__e:null,__d:void 0,__c:null,constructor:void 0,__v:dt??++e,__i:-1,__u:0};return dt==null&&n.vnode!=null&&n.vnode(_),_}function b($){return $.children}function C($,k){this.props=$,this.context=k}function x($,k){if(k==null)return $.__?x($.__,$.__i+1):null;for(var st;k<$.__k.length;k++)if((st=$.__k[k])!=null&&st.__e!=null)return st.__e;return typeof $.type=="function"?x($):null}function w($){var k,st;if(($=$.__)!=null&&$.__c!=null){for($.__e=$.__c.base=null,k=0;k<$.__k.length;k++)if((st=$.__k[k])!=null&&st.__e!=null){$.__e=$.__c.base=st.__e;break}return w($)}}function P($){(!$.__d&&($.__d=!0)&&r.push($)&&!U.__r++||o!==n.debounceRendering)&&((o=n.debounceRendering)||u)(U)}function U(){var $,k,st,ct,dt,_,pt,te;for(r.sort(i);$=r.shift();)$.__d&&(k=r.length,ct=void 0,_=(dt=(st=$).__v).__e,pt=[],te=[],st.__P&&((ct=v({},dt)).__v=dt.__v+1,n.vnode&&n.vnode(ct),M(st.__P,ct,dt,st.__n,st.__P.namespaceURI,32&dt.__u?[_]:null,pt,_??x(dt),!!(32&dt.__u),te),ct.__v=dt.__v,ct.__.__k[ct.__i]=ct,L(pt,ct,te),ct.__e!=_&&w(ct)),r.length>k&&r.sort(i));U.__r=0}function H($,k,st,ct,dt,_,pt,te,mt,Xt,ee){var $t,oe,re,pe,we,$e=ct&&ct.__k||p,ue=k.length;for(st.__d=mt,E(st,k,$e),mt=st.__d,$t=0;$t<ue;$t++)(re=st.__k[$t])!=null&&typeof re!="boolean"&&typeof re!="function"&&(oe=re.__i===-1?f:$e[re.__i]||f,re.__i=$t,M($,re,oe,dt,_,pt,te,mt,Xt,ee),pe=re.__e,re.ref&&oe.ref!=re.ref&&(oe.ref&&F(oe.ref,null,re),ee.push(re.ref,re.__c||pe,re)),we==null&&pe!=null&&(we=pe),65536&re.__u||oe.__k===re.__k?(mt&&!mt.isConnected&&(mt=x(oe)),mt=S(re,mt,$)):typeof re.type=="function"&&re.__d!==void 0?mt=re.__d:pe&&(mt=pe.nextSibling),re.__d=void 0,re.__u&=-196609);st.__d=mt,st.__e=we}function E($,k,st){var ct,dt,_,pt,te,mt=k.length,Xt=st.length,ee=Xt,$t=0;for($.__k=[],ct=0;ct<mt;ct++)pt=ct+$t,(dt=$.__k[ct]=(dt=k[ct])==null||typeof dt=="boolean"||typeof dt=="function"?null:typeof dt=="string"||typeof dt=="number"||typeof dt=="bigint"||dt.constructor==String?g(null,dt,null,null,null):d(dt)?g(b,{children:dt},null,null,null):dt.constructor===void 0&&dt.__b>0?g(dt.type,dt.props,dt.key,dt.ref?dt.ref:null,dt.__v):dt)!=null?(dt.__=$,dt.__b=$.__b+1,te=D(dt,st,pt,ee),dt.__i=te,_=null,te!==-1&&(ee--,(_=st[te])&&(_.__u|=131072)),_==null||_.__v===null?(te==-1&&$t--,typeof dt.type!="function"&&(dt.__u|=65536)):te!==pt&&(te===pt+1?$t++:te>pt?ee>mt-pt?$t+=te-pt:$t--:te<pt?te==pt-1&&($t=te-pt):$t=0,te!==ct+$t&&(dt.__u|=65536))):(_=st[pt])&&_.key==null&&_.__e&&(131072&_.__u)==0&&(_.__e==$.__d&&($.__d=x(_)),I(_,_,!1),st[pt]=null,ee--);if(ee)for(ct=0;ct<Xt;ct++)(_=st[ct])!=null&&(131072&_.__u)==0&&(_.__e==$.__d&&($.__d=x(_)),I(_,_))}function S($,k,st){var ct,dt;if(typeof $.type=="function"){for(ct=$.__k,dt=0;ct&&dt<ct.length;dt++)ct[dt]&&(ct[dt].__=$,k=S(ct[dt],k,st));return k}$.__e!=k&&(st.insertBefore($.__e,k||null),k=$.__e);do k=k&&k.nextSibling;while(k!=null&&k.nodeType===8);return k}function A($,k){return k=k||[],$==null||typeof $=="boolean"||(d($)?$.some((function(st){A(st,k)})):k.push($)),k}function D($,k,st,ct){var dt=$.key,_=$.type,pt=st-1,te=st+1,mt=k[st];if(mt===null||mt&&dt==mt.key&&_===mt.type&&(131072&mt.__u)==0)return st;if(ct>(mt!=null&&(131072&mt.__u)==0?1:0))for(;pt>=0||te<k.length;){if(pt>=0){if((mt=k[pt])&&(131072&mt.__u)==0&&dt==mt.key&&_===mt.type)return pt;pt--}if(te<k.length){if((mt=k[te])&&(131072&mt.__u)==0&&dt==mt.key&&_===mt.type)return te;te++}}return-1}function N($,k,st){k[0]==="-"?$.setProperty(k,st??""):$[k]=st==null?"":typeof st!="number"||h.test(k)?st:st+"px"}function R($,k,st,ct,dt){var _;t:if(k==="style")if(typeof st=="string")$.style.cssText=st;else{if(typeof ct=="string"&&($.style.cssText=ct=""),ct)for(k in ct)st&&k in st||N($.style,k,"");if(st)for(k in st)ct&&st[k]===ct[k]||N($.style,k,st[k])}else if(k[0]==="o"&&k[1]==="n")_=k!==(k=k.replace(/(PointerCapture)$|Capture$/i,"$1")),k=k.toLowerCase()in $||k==="onFocusOut"||k==="onFocusIn"?k.toLowerCase().slice(2):k.slice(2),$.l||($.l={}),$.l[k+_]=st,st?ct?st.u=ct.u:(st.u=l,$.addEventListener(k,_?a:c,_)):$.removeEventListener(k,_?a:c,_);else{if(dt=="http://www.w3.org/2000/svg")k=k.replace(/xlink(H|:h)/,"h").replace(/sName$/,"s");else if(k!="width"&&k!="height"&&k!="href"&&k!="list"&&k!="form"&&k!="tabIndex"&&k!="download"&&k!="rowSpan"&&k!="colSpan"&&k!="role"&&k in $)try{$[k]=st??"";break t}catch{}typeof st=="function"||(st==null||st===!1&&k[4]!=="-"?$.removeAttribute(k):$.setAttribute(k,st))}}function T($){return function(k){if(this.l){var st=this.l[k.type+$];if(k.t==null)k.t=l++;else if(k.t<st.u)return;return st(n.event?n.event(k):k)}}}function M($,k,st,ct,dt,_,pt,te,mt,Xt){var ee,$t,oe,re,pe,we,$e,ue,ye,xe,Se,Ce,Ee,Ie,ie,_e=k.type;if(k.constructor!==void 0)return null;128&st.__u&&(mt=!!(32&st.__u),_=[te=k.__e=st.__e]),(ee=n.__b)&&ee(k);t:if(typeof _e=="function")try{if(ue=k.props,ye=(ee=_e.contextType)&&ct[ee.__c],xe=ee?ye?ye.props.value:ee.__:ct,st.__c?$e=($t=k.__c=st.__c).__=$t.__E:("prototype"in _e&&_e.prototype.render?k.__c=$t=new _e(ue,xe):(k.__c=$t=new C(ue,xe),$t.constructor=_e,$t.render=V),ye&&ye.sub($t),$t.props=ue,$t.state||($t.state={}),$t.context=xe,$t.__n=ct,oe=$t.__d=!0,$t.__h=[],$t._sb=[]),$t.__s==null&&($t.__s=$t.state),_e.getDerivedStateFromProps!=null&&($t.__s==$t.state&&($t.__s=v({},$t.__s)),v($t.__s,_e.getDerivedStateFromProps(ue,$t.__s))),re=$t.props,pe=$t.state,$t.__v=k,oe)_e.getDerivedStateFromProps==null&&$t.componentWillMount!=null&&$t.componentWillMount(),$t.componentDidMount!=null&&$t.__h.push($t.componentDidMount);else{if(_e.getDerivedStateFromProps==null&&ue!==re&&$t.componentWillReceiveProps!=null&&$t.componentWillReceiveProps(ue,xe),!$t.__e&&($t.shouldComponentUpdate!=null&&$t.shouldComponentUpdate(ue,$t.__s,xe)===!1||k.__v===st.__v)){for(k.__v!==st.__v&&($t.props=ue,$t.state=$t.__s,$t.__d=!1),k.__e=st.__e,k.__k=st.__k,k.__k.forEach((function(ae){ae&&(ae.__=k)})),Se=0;Se<$t._sb.length;Se++)$t.__h.push($t._sb[Se]);$t._sb=[],$t.__h.length&&pt.push($t);break t}$t.componentWillUpdate!=null&&$t.componentWillUpdate(ue,$t.__s,xe),$t.componentDidUpdate!=null&&$t.__h.push((function(){$t.componentDidUpdate(re,pe,we)}))}if($t.context=xe,$t.props=ue,$t.__P=$,$t.__e=!1,Ce=n.__r,Ee=0,"prototype"in _e&&_e.prototype.render){for($t.state=$t.__s,$t.__d=!1,Ce&&Ce(k),ee=$t.render($t.props,$t.state,$t.context),Ie=0;Ie<$t._sb.length;Ie++)$t.__h.push($t._sb[Ie]);$t._sb=[]}else do $t.__d=!1,Ce&&Ce(k),ee=$t.render($t.props,$t.state,$t.context),$t.state=$t.__s;while($t.__d&&++Ee<25);$t.state=$t.__s,$t.getChildContext!=null&&(ct=v(v({},ct),$t.getChildContext())),oe||$t.getSnapshotBeforeUpdate==null||(we=$t.getSnapshotBeforeUpdate(re,pe)),H($,d(ie=ee!=null&&ee.type===b&&ee.key==null?ee.props.children:ee)?ie:[ie],k,st,ct,dt,_,pt,te,mt,Xt),$t.base=k.__e,k.__u&=-161,$t.__h.length&&pt.push($t),$e&&($t.__E=$t.__=null)}catch(ae){k.__v=null,mt||_!=null?(k.__e=te,k.__u|=mt?160:32,_[_.indexOf(te)]=null):(k.__e=st.__e,k.__k=st.__k),n.__e(ae,k,st)}else _==null&&k.__v===st.__v?(k.__k=st.__k,k.__e=st.__e):k.__e=W(st.__e,k,st,ct,dt,_,pt,mt,Xt);(ee=n.diffed)&&ee(k)}function L($,k,st){k.__d=void 0;for(var ct=0;ct<st.length;ct++)F(st[ct],st[++ct],st[++ct]);n.__c&&n.__c(k,$),$.some((function(dt){try{$=dt.__h,dt.__h=[],$.some((function(_){_.call(dt)}))}catch(_){n.__e(_,dt.__v)}}))}function W($,k,st,ct,dt,_,pt,te,mt){var Xt,ee,$t,oe,re,pe,we,$e=st.props,ue=k.props,ye=k.type;if(ye==="svg"?dt="http://www.w3.org/2000/svg":ye==="math"?dt="http://www.w3.org/1998/Math/MathML":dt||(dt="http://www.w3.org/1999/xhtml"),_!=null){for(Xt=0;Xt<_.length;Xt++)if((re=_[Xt])&&"setAttribute"in re==!!ye&&(ye?re.localName===ye:re.nodeType===3)){$=re,_[Xt]=null;break}}if($==null){if(ye===null)return document.createTextNode(ue);$=document.createElementNS(dt,ye,ue.is&&ue),_=null,te=!1}if(ye===null)$e===ue||te&&$.data===ue||($.data=ue);else{if(_=_&&t.call($.childNodes),$e=st.props||f,!te&&_!=null)for($e={},Xt=0;Xt<$.attributes.length;Xt++)$e[(re=$.attributes[Xt]).name]=re.value;for(Xt in $e)if(re=$e[Xt],Xt!="children"){if(Xt=="dangerouslySetInnerHTML")$t=re;else if(Xt!=="key"&&!(Xt in ue)){if(Xt=="value"&&"defaultValue"in ue||Xt=="checked"&&"defaultChecked"in ue)continue;R($,Xt,null,re,dt)}}for(Xt in ue)re=ue[Xt],Xt=="children"?oe=re:Xt=="dangerouslySetInnerHTML"?ee=re:Xt=="value"?pe=re:Xt=="checked"?we=re:Xt==="key"||te&&typeof re!="function"||$e[Xt]===re||R($,Xt,re,$e[Xt],dt);if(ee)te||$t&&(ee.__html===$t.__html||ee.__html===$.innerHTML)||($.innerHTML=ee.__html),k.__k=[];else if($t&&($.innerHTML=""),H($,d(oe)?oe:[oe],k,st,ct,ye==="foreignObject"?"http://www.w3.org/1999/xhtml":dt,_,pt,_?_[0]:st.__k&&x(st,0),te,mt),_!=null)for(Xt=_.length;Xt--;)_[Xt]!=null&&m(_[Xt]);te||(Xt="value",pe!==void 0&&(pe!==$[Xt]||ye==="progress"&&!pe||ye==="option"&&pe!==$e[Xt])&&R($,Xt,pe,$e[Xt],dt),Xt="checked",we!==void 0&&we!==$[Xt]&&R($,Xt,we,$e[Xt],dt))}return $}function F($,k,st){try{typeof $=="function"?$(k):$.current=k}catch(ct){n.__e(ct,st)}}function I($,k,st){var ct,dt;if(n.unmount&&n.unmount($),(ct=$.ref)&&(ct.current&&ct.current!==$.__e||F(ct,null,k)),(ct=$.__c)!=null){if(ct.componentWillUnmount)try{ct.componentWillUnmount()}catch(_){n.__e(_,k)}ct.base=ct.__P=null}if(ct=$.__k)for(dt=0;dt<ct.length;dt++)ct[dt]&&I(ct[dt],k,st||typeof $.type!="function");st||$.__e==null||m($.__e),$.__c=$.__=$.__e=$.__d=void 0}function V($,k,st){return this.constructor($,st)}function O($,k,st){var ct,dt,_,pt;n.__&&n.__($,k),dt=(ct=!1)?null:k.__k,_=[],pt=[],M(k,$=k.__k=y(b,null,[$]),dt||f,f,k.namespaceURI,dt?null:k.firstChild?t.call(k.childNodes):null,_,dt?dt.__e:k.firstChild,ct,pt),L(_,$,pt)}function j($,k,st){var ct,dt,_,pt,te=v({},$.props);for(_ in $.type&&$.type.defaultProps&&(pt=$.type.defaultProps),k)_=="key"?ct=k[_]:_=="ref"?dt=k[_]:te[_]=k[_]===void 0&&pt!==void 0?pt[_]:k[_];return arguments.length>2&&(te.children=arguments.length>3?t.call(arguments,2):st),g($.type,te,ct||$.key,dt||$.ref,null)}function q($,k){var st={__c:k="__cC"+s++,__:$,Consumer:function(ct,dt){return ct.children(dt)},Provider:function(ct){var dt,_;return this.getChildContext||(dt=[],(_={})[k]=this,this.getChildContext=function(){return _},this.shouldComponentUpdate=function(pt){this.props.value!==pt.value&&dt.some((function(te){te.__e=!0,P(te)}))},this.sub=function(pt){dt.push(pt);var te=pt.componentWillUnmount;pt.componentWillUnmount=function(){dt.splice(dt.indexOf(pt),1),te&&te.call(pt)}}),ct.children}};return st.Provider.__=st.Consumer.contextType=st}t=p.slice,n={__e:function($,k,st,ct){for(var dt,_,pt;k=k.__;)if((dt=k.__c)&&!dt.__)try{if((_=dt.constructor)&&_.getDerivedStateFromError!=null&&(dt.setState(_.getDerivedStateFromError($)),pt=dt.__d),dt.componentDidCatch!=null&&(dt.componentDidCatch($,ct||{}),pt=dt.__d),pt)return dt.__E=dt}catch(te){$=te}throw $}},e=0,C.prototype.setState=function($,k){var st;st=this.__s!=null&&this.__s!==this.state?this.__s:this.__s=v({},this.state),typeof $=="function"&&($=$(v({},st),this.props)),$&&v(st,$),$!=null&&this.__v&&(k&&this._sb.push(k),P(this))},C.prototype.forceUpdate=function($){this.__v&&(this.__e=!0,$&&this.__h.push($),P(this))},C.prototype.render=b,r=[],u=typeof Promise=="function"?Promise.prototype.then.bind(Promise.resolve()):setTimeout,i=function($,k){return $.__v.__b-k.__v.__b},U.__r=0,l=0,c=T(!1),a=T(!0),s=0;var B,K,z,G,J=0,Q=[],X=[],Y=n,Z=Y.__b,tt=Y.__r,nt=Y.diffed,et=Y.__c,_t=Y.unmount,rt=Y.__;function ot($,k){Y.__h&&Y.__h(K,$,J||k),J=0;var st=K.__H||(K.__H={__:[],__h:[]});return $>=st.__.length&&st.__.push({__V:X}),st.__[$]}function ut($){return J=1,it(wt,$)}function it($,k,st){var ct=ot(B++,2);if(ct.t=$,!ct.__c&&(ct.__=[wt(void 0,k),function(te){var mt=ct.__N?ct.__N[0]:ct.__[0],Xt=ct.t(mt,te);mt!==Xt&&(ct.__N=[Xt,ct.__[1]],ct.__c.setState({}))}],ct.__c=K,!K.u)){var dt=function(te,mt,Xt){if(!ct.__c.__H)return!0;var ee=ct.__c.__H.__.filter((function(oe){return!!oe.__c}));if(ee.every((function(oe){return!oe.__N})))return!_||_.call(this,te,mt,Xt);var $t=!1;return ee.forEach((function(oe){if(oe.__N){var re=oe.__[0];oe.__=oe.__N,oe.__N=void 0,re!==oe.__[0]&&($t=!0)}})),!(!$t&&ct.__c.props===te)&&(!_||_.call(this,te,mt,Xt))};K.u=!0;var _=K.shouldComponentUpdate,pt=K.componentWillUpdate;K.componentWillUpdate=function(te,mt,Xt){if(this.__e){var ee=_;_=void 0,dt(te,mt,Xt),_=ee}pt&&pt.call(this,te,mt,Xt)},K.shouldComponentUpdate=dt}return ct.__N||ct.__}function lt($,k){var st=ot(B++,3);!Y.__s&&xt(st.__H,k)&&(st.__=$,st.i=k,K.__H.__h.push(st))}function at($){return J=5,ft((function(){return{current:$}}),[])}function ft($,k){var st=ot(B++,7);return xt(st.__H,k)?(st.__V=$(),st.i=k,st.__h=$,st.__V):st.__}function yt(){for(var $;$=Q.shift();)if($.__P&&$.__H)try{$.__H.__h.forEach(bt),$.__H.__h.forEach(Ct),$.__H.__h=[]}catch(k){$.__H.__h=[],Y.__e(k,$.__v)}}Y.__b=function($){K=null,Z&&Z($)},Y.__=function($,k){$&&k.__k&&k.__k.__m&&($.__m=k.__k.__m),rt&&rt($,k)},Y.__r=function($){tt&&tt($),B=0;var k=(K=$.__c).__H;k&&(z===K?(k.__h=[],K.__h=[],k.__.forEach((function(st){st.__N&&(st.__=st.__N),st.__V=X,st.__N=st.i=void 0}))):(k.__h.forEach(bt),k.__h.forEach(Ct),k.__h=[],B=0)),z=K},Y.diffed=function($){nt&&nt($);var k=$.__c;k&&k.__H&&(k.__H.__h.length&&(Q.push(k)!==1&&G===Y.requestAnimationFrame||((G=Y.requestAnimationFrame)||kt)(yt)),k.__H.__.forEach((function(st){st.i&&(st.__H=st.i),st.__V!==X&&(st.__=st.__V),st.i=void 0,st.__V=X}))),z=K=null},Y.__c=function($,k){k.some((function(st){try{st.__h.forEach(bt),st.__h=st.__h.filter((function(ct){return!ct.__||Ct(ct)}))}catch(ct){k.some((function(dt){dt.__h&&(dt.__h=[])})),k=[],Y.__e(ct,st.__v)}})),et&&et($,k)},Y.unmount=function($){_t&&_t($);var k,st=$.__c;st&&st.__H&&(st.__H.__.forEach((function(ct){try{bt(ct)}catch(dt){k=dt}})),st.__H=void 0,k&&Y.__e(k,st.__v))};var gt=typeof requestAnimationFrame=="function";function kt($){var k,st=function(){clearTimeout(ct),gt&&cancelAnimationFrame(k),setTimeout($)},ct=setTimeout(st,100);gt&&(k=requestAnimationFrame(st))}function bt($){var k=K,st=$.__c;typeof st=="function"&&($.__c=void 0,st()),K=k}function Ct($){var k=K;$.__c=$.__(),K=k}function xt($,k){return!$||$.length!==k.length||k.some((function(st,ct){return st!==$[ct]}))}function wt($,k){return typeof k=="function"?k($):k}var Pt=function($,k,st,ct){var dt;k[0]=0;for(var _=1;_<k.length;_++){var pt=k[_++],te=k[_]?(k[0]|=pt?1:2,st[k[_++]]):k[++_];pt===3?ct[0]=te:pt===4?ct[1]=Object.assign(ct[1]||{},te):pt===5?(ct[1]=ct[1]||{})[k[++_]]=te:pt===6?ct[1][k[++_]]+=te+"":pt?(dt=$.apply(te,Pt($,te,st,["",null])),ct.push(dt),te[0]?k[0]|=2:(k[_-2]=0,k[_]=dt)):ct.push(te)}return ct},Ut=new Map;function Ht($){var k=Ut.get(this);return k||(k=new Map,Ut.set(this,k)),(k=Pt(this,k.get($)||(k.set($,k=(function(st){for(var ct,dt,_=1,pt="",te="",mt=[0],Xt=function(oe){_===1&&(oe||(pt=pt.replace(/^\s*\n\s*|\s*\n\s*$/g,"")))?mt.push(0,oe,pt):_===3&&(oe||pt)?(mt.push(3,oe,pt),_=2):_===2&&pt==="..."&&oe?mt.push(4,oe,0):_===2&&pt&&!oe?mt.push(5,0,!0,pt):_>=5&&((pt||!oe&&_===5)&&(mt.push(_,0,pt,dt),_=6),oe&&(mt.push(_,oe,0,dt),_=6)),pt=""},ee=0;ee<st.length;ee++){ee&&(_===1&&Xt(),Xt(ee));for(var $t=0;$t<st[ee].length;$t++)ct=st[ee][$t],_===1?ct==="<"?(Xt(),mt=[mt],_=3):pt+=ct:_===4?pt==="--"&&ct===">"?(_=1,pt=""):pt=ct+pt[0]:te?ct===te?te="":pt+=ct:ct==='"'||ct==="'"?te=ct:ct===">"?(Xt(),_=1):_&&(ct==="="?(_=5,dt=pt,pt=""):ct==="/"&&(_<5||st[ee][$t+1]===">")?(Xt(),_===3&&(mt=mt[0]),_=mt,(mt=mt[0]).push(2,0,_),_=0):ct===" "||ct==="	"||ct===`
+(function(){const k=document.createElement("link").relList;if(k&&k.supports&&k.supports("modulepreload"))return;for(const dt of document.querySelectorAll('link[rel="modulepreload"]'))ct(dt);new MutationObserver(dt=>{for(const _ of dt)if(_.type==="childList")for(const pt of _.addedNodes)pt.tagName==="LINK"&&pt.rel==="modulepreload"&&ct(pt)}).observe(document,{childList:!0,subtree:!0});function st(dt){const _={};return dt.integrity&&(_.integrity=dt.integrity),dt.referrerPolicy&&(_.referrerPolicy=dt.referrerPolicy),dt.crossOrigin==="use-credentials"?_.credentials="include":dt.crossOrigin==="anonymous"?_.credentials="omit":_.credentials="same-origin",_}function ct(dt){if(dt.ep)return;dt.ep=!0;const _=st(dt);fetch(dt.href,_)}})();var t,n,e,r,o,u,i,l,c,a,s,f={},p=[],h=/acit|ex(?:s|g|n|p|$)|rph|grid|ows|mnc|ntw|ine[ch]|zoo|^ord|itera/i,d=Array.isArray;function v($,k){for(var st in k)$[st]=k[st];return $}function m($){var k=$.parentNode;k&&k.removeChild($)}function y($,k,st){var ct,dt,_,pt={};for(_ in k)_=="key"?ct=k[_]:_=="ref"?dt=k[_]:pt[_]=k[_];if(arguments.length>2&&(pt.children=arguments.length>3?t.call(arguments,2):st),typeof $=="function"&&$.defaultProps!=null)for(_ in $.defaultProps)pt[_]===void 0&&(pt[_]=$.defaultProps[_]);return g($,pt,ct,dt,null)}function g($,k,st,ct,dt){var _={type:$,props:k,key:st,ref:ct,__k:null,__:null,__b:0,__e:null,__d:void 0,__c:null,constructor:void 0,__v:dt??++e,__i:-1,__u:0};return dt==null&&n.vnode!=null&&n.vnode(_),_}function b($){return $.children}function C($,k){this.props=$,this.context=k}function x($,k){if(k==null)return $.__?x($.__,$.__i+1):null;for(var st;k<$.__k.length;k++)if((st=$.__k[k])!=null&&st.__e!=null)return st.__e;return typeof $.type=="function"?x($):null}function w($){var k,st;if(($=$.__)!=null&&$.__c!=null){for($.__e=$.__c.base=null,k=0;k<$.__k.length;k++)if((st=$.__k[k])!=null&&st.__e!=null){$.__e=$.__c.base=st.__e;break}return w($)}}function P($){(!$.__d&&($.__d=!0)&&r.push($)&&!U.__r++||o!==n.debounceRendering)&&((o=n.debounceRendering)||u)(U)}function U(){var $,k,st,ct,dt,_,pt,te;for(r.sort(i);$=r.shift();)$.__d&&(k=r.length,ct=void 0,_=(dt=(st=$).__v).__e,pt=[],te=[],st.__P&&((ct=v({},dt)).__v=dt.__v+1,n.vnode&&n.vnode(ct),M(st.__P,ct,dt,st.__n,st.__P.namespaceURI,32&dt.__u?[_]:null,pt,_??x(dt),!!(32&dt.__u),te),ct.__v=dt.__v,ct.__.__k[ct.__i]=ct,L(pt,ct,te),ct.__e!=_&&w(ct)),r.length>k&&r.sort(i));U.__r=0}function H($,k,st,ct,dt,_,pt,te,mt,Xt,ee){var $t,oe,re,pe,we,$e=ct&&ct.__k||p,ue=k.length;for(st.__d=mt,E(st,k,$e),mt=st.__d,$t=0;$t<ue;$t++)(re=st.__k[$t])!=null&&typeof re!="boolean"&&typeof re!="function"&&(oe=re.__i===-1?f:$e[re.__i]||f,re.__i=$t,M($,re,oe,dt,_,pt,te,mt,Xt,ee),pe=re.__e,re.ref&&oe.ref!=re.ref&&(oe.ref&&F(oe.ref,null,re),ee.push(re.ref,re.__c||pe,re)),we==null&&pe!=null&&(we=pe),65536&re.__u||oe.__k===re.__k?(mt&&!mt.isConnected&&(mt=x(oe)),mt=S(re,mt,$)):typeof re.type=="function"&&re.__d!==void 0?mt=re.__d:pe&&(mt=pe.nextSibling),re.__d=void 0,re.__u&=-196609);st.__d=mt,st.__e=we}function E($,k,st){var ct,dt,_,pt,te,mt=k.length,Xt=st.length,ee=Xt,$t=0;for($.__k=[],ct=0;ct<mt;ct++)pt=ct+$t,(dt=$.__k[ct]=(dt=k[ct])==null||typeof dt=="boolean"||typeof dt=="function"?null:typeof dt=="string"||typeof dt=="number"||typeof dt=="bigint"||dt.constructor==String?g(null,dt,null,null,null):d(dt)?g(b,{children:dt},null,null,null):dt.constructor===void 0&&dt.__b>0?g(dt.type,dt.props,dt.key,dt.ref?dt.ref:null,dt.__v):dt)!=null?(dt.__=$,dt.__b=$.__b+1,te=D(dt,st,pt,ee),dt.__i=te,_=null,te!==-1&&(ee--,(_=st[te])&&(_.__u|=131072)),_==null||_.__v===null?(te==-1&&$t--,typeof dt.type!="function"&&(dt.__u|=65536)):te!==pt&&(te===pt+1?$t++:te>pt?ee>mt-pt?$t+=te-pt:$t--:te<pt?te==pt-1&&($t=te-pt):$t=0,te!==ct+$t&&(dt.__u|=65536))):(_=st[pt])&&_.key==null&&_.__e&&(131072&_.__u)==0&&(_.__e==$.__d&&($.__d=x(_)),I(_,_,!1),st[pt]=null,ee--);if(ee)for(ct=0;ct<Xt;ct++)(_=st[ct])!=null&&(131072&_.__u)==0&&(_.__e==$.__d&&($.__d=x(_)),I(_,_))}function S($,k,st){var ct,dt;if(typeof $.type=="function"){for(ct=$.__k,dt=0;ct&&dt<ct.length;dt++)ct[dt]&&(ct[dt].__=$,k=S(ct[dt],k,st));return k}$.__e!=k&&(st.insertBefore($.__e,k||null),k=$.__e);do k=k&&k.nextSibling;while(k!=null&&k.nodeType===8);return k}function A($,k){return k=k||[],$==null||typeof $=="boolean"||(d($)?$.some((function(st){A(st,k)})):k.push($)),k}function D($,k,st,ct){var dt=$.key,_=$.type,pt=st-1,te=st+1,mt=k[st];if(mt===null||mt&&dt==mt.key&&_===mt.type&&(131072&mt.__u)==0)return st;if(ct>(mt!=null&&(131072&mt.__u)==0?1:0))for(;pt>=0||te<k.length;){if(pt>=0){if((mt=k[pt])&&(131072&mt.__u)==0&&dt==mt.key&&_===mt.type)return pt;pt--}if(te<k.length){if((mt=k[te])&&(131072&mt.__u)==0&&dt==mt.key&&_===mt.type)return te;te++}}return-1}function N($,k,st){k[0]==="-"?$.setProperty(k,st??""):$[k]=st==null?"":typeof st!="number"||h.test(k)?st:st+"px"}function R($,k,st,ct,dt){var _;t:if(k==="style")if(typeof st=="string")$.style.cssText=st;else{if(typeof ct=="string"&&($.style.cssText=ct=""),ct)for(k in ct)st&&k in st||N($.style,k,"");if(st)for(k in st)ct&&st[k]===ct[k]||N($.style,k,st[k])}else if(k[0]==="o"&&k[1]==="n")_=k!==(k=k.replace(/(PointerCapture)$|Capture$/i,"$1")),k=k.toLowerCase()in $||k==="onFocusOut"||k==="onFocusIn"?k.toLowerCase().slice(2):k.slice(2),$.l||($.l={}),$.l[k+_]=st,st?ct?st.u=ct.u:(st.u=l,$.addEventListener(k,_?a:c,_)):$.removeEventListener(k,_?a:c,_);else{if(dt=="http://www.w3.org/2000/svg")k=k.replace(/xlink(H|:h)/,"h").replace(/sName$/,"s");else if(k!="width"&&k!="height"&&k!="href"&&k!="list"&&k!="form"&&k!="tabIndex"&&k!="download"&&k!="rowSpan"&&k!="colSpan"&&k!="role"&&k in $)try{$[k]=st??"";break t}catch{}typeof st=="function"||(st==null||st===!1&&k[4]!=="-"?$.removeAttribute(k):$.setAttribute(k,st))}}function T($){return function(k){if(this.l){var st=this.l[k.type+$];if(k.t==null)k.t=l++;else if(k.t<st.u)return;return st(n.event?n.event(k):k)}}}function M($,k,st,ct,dt,_,pt,te,mt,Xt){var ee,$t,oe,re,pe,we,$e,ue,ye,xe,Se,Ce,ke,Ie,ie,_e=k.type;if(k.constructor!==void 0)return null;128&st.__u&&(mt=!!(32&st.__u),_=[te=k.__e=st.__e]),(ee=n.__b)&&ee(k);t:if(typeof _e=="function")try{if(ue=k.props,ye=(ee=_e.contextType)&&ct[ee.__c],xe=ee?ye?ye.props.value:ee.__:ct,st.__c?$e=($t=k.__c=st.__c).__=$t.__E:("prototype"in _e&&_e.prototype.render?k.__c=$t=new _e(ue,xe):(k.__c=$t=new C(ue,xe),$t.constructor=_e,$t.render=V),ye&&ye.sub($t),$t.props=ue,$t.state||($t.state={}),$t.context=xe,$t.__n=ct,oe=$t.__d=!0,$t.__h=[],$t._sb=[]),$t.__s==null&&($t.__s=$t.state),_e.getDerivedStateFromProps!=null&&($t.__s==$t.state&&($t.__s=v({},$t.__s)),v($t.__s,_e.getDerivedStateFromProps(ue,$t.__s))),re=$t.props,pe=$t.state,$t.__v=k,oe)_e.getDerivedStateFromProps==null&&$t.componentWillMount!=null&&$t.componentWillMount(),$t.componentDidMount!=null&&$t.__h.push($t.componentDidMount);else{if(_e.getDerivedStateFromProps==null&&ue!==re&&$t.componentWillReceiveProps!=null&&$t.componentWillReceiveProps(ue,xe),!$t.__e&&($t.shouldComponentUpdate!=null&&$t.shouldComponentUpdate(ue,$t.__s,xe)===!1||k.__v===st.__v)){for(k.__v!==st.__v&&($t.props=ue,$t.state=$t.__s,$t.__d=!1),k.__e=st.__e,k.__k=st.__k,k.__k.forEach((function(ae){ae&&(ae.__=k)})),Se=0;Se<$t._sb.length;Se++)$t.__h.push($t._sb[Se]);$t._sb=[],$t.__h.length&&pt.push($t);break t}$t.componentWillUpdate!=null&&$t.componentWillUpdate(ue,$t.__s,xe),$t.componentDidUpdate!=null&&$t.__h.push((function(){$t.componentDidUpdate(re,pe,we)}))}if($t.context=xe,$t.props=ue,$t.__P=$,$t.__e=!1,Ce=n.__r,ke=0,"prototype"in _e&&_e.prototype.render){for($t.state=$t.__s,$t.__d=!1,Ce&&Ce(k),ee=$t.render($t.props,$t.state,$t.context),Ie=0;Ie<$t._sb.length;Ie++)$t.__h.push($t._sb[Ie]);$t._sb=[]}else do $t.__d=!1,Ce&&Ce(k),ee=$t.render($t.props,$t.state,$t.context),$t.state=$t.__s;while($t.__d&&++ke<25);$t.state=$t.__s,$t.getChildContext!=null&&(ct=v(v({},ct),$t.getChildContext())),oe||$t.getSnapshotBeforeUpdate==null||(we=$t.getSnapshotBeforeUpdate(re,pe)),H($,d(ie=ee!=null&&ee.type===b&&ee.key==null?ee.props.children:ee)?ie:[ie],k,st,ct,dt,_,pt,te,mt,Xt),$t.base=k.__e,k.__u&=-161,$t.__h.length&&pt.push($t),$e&&($t.__E=$t.__=null)}catch(ae){k.__v=null,mt||_!=null?(k.__e=te,k.__u|=mt?160:32,_[_.indexOf(te)]=null):(k.__e=st.__e,k.__k=st.__k),n.__e(ae,k,st)}else _==null&&k.__v===st.__v?(k.__k=st.__k,k.__e=st.__e):k.__e=W(st.__e,k,st,ct,dt,_,pt,mt,Xt);(ee=n.diffed)&&ee(k)}function L($,k,st){k.__d=void 0;for(var ct=0;ct<st.length;ct++)F(st[ct],st[++ct],st[++ct]);n.__c&&n.__c(k,$),$.some((function(dt){try{$=dt.__h,dt.__h=[],$.some((function(_){_.call(dt)}))}catch(_){n.__e(_,dt.__v)}}))}function W($,k,st,ct,dt,_,pt,te,mt){var Xt,ee,$t,oe,re,pe,we,$e=st.props,ue=k.props,ye=k.type;if(ye==="svg"?dt="http://www.w3.org/2000/svg":ye==="math"?dt="http://www.w3.org/1998/Math/MathML":dt||(dt="http://www.w3.org/1999/xhtml"),_!=null){for(Xt=0;Xt<_.length;Xt++)if((re=_[Xt])&&"setAttribute"in re==!!ye&&(ye?re.localName===ye:re.nodeType===3)){$=re,_[Xt]=null;break}}if($==null){if(ye===null)return document.createTextNode(ue);$=document.createElementNS(dt,ye,ue.is&&ue),_=null,te=!1}if(ye===null)$e===ue||te&&$.data===ue||($.data=ue);else{if(_=_&&t.call($.childNodes),$e=st.props||f,!te&&_!=null)for($e={},Xt=0;Xt<$.attributes.length;Xt++)$e[(re=$.attributes[Xt]).name]=re.value;for(Xt in $e)if(re=$e[Xt],Xt!="children"){if(Xt=="dangerouslySetInnerHTML")$t=re;else if(Xt!=="key"&&!(Xt in ue)){if(Xt=="value"&&"defaultValue"in ue||Xt=="checked"&&"defaultChecked"in ue)continue;R($,Xt,null,re,dt)}}for(Xt in ue)re=ue[Xt],Xt=="children"?oe=re:Xt=="dangerouslySetInnerHTML"?ee=re:Xt=="value"?pe=re:Xt=="checked"?we=re:Xt==="key"||te&&typeof re!="function"||$e[Xt]===re||R($,Xt,re,$e[Xt],dt);if(ee)te||$t&&(ee.__html===$t.__html||ee.__html===$.innerHTML)||($.innerHTML=ee.__html),k.__k=[];else if($t&&($.innerHTML=""),H($,d(oe)?oe:[oe],k,st,ct,ye==="foreignObject"?"http://www.w3.org/1999/xhtml":dt,_,pt,_?_[0]:st.__k&&x(st,0),te,mt),_!=null)for(Xt=_.length;Xt--;)_[Xt]!=null&&m(_[Xt]);te||(Xt="value",pe!==void 0&&(pe!==$[Xt]||ye==="progress"&&!pe||ye==="option"&&pe!==$e[Xt])&&R($,Xt,pe,$e[Xt],dt),Xt="checked",we!==void 0&&we!==$[Xt]&&R($,Xt,we,$e[Xt],dt))}return $}function F($,k,st){try{typeof $=="function"?$(k):$.current=k}catch(ct){n.__e(ct,st)}}function I($,k,st){var ct,dt;if(n.unmount&&n.unmount($),(ct=$.ref)&&(ct.current&&ct.current!==$.__e||F(ct,null,k)),(ct=$.__c)!=null){if(ct.componentWillUnmount)try{ct.componentWillUnmount()}catch(_){n.__e(_,k)}ct.base=ct.__P=null}if(ct=$.__k)for(dt=0;dt<ct.length;dt++)ct[dt]&&I(ct[dt],k,st||typeof $.type!="function");st||$.__e==null||m($.__e),$.__c=$.__=$.__e=$.__d=void 0}function V($,k,st){return this.constructor($,st)}function O($,k,st){var ct,dt,_,pt;n.__&&n.__($,k),dt=(ct=!1)?null:k.__k,_=[],pt=[],M(k,$=k.__k=y(b,null,[$]),dt||f,f,k.namespaceURI,dt?null:k.firstChild?t.call(k.childNodes):null,_,dt?dt.__e:k.firstChild,ct,pt),L(_,$,pt)}function j($,k,st){var ct,dt,_,pt,te=v({},$.props);for(_ in $.type&&$.type.defaultProps&&(pt=$.type.defaultProps),k)_=="key"?ct=k[_]:_=="ref"?dt=k[_]:te[_]=k[_]===void 0&&pt!==void 0?pt[_]:k[_];return arguments.length>2&&(te.children=arguments.length>3?t.call(arguments,2):st),g($.type,te,ct||$.key,dt||$.ref,null)}function q($,k){var st={__c:k="__cC"+s++,__:$,Consumer:function(ct,dt){return ct.children(dt)},Provider:function(ct){var dt,_;return this.getChildContext||(dt=[],(_={})[k]=this,this.getChildContext=function(){return _},this.shouldComponentUpdate=function(pt){this.props.value!==pt.value&&dt.some((function(te){te.__e=!0,P(te)}))},this.sub=function(pt){dt.push(pt);var te=pt.componentWillUnmount;pt.componentWillUnmount=function(){dt.splice(dt.indexOf(pt),1),te&&te.call(pt)}}),ct.children}};return st.Provider.__=st.Consumer.contextType=st}t=p.slice,n={__e:function($,k,st,ct){for(var dt,_,pt;k=k.__;)if((dt=k.__c)&&!dt.__)try{if((_=dt.constructor)&&_.getDerivedStateFromError!=null&&(dt.setState(_.getDerivedStateFromError($)),pt=dt.__d),dt.componentDidCatch!=null&&(dt.componentDidCatch($,ct||{}),pt=dt.__d),pt)return dt.__E=dt}catch(te){$=te}throw $}},e=0,C.prototype.setState=function($,k){var st;st=this.__s!=null&&this.__s!==this.state?this.__s:this.__s=v({},this.state),typeof $=="function"&&($=$(v({},st),this.props)),$&&v(st,$),$!=null&&this.__v&&(k&&this._sb.push(k),P(this))},C.prototype.forceUpdate=function($){this.__v&&(this.__e=!0,$&&this.__h.push($),P(this))},C.prototype.render=b,r=[],u=typeof Promise=="function"?Promise.prototype.then.bind(Promise.resolve()):setTimeout,i=function($,k){return $.__v.__b-k.__v.__b},U.__r=0,l=0,c=T(!1),a=T(!0),s=0;var B,K,z,G,J=0,Q=[],X=[],Y=n,Z=Y.__b,tt=Y.__r,nt=Y.diffed,et=Y.__c,_t=Y.unmount,rt=Y.__;function ot($,k){Y.__h&&Y.__h(K,$,J||k),J=0;var st=K.__H||(K.__H={__:[],__h:[]});return $>=st.__.length&&st.__.push({__V:X}),st.__[$]}function ut($){return J=1,it(wt,$)}function it($,k,st){var ct=ot(B++,2);if(ct.t=$,!ct.__c&&(ct.__=[wt(void 0,k),function(te){var mt=ct.__N?ct.__N[0]:ct.__[0],Xt=ct.t(mt,te);mt!==Xt&&(ct.__N=[Xt,ct.__[1]],ct.__c.setState({}))}],ct.__c=K,!K.u)){var dt=function(te,mt,Xt){if(!ct.__c.__H)return!0;var ee=ct.__c.__H.__.filter((function(oe){return!!oe.__c}));if(ee.every((function(oe){return!oe.__N})))return!_||_.call(this,te,mt,Xt);var $t=!1;return ee.forEach((function(oe){if(oe.__N){var re=oe.__[0];oe.__=oe.__N,oe.__N=void 0,re!==oe.__[0]&&($t=!0)}})),!(!$t&&ct.__c.props===te)&&(!_||_.call(this,te,mt,Xt))};K.u=!0;var _=K.shouldComponentUpdate,pt=K.componentWillUpdate;K.componentWillUpdate=function(te,mt,Xt){if(this.__e){var ee=_;_=void 0,dt(te,mt,Xt),_=ee}pt&&pt.call(this,te,mt,Xt)},K.shouldComponentUpdate=dt}return ct.__N||ct.__}function lt($,k){var st=ot(B++,3);!Y.__s&&xt(st.__H,k)&&(st.__=$,st.i=k,K.__H.__h.push(st))}function at($){return J=5,ft((function(){return{current:$}}),[])}function ft($,k){var st=ot(B++,7);return xt(st.__H,k)?(st.__V=$(),st.i=k,st.__h=$,st.__V):st.__}function yt(){for(var $;$=Q.shift();)if($.__P&&$.__H)try{$.__H.__h.forEach(bt),$.__H.__h.forEach(Ct),$.__H.__h=[]}catch(k){$.__H.__h=[],Y.__e(k,$.__v)}}Y.__b=function($){K=null,Z&&Z($)},Y.__=function($,k){$&&k.__k&&k.__k.__m&&($.__m=k.__k.__m),rt&&rt($,k)},Y.__r=function($){tt&&tt($),B=0;var k=(K=$.__c).__H;k&&(z===K?(k.__h=[],K.__h=[],k.__.forEach((function(st){st.__N&&(st.__=st.__N),st.__V=X,st.__N=st.i=void 0}))):(k.__h.forEach(bt),k.__h.forEach(Ct),k.__h=[],B=0)),z=K},Y.diffed=function($){nt&&nt($);var k=$.__c;k&&k.__H&&(k.__H.__h.length&&(Q.push(k)!==1&&G===Y.requestAnimationFrame||((G=Y.requestAnimationFrame)||kt)(yt)),k.__H.__.forEach((function(st){st.i&&(st.__H=st.i),st.__V!==X&&(st.__=st.__V),st.i=void 0,st.__V=X}))),z=K=null},Y.__c=function($,k){k.some((function(st){try{st.__h.forEach(bt),st.__h=st.__h.filter((function(ct){return!ct.__||Ct(ct)}))}catch(ct){k.some((function(dt){dt.__h&&(dt.__h=[])})),k=[],Y.__e(ct,st.__v)}})),et&&et($,k)},Y.unmount=function($){_t&&_t($);var k,st=$.__c;st&&st.__H&&(st.__H.__.forEach((function(ct){try{bt(ct)}catch(dt){k=dt}})),st.__H=void 0,k&&Y.__e(k,st.__v))};var gt=typeof requestAnimationFrame=="function";function kt($){var k,st=function(){clearTimeout(ct),gt&&cancelAnimationFrame(k),setTimeout($)},ct=setTimeout(st,100);gt&&(k=requestAnimationFrame(st))}function bt($){var k=K,st=$.__c;typeof st=="function"&&($.__c=void 0,st()),K=k}function Ct($){var k=K;$.__c=$.__(),K=k}function xt($,k){return!$||$.length!==k.length||k.some((function(st,ct){return st!==$[ct]}))}function wt($,k){return typeof k=="function"?k($):k}var Pt=function($,k,st,ct){var dt;k[0]=0;for(var _=1;_<k.length;_++){var pt=k[_++],te=k[_]?(k[0]|=pt?1:2,st[k[_++]]):k[++_];pt===3?ct[0]=te:pt===4?ct[1]=Object.assign(ct[1]||{},te):pt===5?(ct[1]=ct[1]||{})[k[++_]]=te:pt===6?ct[1][k[++_]]+=te+"":pt?(dt=$.apply(te,Pt($,te,st,["",null])),ct.push(dt),te[0]?k[0]|=2:(k[_-2]=0,k[_]=dt)):ct.push(te)}return ct},Ut=new Map;function Ht($){var k=Ut.get(this);return k||(k=new Map,Ut.set(this,k)),(k=Pt(this,k.get($)||(k.set($,k=(function(st){for(var ct,dt,_=1,pt="",te="",mt=[0],Xt=function(oe){_===1&&(oe||(pt=pt.replace(/^\s*\n\s*|\s*\n\s*$/g,"")))?mt.push(0,oe,pt):_===3&&(oe||pt)?(mt.push(3,oe,pt),_=2):_===2&&pt==="..."&&oe?mt.push(4,oe,0):_===2&&pt&&!oe?mt.push(5,0,!0,pt):_>=5&&((pt||!oe&&_===5)&&(mt.push(_,0,pt,dt),_=6),oe&&(mt.push(_,oe,0,dt),_=6)),pt=""},ee=0;ee<st.length;ee++){ee&&(_===1&&Xt(),Xt(ee));for(var $t=0;$t<st[ee].length;$t++)ct=st[ee][$t],_===1?ct==="<"?(Xt(),mt=[mt],_=3):pt+=ct:_===4?pt==="--"&&ct===">"?(_=1,pt=""):pt=ct+pt[0]:te?ct===te?te="":pt+=ct:ct==='"'||ct==="'"?te=ct:ct===">"?(Xt(),_=1):_&&(ct==="="?(_=5,dt=pt,pt=""):ct==="/"&&(_<5||st[ee][$t+1]===">")?(Xt(),_===3&&(mt=mt[0]),_=mt,(mt=mt[0]).push(2,0,_),_=0):ct===" "||ct==="	"||ct===`
 `||ct==="\r"?(Xt(),_=2):pt+=ct),_===3&&pt==="!--"&&(_=4,mt=mt[0])}return Xt(),mt})($)),k),arguments,[])).length>1?k:k[0]}var Et=Ht.bind(y),St={};function At($,k){for(var st in k)$[st]=k[st];return $}function Dt($,k,st){var ct,dt=/(?:\?([^#]*))?(#.*)?$/,_=$.match(dt),pt={};if(_&&_[1])for(var te=_[1].split("&"),mt=0;mt<te.length;mt++){var Xt=te[mt].split("=");pt[decodeURIComponent(Xt[0])]=decodeURIComponent(Xt.slice(1).join("="))}$=Tt($.replace(dt,"")),k=Tt(k||"");for(var ee=Math.max($.length,k.length),$t=0;$t<ee;$t++)if(k[$t]&&k[$t].charAt(0)===":"){var oe=k[$t].replace(/(^:|[+*?]+$)/g,""),re=(k[$t].match(/[+*?]+$/)||St)[0]||"",pe=~re.indexOf("+"),we=~re.indexOf("*"),$e=$[$t]||"";if(!$e&&!we&&(re.indexOf("?")<0||pe)){ct=!1;break}if(pt[oe]=decodeURIComponent($e),pe||we){pt[oe]=$.slice($t).map(decodeURIComponent).join("/");break}}else if(k[$t]!==$[$t]){ct=!1;break}return(st.default===!0||ct!==!1)&&pt}function Nt($,k){return $.rank<k.rank?1:$.rank>k.rank?-1:$.index-k.index}function Rt($,k){return $.index=k,$.rank=(function(st){return st.props.default?0:Tt(st.props.path).map(Mt).join("")})($),$.props}function Tt($){return $.replace(/(^\/+|\/+$)/g,"").split("/")}function Mt($){return $.charAt(0)==":"?1+"*+?".indexOf($.charAt($.length-1))||4:5}var Lt={},Wt=[],Ft=[],It=null,Vt={url:jt()},Ot=q(Vt);function jt(){var $;return""+(($=It&&It.location?It.location:It&&It.getCurrentLocation?It.getCurrentLocation():typeof location<"u"?location:Lt).pathname||"")+($.search||"")}function qt($,k){return k===void 0&&(k=!1),typeof $!="string"&&$.url&&(k=$.replace,$=$.url),(function(st){for(var ct=Wt.length;ct--;)if(Wt[ct].canRoute(st))return!0;return!1})($)&&(function(st,ct){ct===void 0&&(ct="push"),It&&It[ct]?It[ct](st):typeof history<"u"&&history[ct+"State"]&&history[ct+"State"](null,null,st)})($,k?"replace":"push"),Bt($)}function Bt($){for(var k=!1,st=0;st<Wt.length;st++)Wt[st].routeTo($)&&(k=!0);return k}function Kt($){if($&&$.getAttribute){var k=$.getAttribute("href"),st=$.getAttribute("target");if(k&&k.match(/^\//g)&&(!st||st.match(/^_?self$/i)))return qt(k)}}function zt($){return $.stopImmediatePropagation&&$.stopImmediatePropagation(),$.stopPropagation&&$.stopPropagation(),$.preventDefault(),!1}function Gt($){if(!($.ctrlKey||$.metaKey||$.altKey||$.shiftKey||$.button)){var k=$.target;do if(k.localName==="a"&&k.getAttribute("href")){if(k.hasAttribute("data-native")||k.hasAttribute("native"))return;if(Kt(k))return zt($)}while(k=k.parentNode)}}var Jt=!1;function Qt($){$.history&&(It=$.history),this.state={url:$.url||jt()}}At(Qt.prototype=new C,{shouldComponentUpdate:function($){return $.static!==!0||$.url!==this.props.url||$.onChange!==this.props.onChange},canRoute:function($){var k=A(this.props.children);return this.g(k,$)!==void 0},routeTo:function($){this.setState({url:$});var k=this.canRoute($);return this.p||this.forceUpdate(),k},componentWillMount:function(){this.p=!0},componentDidMount:function(){var $=this;Jt||(Jt=!0,It||addEventListener("popstate",(function(){Bt(jt())})),addEventListener("click",Gt)),Wt.push(this),It&&(this.u=It.listen((function(k){var st=k.location||k;$.routeTo(""+(st.pathname||"")+(st.search||""))}))),this.p=!1},componentWillUnmount:function(){typeof this.u=="function"&&this.u(),Wt.splice(Wt.indexOf(this),1)},componentWillUpdate:function(){this.p=!0},componentDidUpdate:function(){this.p=!1},g:function($,k){$=$.filter(Rt).sort(Nt);for(var st=0;st<$.length;st++){var ct=$[st],dt=Dt(k,ct.props.path,ct.props);if(dt)return[ct,dt]}},render:function($,k){var st,ct,dt=$.onChange,_=k.url,pt=this.c,te=this.g(A($.children),_);if(te&&(ct=j(te[0],At(At({url:_,matches:st=te[1]},st),{key:void 0,ref:void 0}))),_!==(pt&&pt.url)){At(Vt,pt=this.c={url:_,previous:pt&&pt.url,current:ct,path:ct?ct.props.path:null,matches:st}),pt.router=this,pt.active=ct?[ct]:[];for(var mt=Ft.length;mt--;)Ft[mt]({});typeof dt=="function"&&dt(pt)}return y(Ot.Provider,{value:pt},ct)}});const switchIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='652.000000pt'%20height='956.000000pt'%20viewBox='0%200%20652.000000%20956.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,956.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M1150%209540%20c-386%20-6%20-408%20-8%20-475%20-29%20-147%20-48%20-255%20-115%20-368%20-226%20-93%20-91%20-145%20-159%20-191%20-250%20-74%20-146%20-77%20-163%20-87%20-455%20-10%20-318%20-14%20-7639%20-4%20-7725%2025%20-214%20107%20-394%20245%20-539%20115%20-121%20227%20-192%20408%20-260%20l72%20-28%202418%20-1%20c2586%20-2%202582%20-2%202716%2047%20254%2092%20492%20346%20573%20611%2017%2058%2018%20211%2018%204095%20l0%204035%20-23%2075%20c-61%20193%20-204%20388%20-368%20501%20-76%2052%20-226%20118%20-294%20129%20-36%206%20-229%2015%20-430%2020%20-398%2010%20-3557%2010%20-4210%200z%20m4610%20-328%20c164%20-59%20291%20-175%20374%20-339%20l36%20-73%200%20-4016%200%20-4016%20-45%20-88%20c-25%20-48%20-70%20-115%20-101%20-148%20-64%20-71%20-175%20-148%20-242%20-168%20-103%20-32%20-400%20-35%20-2687%20-32%20-2180%203%20-2282%204%20-2335%2022%20-204%2068%20-363%20240%20-417%20452%20-17%2065%20-18%20275%20-18%203979%200%203785%201%203912%2019%203980%2024%2091%2084%20207%20140%20271%2055%2062%20182%20152%20244%20171%2027%208%20121%2018%20222%2022%2096%205%201203%208%202460%207%20l2285%20-1%2065%20-23z'/%3e%3cpath%20d='M1434%208128%20l-45%20-41%203%20-3291%20c3%20-3127%204%20-3293%2021%20-3323%209%20-18%2029%20-41%2044%20-50%2026%20-17%20125%20-18%201799%20-18%201918%200%201808%20-3%201834%2054%207%2014%2016%2067%2021%20116%205%2050%209%20789%209%201644%20l0%201554%20249%20981%20c358%201405%20401%201581%20401%201626%200%2051%204%2046%20-414%20468%20l-321%20322%20-1778%200%20-1777%200%20-46%20-42z%20m3636%20-425%20l165%20-168%20-185%20-6%20c-102%20-4%20-770%20-7%20-1485%20-8%20l-1300%20-1%20-145%20148%20c-80%2081%20-156%20159%20-170%20175%20l-23%2027%201489%200%201490%200%20164%20-167z%20m-3078%20-356%20l31%20-38%20-147%20-583%20c-81%20-320%20-153%20-602%20-160%20-626%20-12%20-39%20-13%20-23%20-19%20185%20-9%20291%20-9%20823%200%201123%20l6%20233%20129%20-128%20c71%20-70%20143%20-145%20160%20-166z%20m2900%20-136%20c278%20-3%20510%20-9%20513%20-13%2010%20-10%203%20-40%20-305%20-1260%20l-280%20-1107%200%20-1565%200%20-1566%20-1565%200%20-1565%200%200%201521%200%201520%20310%201226%20c171%20675%20313%201229%20316%201232%2014%2014%201788%2022%202576%2012z'/%3e%3cpath%20d='M3765%206820%20c-61%20-25%20-87%20-94%20-185%20-473%20-80%20-315%20-120%20-493%20-120%20-540%200%20-77%2078%20-141%20163%20-134%2069%206%20101%2040%20131%20141%2057%20190%20197%20746%20212%20843%205%2032%201%2053%20-19%2096%20-22%2048%20-30%2057%20-64%2066%20-44%2013%20-90%2013%20-118%201z'/%3e%3cpath%20d='M3098%203406%20c-104%20-37%20-216%20-134%20-264%20-227%20-24%20-47%20-28%20-71%20-35%20-184%20-19%20-311%20-7%20-500%2037%20-586%2040%20-80%20113%20-151%20201%20-195%20l76%20-39%20151%200%20151%200%2068%2034%20c81%2041%20167%20128%20215%20218%20l32%2061%200%20302%200%20302%20-41%2078%20c-65%20127%20-156%20201%20-284%20235%20-73%2019%20-255%2019%20-307%201z%20m262%20-311%20c58%20-30%2064%20-57%2068%20-301%204%20-219%204%20-222%20-19%20-253%20-65%20-88%20-230%20-95%20-286%20-13%20-16%2024%20-18%2055%20-21%20273%20l-3%20246%2038%2030%20c21%2017%2045%2033%2053%2036%2025%2011%20137%20-1%20170%20-18z'/%3e%3c/g%3e%3c/svg%3e",buttonIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='171.000000pt'%20height='171.000000pt'%20viewBox='0%200%20171.000000%20171.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,171.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M790%201280%20l0%20-420%2065%200%2065%200%200%20420%200%20420%20-65%200%20-65%200%200%20-420z'/%3e%3cpath%20d='M489%201612%20c-228%20-114%20-386%20-309%20-451%20-557%20-29%20-110%20-29%20-297%200%20-406%2081%20-301%20308%20-530%20607%20-610%20112%20-30%20307%20-30%20420%200%20294%2077%20529%20312%20606%20606%2029%20110%2030%20307%201%20416%20-67%20251%20-245%20462%20-477%20565%20l-55%2024%200%20-74%200%20-74%2072%20-42%20c280%20-167%20411%20-508%20313%20-817%20-35%20-110%20-88%20-196%20-175%20-283%20-87%20-87%20-172%20-139%20-285%20-177%20-70%20-23%20-96%20-27%20-210%20-27%20-114%200%20-140%204%20-210%2027%20-293%2097%20-495%20372%20-495%20673%200%2070%2025%20193%2055%20266%2054%20133%20182%20279%20299%20339%20l66%2034%200%2078%20c0%2042%20-1%2077%20-2%2077%20-2%200%20-37%20-18%20-79%20-38z'/%3e%3c/g%3e%3c/svg%3e",timerIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='171.000000pt'%20height='171.000000pt'%20viewBox='0%200%20171.000000%20171.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,171.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M818%201670%20c-24%20-15%20-31%20-77%20-23%20-221%208%20-141%2015%20-159%2064%20-159%2050%200%2060%2024%2063%20150%20l3%20115%2030%20-3%20c172%20-19%20366%20-132%20472%20-275%2094%20-129%20133%20-236%20140%20-392%206%20-142%20-12%20-230%20-73%20-355%20-82%20-165%20-236%20-296%20-419%20-357%20-71%20-24%20-95%20-27%20-215%20-27%20-118%200%20-145%203%20-212%2026%20-123%2041%20-204%2092%20-298%20187%20-68%2068%20-94%20103%20-127%20171%20-61%20125%20-76%20203%20-71%20352%206%20153%2036%20243%20122%20371%2064%2095%2068%20127%2021%20149%20-39%2017%20-68%202%20-113%20-59%20-94%20-127%20-150%20-285%20-159%20-449%20-23%20-399%20236%20-749%20632%20-855%20111%20-30%20297%20-30%20410%200%20449%20119%20716%20562%20610%201011%20-23%2095%20-105%20254%20-173%20336%20-111%20131%20-276%20234%20-442%20274%20-89%2021%20-213%2026%20-242%2010z'/%3e%3cpath%20d='M452%201258%20c-7%20-7%20-12%20-17%20-12%20-23%200%20-21%20330%20-469%20358%20-487%2043%20-28%20106%20-23%20143%2010%2043%2038%2052%20113%2020%20154%20-20%2025%20-454%20342%20-484%20354%20-7%202%20-18%20-1%20-25%20-8z'/%3e%3c/g%3e%3c/svg%3e",owIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='110.000000pt'%20height='52.000000pt'%20viewBox='0%200%20110.000000%2052.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,52.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M171%20500%20c-50%20-12%20-83%20-41%20-111%20-96%20-22%20-43%20-25%20-62%20-24%20-149%200%20-141%2027%20-199%20109%20-236%2073%20-33%20180%20-16%20227%2037%2067%2076%2074%20284%2013%20376%20-39%2059%20-133%2089%20-214%2068z%20m119%20-65%20c50%20-26%2065%20-67%2065%20-180%200%20-146%20-32%20-195%20-128%20-195%20-40%200%20-54%205%20-77%2028%20-16%2016%20-34%2049%20-40%2073%20-16%2056%20-7%20186%2014%20227%2030%2057%20105%2078%20166%2047z'/%3e%3cpath%20d='M482%20483%20c3%20-10%2029%20-120%2058%20-245%20l54%20-228%2038%200%20c43%200%2035%20-20%2089%20215%2017%2077%2035%20146%2038%20152%204%207%2026%20-73%2051%20-178%20l44%20-190%2039%203%2040%203%2058%20240%20c32%20132%2058%20241%2059%20243%200%202%20-15%202%20-32%200%20l-32%20-3%20-43%20-180%20c-23%20-99%20-44%20-187%20-46%20-195%20-2%20-8%20-25%2074%20-51%20183%20l-48%20198%20-36%20-3%20-36%20-3%20-45%20-194%20c-25%20-106%20-47%20-188%20-49%20-181%20-3%207%20-23%2095%20-46%20194%20l-42%20181%20-33%203%20c-28%203%20-33%201%20-29%20-15z'/%3e%3c/g%3e%3c/svg%3e",encoderIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='34.000000pt'%20height='52.000000pt'%20viewBox='0%200%2034.000000%2052.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,52.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M30%20255%20l0%20-245%20150%200%20150%200%200%2030%200%2030%20-115%200%20-115%200%200%2085%200%2085%2095%200%2095%200%200%2030%200%2030%20-95%200%20-95%200%200%2070%200%2070%20115%200%20115%200%200%2030%200%2030%20-150%200%20-150%200%200%20-245z'/%3e%3c/g%3e%3c/svg%3e",Icons={switchIcon:$=>Et`
     <img
       src=${switchIcon}
@@ -293,7 +293,7 @@
     >
       ${ie.title}
     </th>
-  `,Ee=({id:ie,value:_e,label:ae,disabled:me=!1,onChange:ge,checked:ce})=>Et`
+  `,ke=({id:ie,value:_e,label:ae,disabled:me=!1,onChange:ge,checked:ce})=>Et`
     <div class="relative">
       <input
         id="${ie}_${_e}"
@@ -321,15 +321,15 @@
       <td class="px-6 py-2 text-sm text-slate-800 font-medium">${ie.pins}</td>
       <td class="px-2 py-2">
         <div class="flex flex-wrap items-center justify-center gap-x-1 gap-y-1">
-          <${Ee} id=${ie.id} value="0"  label="NONE"     checked=${st[`topin_${ie.id}`]==="0"}  onChange=${ye} />
-          <${Ee} id=${ie.id} value="3"  label="SWITCH"   checked=${st[`topin_${ie.id}`]==="3"}  onChange=${ye} />
-          <${Ee} id=${ie.id} value="1"  label="BUTTON"   checked=${st[`topin_${ie.id}`]==="1"}  onChange=${ye} />
-          <${Ee} id=${ie.id} value="2"  label="DEVICE"   checked=${st[`topin_${ie.id}`]==="2"}  onChange=${ye} />
-          <${Ee} id=${ie.id} value="4"  label="1-WIRE"   checked=${st[`topin_${ie.id}`]==="4"}  onChange=${ye} />
-          <${Ee} id=${ie.id} value="5"  label="PWM"      disabled=${ie.pwm==0} checked=${st[`topin_${ie.id}`]==="5"}  onChange=${ye} />
-          <${Ee} id=${ie.id} value="8"  label="Enc.OutA" checked=${st[`topin_${ie.id}`]==="8"}  onChange=${ye} />
-          <${Ee} id=${ie.id} value="9"  label="Enc.OutB" checked=${st[`topin_${ie.id}`]==="9"}  onChange=${ye} />
-          <${Ee} id=${ie.id} value="10" label="Security" disabled=${ie.monitoring==0} checked=${st[`topin_${ie.id}`]==="10"} onChange=${ye} />
+          <${ke} id=${ie.id} value="0"  label="NONE"     checked=${st[`topin_${ie.id}`]==="0"}  onChange=${ye} />
+          <${ke} id=${ie.id} value="3"  label="SWITCH"   checked=${st[`topin_${ie.id}`]==="3"}  onChange=${ye} />
+          <${ke} id=${ie.id} value="1"  label="BUTTON"   checked=${st[`topin_${ie.id}`]==="1"}  onChange=${ye} />
+          <${ke} id=${ie.id} value="2"  label="DEVICE"   checked=${st[`topin_${ie.id}`]==="2"}  onChange=${ye} />
+          <${ke} id=${ie.id} value="4"  label="1-WIRE"   checked=${st[`topin_${ie.id}`]==="4"}  onChange=${ye} />
+          <${ke} id=${ie.id} value="5"  label="PWM"      disabled=${ie.pwm==0} checked=${st[`topin_${ie.id}`]==="5"}  onChange=${ye} />
+          <${ke} id=${ie.id} value="8"  label="Enc.OutA" checked=${st[`topin_${ie.id}`]==="8"}  onChange=${ye} />
+          <${ke} id=${ie.id} value="9"  label="Enc.OutB" checked=${st[`topin_${ie.id}`]==="9"}  onChange=${ye} />
+          <${ke} id=${ie.id} value="10" label="Security" disabled=${ie.monitoring==0} checked=${st[`topin_${ie.id}`]==="10"} onChange=${ye} />
         </div>
       </td>
     </tr>
@@ -410,7 +410,7 @@
         </form>
       </div>
     </div>
-  `}function ModalSwitch({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedSwitch:_,onSwitchChange:pt,connectionOptions:te,SliderComponent:mt=MyPolzunok}){const[Xt,ee]=ut((_==null?void 0:_.info)||""),[$t,oe]=ut((_==null?void 0:_.onoff)||0),[re,pe]=ut((_==null?void 0:_.ptype)||0),[we,$e]=ut((_==null?void 0:_.setrpins)||""),[ue,ye]=ut([]);lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store",headers:{"Content-Type":"application/json"}}).then(ce=>{if(!ce.ok)throw new Error(`HTTP error! status: ${ce.status}`);return ce.json()}).then(ce=>{if(!ce||!ce.data||!Array.isArray(ce.data)){console.error("Invalid data format:",ce),ye([]);return}const Te=ce.data.filter(fe=>fe.topin===2);ye(Te)}).catch(ce=>{console.error("Error fetching pin config:",ce),ye([])})},[]);const xe=ce=>{ce.preventDefault();const Te=new FormData(ce.target),fe=Object.fromEntries(Te);if(fe.id=_.id,fe.pins=_.pins,$==="edit")fe.onoff=$t;else if($==="connection"){const le=ue.find(ht=>ht.pins===fe.setrpins);le&&(fe.pinact={..._.pinact,[le.id]:le.pins})}fetch("/api/switch/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(fe)}).then(le=>le.json()).then(le=>{console.log("Success:",le),pt({..._,...fe}),st(),window.location.href="/#/switch"}).catch(le=>{console.error("Error:",le)})},Se=ce=>{$e(ce.target.value)},Ce=ce=>{pe(parseInt(ce.target.value))},Ee=ce=>{ee(ce.target.value)},Ie=ce=>{oe(ce)},ie=ce=>{ct&&ce.target===ce.currentTarget&&st()},_e=()=>{pe(0),ee(""),oe(0)},me=Et`
+  `}function ModalSwitch({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedSwitch:_,onSwitchChange:pt,connectionOptions:te,SliderComponent:mt=MyPolzunok}){const[Xt,ee]=ut((_==null?void 0:_.info)||""),[$t,oe]=ut((_==null?void 0:_.onoff)||0),[re,pe]=ut((_==null?void 0:_.ptype)||0),[we,$e]=ut((_==null?void 0:_.setrpins)||""),[ue,ye]=ut([]);lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store",headers:{"Content-Type":"application/json"}}).then(ce=>{if(!ce.ok)throw new Error(`HTTP error! status: ${ce.status}`);return ce.json()}).then(ce=>{if(!ce||!ce.data||!Array.isArray(ce.data)){console.error("Invalid data format:",ce),ye([]);return}const Te=ce.data.filter(he=>he.topin===2);ye(Te)}).catch(ce=>{console.error("Error fetching pin config:",ce),ye([])})},[]);const xe=ce=>{ce.preventDefault();const Te=new FormData(ce.target),he=Object.fromEntries(Te);if(he.id=_.id,he.pins=_.pins,$==="edit")he.onoff=$t;else if($==="connection"){const le=ue.find(ht=>ht.pins===he.setrpins);le&&(he.pinact={..._.pinact,[le.id]:le.pins})}fetch("/api/switch/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(he)}).then(le=>le.json()).then(le=>{console.log("Success:",le),pt({..._,...he}),st(),window.location.href="/#/switch"}).catch(le=>{console.error("Error:",le)})},Se=ce=>{$e(ce.target.value)},Ce=ce=>{pe(parseInt(ce.target.value))},ke=ce=>{ee(ce.target.value)},Ie=ce=>{oe(ce)},ie=ce=>{ct&&ce.target===ce.currentTarget&&st()},_e=()=>{pe(0),ee(""),oe(0)},me=Et`
     <div
       class="fixed inset-0 z-[999] bg-black bg-opacity-50"
       style="margin-top: 7px;"
@@ -508,7 +508,7 @@
                         type="text"
                         name="info"
                         value=${Xt}
-                        oninput=${Ee}
+                        oninput=${ke}
                         class="border rounded p-2 w-full"
                       />
                     </td>
@@ -545,9 +545,9 @@
         </div>
       </div>
     </div>
-  `,ge=at(null);return lt(()=>{const ce=document.createElement("div");return ce.id="modal-portal",document.body.appendChild(ce),ge.current=ce,()=>{O(null,ce),document.body.removeChild(ce)}},[]),lt(()=>{ge.current&&O(me,ge.current)}),null}function initGlobalTooltip$7(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block";const _=dt.getBoundingClientRect();$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const pt=$.offsetWidth,te=$.offsetHeight,mt=window.innerWidth;let Xt=_.left+_.width/2-pt/2;Xt=Math.max(8,Math.min(Xt,mt-pt-8));let ee=_.top-te-8;ee<8&&(ee=_.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}function TabSwitch({}){const[$,k]=ut(null),[st,ct]=ut(null),[dt,_]=ut(!1),[pt,te]=ut(null),[mt,Xt]=ut(null),[ee,$t]=ut(!1),[oe,re]=ut("ru"),[pe,we]=ut(null),[$e,ue]=ut([]),[ye,xe]=ut(""),[Se,Ce]=ut(!1);lt(()=>{initGlobalTooltip$7()},[]);const Ee=()=>Promise.all([fetch("/api/switch/get").then(se=>se.json()),fetch("/api/pintopin/get").then(se=>se.json())]).then(([se,Zt])=>{re(se.lang),we(se.switches),k(se),ue(Zt),xe(`Pintopin data: ${JSON.stringify(Zt,null,2)}
+  `,ge=at(null);return lt(()=>{const ce=document.createElement("div");return ce.id="modal-portal",document.body.appendChild(ce),ge.current=ce,()=>{O(null,ce),document.body.removeChild(ce)}},[]),lt(()=>{ge.current&&O(me,ge.current)}),null}function initGlobalTooltip$7(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block";const _=dt.getBoundingClientRect();$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const pt=$.offsetWidth,te=$.offsetHeight,mt=window.innerWidth;let Xt=_.left+_.width/2-pt/2;Xt=Math.max(8,Math.min(Xt,mt-pt-8));let ee=_.top-te-8;ee<8&&(ee=_.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}function TabSwitch({}){const[$,k]=ut(null),[st,ct]=ut(null),[dt,_]=ut(!1),[pt,te]=ut(null),[mt,Xt]=ut(null),[ee,$t]=ut(!1),[oe,re]=ut("ru"),[pe,we]=ut(null),[$e,ue]=ut([]),[ye,xe]=ut(""),[Se,Ce]=ut(!1);lt(()=>{initGlobalTooltip$7()},[]);const ke=()=>Promise.all([fetch("/api/switch/get").then(se=>se.json()),fetch("/api/pintopin/get").then(se=>se.json())]).then(([se,Yt])=>{re(se.lang),we(se.switches),k(se),ue(Yt),xe(`Pintopin data: ${JSON.stringify(Yt,null,2)}
 
-Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:",Zt),console.log("Switch data:",se.switches)}).catch(se=>{console.error("Error fetching data:",se),xe(`Error fetching data: ${se.message}`)}),Ie=()=>{fetch("/api/switch/get").then(se=>se.json()).then(se=>{we(se.switches),re(se.lang),console.log("Updated switch data:",se.switches)}).catch(se=>{console.error("Error fetching switch data:",se)})},ie=()=>{fetch("/api/pintopin/get").then(se=>se.json()).then(se=>{ue(se),console.log("Updated pintopin data:",se)}).catch(se=>{console.error("Error fetching pintopin data:",se)})};lt(()=>{Ie(),ie();const se=setInterval(()=>{Ie(),ie()},1e3);return()=>clearInterval(se)},[]);const _e=se=>{const Zt=new Map,de=pe.find(be=>be.id===se);return de&&de.pinact&&Object.entries(de.pinact).forEach(([be,ve])=>{Zt.set(be,{pin:be,relayId:ve})}),$e.forEach(be=>{if(be.idin===se){const ve=`${be.pins}(${be.idout})`;Zt.has(ve)||Zt.set(ve,{pin:be.pins,relayId:be.idout})}}),Array.from(Zt.values())},ae=()=>({langswitch:oe==="ru"?ruLangswitch:enLangswitch}),me=(se,Zt)=>{const de=ae(),ve=(de[se]&&de[se][Zt]||"").split(" "),ke=[];let vt="";for(let ne=0;ne<ve.length;ne++){const he=ve[ne];vt.length+he.length+1<=200?vt+=(vt.length>0?" ":"")+he:(vt.length>0&&ke.push(vt),vt=he)}return vt.length>0&&ke.push(vt),ke.join("<br>")},ge=(se,Zt)=>{console.log("Удаление соединения:",se,Zt);const[de,be]=Zt.split("("),ve=be?parseInt(be):null;fetch("/api/connection/del",{method:"post",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:se,pin:de.trim()})}).then(ke=>ke.json()).then(ke=>{ct(ke),we(vt=>vt.map(ne=>{if(ne.id===se){const he={...ne.pinact};return delete he[de.trim()],{...ne,pinact:he}}return ne})),ue(vt=>vt.filter(ne=>!(ne.idin===se&&ne.pins===de.trim()&&(ve===null||ne.idout===ve))))}).then(()=>{console.log("Соединение удалено успешно"),Ee()}).catch(ke=>{console.error("Ошибка при удалении соединения:",ke)})},ce=(se,Zt)=>{te(se),Xt(Zt),_(!0)},Te=()=>{_(!1),te(null),Xt(null)},fe=se=>{console.log("handleSwitchChange:",se),fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:se.id,onoff:se.onoff})}).then(Zt=>Zt.json()).then(Zt=>{console.log("Response from /api/onoff/set:",Zt)}).catch(Zt=>{console.error("Error calling /api/onoff/set:",Zt)}),Te()},le={ru:Et`
+Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:",Yt),console.log("Switch data:",se.switches)}).catch(se=>{console.error("Error fetching data:",se),xe(`Error fetching data: ${se.message}`)}),Ie=()=>{fetch("/api/switch/get").then(se=>se.json()).then(se=>{we(se.switches),re(se.lang),console.log("Updated switch data:",se.switches)}).catch(se=>{console.error("Error fetching switch data:",se)})},ie=()=>{fetch("/api/pintopin/get").then(se=>se.json()).then(se=>{ue(se),console.log("Updated pintopin data:",se)}).catch(se=>{console.error("Error fetching pintopin data:",se)})};lt(()=>{Ie(),ie();const se=setInterval(()=>{Ie(),ie()},1e3);return()=>clearInterval(se)},[]);const _e=se=>{const Yt=new Map,de=pe.find(be=>be.id===se);return de&&de.pinact&&Object.entries(de.pinact).forEach(([be,ve])=>{Yt.set(be,{pin:be,relayId:ve})}),$e.forEach(be=>{if(be.idin===se){const ve=`${be.pins}(${be.idout})`;Yt.has(ve)||Yt.set(ve,{pin:be.pins,relayId:be.idout})}}),Array.from(Yt.values())},ae=()=>({langswitch:oe==="ru"?ruLangswitch:enLangswitch}),me=(se,Yt)=>{const de=ae(),ve=(de[se]&&de[se][Yt]||"").split(" "),Ee=[];let vt="";for(let ne=0;ne<ve.length;ne++){const fe=ve[ne];vt.length+fe.length+1<=200?vt+=(vt.length>0?" ":"")+fe:(vt.length>0&&Ee.push(vt),vt=fe)}return vt.length>0&&Ee.push(vt),Ee.join("<br>")},ge=(se,Yt)=>{console.log("Удаление соединения:",se,Yt);const[de,be]=Yt.split("("),ve=be?parseInt(be):null;fetch("/api/connection/del",{method:"post",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:se,pin:de.trim()})}).then(Ee=>Ee.json()).then(Ee=>{ct(Ee),we(vt=>vt.map(ne=>{if(ne.id===se){const fe={...ne.pinact};return delete fe[de.trim()],{...ne,pinact:fe}}return ne})),ue(vt=>vt.filter(ne=>!(ne.idin===se&&ne.pins===de.trim()&&(ve===null||ne.idout===ve))))}).then(()=>{console.log("Соединение удалено успешно"),ke()}).catch(Ee=>{console.error("Ошибка при удалении соединения:",Ee)})},ce=(se,Yt)=>{te(se),Xt(Yt),_(!0)},Te=()=>{_(!1),te(null),Xt(null)},he=se=>{console.log("handleSwitchChange:",se),fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:se.id,onoff:se.onoff})}).then(Yt=>Yt.json()).then(Yt=>{console.log("Response from /api/onoff/set:",Yt)}).catch(Yt=>{console.error("Error calling /api/onoff/set:",Yt)}),Te()},le={ru:Et`
       <div class="mytext space-y-6">
         <div>
           <pre class="mb-4">
@@ -568,19 +568,19 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">
-                  http://192.168.1.24:8000/api/Zerg/switch?id=27&onoff=1
+                <td class="border px-4 py-2 whitespace-nowrap">
+                  http://192.168.1.24:8000/api/Zerg/switch?id=27&state=1
                 </td>
                 <td class="border px-4 py-2">
-                  Данная команда ВКЛючит выключатель с id = 27. Где "Zerg" это Ваш 'Token'.
+                  Данная команда ВКЛючает все пины, указанные в поле “Device connection”, для строки с id = 27. Где “Zerg” — это ваш “Token”.
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">
-                  http://192.168.1.24:8000/api/Zerg/switch?id=27&onoff=0
+                <td class="border px-4 py-2 whitespace-nowrap">
+                  http://192.168.1.24:8000/api/Zerg/switch?id=27&state=0
                 </td>
                 <td class="border px-4 py-2">
-                  Данная команда ОТКлючит выключатель с id = 27. Где "Zerg" это Ваш 'Token'.
+                  Данная команда ОТКлючает все пины, указанные в поле “Device connection”, для строки с id = 27. Где “Zerg” — это ваш “Token”.
                 </td>
               </tr>
             </tbody>
@@ -602,15 +602,15 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">Swarm/switch/id=27/onoff=1</td>
+                <td class="border px-4 py-2">Zagotovka/switch/id=27/state=1</td>
                 <td class="border px-4 py-2">
-                  Данная MQTT команда ВКЛючит выключатель с id = 27. Где "Swarm" это Ваш 'TX topic'.
+                  Данная MQTT команда ВКЛючает все пины, указанные в поле “Device connection”, для строки с id = 27. Где "Zagotovka" это Ваш 'RX topic'.
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">Swarm/switch/id=27/onoff=0</td>
+                <td class="border px-4 py-2">Zagotovka/switch/id=27/state=0</td>
                 <td class="border px-4 py-2">
-                  Данная MQTT команда ОТКлючит выключатель с id = 27. Где "Swarm" это Ваш 'TX topic'.
+                  Данная MQTT команда ОТКлючает все пины, указанные в поле “Device connection”, для строки с id = 27. Где "Zagotovka" это Ваш 'RX topic'.
                 </td>
               </tr>
             </tbody>
@@ -627,10 +627,10 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">Swarm/switch/</td>
+                <td class="border px-4 py-2 whitespace-nowrap">Zagotovka/switch/</td>
                 <td class="border px-4 py-2">
-                  Данная страница отслеживает изменения выключателей и автоматически отправляет каждое изменение по MQTT на топик: Swarm/switch/.
-                  Где "Swarm" это Ваш 'TX topic'.
+                  Данная страница отслеживает изменения выключателей и автоматически отправляет каждое изменение по MQTT на топик: Zagotovka/switch/.
+                  Где "Zagotovka" это Ваш 'RX topic'.
                 </td>
               </tr>
             </tbody>
@@ -647,16 +647,16 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">14#1*</td>
-                <td class="border px-4 py-2">Данная команда ВКЛючит выключатель с id = 14. Работает как по SMS, так и в тональном наборе (DTMF) во время звонка.</td>
+                <td class="border px-4 py-2">14#1*#</td>
+                <td class="border px-4 py-2">Данная команда ВКЛючает все пины, указанные в поле “Device connection” для строки с id = 14. Она работает как по SMS, так и с помощью тонального набора (DTMF) во время звонка.</td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">14#0*</td>
-                <td class="border px-4 py-2">Данная команда ОТКлючит выключатель с id = 14.</td>
+                <td class="border px-4 py-2">14#0*#</td>
+                <td class="border px-4 py-2">Данная команда ОТКлючает все пины, указанные в поле “Device connection” для строки с id = 14. Она работает как по SMS, так и с помощью тонального набора (DTMF) во время звонка.</td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">14#2*</td>
-                <td class="border px-4 py-2">Данная команда переключит (TOGGLE) состояние выключателя с id = 14 на противоположное.</td>
+                <td class="border px-4 py-2">14#2*#</td>
+                <td class="border px-4 py-2">Данная команда переключит (TOGGLE) все пины, указанные в поле “Device connection” для строки с id = 14 на противоположное.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">14#1*15#0*#</td>
@@ -664,7 +664,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
               </tr>
               <tr>
                 <td class="border px-4 py-2">Ответ</td>
-                <td class="border px-4 py-2">Если (On/Off) в какой-либо строке таблицы выключен, то команда будет проигнорирована для этой строки, а в ответном SMS придет подобное сообщение <b>14:DISABLED</b>.</td>
+                <td class="border px-4 py-2">Если главный рубильник (On/Off) в какой-либо строке таблицы выключен, то команда будет проигнорирована для этой строки, а в ответном SMS придет подобное сообщение <b>14:DISABLED</b>.</td>
               </tr>
             </tbody>
           </table>
@@ -691,19 +691,19 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">
-                  http://192.168.1.24:8000/api/Zerg/switch?id=15&onoff=1
+                <td class="border px-4 py-2 whitespace-nowrap">
+                  http://192.168.1.24:8000/api/Zerg/switch?id=27&state=1
                 </td>
                 <td class="border px-4 py-2">
-                  Where "Zerg" is your 'Token'. This command will turn on the switch with id = 15.
+                  This command turns ON all pins specified in the "Device connection" field for the row with id = 27. Where "Zerg" is your "Token".
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">
-                  http://192.168.1.24:8000/api/Zerg/switch?id=15&onoff=0
+                <td class="border px-4 py-2 whitespace-nowrap">
+                  http://192.168.1.24:8000/api/Zerg/switch?id=27&state=0
                 </td>
                 <td class="border px-4 py-2">
-                  Where "Zerg" is your 'Token'. This command will turn off the switch with id = 15.
+                  This command turns OFF all pins specified in the "Device connection" field for the row with id = 27. Where "Zerg" is your "Token".
                 </td>
               </tr>
             </tbody>
@@ -725,15 +725,15 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">Swarm/switch/id=27/onoff=1</td>
+                <td class="border px-4 py-2 whitespace-nowrap">Zagotovka/switch/id=27/state=1</td>
                 <td class="border px-4 py-2">
-                  Where "Swarm" is your 'RX topic'. This command will turn ON the switch with id = 27.
+                  This MQTT command turns ON all pins specified in the "Device connection" field for the row with id = 27. Where "Zagotovka" is your 'RX topic'.
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">Swarm/switch/id=27/onoff=0</td>
+                <td class="border px-4 py-2 whitespace-nowrap">Zagotovka/switch/id=27/state=0</td>
                 <td class="border px-4 py-2">
-                  Where "Swarm" is your 'RX topic'. This command will turn OFF the switch with id = 27.
+                  This MQTT command turns OFF all pins specified in the "Device connection" field for the row with id = 27. Where "Zagotovka" is your 'RX topic'.
                 </td>
               </tr>
             </tbody>
@@ -750,10 +750,10 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">Swarm/switch/</td>
+                <td class="border px-4 py-2">Zagotovka/switch/</td>
                 <td class="border px-4 py-2">
-                  This page tracks changes in switches and automatically sends each change via MQTT to the topic: Swarm/switch/.
-                  Where "Swarm" is your 'RX topic'.
+                  This page tracks switch changes and automatically sends each change via MQTT to the topic: Zagotovka/switch/.
+                  Where "Zagotovka" is your 'RX topic'.
                 </td>
               </tr>
             </tbody>
@@ -770,24 +770,24 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">14#1*</td>
-                <td class="border px-4 py-2">This command will turn ON the switch with id = 14. Works via SMS and DTMF during a voice call.</td>
+                <td class="border px-4 py-2">14#1*#</td>
+                <td class="border px-4 py-2">This command turns ON all pins specified in the "Device connection" field for the row with id = 14. Works via both SMS and DTMF tone dialing during a voice call.</td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">14#0*</td>
-                <td class="border px-4 py-2">This command will turn OFF the switch with id = 14.</td>
+                <td class="border px-4 py-2">14#0*#</td>
+                <td class="border px-4 py-2">This command turns OFF all pins specified in the "Device connection" field for the row with id = 14. Works via both SMS and DTMF tone dialing during a voice call.</td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">14#2*</td>
-                <td class="border px-4 py-2">This command will TOGGLE the state of the switch with id = 14.</td>
+                <td class="border px-4 py-2">14#2*#</td>
+                <td class="border px-4 py-2">This command will TOGGLE all pins specified in the "Device connection" field for the row with id = 14 to the opposite state.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">14#1*15#0*#</td>
-                <td class="border px-4 py-2">You can chain multiple commands! You must append the <b>#</b> symbol at the very end of the string to terminate the command sequence.</td>
+                <td class="border px-4 py-2">You can chain multiple commands into one! At the end of the string you must append the <b>#</b> symbol to close the command.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">Response</td>
-                <td class="border px-4 py-2">If (On/Off) in any row of the table, the command will be ignored for this row, and a similar message <b>14:DISABLED</b> in the SMS response.</td>
+                <td class="border px-4 py-2">If the master switch (On/Off) in any row of the table is turned off, the command will be ignored for that row, and a message like <b>14:DISABLED</b> will be sent in the SMS response.</td>
               </tr>
             </tbody>
           </table>
@@ -800,8 +800,8 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
     >
       ${se.title}
     </th>
-  `,Yt=({d:se,index:Zt})=>{const de=_e(se.id);return Et`
-      <tr class="${Zt%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
+  `,Zt=({d:se,index:Yt})=>{const de=_e(se.id);return Et`
+      <tr class="${Yt%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
         <td class="px-6 py-2 text-sm text-slate-800">${se.id}</td>
         <td class="px-6 py-2 text-sm text-slate-800 font-medium">${se.pins}</td>
         <td class="px-6 py-2 text-sm text-slate-700">
@@ -812,7 +812,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
               <span class="mr-2 inline-flex items-center">
                 ${be}${ve!==void 0?`(${ve})`:""}
                 <button
-                  onClick=${ke=>{ke.preventDefault(),ge(se.id,`${be}(${ve})`)}}
+                  onClick=${Ee=>{Ee.preventDefault(),ge(se.id,`${be}(${ve})`)}}
                   class="ml-1 text-red-500 hover:text-red-700 transition-colors font-bold"
                   title="Remove connection"
                 >
@@ -825,7 +825,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
         <td class="px-6 py-2">
           <${MyPolzunok}
             value=${se.onoff}
-            onChange=${be=>fe({...se,onoff:be})}
+            onChange=${be=>he({...se,onoff:be})}
           />
         </td>
         <td class="px-6 py-2 text-sm">
@@ -872,7 +872,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-white/40">
-                    ${pe.map((se,Zt)=>Et`<${Yt} d=${se} index=${Zt} key=${se.id} />`)}
+                    ${pe.map((se,Yt)=>Et`<${Zt} d=${se} index=${Yt} key=${se.id} />`)}
                   </tbody>
                 </table>
               </div>
@@ -902,7 +902,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
               hideModal=${Te}
               title=${pt==="connection"?"Edit Connection":"Edit switch"}
               selectedSwitch=${mt}
-              onSwitchChange=${fe}
+              onSwitchChange=${he}
             />
           `}
       </div>
@@ -1055,7 +1055,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
         ${page==="TabButton"&&modalType==="connection"?renderConnectionModal():renderEditModal()}
       </div>
     </div>
-  `,portalRef=at(null);return lt(()=>{const $=document.createElement("div");return $.id="modal-portal",document.body.appendChild($),portalRef.current=$,()=>{O(null,$),document.body.removeChild($)}},[]),lt(()=>{portalRef.current&&O(modalContent,portalRef.current)}),null};function initGlobalTooltip$6(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,te=window.innerWidth,mt=dt.getBoundingClientRect();let Xt=mt.left+mt.width/2-_/2;Xt=Math.max(8,Math.min(Xt,te-_-8));let ee=mt.top-pt-8;ee<8&&(ee=mt.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const TabButton=()=>{const[$,k]=ut(null),[st,ct]=ut([]),[dt,_]=ut(null),[pt,te]=ut(null),[mt,Xt]=ut(!1),[ee,$t]=ut(null),[oe,re]=ut(null),[pe,we]=ut(!1),[$e,ue]=ut("ru"),[ye,xe]=ut(""),[Se,Ce]=ut(!0);lt(()=>{initGlobalTooltip$6()},[]);const Ee={ru:Et`
+  `,portalRef=at(null);return lt(()=>{const $=document.createElement("div");return $.id="modal-portal",document.body.appendChild($),portalRef.current=$,()=>{O(null,$),document.body.removeChild($)}},[]),lt(()=>{portalRef.current&&O(modalContent,portalRef.current)}),null};function initGlobalTooltip$6(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,te=window.innerWidth,mt=dt.getBoundingClientRect();let Xt=mt.left+mt.width/2-_/2;Xt=Math.max(8,Math.min(Xt,te-_-8));let ee=mt.top-pt-8;ee<8&&(ee=mt.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const TabButton=()=>{const[$,k]=ut(null),[st,ct]=ut([]),[dt,_]=ut(null),[pt,te]=ut(null),[mt,Xt]=ut(!1),[ee,$t]=ut(null),[oe,re]=ut(null),[pe,we]=ut(!1),[$e,ue]=ut("ru"),[ye,xe]=ut(""),[Se,Ce]=ut(!0);lt(()=>{initGlobalTooltip$6()},[]);const ke={ru:Et`
       <div class="mytext space-y-6">
         <div>
           <pre class="mb-4">
@@ -1376,17 +1376,17 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
           </div>
         </div>
       </div>
-    `},Ie=()=>{fetch("/api/button/get").then(ht=>ht.json()).then(ht=>{_(ht.buttons),ue(ht.lang),console.log("Updated button data:",ht.buttons)}).catch(ht=>{console.error("Error fetching button data:",ht)})};lt(()=>{Ie();let ht;return Se&&(ht=setInterval(()=>{Ie()},1e3)),()=>{ht&&clearInterval(ht)}},[Se]);const ie=ht=>{const Yt=new Map,se=dt.find(Zt=>Zt.id===ht);return se&&se.pinact&&Object.entries(se.pinact).forEach(([Zt,de])=>{Yt.set(Zt,{pin:Zt,relayId:de})}),st.forEach(Zt=>{if(Zt.idin===ht){const de=`${Zt.pins}(${Zt.idout})`;Yt.has(de)||Yt.set(de,{pin:Zt.pins,relayId:Zt.idout})}}),Array.from(Yt.values())},_e=()=>({langbutton:$e==="ru"?rulangbutton:enlangbutton}),ae=(ht,Yt)=>{const se=_e(),Zt=se[ht]&&se[ht][Yt]?se[ht][Yt]:"";return me(Zt)},me=(ht,Yt=100)=>{if(!ht||typeof ht!="string")return"";const se=[];let Zt="";const de=ht.split(`
-`);return de.forEach((be,ve)=>{be.split(" ").filter(vt=>vt.length>0).forEach(vt=>{const ne=Zt.length===0?vt:" "+vt;Zt.length+ne.length<=Yt?Zt+=ne:(Zt.length>0&&se.push(Zt),Zt=vt)}),Zt.length>0&&(se.push(Zt),Zt=""),ve<de.length-1&&se.push("")}),Zt.length>0&&se.push(Zt),se.join(`
-`)},ge=(ht,Yt)=>{$t(ht),re(Yt),Xt(!0),Ce(!1)},ce=()=>{Xt(!1),$t(null),re(null),Ce(!0)},Te=ht=>{console.log("handleButtonChange:",ht),_(Yt=>Yt.map(se=>se.id===ht.id?{...se,...ht}:se)),fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ht.id,onoff:ht.onoff})}).then(Yt=>Yt.json()).then(Yt=>{console.log("Response from /api/onoff/set:",Yt)}).catch(Yt=>{console.error("Error calling /api/onoff/set:",Yt)}),ce()},fe=ht=>Et`
+    `},Ie=()=>{fetch("/api/button/get").then(ht=>ht.json()).then(ht=>{_(ht.buttons),ue(ht.lang),console.log("Updated button data:",ht.buttons)}).catch(ht=>{console.error("Error fetching button data:",ht)})};lt(()=>{Ie();let ht;return Se&&(ht=setInterval(()=>{Ie()},1e3)),()=>{ht&&clearInterval(ht)}},[Se]);const ie=ht=>{const Zt=new Map,se=dt.find(Yt=>Yt.id===ht);return se&&se.pinact&&Object.entries(se.pinact).forEach(([Yt,de])=>{Zt.set(Yt,{pin:Yt,relayId:de})}),st.forEach(Yt=>{if(Yt.idin===ht){const de=`${Yt.pins}(${Yt.idout})`;Zt.has(de)||Zt.set(de,{pin:Yt.pins,relayId:Yt.idout})}}),Array.from(Zt.values())},_e=()=>({langbutton:$e==="ru"?rulangbutton:enlangbutton}),ae=(ht,Zt)=>{const se=_e(),Yt=se[ht]&&se[ht][Zt]?se[ht][Zt]:"";return me(Yt)},me=(ht,Zt=100)=>{if(!ht||typeof ht!="string")return"";const se=[];let Yt="";const de=ht.split(`
+`);return de.forEach((be,ve)=>{be.split(" ").filter(vt=>vt.length>0).forEach(vt=>{const ne=Yt.length===0?vt:" "+vt;Yt.length+ne.length<=Zt?Yt+=ne:(Yt.length>0&&se.push(Yt),Yt=vt)}),Yt.length>0&&(se.push(Yt),Yt=""),ve<de.length-1&&se.push("")}),Yt.length>0&&se.push(Yt),se.join(`
+`)},ge=(ht,Zt)=>{$t(ht),re(Zt),Xt(!0),Ce(!1)},ce=()=>{Xt(!1),$t(null),re(null),Ce(!0)},Te=ht=>{console.log("handleButtonChange:",ht),_(Zt=>Zt.map(se=>se.id===ht.id?{...se,...ht}:se)),fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ht.id,onoff:ht.onoff})}).then(Zt=>Zt.json()).then(Zt=>{console.log("Response from /api/onoff/set:",Zt)}).catch(Zt=>{console.error("Error calling /api/onoff/set:",Zt)}),ce()},he=ht=>Et`
     <th
       class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
       data-tip=${ae("langbutton",ht.tooltipIndex)}
     >
       ${ht.title}
     </th>
-  `,le=({d:ht,index:Yt})=>(ie(ht.id),Et`
-      <tr class="${Yt%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
+  `,le=({d:ht,index:Zt})=>(ie(ht.id),Et`
+      <tr class="${Zt%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
         <td class="px-6 py-2 text-sm text-slate-800">${ht.id}</td>
         <td class="px-6 py-2 text-sm text-slate-800 font-medium">${ht.pins}</td>
         <td class="px-6 py-2 text-sm text-slate-700">
@@ -1435,19 +1435,19 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
                 <table class="w-full text-left border-collapse whitespace-nowrap">
                   <thead>
                     <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                      <${fe} title="ID" tooltipIndex=${1} />
-                      <${fe} title="Pin" tooltipIndex=${2} />
-                      <${fe} title="Pullup type" tooltipIndex=${3} />
-                      <${fe} title="SINGLE CLICK" tooltipIndex=${4} />
-                      <${fe} title="DOUBLE CLICK" tooltipIndex=${5} />
-                      <${fe} title="LONG PRESS" tooltipIndex=${6} />
-                      <${fe} title="INFO" tooltipIndex=${7} />
-                      <${fe} title="On/Off" tooltipIndex=${8} />
-                      <${fe} title="Action" tooltipIndex=${9} />
+                      <${he} title="ID" tooltipIndex=${1} />
+                      <${he} title="Pin" tooltipIndex=${2} />
+                      <${he} title="Pullup type" tooltipIndex=${3} />
+                      <${he} title="SINGLE CLICK" tooltipIndex=${4} />
+                      <${he} title="DOUBLE CLICK" tooltipIndex=${5} />
+                      <${he} title="LONG PRESS" tooltipIndex=${6} />
+                      <${he} title="INFO" tooltipIndex=${7} />
+                      <${he} title="On/Off" tooltipIndex=${8} />
+                      <${he} title="Action" tooltipIndex=${9} />
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-white/40">
-                    ${dt.map((ht,Yt)=>Et`<${le} d=${ht} index=${Yt} key=${ht.id} />`)}
+                    ${dt.map((ht,Zt)=>Et`<${le} d=${ht} index=${Zt} key=${ht.id} />`)}
                   </tbody>
                 </table>
               </div>
@@ -1464,7 +1464,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
 
             ${pe&&Et`
                 <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
-                  ${Ee[$e]}
+                  ${ke[$e]}
                 </div>
               `}
           </div>
@@ -1482,7 +1482,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
           onButtonChange=${Te}
         />
       `}
-  `:""};function ModalEncoder({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedEncoder:_,handleEncoderChange:pt,connectionOptions:te,SliderComponent:mt=MyPolzunok}){const[Xt,ee]=ut((_==null?void 0:_.info)||""),[$t,oe]=ut((_==null?void 0:_.onoff)===1),[re,pe]=ut({pin:(_==null?void 0:_.encdrbpin)||"",id:(_==null?void 0:_.encoderb)||""}),[we,$e]=ut(Object.entries(_.pinact||{})[0]||["",""]),[ue,ye]=ut([]),[xe,Se]=ut([]),[Ce,Ee]=ut([]),Ie=_.pwmmax||100,[ie,_e]=ut(_.dvalue||0),[ae,me]=ut(_.ponr||0),[ge,ce]=ut(_.pwm||1e7),Te=ne=>Math.round(ne*Ie/100);lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store",headers:{"Content-Type":"application/json"}}).then(ne=>{if(!ne.ok)throw new Error(`HTTP error! status: ${ne.status}`);return ne.json()}).then(ne=>{if(!ne||!ne.data||!Array.isArray(ne.data)){console.error("Invalid data format:",ne),ye([]),Se([]),Ee([]);return}const he=ne.data.filter(Pe=>Pe.topin===2),Oe=ne.data.filter(Pe=>Pe.topin===9),Me=ne.data.filter(Pe=>Pe.topin===5);if(ye(he),Se(Oe),Ee(Me),_.encoderb||_.encdrbpin){const Pe=Oe.find(Le=>String(Le.id)===String(_.encoderb)||Le.pins===_.encdrbpin);pe({pin:Pe?Pe.pins:"",id:Pe?Pe.id:""})}}).catch(ne=>{console.error("Error fetching pin config:",ne),ye([]),Se([]),Ee([])})},[_]);const fe=ne=>{if(ne.preventDefault(),!(ne.target instanceof HTMLFormElement))return;let Oe={};if($==="edit")Oe={topin:8,id:_.id,pins:_.pins,pwm:parseInt(ge),pwmmax:_.pwmmax,dvalue:parseInt(ie),ponr:parseInt(ae),info:Xt,onoff:$t?1:0};else if($==="connection"){const Pe=we&&we[0]&&we[1]!==void 0?{[we[0]]:parseInt(we[1])}:{};Oe={id:_.id,pins:_.pins,pwm:parseInt(ge)},re&&re.id!==void 0&&re.id!==""?(Oe.encoderb=parseInt(re.id),Oe.encdrbpin=re.pin):(Oe.encoderb=255,Oe.encdrbpin=""),Oe.pinact=Pe}console.log("Sending JSON to STM32:",JSON.stringify(Oe)),fetch("/api/encoder/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Oe)}).then(Me=>Me.json()).then(Me=>{pt({..._,...Oe}),st()}).catch(Me=>console.error("Error saving encoder:",Me))},le=ne=>{ee(ne.target.value)},ht=ne=>{oe(ne)},Yt=ne=>{const he=xe.find(Oe=>Oe.pins===ne.target.value);pe({pin:ne.target.value,id:he?he.id:""})},se=ne=>{if(!ne.target.value)$e(["",""]);else{const he=ne.target.value.split("|");$e([he[0],he[1]])}},Zt=ne=>{_e(ne.target.value)},de=ne=>{me(ne.target.value)},be=ne=>{const he=ne/1e3;return he<=4e4?{cls:"text-green-600",msg:"Optimal range"}:he<=2e5?{cls:"text-yellow-600",msg:"Precision might drop"}:{cls:"text-red-600",msg:"Expert mode: low precision"}},ke=Et`
+  `:""};function ModalEncoder({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedEncoder:_,handleEncoderChange:pt,connectionOptions:te,SliderComponent:mt=MyPolzunok}){const[Xt,ee]=ut((_==null?void 0:_.info)||""),[$t,oe]=ut((_==null?void 0:_.onoff)===1),[re,pe]=ut({pin:(_==null?void 0:_.encdrbpin)||"",id:(_==null?void 0:_.encoderb)||""}),[we,$e]=ut(Object.entries(_.pinact||{})[0]||["",""]),[ue,ye]=ut([]),[xe,Se]=ut([]),[Ce,ke]=ut([]),Ie=_.pwmmax||100,[ie,_e]=ut(_.dvalue||0),[ae,me]=ut(_.ponr||0),[ge,ce]=ut(_.pwm||1e7),Te=ne=>Math.round(ne*Ie/100);lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store",headers:{"Content-Type":"application/json"}}).then(ne=>{if(!ne.ok)throw new Error(`HTTP error! status: ${ne.status}`);return ne.json()}).then(ne=>{if(!ne||!ne.data||!Array.isArray(ne.data)){console.error("Invalid data format:",ne),ye([]),Se([]),ke([]);return}const fe=ne.data.filter(Pe=>Pe.topin===2),Oe=ne.data.filter(Pe=>Pe.topin===9),Me=ne.data.filter(Pe=>Pe.topin===5);if(ye(fe),Se(Oe),ke(Me),_.encoderb||_.encdrbpin){const Pe=Oe.find(Le=>String(Le.id)===String(_.encoderb)||Le.pins===_.encdrbpin);pe({pin:Pe?Pe.pins:"",id:Pe?Pe.id:""})}}).catch(ne=>{console.error("Error fetching pin config:",ne),ye([]),Se([]),ke([])})},[_]);const he=ne=>{if(ne.preventDefault(),!(ne.target instanceof HTMLFormElement))return;let Oe={};if($==="edit")Oe={topin:8,id:_.id,pins:_.pins,pwm:parseInt(ge),pwmmax:_.pwmmax,dvalue:parseInt(ie),ponr:parseInt(ae),info:Xt,onoff:$t?1:0};else if($==="connection"){const Pe=we&&we[0]&&we[1]!==void 0?{[we[0]]:parseInt(we[1])}:{};Oe={id:_.id,pins:_.pins,pwm:parseInt(ge)},re&&re.id!==void 0&&re.id!==""?(Oe.encoderb=parseInt(re.id),Oe.encdrbpin=re.pin):(Oe.encoderb=255,Oe.encdrbpin=""),Oe.pinact=Pe}console.log("Sending JSON to STM32:",JSON.stringify(Oe)),fetch("/api/encoder/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Oe)}).then(Me=>Me.json()).then(Me=>{pt({..._,...Oe}),st()}).catch(Me=>console.error("Error saving encoder:",Me))},le=ne=>{ee(ne.target.value)},ht=ne=>{oe(ne)},Zt=ne=>{const fe=xe.find(Oe=>Oe.pins===ne.target.value);pe({pin:ne.target.value,id:fe?fe.id:""})},se=ne=>{if(!ne.target.value)$e(["",""]);else{const fe=ne.target.value.split("|");$e([fe[0],fe[1]])}},Yt=ne=>{_e(ne.target.value)},de=ne=>{me(ne.target.value)},be=ne=>{const fe=ne/1e3;return fe<=4e4?{cls:"text-green-600",msg:"Optimal range"}:fe<=2e5?{cls:"text-yellow-600",msg:"Precision might drop"}:{cls:"text-red-600",msg:"Expert mode: low precision"}},Ee=Et`
     <div
       class="fixed inset-0 z-[999] bg-black bg-opacity-50 flex items-center justify-center p-4"
       onClick=${ne=>ct&&ne.target===ne.currentTarget&&st()}
@@ -1501,7 +1501,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
           </button>
         </div>
         ${(()=>{if(k==="TabEncoder"){if($==="connection")return Et`
-          <form onsubmit=${fe}>
+          <form onsubmit=${he}>
             <div class="modal-body">
               <table class="table-auto w-full">
                 <tbody>
@@ -1519,7 +1519,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
                       <select
                         name="encdrb"
                         value=${xe.some(ne=>ne.pins===re.pin)?re.pin:""}
-                        onchange=${Yt}
+                        onchange=${Zt}
                         class="border rounded p-2 w-full"
                       >
                         <option value="">Select Encoder B</option>
@@ -1562,7 +1562,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
             </div>
           </form>
         `;if($==="edit")return Et`
-          <form onsubmit=${fe}>
+          <form onsubmit=${he}>
             <div class="modal-body">
               <table class="table-auto w-full">
                 <tbody>
@@ -1605,7 +1605,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
                         min="0"
                         max="100"
                         value=${ie}
-                        oninput=${Zt}
+                        oninput=${Yt}
                         class="border rounded p-2 w-full"
                       />
                       <div class="text-xs text-gray-500">
@@ -1662,8 +1662,8 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
         `}})()}
       </div>
     </div>
-  `,vt=at(null);return lt(()=>{const ne=document.createElement("div");return ne.id="encoder-modal-portal",document.body.appendChild(ne),vt.current=ne,()=>{O(null,ne),document.body.removeChild(ne)}},[]),lt(()=>{vt.current&&O(ke,vt.current)}),null}function initGlobalTooltip$5(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,te=window.innerWidth,mt=dt.getBoundingClientRect();let Xt=mt.left+mt.width/2-_/2;Xt=Math.max(8,Math.min(Xt,te-_-8));let ee=mt.top-pt-8;ee<8&&(ee=mt.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}function TabEncoder({}){{const[$,k]=ut(null),[st,ct]=ut(null),[dt,_]=ut(!1),[pt,te]=ut(null),[mt,Xt]=ut(null),[ee,$t]=ut(!1),[oe,re]=ut("ru"),[pe,we]=ut([]),$e=at(!1);lt(()=>{initGlobalTooltip$5()},[]);const ue=()=>Promise.all([fetch("/api/encoder/get").then(ht=>ht.json()),fetch("/api/pintopin/get").then(ht=>ht.json())]).then(([ht,Yt])=>{re(ht.lang),k(ht.encoders),we(Yt),console.log("Encoder data:",ht.encoders),console.log("Pintopin data:",Yt)}).catch(ht=>{console.error("Error fetching data:",ht)}),ye=()=>{fetch("/api/encoder/get").then(ht=>ht.json()).then(ht=>{if($e.current){console.log("Polling skip: onoff request in flight");return}k(ht.encoders),re(ht.lang),console.log("Updated encoder data:",ht.encoders)}).catch(ht=>{console.error("Error fetching encoder data:",ht)})},xe=()=>{fetch("/api/pintopin/get").then(ht=>ht.json()).then(ht=>{we(ht),console.log("Updated pintopin data:",ht)}).catch(ht=>{console.error("Error fetching pintopin data:",ht)})};lt(()=>{ye(),xe();const ht=setInterval(()=>{ye(),xe()},500);return()=>clearInterval(ht)},[]);const Se=ht=>{k(Yt=>Yt.map(se=>se.id===ht.id?ht:se)),$e.current=!0,fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ht.id,onoff:ht.onoff})}).then(Yt=>Yt.json()).then(Yt=>{console.log("Response from /api/onoff/set (Encoder):",Yt)}).catch(Yt=>{console.error("Error calling /api/onoff/set (Encoder):",Yt)}).finally(()=>{$e.current=!1})},Ce=ht=>{const Yt=$.find(Zt=>Zt.id===ht),se=[];return Yt&&Yt.pinact&&Object.entries(Yt.pinact).forEach(([Zt,de])=>{se.push({pin:Zt,idout:de})}),se},Ee=ht=>{const Yt=ht/1e3;return Yt<=4e4?{cls:"text-green-600",msg:"✓"}:Yt<=2e5?{cls:"text-yellow-600",msg:"~"}:{cls:"text-red-600",msg:"!"}},Ie=ht=>{if(!ht)return"—";const Yt=ht/1e3;return Yt>=1e6?`${(Yt/1e6).toFixed(2)} MHz`:Yt>=1e3?`${(Yt/1e3).toFixed(1)} kHz`:`${Yt} Hz`},ie=()=>({langbutton:oe==="ru"?ruencoder:enencoder}),_e=(ht,Yt)=>{const se=ie(),Zt=se[ht]&&se[ht][Yt]?se[ht][Yt]:"";return ae(Zt)},ae=(ht,Yt=50)=>{if(!ht||typeof ht!="string")return"";const se=ht.split(" ");let Zt=[],de="";for(let be=0;be<se.length;be++)de.length+se[be].length+1<=Yt?de+=`${de?" ":""}${se[be]}`:(de&&Zt.push(de.trim()),de=se[be]);return de&&Zt.push(de.trim()),Zt.join(`
-`)},me=(ht,Yt)=>{console.log("Deleting connection:",ht,Yt);const se=Yt.split("(")[0].trim();fetch("/api/connection/del",{method:"post",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ht,pin:se})}).then(Zt=>Zt.ok?Zt.json():Zt.text().then(de=>{throw new Error(`HTTP error! status: ${Zt.status}, message: ${de}`)})).then(Zt=>{ct(Zt),k(de=>de.map(be=>{if(be.id===ht){const ve={...be.pinact};return delete ve[se],{...be,pinact:ve}}return be})),we(de=>de.filter(be=>!(be.idin===ht&&be.pins===se)))}).then(()=>{console.log("Connection deleted successfully"),ue()}).catch(Zt=>{console.error("Error deleting connection:",Zt)})},ge=(ht,Yt)=>{console.log("Opening modal:",ht,Yt),te(ht),Xt(Yt),_(!0)},ce=()=>{_(!1),te(null),Xt(null)},Te={ru:Et`
+  `,vt=at(null);return lt(()=>{const ne=document.createElement("div");return ne.id="encoder-modal-portal",document.body.appendChild(ne),vt.current=ne,()=>{O(null,ne),document.body.removeChild(ne)}},[]),lt(()=>{vt.current&&O(Ee,vt.current)}),null}function initGlobalTooltip$5(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,te=window.innerWidth,mt=dt.getBoundingClientRect();let Xt=mt.left+mt.width/2-_/2;Xt=Math.max(8,Math.min(Xt,te-_-8));let ee=mt.top-pt-8;ee<8&&(ee=mt.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}function TabEncoder({}){{const[$,k]=ut(null),[st,ct]=ut(null),[dt,_]=ut(!1),[pt,te]=ut(null),[mt,Xt]=ut(null),[ee,$t]=ut(!1),[oe,re]=ut("ru"),[pe,we]=ut([]),$e=at(!1);lt(()=>{initGlobalTooltip$5()},[]);const ue=()=>Promise.all([fetch("/api/encoder/get").then(ht=>ht.json()),fetch("/api/pintopin/get").then(ht=>ht.json())]).then(([ht,Zt])=>{re(ht.lang),k(ht.encoders),we(Zt),console.log("Encoder data:",ht.encoders),console.log("Pintopin data:",Zt)}).catch(ht=>{console.error("Error fetching data:",ht)}),ye=()=>{fetch("/api/encoder/get").then(ht=>ht.json()).then(ht=>{if($e.current){console.log("Polling skip: onoff request in flight");return}k(ht.encoders),re(ht.lang),console.log("Updated encoder data:",ht.encoders)}).catch(ht=>{console.error("Error fetching encoder data:",ht)})},xe=()=>{fetch("/api/pintopin/get").then(ht=>ht.json()).then(ht=>{we(ht),console.log("Updated pintopin data:",ht)}).catch(ht=>{console.error("Error fetching pintopin data:",ht)})};lt(()=>{ye(),xe();const ht=setInterval(()=>{ye(),xe()},500);return()=>clearInterval(ht)},[]);const Se=ht=>{k(Zt=>Zt.map(se=>se.id===ht.id?ht:se)),$e.current=!0,fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ht.id,onoff:ht.onoff})}).then(Zt=>Zt.json()).then(Zt=>{console.log("Response from /api/onoff/set (Encoder):",Zt)}).catch(Zt=>{console.error("Error calling /api/onoff/set (Encoder):",Zt)}).finally(()=>{$e.current=!1})},Ce=ht=>{const Zt=$.find(Yt=>Yt.id===ht),se=[];return Zt&&Zt.pinact&&Object.entries(Zt.pinact).forEach(([Yt,de])=>{se.push({pin:Yt,idout:de})}),se},ke=ht=>{const Zt=ht/1e3;return Zt<=4e4?{cls:"text-green-600",msg:"✓"}:Zt<=2e5?{cls:"text-yellow-600",msg:"~"}:{cls:"text-red-600",msg:"!"}},Ie=ht=>{if(!ht)return"—";const Zt=ht/1e3;return Zt>=1e6?`${(Zt/1e6).toFixed(2)} MHz`:Zt>=1e3?`${(Zt/1e3).toFixed(1)} kHz`:`${Zt} Hz`},ie=()=>({langbutton:oe==="ru"?ruencoder:enencoder}),_e=(ht,Zt)=>{const se=ie(),Yt=se[ht]&&se[ht][Zt]?se[ht][Zt]:"";return ae(Yt)},ae=(ht,Zt=50)=>{if(!ht||typeof ht!="string")return"";const se=ht.split(" ");let Yt=[],de="";for(let be=0;be<se.length;be++)de.length+se[be].length+1<=Zt?de+=`${de?" ":""}${se[be]}`:(de&&Yt.push(de.trim()),de=se[be]);return de&&Yt.push(de.trim()),Yt.join(`
+`)},me=(ht,Zt)=>{console.log("Deleting connection:",ht,Zt);const se=Zt.split("(")[0].trim();fetch("/api/connection/del",{method:"post",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ht,pin:se})}).then(Yt=>Yt.ok?Yt.json():Yt.text().then(de=>{throw new Error(`HTTP error! status: ${Yt.status}, message: ${de}`)})).then(Yt=>{ct(Yt),k(de=>de.map(be=>{if(be.id===ht){const ve={...be.pinact};return delete ve[se],{...be,pinact:ve}}return be})),we(de=>de.filter(be=>!(be.idin===ht&&be.pins===se)))}).then(()=>{console.log("Connection deleted successfully"),ue()}).catch(Yt=>{console.error("Error deleting connection:",Yt)})},ge=(ht,Zt)=>{console.log("Opening modal:",ht,Zt),te(ht),Xt(Zt),_(!0)},ce=()=>{_(!1),te(null),Xt(null)},Te={ru:Et`
         <div class="mytext space-y-6">
           <div>
             <pre class="mb-4">
@@ -1775,15 +1775,15 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
             </table>
           </div>
         </div>
-      `},fe=({title:ht,tooltipIndex:Yt})=>Et`
+      `},he=({title:ht,tooltipIndex:Zt})=>Et`
       <th
         class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
-        data-tip=${_e("langbutton",Yt)}
+        data-tip=${_e("langbutton",Zt)}
       >
         ${ht}
       </th>
-    `,le=({d:ht,index:Yt})=>{const se=Ce(ht.id),Zt=Ee(ht.pwm||0);return Et`
-        <tr class="${Yt%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
+    `,le=({d:ht,index:Zt})=>{const se=Ce(ht.id),Yt=ke(ht.pwm||0);return Et`
+        <tr class="${Zt%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
           <td class="px-6 py-2 text-sm text-slate-800 font-medium">${ht.pins}(${ht.id})</td>
           <td class="px-6 py-2 text-sm text-slate-700">
             ${ht.encdrbpin?`${ht.encdrbpin}(${ht.encoderb})`:"Not set"}
@@ -1804,7 +1804,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
           </td>
           <td class="px-6 py-2 text-sm">
             <span class="font-mono text-slate-700">${Ie(ht.pwm)}</span>
-            <span class="ml-1 font-bold ${Zt.cls}">${Zt.msg}</span>
+            <span class="ml-1 font-bold ${Yt.cls}">${Yt.msg}</span>
           </td>
           <td class="px-6 py-2 font-mono text-sm text-blue-600">
             ${ht.pwmmax?`${ht.pwmmax} steps`:"—"}
@@ -1851,20 +1851,20 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
                   <table class="w-full text-left border-collapse whitespace-nowrap">
                     <thead>
                       <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                        <${fe} title="Encoder A (ID)" tooltipIndex=${3} />
-                        <${fe} title="Encoder B (ID)" tooltipIndex=${4} />
-                        <${fe} title="PWM connection" tooltipIndex=${5} />
-                        <${fe} title="PWM Frequency" tooltipIndex=${11} />
-                        <${fe} title="Resolution (steps)" tooltipIndex=${12} />
-                        <${fe} title="Dimmer value (0-100)" tooltipIndex=${6} />
-                        <${fe} title="Duty on restore" tooltipIndex=${7} />
-                        <${fe} title="INFO" tooltipIndex=${8} />
-                        <${fe} title="On/Off" tooltipIndex=${9} />
-                        <${fe} title="Action" tooltipIndex=${10} />
+                        <${he} title="Encoder A (ID)" tooltipIndex=${3} />
+                        <${he} title="Encoder B (ID)" tooltipIndex=${4} />
+                        <${he} title="PWM connection" tooltipIndex=${5} />
+                        <${he} title="PWM Frequency" tooltipIndex=${11} />
+                        <${he} title="Resolution (steps)" tooltipIndex=${12} />
+                        <${he} title="Dimmer value (0-100)" tooltipIndex=${6} />
+                        <${he} title="Duty on restore" tooltipIndex=${7} />
+                        <${he} title="INFO" tooltipIndex=${8} />
+                        <${he} title="On/Off" tooltipIndex=${9} />
+                        <${he} title="Action" tooltipIndex=${10} />
                       </tr>
                     </thead>
                     <tbody id="tab1" class="divide-y divide-white/40">
-                      ${$.map((ht,Yt)=>Et`<${le} d=${ht} index=${Yt} key=${ht.id} />`)}
+                      ${$.map((ht,Zt)=>Et`<${le} d=${ht} index=${Zt} key=${ht.id} />`)}
                     </tbody>
                   </table>
                 </div>
@@ -1898,7 +1898,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
             `}
         </div>
       </div>
-    `:Et`<div class="flex items-center justify-center p-8 text-slate-500 font-medium">Loading...</div>`}}function ModalCron({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedCron:_,handleCronChange:pt,connectionOptions:te,modalClass:mt,SliderComponent:Xt=MyPolzunok}){const[ee,$t]=ut((_==null?void 0:_.info)||""),[oe,re]=ut((_==null?void 0:_.onoff)===1),[pe,we]=ut((_==null?void 0:_.activ)||""),[$e,ue]=ut((_==null?void 0:_.cron)||""),[ye,xe]=ut(_.setrpins||""),Se=ge=>{ge.preventDefault();const ce=new FormData(ge.target),Te=Object.fromEntries(ce);Te.id=_.id,Te.pins=_.pins,$==="edit"?(Te.onoff=oe?1:0,Te.info=ee,Te.cron=$e,Te.activ=pe):$==="connection"&&(Te.setrpins=ye),console.log("Data being sent to server:"),console.log(Te),console.log("Stringified data:"),console.log(JSON.stringify(Te)),fetch("/api/cron/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Te)}).then(fe=>fe.json()).then(fe=>{console.log("Success:",fe),pt({..._,...Te}),st(),window.location.href="/#/cron"}).catch(fe=>{console.error("Error:",fe)})};lt(()=>{$t((_==null?void 0:_.info)||""),xe((_==null?void 0:_.setrpins)||""),re((_==null?void 0:_.onoff)===1)},[_]);const Ce=ge=>{ue(ge.target.value)},Ee=ge=>{$t(ge.target.value)},Ie=ge=>{re(ge)},ie=ge=>{we(ge.target.value)},_e=()=>{if(k==="TabCron"&&$==="edit")return Et`
+    `:Et`<div class="flex items-center justify-center p-8 text-slate-500 font-medium">Loading...</div>`}}function ModalCron({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedCron:_,handleCronChange:pt,connectionOptions:te,modalClass:mt,SliderComponent:Xt=MyPolzunok}){const[ee,$t]=ut((_==null?void 0:_.info)||""),[oe,re]=ut((_==null?void 0:_.onoff)===1),[pe,we]=ut((_==null?void 0:_.activ)||""),[$e,ue]=ut((_==null?void 0:_.cron)||""),[ye,xe]=ut(_.setrpins||""),Se=ge=>{ge.preventDefault();const ce=new FormData(ge.target),Te=Object.fromEntries(ce);Te.id=_.id,Te.pins=_.pins,$==="edit"?(Te.onoff=oe?1:0,Te.info=ee,Te.cron=$e,Te.activ=pe):$==="connection"&&(Te.setrpins=ye),console.log("Data being sent to server:"),console.log(Te),console.log("Stringified data:"),console.log(JSON.stringify(Te)),fetch("/api/cron/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Te)}).then(he=>he.json()).then(he=>{console.log("Success:",he),pt({..._,...Te}),st(),window.location.href="/#/cron"}).catch(he=>{console.error("Error:",he)})};lt(()=>{$t((_==null?void 0:_.info)||""),xe((_==null?void 0:_.setrpins)||""),re((_==null?void 0:_.onoff)===1)},[_]);const Ce=ge=>{ue(ge.target.value)},ke=ge=>{$t(ge.target.value)},Ie=ge=>{re(ge)},ie=ge=>{we(ge.target.value)},_e=()=>{if(k==="TabCron"&&$==="edit")return Et`
           <form onsubmit=${Se}>
             <div class="modal-body">
               <table class="table-auto w-full">
@@ -1921,7 +1921,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
                         <input
                           type="text"
                           value=${ee}
-                          onInput=${Ee}
+                          onInput=${ke}
                           class="border rounded p-2 w-full"
                         />
                       `},{label:"On/Off",value:Et`<${Xt}
@@ -1976,7 +1976,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
         </div>
       </div>
     </div>
-  `,me=at(null);return lt(()=>{const ge=document.createElement("div");return ge.id="modal-portal",document.body.appendChild(ge),me.current=ge,()=>{O(null,ge),document.body.removeChild(ge)}},[]),lt(()=>{me.current&&O(ae,me.current)}),null}function ModalPwmCron({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedCron:_,handleCronChange:pt,modalClass:te,SliderComponent:mt=MyPolzunok}){let Xt="",ee="900",$t="0",oe="100";if(_!=null&&_.activ&&_.activ.startsWith("pwm:")){const ht=_.activ.substring(4).split(",");ht.length===4&&(Xt=ht[0],ee=ht[1],$t=ht[2],oe=ht[3])}const[re,pe]=ut((_==null?void 0:_.info)||""),[we,$e]=ut((_==null?void 0:_.onoff)===1),[ue,ye]=ut((_==null?void 0:_.cron)||""),[xe,Se]=ut(Xt),[Ce,Ee]=ut(ee),[Ie,ie]=ut($t),[_e,ae]=ut(oe),[me,ge]=ut([]);lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store"}).then(ht=>ht.json()).then(ht=>{if(ht&&ht.data&&Array.isArray(ht.data)){const Yt=ht.data.filter(se=>se.topin===5);ge(Yt),!xe&&Yt.length>0&&Se(Yt[0].id.toString())}}).catch(ht=>console.error("Error fetching pin config:",ht))},[]);const ce=ht=>{ht.preventDefault();const Yt=new FormData(ht.target),se=Object.fromEntries(Yt);se.id=_.id,se.pins=_.pins,se.onoff=we?1:0,se.info=re,se.cron=ue,se.activ=`pwm:${xe},${Ce},${Ie},${_e}`,fetch("/api/cron/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(se)}).then(Zt=>Zt.json()).then(Zt=>{pt({..._,...se}),st(),window.location.href="/#/cron"}).catch(Zt=>console.error("Error:",Zt))},Te=()=>Et`
+  `,me=at(null);return lt(()=>{const ge=document.createElement("div");return ge.id="modal-portal",document.body.appendChild(ge),me.current=ge,()=>{O(null,ge),document.body.removeChild(ge)}},[]),lt(()=>{me.current&&O(ae,me.current)}),null}function ModalPwmCron({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedCron:_,handleCronChange:pt,modalClass:te,SliderComponent:mt=MyPolzunok}){let Xt="",ee="900",$t="0",oe="100";if(_!=null&&_.activ&&_.activ.startsWith("pwm:")){const ht=_.activ.substring(4).split(",");ht.length===4&&(Xt=ht[0],ee=ht[1],$t=ht[2],oe=ht[3])}const[re,pe]=ut((_==null?void 0:_.info)||""),[we,$e]=ut((_==null?void 0:_.onoff)===1),[ue,ye]=ut((_==null?void 0:_.cron)||""),[xe,Se]=ut(Xt),[Ce,ke]=ut(ee),[Ie,ie]=ut($t),[_e,ae]=ut(oe),[me,ge]=ut([]);lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store"}).then(ht=>ht.json()).then(ht=>{if(ht&&ht.data&&Array.isArray(ht.data)){const Zt=ht.data.filter(se=>se.topin===5);ge(Zt),!xe&&Zt.length>0&&Se(Zt[0].id.toString())}}).catch(ht=>console.error("Error fetching pin config:",ht))},[]);const ce=ht=>{ht.preventDefault();const Zt=new FormData(ht.target),se=Object.fromEntries(Zt);se.id=_.id,se.pins=_.pins,se.onoff=we?1:0,se.info=re,se.cron=ue,se.activ=`pwm:${xe},${Ce},${Ie},${_e}`,fetch("/api/cron/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(se)}).then(Yt=>Yt.json()).then(Yt=>{pt({..._,...se}),st(),window.location.href="/#/cron"}).catch(Yt=>console.error("Error:",Yt))},Te=()=>Et`
       <form onsubmit=${ce}>
         <div class="modal-body">
           <table class="table-auto w-full">
@@ -2019,7 +2019,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
                     min="1"
                     max="864000"
                     value=${Ce}
-                    onInput=${ht=>Ee(ht.target.value)}
+                    onInput=${ht=>ke(ht.target.value)}
                     class="border rounded p-2 w-full"
                     required
                   />
@@ -2079,7 +2079,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
           </button>
         </div>
       </form>
-    `,fe=Et`
+    `,he=Et`
     <div class=${`modal ${te||""}`}>
       <div class="modal-content">
         <div
@@ -2101,7 +2101,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
         </div>
       </div>
     </div>
-  `,le=at(null);return lt(()=>{const ht=document.createElement("div");return ht.id="pwm-modal-portal",document.body.appendChild(ht),le.current=ht,()=>{O(null,ht),document.body.removeChild(ht)}},[]),lt(()=>{le.current&&O(fe,le.current)}),null}function initGlobalTooltip$4(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,te=window.innerWidth,mt=dt.getBoundingClientRect();let Xt=mt.left+mt.width/2-_/2;Xt=Math.max(8,Math.min(Xt,te-_-8));let ee=mt.top-pt-8;ee<8&&(ee=mt.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}function TabCron({}){const[$,k]=ut(null),[st,ct]=ut(null);at(null);const[dt,_]=ut(!1),[pt,te]=ut(null),[mt,Xt]=ut(null),[ee,$t]=ut("ru"),[oe,re]=ut(!1),[pe,we]=ut(1),[$e,ue]=ut(0);lt(()=>{initGlobalTooltip$4()},[]);const ye=()=>fetch("/api/cron/get").then(le=>le.json()).then(le=>{console.log("API response:",le),le&&Array.isArray(le.timers)?(k(le.timers),$t(le.lang||"ru"),typeof le.numline=="number"&&(ue(le.numline),we(le.numline))):(console.error("Unexpected API response structure:",le),k([]))}).catch(le=>{console.error("Error fetching cron data:",le),k([])});lt(()=>{ye()},[]);const xe=at(!0);lt(()=>{if(xe.current){xe.current=!1;return}Se($e)},[$e]);const Se=le=>{fetch("/api/numline/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({numline:le})}).then(ht=>ht.json()).then(ht=>console.log("Numline sent to stm32:",ht)).catch(ht=>console.error("Error sending Crone line to stm32:",ht))},Ce=()=>{if(pe<$.length){const le=pe+1;we(le),ue(le),Se(le)}},Ee=()=>{if(pe>0){const le=pe-1;we(le),ue(le),Se(le)}},Ie={ru:Et`
+  `,le=at(null);return lt(()=>{const ht=document.createElement("div");return ht.id="pwm-modal-portal",document.body.appendChild(ht),le.current=ht,()=>{O(null,ht),document.body.removeChild(ht)}},[]),lt(()=>{le.current&&O(he,le.current)}),null}function initGlobalTooltip$4(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,te=window.innerWidth,mt=dt.getBoundingClientRect();let Xt=mt.left+mt.width/2-_/2;Xt=Math.max(8,Math.min(Xt,te-_-8));let ee=mt.top-pt-8;ee<8&&(ee=mt.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}function TabCron({}){const[$,k]=ut(null),[st,ct]=ut(null);at(null);const[dt,_]=ut(!1),[pt,te]=ut(null),[mt,Xt]=ut(null),[ee,$t]=ut("ru"),[oe,re]=ut(!1),[pe,we]=ut(1),[$e,ue]=ut(0);lt(()=>{initGlobalTooltip$4()},[]);const ye=()=>fetch("/api/cron/get").then(le=>le.json()).then(le=>{console.log("API response:",le),le&&Array.isArray(le.timers)?(k(le.timers),$t(le.lang||"ru"),typeof le.numline=="number"&&(ue(le.numline),we(le.numline))):(console.error("Unexpected API response structure:",le),k([]))}).catch(le=>{console.error("Error fetching cron data:",le),k([])});lt(()=>{ye()},[]);const xe=at(!0);lt(()=>{if(xe.current){xe.current=!1;return}Se($e)},[$e]);const Se=le=>{fetch("/api/numline/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({numline:le})}).then(ht=>ht.json()).then(ht=>console.log("Numline sent to stm32:",ht)).catch(ht=>console.error("Error sending Crone line to stm32:",ht))},Ce=()=>{if(pe<$.length){const le=pe+1;we(le),ue(le),Se(le)}},ke=()=>{if(pe>0){const le=pe-1;we(le),ue(le),Se(le)}},Ie={ru:Et`
       <div class="mytext">
         <div>
           <pre>
@@ -2326,14 +2326,14 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
           </tbody>
         </table>
       </div>
-    `};if($===null)return Et`<div>Loading...</div>`;const ie=()=>({langtimers:ee==="ru"?rulangtimers:enlangtimers}),_e=(le,ht)=>{const Yt=ie(),Zt=(Yt[le]&&Yt[le][ht]?Yt[le][ht]:"").split(" "),de=[];for(let be=0;be<Zt.length;be+=15)de.push(Zt.slice(be,be+15).join(" "));return de.join("<br>")},ae=(le,ht)=>{te(le),Xt(ht),_(!0)},me=()=>{_(!1),te(null),Xt(null)},ge=le=>{console.log("handleCronChange:",le),k($.map(ht=>ht.id===le.id?le:ht)),fetch("/api/cron/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(le)}).then(ht=>ht.json()).then(ht=>{console.log("Cron job updated successfully:",ht)}).catch(ht=>{console.error("Error updating cron job:",ht)})},ce=()=>Array.isArray(mt)?mt.flatMap(le=>le.pinact?Object.keys(le.pinact).map(ht=>({value:ht,label:ht})):[]):mt&&mt.pinact?Object.keys(mt.pinact).map(le=>({value:le,label:le})):[],Te=le=>Et`
+    `};if($===null)return Et`<div>Loading...</div>`;const ie=()=>({langtimers:ee==="ru"?rulangtimers:enlangtimers}),_e=(le,ht)=>{const Zt=ie(),Yt=(Zt[le]&&Zt[le][ht]?Zt[le][ht]:"").split(" "),de=[];for(let be=0;be<Yt.length;be+=15)de.push(Yt.slice(be,be+15).join(" "));return de.join("<br>")},ae=(le,ht)=>{te(le),Xt(ht),_(!0)},me=()=>{_(!1),te(null),Xt(null)},ge=le=>{console.log("handleCronChange:",le),k($.map(ht=>ht.id===le.id?le:ht)),fetch("/api/cron/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(le)}).then(ht=>ht.json()).then(ht=>{console.log("Cron job updated successfully:",ht)}).catch(ht=>{console.error("Error updating cron job:",ht)})},ce=()=>Array.isArray(mt)?mt.flatMap(le=>le.pinact?Object.keys(le.pinact).map(ht=>({value:ht,label:ht})):[]):mt&&mt.pinact?Object.keys(mt.pinact).map(le=>({value:le,label:le})):[],Te=le=>Et`
     <th
       class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
       data-tip=${_e("langtimers",le.tooltipIndex)}
     >
       ${le.title}
     </th>
-  `,fe=({d:le,index:ht})=>{const Yt=le.activ&&le.activ.startsWith("pwm:");let se=le.activ;if(Yt){const Zt=le.activ.substring(4).split(",");Zt.length===4&&(se=`pwmID=${Zt[0]} | ${Zt[1]}s | ${Zt[2]}%→${Zt[3]}%`)}return Et`
+  `,he=({d:le,index:ht})=>{const Zt=le.activ&&le.activ.startsWith("pwm:");let se=le.activ;if(Zt){const Yt=le.activ.substring(4).split(",");Yt.length===4&&(se=`pwmID=${Yt[0]} | ${Yt[1]}s | ${Yt[2]}%→${Yt[3]}%`)}return Et`
     <tr class="${ht%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
       <td class="px-6 py-4 text-sm text-slate-800 font-medium">${le.id}</td>
       <td class="px-6 py-4 text-sm text-slate-700 font-mono tracking-wider">${le.cron}</td>
@@ -2342,11 +2342,11 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
       <td class="px-6 py-4">
         <${MyPolzunok}
           value=${le.onoff}
-          onChange=${Zt=>ge({...le,onoff:Zt})}
+          onChange=${Yt=>ge({...le,onoff:Yt})}
         />
       </td>
      <td class="px-6 py-4 text-center">
-        ${Yt?Et`
+        ${Zt?Et`
           <button
             onclick=${()=>ae("edit_pwm",le)}
             class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap mr-3"
@@ -2402,7 +2402,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
                         </tr>
                       </thead>
                       <tbody class="divide-y divide-white/40">
-                        ${$.slice(0,pe).map((le,ht)=>Et`<${fe} d=${le} index=${ht} key=${le.id} />`)}
+                        ${$.slice(0,pe).map((le,ht)=>Et`<${he} d=${le} index=${ht} key=${le.id} />`)}
                       </tbody>
                     </table>
                   </div>
@@ -2430,7 +2430,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
             ${pe>0?Et`
                   <button
                     class="bg-rose-500 hover:bg-rose-600 shadow-md text-white font-black text-xl w-10 h-10 rounded-full transition-transform hover:scale-110 active:scale-95 flex items-center justify-center pb-1 shadow-rose-500/30"
-                    onclick=${Ee}
+                    onclick=${ke}
                     title="Remove Cron"
                   >-</button>
                 `:null}
@@ -2467,36 +2467,36 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
         />
       `:null}
     </div>
-  `}const PRESETS$1={ru:[{value:"1",label:"Паяльная станция T max=125°C, T min=-55°C"},{value:"2",label:"Кулер / вентилятор T max=70°C, T min=-55°C"},{value:"3",label:"3D‑принтер (стол) T max=120°C, T min=0°C"},{value:"4",label:"Форточный нагреватель T max=60°C, T min=-55°C"},{value:"5",label:"Тёплый пол T max=45°C, T min=0°C"},{value:"6",label:"Холодильник T max=100°C, T min=-55°C"},{value:"7",label:"Аквариум / бойлер T max=80°C, T min=0°C"},{value:"8",label:"Инкубатор T max=45°C, T min=0°C"},{value:"9",label:"Теплица / комната T max=50°C, T min=-55°C"}],en:[{value:"1",label:"Soldering station T max=125°C, T min=-55°C"},{value:"2",label:"Cooler / fan T max=70°C, T min=-55°C"},{value:"3",label:"3D printer (table) T max=120°C, T min=0°C"},{value:"4",label:"Vent heater T max=60°C, T min=-55°C"},{value:"5",label:"Warm floor T max=45°C, T min=0°C"},{value:"6",label:"Refrigerator T max=100°C, T min=-55°C"},{value:"7",label:"Aquarium / boiler T max=80°C, T min=0°C"},{value:"8",label:"Incubator T max=45°C, T min=0°C"},{value:"9",label:"Greenhouse / room T max=50°C, T min=-55°C"}]},SENSOR_OPTIONS$1=[{value:"1",label:"DS18B20"},{value:"2",label:"DHT-22"}];function ModalPid({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedPid:_,handlePidChange:pt,language:te="en",modalClass:mt,SliderComponent:Xt=MyPolzunok}){const[ee,$t]=ut((_==null?void 0:_.info)||""),[oe,re]=ut((_==null?void 0:_.onoff)===1),[pe,we]=ut((_==null?void 0:_.selsens)||"1"),[$e,ue]=ut((_==null?void 0:_.sernum)||""),[ye,xe]=ut((_==null?void 0:_.presets)||"1"),[Se,Ce]=ut((_==null?void 0:_.tmpset)||""),[Ee,Ie]=ut((_==null?void 0:_.tmpcur)||""),[ie,_e]=ut([]),[ae,me]=ut(Object.entries((_==null?void 0:_.pinact)||{})[0]||["",""]);lt(()=>{$t((_==null?void 0:_.info)||""),re((_==null?void 0:_.onoff)===1),we((_==null?void 0:_.selsens)||"1"),ue((_==null?void 0:_.sernum)||""),xe((_==null?void 0:_.presets)||"1"),Ce((_==null?void 0:_.tmpset)||""),Ie((_==null?void 0:_.tmpcur)||""),me(Object.entries((_==null?void 0:_.pinact)||{})[0]||["",""])},[_]),lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store",headers:{"Content-Type":"application/json"}}).then(Yt=>{if(!Yt.ok)throw new Error(`HTTP error! status: ${Yt.status}`);return Yt.json()}).then(Yt=>{if(!Yt||!Yt.data||!Array.isArray(Yt.data)){console.error("Invalid data format:",Yt),_e([]);return}const se=Yt.data.filter(Zt=>Zt.topin===5);_e(se)}).catch(Yt=>{console.error("Error fetching pin config:",Yt),_e([])})},[_]);const ge=Yt=>{Yt.preventDefault();const se=ae[0]&&ae[1]!==void 0&&ae[1]!=="",Zt={id:_.id,pins:ae[0],pinact:se?{[ae[0]]:parseInt(ae[1])}:{},selsens:pe,sernum:$e,presets:ye,tmpset:Se,tmpcur:Ee,info:ee,onoff:oe?1:0};console.log("Data being sent to server:",Zt),fetch("/api/pid/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Zt)}).then(de=>de.json()).then(de=>{console.log("Success:",de),pt({..._,...Zt}),st(),window.location.href="/#/pid"}).catch(de=>{console.error("Error:",de)})},ce=Yt=>{if(!Yt.target.value)me(["",""]);else{const se=Yt.target.value.split("|");me([se[0],se[1]])}},Te=PRESETS$1[te]||PRESETS$1.en,fe=()=>k==="TabPid"&&$==="edit"?Et`
+  `}const PRESETS$1={ru:[{value:"1",label:"Паяльная станция T max=125°C, T min=-55°C"},{value:"2",label:"Кулер / вентилятор T max=70°C, T min=-55°C"},{value:"3",label:"3D‑принтер (стол) T max=120°C, T min=0°C"},{value:"4",label:"Форточный нагреватель T max=60°C, T min=-55°C"},{value:"5",label:"Тёплый пол T max=45°C, T min=0°C"},{value:"6",label:"Холодильник T max=100°C, T min=-55°C"},{value:"7",label:"Аквариум / бойлер T max=80°C, T min=0°C"},{value:"8",label:"Инкубатор T max=45°C, T min=0°C"},{value:"9",label:"Теплица / комната T max=50°C, T min=-55°C"}],en:[{value:"1",label:"Soldering station T max=125°C, T min=-55°C"},{value:"2",label:"Cooler / fan T max=70°C, T min=-55°C"},{value:"3",label:"3D printer (table) T max=120°C, T min=0°C"},{value:"4",label:"Vent heater T max=60°C, T min=-55°C"},{value:"5",label:"Warm floor T max=45°C, T min=0°C"},{value:"6",label:"Refrigerator T max=100°C, T min=-55°C"},{value:"7",label:"Aquarium / boiler T max=80°C, T min=0°C"},{value:"8",label:"Incubator T max=45°C, T min=0°C"},{value:"9",label:"Greenhouse / room T max=50°C, T min=-55°C"}]},SENSOR_OPTIONS$1=[{value:"1",label:"DS18B20"},{value:"2",label:"DHT-22"}];function ModalPid({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedPid:_,handlePidChange:pt,language:te="en",modalClass:mt,SliderComponent:Xt=MyPolzunok}){const[ee,$t]=ut((_==null?void 0:_.info)||""),[oe,re]=ut((_==null?void 0:_.onoff)===1),[pe,we]=ut((_==null?void 0:_.selsens)||"1"),[$e,ue]=ut((_==null?void 0:_.sernum)||""),[ye,xe]=ut((_==null?void 0:_.presets)||"1"),[Se,Ce]=ut((_==null?void 0:_.tmpset)||""),[ke,Ie]=ut((_==null?void 0:_.tmpcur)||""),[ie,_e]=ut([]),[ae,me]=ut(Object.entries((_==null?void 0:_.pinact)||{})[0]||["",""]);lt(()=>{$t((_==null?void 0:_.info)||""),re((_==null?void 0:_.onoff)===1),we((_==null?void 0:_.selsens)||"1"),ue((_==null?void 0:_.sernum)||""),xe((_==null?void 0:_.presets)||"1"),Ce((_==null?void 0:_.tmpset)||""),Ie((_==null?void 0:_.tmpcur)||""),me(Object.entries((_==null?void 0:_.pinact)||{})[0]||["",""])},[_]),lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store",headers:{"Content-Type":"application/json"}}).then(Zt=>{if(!Zt.ok)throw new Error(`HTTP error! status: ${Zt.status}`);return Zt.json()}).then(Zt=>{if(!Zt||!Zt.data||!Array.isArray(Zt.data)){console.error("Invalid data format:",Zt),_e([]);return}const se=Zt.data.filter(Yt=>Yt.topin===5);_e(se)}).catch(Zt=>{console.error("Error fetching pin config:",Zt),_e([])})},[_]);const ge=Zt=>{Zt.preventDefault();const se=ae[0]&&ae[1]!==void 0&&ae[1]!=="",Yt={id:_.id,pins:ae[0],pinact:se?{[ae[0]]:parseInt(ae[1])}:{},selsens:pe,sernum:$e,presets:ye,tmpset:Se,tmpcur:ke,info:ee,onoff:oe?1:0};console.log("Data being sent to server:",Yt),fetch("/api/pid/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Yt)}).then(de=>de.json()).then(de=>{console.log("Success:",de),pt({..._,...Yt}),st(),window.location.href="/#/pid"}).catch(de=>{console.error("Error:",de)})},ce=Zt=>{if(!Zt.target.value)me(["",""]);else{const se=Zt.target.value.split("|");me([se[0],se[1]])}},Te=PRESETS$1[te]||PRESETS$1.en,he=()=>k==="TabPid"&&$==="edit"?Et`
         <form onsubmit=${ge}>
           <div class="modal-body">
             <table class="table-auto w-full">
               <tbody>
                 ${[{label:"ID",value:_.id},{label:"PWM Pin",value:Et`
                         <select
-                          value=${ie.some(Yt=>String(Yt.pins)===String(ae[0]))?`${ae[0]}|${ae[1]}`:""}
+                          value=${ie.some(Zt=>String(Zt.pins)===String(ae[0]))?`${ae[0]}|${ae[1]}`:""}
                           onChange=${ce}
                           class="border rounded p-2 w-full"
                         >
                           <option value="">Select PWM pin</option>
-                          ${ie.map(Yt=>Et`
-                              <option value=${`${Yt.pins}|${Yt.id}`}>
-                                ${Yt.pins} (ID: ${Yt.id})
+                          ${ie.map(Zt=>Et`
+                              <option value=${`${Zt.pins}|${Zt.id}`}>
+                                ${Zt.pins} (ID: ${Zt.id})
                               </option>
                             `)}
                         </select>
                       `},{label:"Selected sensor",value:Et`
                       <select
                         value=${pe}
-                        onChange=${Yt=>we(Yt.target.value)}
+                        onChange=${Zt=>we(Zt.target.value)}
                         class="border rounded p-2 w-full"
                       >
-                        ${SENSOR_OPTIONS$1.map(Yt=>Et`
+                        ${SENSOR_OPTIONS$1.map(Zt=>Et`
                             <option
-                              value=${Yt.value}
-                              selected=${Yt.value===pe}
+                              value=${Zt.value}
+                              selected=${Zt.value===pe}
                             >
-                              ${Yt.label}
+                              ${Zt.label}
                             </option>
                           `)}
                       </select>
@@ -2504,7 +2504,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
                           <input
                             type="text"
                             value=${$e}
-                            onInput=${Yt=>ue(Yt.target.value)}
+                            onInput=${Zt=>ue(Zt.target.value)}
                             class="border rounded p-2 w-full font-mono"
                             placeholder="e.g. xxxxxxxxxxxxxxxx"
                           />
@@ -2518,15 +2518,15 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
                         `},{label:"Presets",value:Et`
                       <select
                         value=${ye}
-                        onChange=${Yt=>xe(Yt.target.value)}
+                        onChange=${Zt=>xe(Zt.target.value)}
                         class="border rounded p-2 w-full"
                       >
-                        ${Te.map(Yt=>Et`
+                        ${Te.map(Zt=>Et`
                             <option
-                              value=${Yt.value}
-                              selected=${Yt.value===ye}
+                              value=${Zt.value}
+                              selected=${Zt.value===ye}
                             >
-                              ${Yt.label}
+                              ${Zt.label}
                             </option>
                           `)}
                       </select>
@@ -2534,14 +2534,14 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
                       <input
                         type="text"
                         value=${Se}
-                        onInput=${Yt=>Ce(Yt.target.value)}
+                        onInput=${Zt=>Ce(Zt.target.value)}
                         class="border rounded p-2 w-full"
                         placeholder="°C"
                       />
                     `},{label:"t_current",value:Et`
                       <input
                         type="text"
-                        value=${Ee}
+                        value=${ke}
                         readOnly
                         class="border rounded p-2 w-full bg-gray-100 cursor-not-allowed"
                         placeholder="°C"
@@ -2550,18 +2550,18 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
                       <input
                         type="text"
                         value=${ee}
-                        onInput=${Yt=>$t(Yt.target.value)}
+                        onInput=${Zt=>$t(Zt.target.value)}
                         class="border rounded p-2 w-full"
                       />
                     `},{label:"On/Off",value:Et`
                       <${Xt}
                         value=${oe}
-                        onChange=${Yt=>re(Yt)}
+                        onChange=${Zt=>re(Zt)}
                       />
-                    `}].map((Yt,se)=>Et`
+                    `}].map((Zt,se)=>Et`
                     <tr class="${se%2===1?"bg-white":"bg-gray-200"}">
-                      <td class="p-2 font-bold">${Yt.label}</td>
-                      <td class="p-2">${Yt.value}</td>
+                      <td class="p-2 font-bold">${Zt.label}</td>
+                      <td class="p-2">${Zt.value}</td>
                     </tr>
                   `)}
               </tbody>
@@ -2581,7 +2581,7 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
       <div class="modal-content">
         <div
           class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[999]"
-          onclick=${Yt=>ct&&Yt.target===Yt.currentTarget&&st()}
+          onclick=${Zt=>ct&&Zt.target===Zt.currentTarget&&st()}
         >
           <div
             class="modal-content bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-lg relative"
@@ -2598,12 +2598,12 @@ Switch data: ${JSON.stringify(se.switches,null,2)}`),console.log("Pintopin data:
                 Close
               </button>
             </div>
-            ${fe()}
+            ${he()}
           </div>
         </div>
       </div>
     </div>
-  `,ht=at(null);return lt(()=>{const Yt=document.createElement("div");return Yt.id="modal-portal",document.body.appendChild(Yt),ht.current=Yt,()=>{O(null,Yt),document.body.removeChild(Yt)}},[]),lt(()=>{ht.current&&O(le,ht.current)}),null}function initGlobalTooltip$3(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,te=window.innerWidth,mt=dt.getBoundingClientRect();let Xt=mt.left+mt.width/2-_/2;Xt=Math.max(8,Math.min(Xt,te-_-8));let ee=mt.top-pt-8;ee<8&&(ee=mt.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const PRESETS={ru:[{value:"1",label:"Паяльная станция T max=125°C, T min=-55°C"},{value:"2",label:"Кулер / вентилятор T max=70°C, T min=-55°C"},{value:"3",label:"3D‑принтер (стол) T max=120°C, T min=0°C"},{value:"4",label:"Форточный нагреватель T max=60°C, T min=-55°C"},{value:"5",label:"Тёплый пол T max=45°C, T min=0°C"},{value:"6",label:"Холодильник T max=100°C, T min=-55°C"},{value:"7",label:"Аквариум / бойлер T max=80°C, T min=0°C"},{value:"8",label:"Инкубатор T max=45°C, T min=0°C"},{value:"9",label:"Теплица / комната T max=50°C, T min=-55°C"}],en:[{value:"1",label:"Soldering station T max=125°C, T min=-55°C"},{value:"2",label:"Cooler / fan T max=70°C, T min=-55°C"},{value:"3",label:"3D printer (table) T max=120°C, T min=0°C"},{value:"4",label:"Vent heater T max=60°C, T min=-55°C"},{value:"5",label:"Warm floor T max=45°C, T min=0°C"},{value:"6",label:"Refrigerator T max=100°C, T min=-55°C"},{value:"7",label:"Aquarium / boiler T max=80°C, T min=0°C"},{value:"8",label:"Incubator T max=45°C, T min=0°C"},{value:"9",label:"Greenhouse / room T max=50°C, T min=-55°C"}]},SENSOR_OPTIONS=[{value:"1",label:"DS18B20"},{value:"2",label:"DHT-22"}],HELP_CONTENT={ru:Et`
+  `,ht=at(null);return lt(()=>{const Zt=document.createElement("div");return Zt.id="modal-portal",document.body.appendChild(Zt),ht.current=Zt,()=>{O(null,Zt),document.body.removeChild(Zt)}},[]),lt(()=>{ht.current&&O(le,ht.current)}),null}function initGlobalTooltip$3(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,te=window.innerWidth,mt=dt.getBoundingClientRect();let Xt=mt.left+mt.width/2-_/2;Xt=Math.max(8,Math.min(Xt,te-_-8));let ee=mt.top-pt-8;ee<8&&(ee=mt.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const PRESETS={ru:[{value:"1",label:"Паяльная станция T max=125°C, T min=-55°C"},{value:"2",label:"Кулер / вентилятор T max=70°C, T min=-55°C"},{value:"3",label:"3D‑принтер (стол) T max=120°C, T min=0°C"},{value:"4",label:"Форточный нагреватель T max=60°C, T min=-55°C"},{value:"5",label:"Тёплый пол T max=45°C, T min=0°C"},{value:"6",label:"Холодильник T max=100°C, T min=-55°C"},{value:"7",label:"Аквариум / бойлер T max=80°C, T min=0°C"},{value:"8",label:"Инкубатор T max=45°C, T min=0°C"},{value:"9",label:"Теплица / комната T max=50°C, T min=-55°C"}],en:[{value:"1",label:"Soldering station T max=125°C, T min=-55°C"},{value:"2",label:"Cooler / fan T max=70°C, T min=-55°C"},{value:"3",label:"3D printer (table) T max=120°C, T min=0°C"},{value:"4",label:"Vent heater T max=60°C, T min=-55°C"},{value:"5",label:"Warm floor T max=45°C, T min=0°C"},{value:"6",label:"Refrigerator T max=100°C, T min=-55°C"},{value:"7",label:"Aquarium / boiler T max=80°C, T min=0°C"},{value:"8",label:"Incubator T max=45°C, T min=0°C"},{value:"9",label:"Greenhouse / room T max=50°C, T min=-55°C"}]},SENSOR_OPTIONS=[{value:"1",label:"DS18B20"},{value:"2",label:"DHT-22"}],HELP_CONTENT={ru:Et`
     <div class="mytext space-y-6">
       <div>
         <p class="mb-4">
@@ -2631,15 +2631,15 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
       from { width: 0%; }
       to   { width: 100%; }
     }
-  `,document.head.appendChild($)}function TabPid({}){const[$,k]=ut(null),[st,ct]=ut(null);at(null);const[dt,_]=ut(!1),[pt,te]=ut(null),[mt,Xt]=ut(null),[ee,$t]=ut("ru"),[oe,re]=ut(!1),[pe,we]=ut(0),[$e,ue]=ut(0),ye=at(!1);lt(()=>{initGlobalTooltip$3(),initTuneStyles()},[]);const xe=()=>{fetch("/api/pid/get").then(Zt=>Zt.json()).then(Zt=>{ye.current||Zt&&Array.isArray(Zt.pid)&&(k(Zt.pid),$t(Zt.lang||"ru"),typeof Zt.pidline=="number"&&(ue(Zt.pidline),we(Zt.pidline)))}).catch(Zt=>console.error("Error fetching PID data:",Zt))};lt(()=>{xe();const Zt=setInterval(()=>{xe()},500);return()=>clearInterval(Zt)},[]);const Se=at(!0);lt(()=>{if(Se.current){Se.current=!1;return}Ce($e)},[$e]);const Ce=Zt=>{fetch("/api/pidline/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pidline:Zt})}).then(de=>de.json()).then(de=>console.log("Pidline sent to stm32:",de)).catch(de=>console.error("Error sending PID line to stm32:",de))},Ee=()=>{if(pe<PID_MAX_SLOTS){const Zt=pe+1;we(Zt),ue(Zt)}},Ie=()=>{if(pe>0){const Zt=pe-1;we(Zt),ue(Zt)}};if($===null)return Et`<div>Loading...</div>`;const ie=()=>({langtimers:ee==="ru"?rulangtimers:enlangtimers}),_e=(Zt,de)=>{const be=ie(),ke=(be[Zt]&&be[Zt][de]?be[Zt][de]:"").split(" "),vt=[];for(let ne=0;ne<ke.length;ne+=15)vt.push(ke.slice(ne,ne+15).join(" "));return vt.join("<br>")},ae=(Zt,de)=>{te(Zt),Xt(de),_(!0)},me=()=>{_(!1),te(null),Xt(null)},ge=Zt=>{console.log("handlePidChange:",Zt),k($.map(de=>de.id===Zt.id?Zt:de)),ye.current=!0,fetch("/api/pid/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Zt)}).then(de=>de.json()).then(de=>{console.log("PID job updated successfully:",de)}).catch(de=>{console.error("Error updating PID job:",de)}).finally(()=>{ye.current=!1})},ce=Zt=>{const de=Zt.id,be=Zt.tune_state||0;if(!(be===TUNE_STEP||be===TUNE_BIAS)){if(be===TUNE_ERROR){Te(de);return}console.log("Run tune for id:",de),fetch("/api/pid/tune",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:de,action:"start"})}).then(ve=>ve.json()).then(ve=>{console.log("Tune start response:",ve)}).catch(ve=>{console.error("Error starting tune:",ve)})}},Te=Zt=>{console.log("Stop tune for id:",Zt),fetch("/api/pid/tune",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:Zt,action:"stop"})}).then(de=>de.json()).then(de=>{console.log("Tune stop response:",de)}).catch(de=>{console.error("Error stopping tune:",de)})},fe=PRESETS[ee]||PRESETS.en,le=Zt=>{const de=fe.find(be=>be.value===String(Zt));return de?de.label:Zt},ht=Zt=>{const de=SENSOR_OPTIONS.find(be=>be.value===String(Zt));return de?de.label:Zt},Yt=Zt=>Et`
+  `,document.head.appendChild($)}function TabPid({}){const[$,k]=ut(null),[st,ct]=ut(null);at(null);const[dt,_]=ut(!1),[pt,te]=ut(null),[mt,Xt]=ut(null),[ee,$t]=ut("ru"),[oe,re]=ut(!1),[pe,we]=ut(0),[$e,ue]=ut(0),ye=at(!1);lt(()=>{initGlobalTooltip$3(),initTuneStyles()},[]);const xe=()=>{fetch("/api/pid/get").then(Yt=>Yt.json()).then(Yt=>{ye.current||Yt&&Array.isArray(Yt.pid)&&(k(Yt.pid),$t(Yt.lang||"ru"),typeof Yt.pidline=="number"&&(ue(Yt.pidline),we(Yt.pidline)))}).catch(Yt=>console.error("Error fetching PID data:",Yt))};lt(()=>{xe();const Yt=setInterval(()=>{xe()},500);return()=>clearInterval(Yt)},[]);const Se=at(!0);lt(()=>{if(Se.current){Se.current=!1;return}Ce($e)},[$e]);const Ce=Yt=>{fetch("/api/pidline/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pidline:Yt})}).then(de=>de.json()).then(de=>console.log("Pidline sent to stm32:",de)).catch(de=>console.error("Error sending PID line to stm32:",de))},ke=()=>{if(pe<PID_MAX_SLOTS){const Yt=pe+1;we(Yt),ue(Yt)}},Ie=()=>{if(pe>0){const Yt=pe-1;we(Yt),ue(Yt)}};if($===null)return Et`<div>Loading...</div>`;const ie=()=>({langtimers:ee==="ru"?rulangtimers:enlangtimers}),_e=(Yt,de)=>{const be=ie(),Ee=(be[Yt]&&be[Yt][de]?be[Yt][de]:"").split(" "),vt=[];for(let ne=0;ne<Ee.length;ne+=15)vt.push(Ee.slice(ne,ne+15).join(" "));return vt.join("<br>")},ae=(Yt,de)=>{te(Yt),Xt(de),_(!0)},me=()=>{_(!1),te(null),Xt(null)},ge=Yt=>{console.log("handlePidChange:",Yt),k($.map(de=>de.id===Yt.id?Yt:de)),ye.current=!0,fetch("/api/pid/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Yt)}).then(de=>de.json()).then(de=>{console.log("PID job updated successfully:",de)}).catch(de=>{console.error("Error updating PID job:",de)}).finally(()=>{ye.current=!1})},ce=Yt=>{const de=Yt.id,be=Yt.tune_state||0;if(!(be===TUNE_STEP||be===TUNE_BIAS)){if(be===TUNE_ERROR){Te(de);return}console.log("Run tune for id:",de),fetch("/api/pid/tune",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:de,action:"start"})}).then(ve=>ve.json()).then(ve=>{console.log("Tune start response:",ve)}).catch(ve=>{console.error("Error starting tune:",ve)})}},Te=Yt=>{console.log("Stop tune for id:",Yt),fetch("/api/pid/tune",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:Yt,action:"stop"})}).then(de=>de.json()).then(de=>{console.log("Tune stop response:",de)}).catch(de=>{console.error("Error stopping tune:",de)})},he=PRESETS[ee]||PRESETS.en,le=Yt=>{const de=he.find(be=>be.value===String(Yt));return de?de.label:Yt},ht=Yt=>{const de=SENSOR_OPTIONS.find(be=>be.value===String(Yt));return de?de.label:Yt},Zt=Yt=>Et`
     <th
       class="px-4 py-4 text-base font-bold text-slate-700 tracking-wide cursor-help"
-      data-tip=${_e("langtimers",Zt.tooltipIndex)}
+      data-tip=${_e("langtimers",Yt.tooltipIndex)}
     >
-      ${Zt.title}
+      ${Yt.title}
     </th>
-  `,se=(Zt,de)=>{const be=Zt.tune_state||0,ve=Zt.tune_progress||0,ke=be===TUNE_STEP||be===TUNE_BIAS,vt=be===TUNE_DONE,ne=be===TUNE_ERROR,he=vt?"background:linear-gradient(to right,#4ade80,#10b981);box-shadow:0 4px 14px rgba(16,185,129,0.4);":ne?"background:linear-gradient(to right,#dc2626,#b91c1c);box-shadow:0 4px 14px rgba(220,38,38,0.5);animation:tuneBlink 1s ease-in-out infinite;":"background:linear-gradient(to right,#ef4444,#e11d48);box-shadow:0 4px 14px rgba(239,68,68,0.4);",Oe="px-3 py-1 rounded-full text-sm font-bold text-white transition-all duration-300 transform hover:scale-105 active:scale-95 whitespace-nowrap",Me=vt?"Tuning Done":ne?"⚠ Error!":"Run tune";if(ke){const Pe=ve.toFixed(1),De=`Auto Tune (${be===TUNE_STEP?"Step test":"Bias search"})… ${ve}%`;return Et`
-        <tr key=${Zt.id} class="${de%2===1?"bg-white/80":"bg-sky-200/40"}">
+  `,se=(Yt,de)=>{const be=Yt.tune_state||0,ve=Yt.tune_progress||0,Ee=be===TUNE_STEP||be===TUNE_BIAS,vt=be===TUNE_DONE,ne=be===TUNE_ERROR,fe=vt?"background:linear-gradient(to right,#4ade80,#10b981);box-shadow:0 4px 14px rgba(16,185,129,0.4);":ne?"background:linear-gradient(to right,#dc2626,#b91c1c);box-shadow:0 4px 14px rgba(220,38,38,0.5);animation:tuneBlink 1s ease-in-out infinite;":"background:linear-gradient(to right,#ef4444,#e11d48);box-shadow:0 4px 14px rgba(239,68,68,0.4);",Oe="px-3 py-1 rounded-full text-sm font-bold text-white transition-all duration-300 transform hover:scale-105 active:scale-95 whitespace-nowrap",Me=vt?"Tuning Done":ne?"⚠ Error!":"Run tune";if(Ee){const Pe=ve.toFixed(1),De=`Auto Tune (${be===TUNE_STEP?"Step test":"Bias search"})… ${ve}%`;return Et`
+        <tr key=${Yt.id} class="${de%2===1?"bg-white/80":"bg-sky-200/40"}">
           <td colspan="11" class="px-2 py-2">
             <div style="position:relative;width:100%;height:2.5rem;border-radius:0.75rem;overflow:hidden;background:#d1d5db;box-shadow:inset 0 2px 6px rgba(0,0,0,0.12);">
               <div
@@ -2652,42 +2652,42 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
           </td>
           <td class="px-4 py-2 text-center">
             <button
-              onclick=${()=>Te(Zt.id)}
+              onclick=${()=>Te(Yt.id)}
               class="px-3 py-1 rounded-full text-sm font-bold text-white whitespace-nowrap transition-all duration-300 hover:scale-105 active:scale-95"
               style="background:linear-gradient(to right,#f97316,#ef4444);box-shadow:0 4px 14px rgba(239,68,68,0.4);"
             >Stop</button>
           </td>
         </tr>
       `}return Et`
-      <tr key=${Zt.id} class="${de%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
-        <td class="px-4 py-3 text-sm text-slate-800 font-medium">${Zt.id}</td>
+      <tr key=${Yt.id} class="${de%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
+        <td class="px-4 py-3 text-sm text-slate-800 font-medium">${Yt.id}</td>
         <td class="px-4 py-3 text-sm text-slate-700 font-mono">
-          ${(()=>{const Pe=Object.entries(Zt.pinact||{});if(!Pe.length)return"—";const[Le,De]=Pe[0];return`${Le}(${De})`})()}
+          ${(()=>{const Pe=Object.entries(Yt.pinact||{});if(!Pe.length)return"—";const[Le,De]=Pe[0];return`${Le}(${De})`})()}
         </td>
-        <td class="px-4 py-3 text-sm text-slate-700">${ht(Zt.selsens)}</td>
-        <td class="px-4 py-3 text-sm font-mono ${Zt.selsens==="1"?"text-slate-700":"text-slate-400 italic"}">${Zt.selsens==="1"?Zt.sernum||"—":"N/A"}</td>
-        <td class="px-4 py-3 text-sm text-slate-700">${le(Zt.presets)}</td>
-        <td class="px-4 py-3 text-sm text-slate-700 font-mono">${Zt.tmpset}</td>
-        <td class="px-4 py-3 text-sm text-slate-700 font-mono">${Zt.tmpcur}</td>
-        <td class="px-4 py-3 text-sm text-slate-800 font-mono ${Zt.onoff?"":"text-rose-500 font-bold"}">${Zt.onoff?Zt.duty!==void 0?Zt.duty:"—":"OFF"}</td>
-        <td class="px-4 py-3 text-sm text-slate-600">${Zt.info}</td>
+        <td class="px-4 py-3 text-sm text-slate-700">${ht(Yt.selsens)}</td>
+        <td class="px-4 py-3 text-sm font-mono ${Yt.selsens==="1"?"text-slate-700":"text-slate-400 italic"}">${Yt.selsens==="1"?Yt.sernum||"—":"N/A"}</td>
+        <td class="px-4 py-3 text-sm text-slate-700">${le(Yt.presets)}</td>
+        <td class="px-4 py-3 text-sm text-slate-700 font-mono">${Yt.tmpset}</td>
+        <td class="px-4 py-3 text-sm text-slate-700 font-mono">${Yt.tmpcur}</td>
+        <td class="px-4 py-3 text-sm text-slate-800 font-mono ${Yt.onoff?"":"text-rose-500 font-bold"}">${Yt.onoff?Yt.duty!==void 0?Yt.duty:"—":"OFF"}</td>
+        <td class="px-4 py-3 text-sm text-slate-600">${Yt.info}</td>
         <td class="px-4 py-3">
           <${MyPolzunok}
-            value=${Zt.onoff}
-            onChange=${Pe=>ge({...Zt,onoff:Pe})}
+            value=${Yt.onoff}
+            onChange=${Pe=>ge({...Yt,onoff:Pe})}
           />
         </td>
         <td class="px-4 py-3 text-center">
           <button
-            onclick=${()=>ae("edit",Zt)}
+            onclick=${()=>ae("edit",Yt)}
             class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap mr-2"
           >Edit</button>
         </td>
         <td class="px-4 py-3 text-center">
           <button
-            onclick=${()=>ce(Zt)}
+            onclick=${()=>ce(Yt)}
             class="${Oe}"
-            style="${he}"
+            style="${fe}"
           >${Me}</button>
         </td>
       </tr>
@@ -2708,22 +2708,22 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                   <table class="w-full text-left border-collapse whitespace-nowrap">
                     <thead>
                       <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                        <${Yt} title="No" tooltipIndex=${1} />
-                        <${Yt} title="PWM Pin" tooltipIndex=${2} />
-                        <${Yt} title="Sel. sensor" tooltipIndex=${3} />
-                        <${Yt} title="Dev. ser. number" tooltipIndex=${3} />
-                        <${Yt} title="Presets" tooltipIndex=${4} />
-                        <${Yt} title="T set." tooltipIndex=${5} />
-                        <${Yt} title="T cur." tooltipIndex=${6} />
-                        <${Yt} title="Duty" tooltipIndex=${7} />
-                        <${Yt} title="Info" tooltipIndex=${4} />
-                        <${Yt} title="On/Off" tooltipIndex=${5} />
-                        <${Yt} title="Action" tooltipIndex=${6} />
-                        <${Yt} title="Auto tune" tooltipIndex=${7} />
+                        <${Zt} title="No" tooltipIndex=${1} />
+                        <${Zt} title="PWM Pin" tooltipIndex=${2} />
+                        <${Zt} title="Sel. sensor" tooltipIndex=${3} />
+                        <${Zt} title="Dev. ser. number" tooltipIndex=${3} />
+                        <${Zt} title="Presets" tooltipIndex=${4} />
+                        <${Zt} title="T set." tooltipIndex=${5} />
+                        <${Zt} title="T cur." tooltipIndex=${6} />
+                        <${Zt} title="Duty" tooltipIndex=${7} />
+                        <${Zt} title="Info" tooltipIndex=${4} />
+                        <${Zt} title="On/Off" tooltipIndex=${5} />
+                        <${Zt} title="Action" tooltipIndex=${6} />
+                        <${Zt} title="Auto tune" tooltipIndex=${7} />
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-white/40">
-                      ${Array.from({length:pe},(Zt,de)=>{const be=$&&$[de]?$[de]:{id:de+1,pins:"",pinact:{},selsens:"",sernum:"",presets:"",tmpset:"",tmpcur:"",info:"",onoff:0,tune_state:0,tune_progress:0};return se(be,de)})}
+                      ${Array.from({length:pe},(Yt,de)=>{const be=$&&$[de]?$[de]:{id:de+1,pins:"",pinact:{},selsens:"",sernum:"",presets:"",tmpset:"",tmpcur:"",info:"",onoff:0,tune_state:0,tune_progress:0};return se(be,de)})}
                     </tbody>
                   </table>
                 </div>
@@ -2744,7 +2744,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             ${pe<PID_MAX_SLOTS?Et`
             <button
                 class="bg-emerald-500 hover:bg-emerald-600 shadow-md text-white font-black text-xl w-10 h-10 rounded-full transition-transform hover:scale-110 active:scale-95 flex items-center justify-center pb-1 shadow-emerald-500/30"
-                onclick=${Ee}
+                onclick=${ke}
                 title="Add PID"
             >+</button>
             `:null}
@@ -2778,7 +2778,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         />
       `:null}
     </div>
-  `}function ModalEditSensor({typsensor:$,oneWireId:k,pins:st,onClose:ct,onUpdate:dt,sensorType:_,sensorData:pt,closeOnOverlayClick:te=!0}){const[mt,Xt]=ut({ut:(pt==null?void 0:pt.ut)||$.ut,lt:(pt==null?void 0:pt.lt)||$.lt,action_ut:(pt==null?void 0:pt.action_ut)||$.action_ut,action_lt:(pt==null?void 0:pt.action_lt)||$.action_lt,upphumid:(pt==null?void 0:pt.upphumid)||$.upphumid||0,humlolim:(pt==null?void 0:pt.humlolim)||$.humlolim||0,actuphum:(pt==null?void 0:pt.actuphum)||$.actuphum||"",actlowhum:(pt==null?void 0:pt.actlowhum)||$.actlowhum||"",info:(pt==null?void 0:pt.info)||$.info,onoff:(pt==null?void 0:pt.onoff)||$.onoff||0,humidity:(pt==null?void 0:pt.humidity)||$.humidity||0}),[ee,$t]=ut(!1),oe=(xe,Se,Ce)=>{if(xe===""||xe==="-")return xe;const Ee=xe.replace(",",".");if(!/^-?\d*\.?\d*$/.test(Ee))return null;const Ie=parseFloat(Ee);return isNaN(Ie)||Ie<Se||Ie>Ce?null:Ee},re=xe=>{const{name:Se,value:Ce}=xe.target;if(["ut","lt"].includes(Se)){const Ee=oe(Ce,-55,125);Ee!==null&&Xt(Ie=>({...Ie,[Se]:Ee}))}else if(["upphumid","humlolim"].includes(Se)){const Ee=oe(Ce,0,100);Ee!==null&&Xt(Ie=>({...Ie,[Se]:Ee}))}else Xt(Ee=>({...Ee,[Se]:Ce}))},pe=xe=>{const Se=["ut","lt","upphumid","humlolim"],Ce={...xe};return Se.forEach(Ee=>{Ce[Ee]===""||Ce[Ee]==="-"?Ce[Ee]=0:Ce[Ee]=parseFloat(Ce[Ee].toString().replace(",","."))}),Ce},ue=Et`
+  `}function ModalEditSensor({typsensor:$,oneWireId:k,pins:st,onClose:ct,onUpdate:dt,sensorType:_,sensorData:pt,closeOnOverlayClick:te=!0}){const[mt,Xt]=ut({ut:(pt==null?void 0:pt.ut)||$.ut,lt:(pt==null?void 0:pt.lt)||$.lt,action_ut:(pt==null?void 0:pt.action_ut)||$.action_ut,action_lt:(pt==null?void 0:pt.action_lt)||$.action_lt,upphumid:(pt==null?void 0:pt.upphumid)||$.upphumid||0,humlolim:(pt==null?void 0:pt.humlolim)||$.humlolim||0,actuphum:(pt==null?void 0:pt.actuphum)||$.actuphum||"",actlowhum:(pt==null?void 0:pt.actlowhum)||$.actlowhum||"",info:(pt==null?void 0:pt.info)||$.info,onoff:(pt==null?void 0:pt.onoff)||$.onoff||0,humidity:(pt==null?void 0:pt.humidity)||$.humidity||0}),[ee,$t]=ut(!1),oe=(xe,Se,Ce)=>{if(xe===""||xe==="-")return xe;const ke=xe.replace(",",".");if(!/^-?\d*\.?\d*$/.test(ke))return null;const Ie=parseFloat(ke);return isNaN(Ie)||Ie<Se||Ie>Ce?null:ke},re=xe=>{const{name:Se,value:Ce}=xe.target;if(["ut","lt"].includes(Se)){const ke=oe(Ce,-55,125);ke!==null&&Xt(Ie=>({...Ie,[Se]:ke}))}else if(["upphumid","humlolim"].includes(Se)){const ke=oe(Ce,0,100);ke!==null&&Xt(Ie=>({...Ie,[Se]:ke}))}else Xt(ke=>({...ke,[Se]:Ce}))},pe=xe=>{const Se=["ut","lt","upphumid","humlolim"],Ce={...xe};return Se.forEach(ke=>{Ce[ke]===""||Ce[ke]==="-"?Ce[ke]=0:Ce[ke]=parseFloat(Ce[ke].toString().replace(",","."))}),Ce},ue=Et`
     <div
       class="fixed inset-0 z-[999] bg-black bg-opacity-50 flex items-center justify-center p-4"
       onclick=${xe=>{te&&xe.target===xe.currentTarget&&ct()}}
@@ -3036,10 +3036,10 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         </form>
       </div>
     </div>
-  `,$e=at(null);return lt(()=>{const ue=document.createElement("div");return ue.id="modal-portal-onewire",document.body.appendChild(ue),$e.current=ue,()=>{O(null,ue),document.body.removeChild(ue)}},[]),lt(()=>{$e.current&&O(we,$e.current)}),null}function initGlobalTooltip$2(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,te=window.innerWidth,mt=dt.getBoundingClientRect();let Xt=mt.left+mt.width/2-_/2;Xt=Math.max(8,Math.min(Xt,te-_-8));let ee=mt.top-pt-8;ee<8&&(ee=mt.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const TabOneWire=()=>{const[$,k]=ut([]),[st,ct]=ut(null),[dt,_]=ut(!1),[pt,te]=ut(null),[mt,Xt]=ut(null),[ee,$t]=ut("ru"),[oe,re]=ut(null);lt(()=>{initGlobalTooltip$2()},[]);const pe=()=>{console.log("Calling initial refresh..."),fetch("/api/onewire/get").then(ae=>ae.json()).then(ae=>{console.log("Initial data received:",ae),$t(ae.lang||"ru"),k(ae.pins||[]),console.log("Initial OneWire state set:",ae.pins),ct(null)}).catch(ae=>{console.error("Error in refresh:",ae),ct(ae.message),k([])})},we=async()=>{try{const me=await(await fetch("/api/temp/get")).json();k(ge=>ge.map(ce=>{if(!ce.sensors||ce.typsensor!==1&&ce.typsensr!==1&&ce.typsensor!==2&&ce.typsensr!==2)return ce;const Te=ce.sensors.map(fe=>{var le,ht;if(ce.typsensor===1||ce.typsensr===1){const Yt=(le=me.ds18b20)==null?void 0:le.find(se=>se.addr===fe.s_number);if(Yt)return{...fe,t:Yt.temp}}else if(ce.typsensor===2||ce.typsensr===2){const Yt=(ht=me.dht22)==null?void 0:ht.find(se=>se.id===ce.id);if(Yt)return{...fe,t:Yt.temp,humidity:Yt.humidity}}return fe});return{...ce,sensors:Te}}))}catch(ae){console.error("Error in updateSensorData:",ae)}};lt(()=>{console.log("Setting up initial data and interval..."),pe();const ae=setInterval(we,1e3);return()=>{clearInterval(ae)}},[]);const $e=()=>{_(!1),te(null),Xt(null)},ue=ae=>{k(me=>me.map(ge=>{var ce;if(ge.id===ae.oneWireId){const Te=((ce=ge.sensors)==null?void 0:ce.map(fe=>fe.s_number===ae.s_number?{...fe,...ae}:fe))||[];return{...ge,sensors:Te}}return ge})),$e()},ye=ae=>{Xt(ae),_(!0)},xe=ae=>{k(me=>me.map(ge=>ge.id===ae.id?{...ge,onoff:ae.onoff}:ge))},Se=ae=>{k(me=>me.map(ge=>ge.id===ae.id?ae:ge)),$e()};if(st)return Et`<div>Error fetching sensor data: ${st}</div>`;const Ce=()=>({lang1Wire:ee==="ru"?rulange1Wire:enlange1Wire}),Ee=(ae,me)=>{const ge=Ce(),Te=(ge[ae]&&ge[ae][me]?ge[ae][me]:"").split(" "),fe=[];for(let le=0;le<Te.length;le+=15)fe.push(Te.slice(le,le+15).join(" "));return fe.join("<br>")},Ie=ae=>Et`
+  `,$e=at(null);return lt(()=>{const ue=document.createElement("div");return ue.id="modal-portal-onewire",document.body.appendChild(ue),$e.current=ue,()=>{O(null,ue),document.body.removeChild(ue)}},[]),lt(()=>{$e.current&&O(we,$e.current)}),null}function initGlobalTooltip$2(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,te=window.innerWidth,mt=dt.getBoundingClientRect();let Xt=mt.left+mt.width/2-_/2;Xt=Math.max(8,Math.min(Xt,te-_-8));let ee=mt.top-pt-8;ee<8&&(ee=mt.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const TabOneWire=()=>{const[$,k]=ut([]),[st,ct]=ut(null),[dt,_]=ut(!1),[pt,te]=ut(null),[mt,Xt]=ut(null),[ee,$t]=ut("ru"),[oe,re]=ut(null);lt(()=>{initGlobalTooltip$2()},[]);const pe=()=>{console.log("Calling initial refresh..."),fetch("/api/onewire/get").then(ae=>ae.json()).then(ae=>{console.log("Initial data received:",ae),$t(ae.lang||"ru"),k(ae.pins||[]),console.log("Initial OneWire state set:",ae.pins),ct(null)}).catch(ae=>{console.error("Error in refresh:",ae),ct(ae.message),k([])})},we=async()=>{try{const me=await(await fetch("/api/temp/get")).json();k(ge=>ge.map(ce=>{if(!ce.sensors||ce.typsensor!==1&&ce.typsensr!==1&&ce.typsensor!==2&&ce.typsensr!==2)return ce;const Te=ce.sensors.map(he=>{var le,ht;if(ce.typsensor===1||ce.typsensr===1){const Zt=(le=me.ds18b20)==null?void 0:le.find(se=>se.addr===he.s_number);if(Zt)return{...he,t:Zt.temp}}else if(ce.typsensor===2||ce.typsensr===2){const Zt=(ht=me.dht22)==null?void 0:ht.find(se=>se.id===ce.id);if(Zt)return{...he,t:Zt.temp,humidity:Zt.humidity}}return he});return{...ce,sensors:Te}}))}catch(ae){console.error("Error in updateSensorData:",ae)}};lt(()=>{console.log("Setting up initial data and interval..."),pe();const ae=setInterval(we,1e3);return()=>{clearInterval(ae)}},[]);const $e=()=>{_(!1),te(null),Xt(null)},ue=ae=>{k(me=>me.map(ge=>{var ce;if(ge.id===ae.oneWireId){const Te=((ce=ge.sensors)==null?void 0:ce.map(he=>he.s_number===ae.s_number?{...he,...ae}:he))||[];return{...ge,sensors:Te}}return ge})),$e()},ye=ae=>{Xt(ae),_(!0)},xe=ae=>{k(me=>me.map(ge=>ge.id===ae.id?{...ge,onoff:ae.onoff}:ge))},Se=ae=>{k(me=>me.map(ge=>ge.id===ae.id?ae:ge)),$e()};if(st)return Et`<div>Error fetching sensor data: ${st}</div>`;const Ce=()=>({lang1Wire:ee==="ru"?rulange1Wire:enlange1Wire}),ke=(ae,me)=>{const ge=Ce(),Te=(ge[ae]&&ge[ae][me]?ge[ae][me]:"").split(" "),he=[];for(let le=0;le<Te.length;le+=15)he.push(Te.slice(le,le+15).join(" "));return he.join("<br>")},Ie=ae=>Et`
     <th
       class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
-      data-tip=${Ee("lang1Wire",ae.tooltipIndex)}
+      data-tip=${ke("lang1Wire",ae.tooltipIndex)}
     >
       ${ae.title}
     </th>
@@ -3052,7 +3052,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         <td class="px-6 py-4">
           <${MyPolzunok}
             value=${ae.onoff||0}
-            onChange=${fe=>xe({...ae,onoff:fe})}
+            onChange=${he=>xe({...ae,onoff:he})}
           />
         </td>
         <td class="px-6 py-4">
@@ -3077,16 +3077,16 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         <div class="px-4 py-2 text-slate-500 font-medium">
           No connected sensors for this OneWire pin.
         </div>
-      `;let ce=ae.sensors||[];const Te=(fe,le)=>{const ht=me===2;return Et`
+      `;let ce=ae.sensors||[];const Te=(he,le)=>{const ht=me===2;return Et`
         <div class="bg-white/70 backdrop-blur-md p-6 rounded-2xl shadow-lg border border-white/60 mb-4 transition-all hover:shadow-xl">
           <div class="font-extrabold text-xl text-slate-700 mb-4 flex justify-between items-center border-b border-slate-200/60 pb-3">
             <span class="tracking-tight drop-shadow-sm">
-              ${ht?"DHT22 Sensor":`DS18B20 Sensor (S/N: ${fe.s_number})`}
+              ${ht?"DHT22 Sensor":`DS18B20 Sensor (S/N: ${he.s_number})`}
             </span>
             <a
               href="#"
               class="text-blue-600 hover:text-blue-800 font-semibold text-sm transition-colors uppercase tracking-wider bg-white/50 hover:bg-white/80 px-4 py-1.5 rounded-lg shadow-sm"
-              onclick=${Yt=>{Yt.preventDefault(),te({...fe,oneWireId:ae.id,sensorType:me,pins:ae.pins||ae.pin}),_(!0)}}
+              onclick=${Zt=>{Zt.preventDefault(),te({...he,oneWireId:ae.id,sensorType:me,pins:ae.pins||ae.pin}),_(!0)}}
             >
               Edit
             </a>
@@ -3095,48 +3095,48 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             <tbody>
               <tr class="hover:bg-slate-100/50 transition-colors rounded-lg">
                 <td class="font-semibold py-2 px-2 text-slate-800">Current Temperature:</td>
-                <td class="font-mono text-cyan-700 font-bold py-2 px-2 text-right">${fe.t}°C</td>
+                <td class="font-mono text-cyan-700 font-bold py-2 px-2 text-right">${he.t}°C</td>
               </tr>
-              ${ht&&"humidity"in fe?Et`
+              ${ht&&"humidity"in he?Et`
                     <tr class="hover:bg-slate-100/50 transition-colors rounded-lg">
                       <td class="font-semibold py-2 px-2 text-slate-800">Current Humidity:</td>
-                      <td class="font-mono text-teal-700 font-bold py-2 px-2 text-right">${fe.humidity}%</td>
+                      <td class="font-mono text-teal-700 font-bold py-2 px-2 text-right">${he.humidity}%</td>
                     </tr>
                   `:""}
               <tr class="hover:bg-slate-100/50 transition-colors rounded-lg border-t border-slate-100">
-                <td class="font-medium py-2 px-2 text-slate-600">Upper Temp. Limit = ${fe.ut}°C</td>
+                <td class="font-medium py-2 px-2 text-slate-600">Upper Temp. Limit = ${he.ut}°C</td>
                 <td class="py-2 px-2 text-right">
-                  <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${fe.action_ut}</span>
+                  <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${he.action_ut}</span>
                 </td>
               </tr>
               <tr class="hover:bg-slate-100/50 transition-colors rounded-lg">
-                <td class="font-medium py-2 px-2 text-slate-600">Lower Temp. Limit = ${fe.lt}°C</td>
+                <td class="font-medium py-2 px-2 text-slate-600">Lower Temp. Limit = ${he.lt}°C</td>
                 <td class="py-2 px-2 text-right">
-                  <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${fe.action_lt}</span>
+                  <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${he.action_lt}</span>
                 </td>
               </tr>
-              ${ht&&"upphumid"in fe?Et`
+              ${ht&&"upphumid"in he?Et`
                     <tr class="hover:bg-slate-100/50 transition-colors rounded-lg border-t border-slate-100">
-                      <td class="font-medium py-2 px-2 text-slate-600">Upper Humidity Limit = ${fe.upphumid}%</td>
+                      <td class="font-medium py-2 px-2 text-slate-600">Upper Humidity Limit = ${he.upphumid}%</td>
                       <td class="py-2 px-2 text-right">
-                        <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${fe.actuphum}</span>
+                        <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${he.actuphum}</span>
                       </td>
                     </tr>
                     <tr class="hover:bg-slate-100/50 transition-colors rounded-lg">
-                      <td class="font-medium py-2 px-2 text-slate-600">Lower Humidity Limit = ${fe.humlolim}%</td>
+                      <td class="font-medium py-2 px-2 text-slate-600">Lower Humidity Limit = ${he.humlolim}%</td>
                       <td class="py-2 px-2 text-right">
-                        <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${fe.actlowhum}</span>
+                        <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${he.actlowhum}</span>
                       </td>
                     </tr>
                   `:""}
               <tr class="hover:bg-slate-100/50 transition-colors rounded-lg border-t border-slate-200/60 mt-2">
                 <td class="font-semibold py-3 px-2 text-slate-800">Info:</td>
-                <td class="text-slate-600 py-3 px-2 text-right italic">${fe.info}</td>
+                <td class="text-slate-600 py-3 px-2 text-right italic">${he.info}</td>
               </tr>
             </tbody>
           </table>
         </div>
-      `};return ce.length>0&&Object.keys(ce[0]).length>0?Et`<div class="space-y-4 w-full">${ce.map((fe,le)=>Te(fe))}</div>`:Et`
+      `};return ce.length>0&&Object.keys(ce[0]).length>0?Et`<div class="space-y-4 w-full">${ce.map((he,le)=>Te(he))}</div>`:Et`
           <div class="px-4 py-4 text-slate-500 font-medium bg-white/50 backdrop-blur-sm rounded-xl border border-white/40 text-center">
             No sensor data available for this OneWire pin.
           </div>
@@ -3285,7 +3285,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         </div>
       </div>
     </div>
-  `,$e=at(null);return lt(()=>{const ue=document.createElement("div");return ue.id="modal-portal",document.body.appendChild(ue),$e.current=ue,()=>{O(null,ue),document.body.removeChild(ue)}},[]),lt(()=>{$e.current&&O(we,$e.current)}),null}const ModalSecurity=({modalType:$,page:k,hideModal:st,title:ct,selectedSecurity:dt,onSecurityChange:_,SliderComponent:pt=MyPolzunok})=>{const[te,mt]=ut((dt==null?void 0:dt.info)||""),[Xt,ee]=ut((dt==null?void 0:dt.onoff)||0),[$t,oe]=ut((dt==null?void 0:dt.ptype)||0),[re,pe]=ut((dt==null?void 0:dt.send_sms)||""),[we,$e]=ut((dt==null?void 0:dt.action)||""),[ue,ye]=ut([]),[xe,Se]=ut({send_sms:null,action:null}),[Ce,Ee]=ut(null),Ie=/^(None|\d{1,2}:[012])(,\d{1,2}:[012])*$/,ie=(le,ht)=>!ht||ht.trim()===""||ht.toLowerCase()==="none"?null:le==="action"?Ie.test(ht)?null:'Incorrect format. Use "None" or "pin:value" format.':ht.length>100?"Text should not exceed 100 characters":null,_e=(le,ht)=>{const Yt=ie(le,ht);switch(Se(se=>({...se,[le]:Yt})),le){case"send_sms":pe(ht);break;case"action":$e(ht);break}};lt(()=>{fetch("/api/monitoring/get").then(le=>le.json()).then(le=>{Array.isArray(le)?ye(le.filter(ht=>ht.topin===2)):ye([])}).catch(le=>{console.error("Error fetching pin config:",le),ye([])})},[]);const ae=le=>{if(le.preventDefault(),Object.values(xe).some(Yt=>Yt!==null)){Ee("Please correct the errors before submitting.");return}const ht={...dt,info:te,send_sms:re||"NO",action:we||"None",onoff:Xt,ptype:$t};fetch("/api/monitoring/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ht)}).then(Yt=>{if(!Yt.ok)throw new Error("Network response was not ok");return Yt.json()}).then(Yt=>{if(Yt.error)throw new Error(Yt.error);_(ht),st()}).catch(Yt=>{console.error("Error:",Yt),Ee("Failed to save changes. Please try again.")})},me=()=>{oe(0),pe(""),$e(""),mt(""),ee(0),Se({send_sms:null,action:null})},Te=Et`
+  `,$e=at(null);return lt(()=>{const ue=document.createElement("div");return ue.id="modal-portal",document.body.appendChild(ue),$e.current=ue,()=>{O(null,ue),document.body.removeChild(ue)}},[]),lt(()=>{$e.current&&O(we,$e.current)}),null}const ModalSecurity=({modalType:$,page:k,hideModal:st,title:ct,selectedSecurity:dt,onSecurityChange:_,SliderComponent:pt=MyPolzunok})=>{const[te,mt]=ut((dt==null?void 0:dt.info)||""),[Xt,ee]=ut((dt==null?void 0:dt.onoff)||0),[$t,oe]=ut((dt==null?void 0:dt.ptype)||0),[re,pe]=ut((dt==null?void 0:dt.send_sms)||""),[we,$e]=ut((dt==null?void 0:dt.action)||""),[ue,ye]=ut([]),[xe,Se]=ut({send_sms:null,action:null}),[Ce,ke]=ut(null),Ie=/^(None|\d{1,2}:[012])(,\d{1,2}:[012])*$/,ie=(le,ht)=>!ht||ht.trim()===""||ht.toLowerCase()==="none"?null:le==="action"?Ie.test(ht)?null:'Incorrect format. Use "None" or "pin:value" format.':ht.length>100?"Text should not exceed 100 characters":null,_e=(le,ht)=>{const Zt=ie(le,ht);switch(Se(se=>({...se,[le]:Zt})),le){case"send_sms":pe(ht);break;case"action":$e(ht);break}};lt(()=>{fetch("/api/monitoring/get").then(le=>le.json()).then(le=>{Array.isArray(le)?ye(le.filter(ht=>ht.topin===2)):ye([])}).catch(le=>{console.error("Error fetching pin config:",le),ye([])})},[]);const ae=le=>{if(le.preventDefault(),Object.values(xe).some(Zt=>Zt!==null)){ke("Please correct the errors before submitting.");return}const ht={...dt,info:te,send_sms:re||"NO",action:we||"None",onoff:Xt,ptype:$t};fetch("/api/monitoring/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ht)}).then(Zt=>{if(!Zt.ok)throw new Error("Network response was not ok");return Zt.json()}).then(Zt=>{if(Zt.error)throw new Error(Zt.error);_(ht),st()}).catch(Zt=>{console.error("Error:",Zt),ke("Failed to save changes. Please try again.")})},me=()=>{oe(0),pe(""),$e(""),mt(""),ee(0),Se({send_sms:null,action:null})},Te=Et`
     <div
       class="fixed inset-0 z-[999] bg-black bg-opacity-50"
       style="margin-top: 7px;"
@@ -3447,14 +3447,14 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         </div>
       </div>
     </div>
-  `,fe=at(null);return lt(()=>{const le=document.createElement("div");return le.id="modal-portal",document.body.appendChild(le),fe.current=le,()=>{O(null,le),document.body.removeChild(le)}},[]),lt(()=>{fe.current&&O(Te,fe.current)}),null};function initGlobalTooltip$1(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,te=window.innerWidth,mt=dt.getBoundingClientRect();let Xt=mt.left+mt.width/2-_/2;Xt=Math.max(8,Math.min(Xt,te-_-8));let ee=mt.top-pt-8;ee<8&&(ee=mt.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const TabSecurity=()=>{const[$,k]=ut({lang:"ru",sim800l:0,onoff:0,tel:"",info:""}),[st,ct]=ut(!1),[dt,_]=ut(!1),[pt,te]=ut([]),[mt,Xt]=ut(!1),[ee,$t]=ut("ru"),[oe,re]=ut(!1),[pe,we]=ut(""),[$e,ue]=ut(null),[ye,xe]=ut(!1),[Se,Ce]=ut("connected"),[Ee,Ie]=ut(0);lt(()=>{initGlobalTooltip$1()},[]);const ie=()=>ee==="ru"?ruLangsecurity:enLangsecurity,_e=()=>ee==="ru"?ruLangsecuritypins:enLangsecuritypins,ae=(ve,ke)=>{const ne=(ve&&ve[ke]?ve[ke]:"").split(" "),he=[];for(let Oe=0;Oe<ne.length;Oe+=15)he.push(ne.slice(Oe,Oe+15).join(" "));return he.join("<br>")},me=({title:ve,langArr:ke,tooltipIndex:vt})=>Et`
+  `,he=at(null);return lt(()=>{const le=document.createElement("div");return le.id="modal-portal",document.body.appendChild(le),he.current=le,()=>{O(null,le),document.body.removeChild(le)}},[]),lt(()=>{he.current&&O(Te,he.current)}),null};function initGlobalTooltip$1(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,te=window.innerWidth,mt=dt.getBoundingClientRect();let Xt=mt.left+mt.width/2-_/2;Xt=Math.max(8,Math.min(Xt,te-_-8));let ee=mt.top-pt-8;ee<8&&(ee=mt.bottom+8),$.style.left=Xt+"px",$.style.top=ee+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const TabSecurity=()=>{const[$,k]=ut({lang:"ru",sim800l:0,onoff:0,tel:"",info:""}),[st,ct]=ut(!1),[dt,_]=ut(!1),[pt,te]=ut([]),[mt,Xt]=ut(!1),[ee,$t]=ut("ru"),[oe,re]=ut(!1),[pe,we]=ut(""),[$e,ue]=ut(null),[ye,xe]=ut(!1),[Se,Ce]=ut("connected"),[ke,Ie]=ut(0);lt(()=>{initGlobalTooltip$1()},[]);const ie=()=>ee==="ru"?ruLangsecurity:enLangsecurity,_e=()=>ee==="ru"?ruLangsecuritypins:enLangsecuritypins,ae=(ve,Ee)=>{const ne=(ve&&ve[Ee]?ve[Ee]:"").split(" "),fe=[];for(let Oe=0;Oe<ne.length;Oe+=15)fe.push(ne.slice(Oe,Oe+15).join(" "));return fe.join("<br>")},me=({title:ve,langArr:Ee,tooltipIndex:vt})=>Et`
     <th
       class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
-      data-tip=${ae(ke,vt)}
+      data-tip=${ae(Ee,vt)}
     >
       ${ve}
     </th>
-  `,ge=(ve,ke)=>{let vt;return(...ne)=>{clearTimeout(vt),vt=setTimeout(()=>ve(...ne),ke)}},ce=async(ve,ke={},vt=3)=>{try{const ne=await fetch(ve,ke);if(!ne.ok)throw new Error("Network response was not ok");return Ce("connected"),ne}catch(ne){if(Ce("error"),vt>0)return await new Promise(he=>setTimeout(he,1e3)),ce(ve,ke,vt-1);throw Ce("disconnected"),ne}},Te={ru:Et`
+  `,ge=(ve,Ee)=>{let vt;return(...ne)=>{clearTimeout(vt),vt=setTimeout(()=>ve(...ne),Ee)}},ce=async(ve,Ee={},vt=3)=>{try{const ne=await fetch(ve,Ee);if(!ne.ok)throw new Error("Network response was not ok");return Ce("connected"),ne}catch(ne){if(Ce("error"),vt>0)return await new Promise(fe=>setTimeout(fe,1e3)),ce(ve,Ee,vt-1);throw Ce("disconnected"),ne}},Te={ru:Et`
       <div class="mytext space-y-6">
         <div>
           <h2 class="text-xl font-bold mb-4 text-blue-600">Модуль SIM800L📱</h2>
@@ -3522,7 +3522,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
           </div>
         </div>
       </div>
-    `},fe={ru:Et`
+    `},he={ru:Et`
       <div class="mytext space-y-6">
         <div>
           <h2 class="text-xl font-bold mb-4 text-blue-600">Подключение датчиков 🔌</h2>
@@ -3620,7 +3620,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
           </div>
         </div>
       </div>
-    `},le=async()=>{if(!(ye||Date.now()-Ee<500))try{const ke=await(await ce("/api/sim800l/get")).json();k(ke)}catch(ve){console.error("Error fetching SIM800L data:",ve)}},ht=async()=>{if(!(ye||Date.now()-Ee<500))try{const ke=await(await ce("/api/monitoring/get")).json();te(ke.pins||[])}catch(ve){console.error("Error fetching monitoring data:",ve)}};lt(()=>{fetch("/api/monitoring/get").then(ke=>ke.json()).then(ke=>$t(ke.lang||"ru")).catch(ke=>console.error("Error fetching initial language:",ke));const ve=setInterval(()=>{le(),ht()},500);return()=>clearInterval(ve)},[]);const Yt=ge(async ve=>{xe(!0);try{await ce("/api/sim800l/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ve)}),k(ve),Ie(Date.now())}catch(ke){console.error("Error updating SIM800L:",ke)}finally{xe(!1)}},300),se=async ve=>{try{const ke=await fetch("/api/monitoring/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ve)});if(!ke.ok)throw new Error(`HTTP error! status: ${ke.status}`);te(vt=>vt.map(ne=>ne.id===ve.id?ve:ne)),await ht(),re(!1)}catch(ke){console.error("Error updating security:",ke),alert("Failed to save changes. Please try again."),await ht()}},Zt=ve=>{te(ke=>ke.map(vt=>vt.id===ve.id?{...vt,...ve}:vt)),fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ve.id,onoff:ve.onoff})}).then(ke=>ke.json()).then(ke=>console.log("Response from /api/onoff/set:",ke)).catch(ke=>console.error("Error calling /api/onoff/set:",ke)),be()},de=(ve,ke)=>{we(ve),ue(ke),re(!0)},be=()=>{re(!1),we(""),ue(null)};return Et`
+    `},le=async()=>{if(!(ye||Date.now()-ke<500))try{const Ee=await(await ce("/api/sim800l/get")).json();k(Ee)}catch(ve){console.error("Error fetching SIM800L data:",ve)}},ht=async()=>{if(!(ye||Date.now()-ke<500))try{const Ee=await(await ce("/api/monitoring/get")).json();te(Ee.pins||[])}catch(ve){console.error("Error fetching monitoring data:",ve)}};lt(()=>{fetch("/api/monitoring/get").then(Ee=>Ee.json()).then(Ee=>$t(Ee.lang||"ru")).catch(Ee=>console.error("Error fetching initial language:",Ee));const ve=setInterval(()=>{le(),ht()},500);return()=>clearInterval(ve)},[]);const Zt=ge(async ve=>{xe(!0);try{await ce("/api/sim800l/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ve)}),k(ve),Ie(Date.now())}catch(Ee){console.error("Error updating SIM800L:",Ee)}finally{xe(!1)}},300),se=async ve=>{try{const Ee=await fetch("/api/monitoring/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ve)});if(!Ee.ok)throw new Error(`HTTP error! status: ${Ee.status}`);te(vt=>vt.map(ne=>ne.id===ve.id?ve:ne)),await ht(),re(!1)}catch(Ee){console.error("Error updating security:",Ee),alert("Failed to save changes. Please try again."),await ht()}},Yt=ve=>{te(Ee=>Ee.map(vt=>vt.id===ve.id?{...vt,...ve}:vt)),fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ve.id,onoff:ve.onoff})}).then(Ee=>Ee.json()).then(Ee=>console.log("Response from /api/onoff/set:",Ee)).catch(Ee=>console.error("Error calling /api/onoff/set:",Ee)),be()},de=(ve,Ee)=>{we(ve),ue(Ee),re(!0)},be=()=>{re(!1),we(""),ue(null)};return Et`
     <div class="flex flex-col items-center w-full p-4">
       ${Se!=="connected"&&Et`
         <div class=${`w-full p-2 mb-4 text-white text-center rounded-xl shadow-md backdrop-blur-md 
@@ -3665,7 +3665,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                   <td class="px-6 py-4 text-sm text-slate-800 font-medium">
                     <${MyPolzunok}
                       value=${$.onoff}
-                      onChange=${ve=>Yt({...$,onoff:ve})}
+                      onChange=${ve=>Zt({...$,onoff:ve})}
                     />
                   </td>
                   <td class="px-6 py-4 text-sm text-slate-800 font-medium">
@@ -3717,8 +3717,8 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                 </tr>
               </thead>
               <tbody class="divide-y divide-white/40">
-                ${pt.length>0?pt.map((ve,ke)=>Et`
-                      <tr class="${ke%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
+                ${pt.length>0?pt.map((ve,Ee)=>Et`
+                      <tr class="${Ee%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
                         <td class="px-6 py-4 text-sm text-slate-800 font-medium">${ve.id}</td>
                         <td class="px-6 py-4 text-sm text-slate-800 font-medium">${ve.pins}</td>
                         <td class="px-6 py-4 text-sm text-slate-800 font-medium">
@@ -3730,7 +3730,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                         <td class="px-6 py-4 text-sm text-slate-800 font-medium">
                           <${MyPolzunok}
                             value=${ve.onoff}
-                            onChange=${vt=>Zt({...ve,onoff:vt})}
+                            onChange=${vt=>Yt({...ve,onoff:vt})}
                           />
                         </td>
                         <td class="px-6 py-4 text-sm text-slate-800 font-medium">
@@ -3763,7 +3763,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
           </div>
           ${mt&&Et`
             <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
-              ${fe[ee]}
+              ${he[ee]}
             </div>
           `}
         </div>
@@ -3773,7 +3773,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             hideModal=${()=>ct(!1)}
             title="Edit SIM800L Settings"
             selectedGps=${$}
-            onSave=${Yt}
+            onSave=${Zt}
           />
         `}
 
@@ -3801,7 +3801,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         ${dt}
       </td>
     </tr>
-  `};function Settings({}){const[$,k]=ut({}),[st,ct]=ut(null),[dt,_]=ut(null),[pt,te]=ut({}),mt=at(null),[Xt,ee]=ut(null),[$t,oe]=ut(null),[re,pe]=ut(!1),[we,$e]=ut(!1),[ue,ye]=ut(!1),[xe,Se]=ut(!1),[Ce,Ee]=ut(!1),[Ie,ie]=ut(!0);lt(()=>{if(initGlobalTooltip(),!document.getElementById("__network_toggle_style")){const vt=document.createElement("style");vt.id="__network_toggle_style",vt.textContent=".network-toggle span { display: none !important; }",document.head.appendChild(vt)}},[]);const _e=vt=>getTip(vt,$.lang||"ru",rulangsettings,enlangsettings),ae=[{value:"en",label:"English"},{value:"ru",label:"Russian"}],me=[[-12,"(GMT -12:00) Eniwetok, Kwajalein"],[-11,"(GMT -11:00) Midway Island, Samoa"],[-10,"(GMT -10:00) Hawaii"],[-9,"(GMT -9:00) Alaska"],[-8,"(GMT -8:00) Pacific Time (US & Canada)"],[-7,"(GMT -7:00) Mountain Time (US & Canada)"],[-6,"(GMT -6:00) Central Time (US & Canada), Mexico City"],[-5,"(GMT -5:00) Eastern Time (US & Canada), Bogota, Lima"],[-4,"(GMT -4:00) Atlantic Time (Canada), Caracas, La Paz"],[-3.3,"(GMT -3:30) Newfoundland"],[-3,"(GMT -3:00) Brazil, Buenos Aires, Georgetown"],[-2,"(GMT -2:00) Mid-Atlantic"],[-1,"(GMT -1:00) Azores, Cape Verde Islands"],[0,"(GMT +0:00) Western Europe Time, London, Lisbon, Casablanca"],[1,"(GMT +1:00) Brussels, Copenhagen, Madrid, Paris"],[2,"(GMT +2:00) Kaliningrad, South Africa"],[3,"(GMT +3:00) Moscow, St. Petersburg, Baghdad, Riyadh"],[3.3,"(GMT +3:30) Tehran"],[4,"(GMT +4:00) Abu Dhabi, Muscat, Baku, Tbilisi"],[4.3,"(GMT +4:30) Kabul"],[5,"(GMT +5:00) Ekaterinburg, Islamabad, Karachi, Tashkent"],[5.3,"(GMT +5:30) Bombay, Calcutta, Madras, New Delhi"],[5.45,"(GMT +5:45) Kathmandu"],[6,"(GMT +6:00) Almaty, Dhaka, Colombo"],[7,"(GMT +7:00) Bangkok, Hanoi, Jakarta"],[8,"(GMT +8:00) Beijing, Perth, Singapore, Hong Kong"],[9,"(GMT +9:00) Tokyo, Seoul, Osaka, Sapporo, Yakutsk"],[9.3,"(GMT +9:30) Adelaide, Darwin"],[10,"(GMT +10:00) Eastern Australia, Guam, Vladivostok"],[11,"(GMT +11:00) Magadan, Solomon Islands, New Caledonia"],[12,"(GMT +12:00) Auckland, Wellington, Fiji, Kamchatka"]],ge=/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/,ce=/^(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)$/,Te=vt=>{if(!vt)return{date:"",time:""};const ne=vt.match(/d:(\d{1,2}\.\d{1,2}\.\d{2})/),he=vt.match(/t:(\d{2}:\d{2}:\d{2})/);return{date:ne?ne[1]:"",time:he?he[1]:""}},fe=vt=>{if(!/^\d{1,2}\.\d{1,2}\.\d{2}$/.test(vt))return!1;const[he,Oe,Me]=vt.split(".").map(Number);if(Oe<1||Oe>12||he<1||he>31||Me<0||Me>99)return!1;const Pe=new Date().getFullYear()%100;if(Me>Pe+5)return!1;const Le=new Date(2e3+Me,Oe,0).getDate();return!(he>Le)},le=vt=>/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/.test(vt),ht=(vt,ne)=>{const he=Object.values(ne).some(Me=>Me!==null),Oe=vt.usehttps?vt.domain&&vt.domain.trim()!=="":!0;return!(he||!Oe)},Yt=(vt,ne)=>{ee({message:vt,type:ne}),setTimeout(()=>{ee(null)},3e3)},se=vt=>{oe(vt),setTimeout(()=>{oe(null)},3e3)},Zt=(vt,ne)=>{let he=null;if(!$.usehttps&&["domain","tls_key","tls_cert","tls_ca","telegram_token"].includes(vt))return null;if(!ne&&["ip_addr","gateway","mqtt_hst","sb_mask","offdate","offtime","domain"].includes(vt))return"Поле не может быть пустым";switch(vt){case"ip_addr":case"gateway":case"mqtt_hst":ge.test(ne)||(he="Неверный IP-адрес");break;case"sb_mask":ce.test(ne)||(he="Неверная маска подсети");break;case"offdate":fe(ne)||(he="Неверный формат даты (д.м.гг)");break;case"offtime":le(ne)||(he="Неверный формат времени (чч:мм:сс)");break;case"domain":ne.length>50?he="Домен не должен превышать 50 символов":ne.match(/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/)||(he="Неверный формат домена");break;case"tls_key":ne&&ne.trim()!==""&&(ne.length>512?he="Private Key не должен превышать 512 символов":(!ne.includes("BEGIN EC PRIVATE KEY")||!ne.includes("END EC PRIVATE KEY"))&&(he="Неверный формат Private Key"));break;case"tls_cert":ne&&ne.trim()!==""&&(ne.length>1024?he="Public Key не должен превышать 1024 символов":(!ne.includes("BEGIN CERTIFICATE")||!ne.includes("END CERTIFICATE"))&&(he="Неверный формат Public Key"));break;case"tls_ca":ne&&ne.trim()!==""&&(ne.length>1024?he="Secret Key не должен превышать 1024 символов":(!ne.includes("BEGIN CERTIFICATE")||!ne.includes("END CERTIFICATE"))&&(he="Неверный формат Secret Key"));break}return he},de=vt=>{vt.preventDefault();const ne=new FormData(mt.current);let he={...$};for(const[Oe,Me]of ne.entries())["lon_de","lat_de","timezone","mqtt_prt"].includes(Oe)?he[Oe]=Me===""||Me===null?0:Number(Me):he[Oe]=Me;he.usehttps||["tls_ca","tls_key","tls_cert","telegram_token","domain"].forEach(Oe=>delete he[Oe]),he.offdate&&he.offtime?he.offldt=`d:${he.offdate} t:${he.offtime}`:delete he.offldt,["lon_de","lat_de","timezone","mqtt_prt"].forEach(Oe=>{(he[Oe]===null||he[Oe]==="")&&(he[Oe]=0)}),he.onsunrise=he.onsunrise?1:0,he.onsunset=he.onsunset?1:0,he.check_ip=he.check_ip?1:0,he.check_mqtt=he.check_mqtt?1:0,he.usehttps=he.usehttps?1:0,fetch("/api/mysett/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(he)}).then(Oe=>{if(!Oe.ok)throw new Error("Ошибка сети");return Oe.json()}).then(Oe=>{_("success"),ct(Oe),Yt("Данные успешно сохранены","success"),se("Данные успешно сохранены")}).catch(Oe=>{_("error"),ct(Oe),Yt("Ошибка при сохранении данных","error"),se("Ошибка при сохранении данных")})},be=(vt,ne)=>{let he=null;vt==="offdate"?he=fe(ne)?null:"Неверный формат даты (д.м.гг)":vt==="offtime"?he=le(ne)?null:"Неверный формат времени (чч:мм:сс)":he=Zt(vt,ne),te(Me=>{const Pe={...Me,[vt]:he},Le=["tls_key","tls_cert","tls_ca"],De=Object.keys(Pe).filter(Ne=>!Le.includes(Ne)&&Ne!=="telegram_token").some(Ne=>Pe[Ne]!==null);return pe(De||!$.usehttps&&Le.some(Ne=>$[Ne])),Pe});let Oe=ne;["lon_de","lat_de","timezone","mqtt_prt"].includes(vt)?Oe=ne===""||ne===null?0:Number(ne):["onsunrise","onsunset","check_ip","check_mqtt","usehttps"].includes(vt)&&(Oe=ne?1:0),k(Me=>({...Me,[vt]:Oe})),vt==="usehttps"&&(te({}),pe(!1))},ve=()=>fetch("/api/mysett/get").then(vt=>vt.json()).then(vt=>{if(vt.offldt){const{date:ne,time:he}=Te(vt.offldt);vt.offdate=ne,vt.offtime=he}return k(vt),vt}).catch(vt=>{console.error("Error fetching settings:",vt),Yt("Ошибка при загрузке настроек","error")});if(lt(()=>{ve().then(vt=>{vt!=null&&vt.tls_key&&$e(!0),vt!=null&&vt.tls_cert&&ye(!0),vt!=null&&vt.tls_ca&&Se(!0),vt!=null&&vt.telegram_token&&Ee(!0),ie(!1)})},[]),lt(()=>{pe(!ht($,pt))},[$,pt]),Ie)return Et`<div>Loading...</div>`;if(!$)return"";const ke=(vt="")=>Et`
+  `};function Settings({}){const[$,k]=ut({}),[st,ct]=ut(null),[dt,_]=ut(null),[pt,te]=ut({}),mt=at(null),[Xt,ee]=ut(null),[$t,oe]=ut(null),[re,pe]=ut(!1),[we,$e]=ut(!1),[ue,ye]=ut(!1),[xe,Se]=ut(!1),[Ce,ke]=ut(!1),[Ie,ie]=ut(!0);lt(()=>{if(initGlobalTooltip(),!document.getElementById("__network_toggle_style")){const vt=document.createElement("style");vt.id="__network_toggle_style",vt.textContent=".network-toggle span { display: none !important; }",document.head.appendChild(vt)}},[]);const _e=vt=>getTip(vt,$.lang||"ru",rulangsettings,enlangsettings),ae=[{value:"en",label:"English"},{value:"ru",label:"Russian"}],me=[[-12,"(GMT -12:00) Eniwetok, Kwajalein"],[-11,"(GMT -11:00) Midway Island, Samoa"],[-10,"(GMT -10:00) Hawaii"],[-9,"(GMT -9:00) Alaska"],[-8,"(GMT -8:00) Pacific Time (US & Canada)"],[-7,"(GMT -7:00) Mountain Time (US & Canada)"],[-6,"(GMT -6:00) Central Time (US & Canada), Mexico City"],[-5,"(GMT -5:00) Eastern Time (US & Canada), Bogota, Lima"],[-4,"(GMT -4:00) Atlantic Time (Canada), Caracas, La Paz"],[-3.3,"(GMT -3:30) Newfoundland"],[-3,"(GMT -3:00) Brazil, Buenos Aires, Georgetown"],[-2,"(GMT -2:00) Mid-Atlantic"],[-1,"(GMT -1:00) Azores, Cape Verde Islands"],[0,"(GMT +0:00) Western Europe Time, London, Lisbon, Casablanca"],[1,"(GMT +1:00) Brussels, Copenhagen, Madrid, Paris"],[2,"(GMT +2:00) Kaliningrad, South Africa"],[3,"(GMT +3:00) Moscow, St. Petersburg, Baghdad, Riyadh"],[3.3,"(GMT +3:30) Tehran"],[4,"(GMT +4:00) Abu Dhabi, Muscat, Baku, Tbilisi"],[4.3,"(GMT +4:30) Kabul"],[5,"(GMT +5:00) Ekaterinburg, Islamabad, Karachi, Tashkent"],[5.3,"(GMT +5:30) Bombay, Calcutta, Madras, New Delhi"],[5.45,"(GMT +5:45) Kathmandu"],[6,"(GMT +6:00) Almaty, Dhaka, Colombo"],[7,"(GMT +7:00) Bangkok, Hanoi, Jakarta"],[8,"(GMT +8:00) Beijing, Perth, Singapore, Hong Kong"],[9,"(GMT +9:00) Tokyo, Seoul, Osaka, Sapporo, Yakutsk"],[9.3,"(GMT +9:30) Adelaide, Darwin"],[10,"(GMT +10:00) Eastern Australia, Guam, Vladivostok"],[11,"(GMT +11:00) Magadan, Solomon Islands, New Caledonia"],[12,"(GMT +12:00) Auckland, Wellington, Fiji, Kamchatka"]],ge=/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/,ce=/^(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)$/,Te=vt=>{if(!vt)return{date:"",time:""};const ne=vt.match(/d:(\d{1,2}\.\d{1,2}\.\d{2})/),fe=vt.match(/t:(\d{2}:\d{2}:\d{2})/);return{date:ne?ne[1]:"",time:fe?fe[1]:""}},he=vt=>{if(!/^\d{1,2}\.\d{1,2}\.\d{2}$/.test(vt))return!1;const[fe,Oe,Me]=vt.split(".").map(Number);if(Oe<1||Oe>12||fe<1||fe>31||Me<0||Me>99)return!1;const Pe=new Date().getFullYear()%100;if(Me>Pe+5)return!1;const Le=new Date(2e3+Me,Oe,0).getDate();return!(fe>Le)},le=vt=>/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/.test(vt),ht=(vt,ne)=>{const fe=Object.values(ne).some(Me=>Me!==null),Oe=vt.usehttps?vt.domain&&vt.domain.trim()!=="":!0;return!(fe||!Oe)},Zt=(vt,ne)=>{ee({message:vt,type:ne}),setTimeout(()=>{ee(null)},3e3)},se=vt=>{oe(vt),setTimeout(()=>{oe(null)},3e3)},Yt=(vt,ne)=>{let fe=null;if(!$.usehttps&&["domain","tls_key","tls_cert","tls_ca","telegram_token"].includes(vt))return null;if(!ne&&["ip_addr","gateway","mqtt_hst","sb_mask","offdate","offtime","domain"].includes(vt))return"Поле не может быть пустым";switch(vt){case"ip_addr":case"gateway":case"mqtt_hst":ge.test(ne)||(fe="Неверный IP-адрес");break;case"sb_mask":ce.test(ne)||(fe="Неверная маска подсети");break;case"offdate":he(ne)||(fe="Неверный формат даты (д.м.гг)");break;case"offtime":le(ne)||(fe="Неверный формат времени (чч:мм:сс)");break;case"domain":ne.length>50?fe="Домен не должен превышать 50 символов":ne.match(/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/)||(fe="Неверный формат домена");break;case"tls_key":ne&&ne.trim()!==""&&(ne.length>512?fe="Private Key не должен превышать 512 символов":(!ne.includes("BEGIN EC PRIVATE KEY")||!ne.includes("END EC PRIVATE KEY"))&&(fe="Неверный формат Private Key"));break;case"tls_cert":ne&&ne.trim()!==""&&(ne.length>1024?fe="Public Key не должен превышать 1024 символов":(!ne.includes("BEGIN CERTIFICATE")||!ne.includes("END CERTIFICATE"))&&(fe="Неверный формат Public Key"));break;case"tls_ca":ne&&ne.trim()!==""&&(ne.length>1024?fe="Secret Key не должен превышать 1024 символов":(!ne.includes("BEGIN CERTIFICATE")||!ne.includes("END CERTIFICATE"))&&(fe="Неверный формат Secret Key"));break}return fe},de=vt=>{vt.preventDefault();const ne=new FormData(mt.current);let fe={...$};for(const[Oe,Me]of ne.entries())["lon_de","lat_de","timezone","mqtt_prt"].includes(Oe)?fe[Oe]=Me===""||Me===null?0:Number(Me):fe[Oe]=Me;fe.usehttps||["tls_ca","tls_key","tls_cert","telegram_token","domain"].forEach(Oe=>delete fe[Oe]),fe.offdate&&fe.offtime?fe.offldt=`d:${fe.offdate} t:${fe.offtime}`:delete fe.offldt,["lon_de","lat_de","timezone","mqtt_prt"].forEach(Oe=>{(fe[Oe]===null||fe[Oe]==="")&&(fe[Oe]=0)}),fe.onsunrise=fe.onsunrise?1:0,fe.onsunset=fe.onsunset?1:0,fe.check_ip=fe.check_ip?1:0,fe.check_mqtt=fe.check_mqtt?1:0,fe.usehttps=fe.usehttps?1:0,fetch("/api/mysett/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(fe)}).then(Oe=>{if(!Oe.ok)throw new Error("Ошибка сети");return Oe.json()}).then(Oe=>{_("success"),ct(Oe),Zt("Данные успешно сохранены","success"),se("Данные успешно сохранены")}).catch(Oe=>{_("error"),ct(Oe),Zt("Ошибка при сохранении данных","error"),se("Ошибка при сохранении данных")})},be=(vt,ne)=>{let fe=null;vt==="offdate"?fe=he(ne)?null:"Неверный формат даты (д.м.гг)":vt==="offtime"?fe=le(ne)?null:"Неверный формат времени (чч:мм:сс)":fe=Yt(vt,ne),te(Me=>{const Pe={...Me,[vt]:fe},Le=["tls_key","tls_cert","tls_ca"],De=Object.keys(Pe).filter(Ne=>!Le.includes(Ne)&&Ne!=="telegram_token").some(Ne=>Pe[Ne]!==null);return pe(De||!$.usehttps&&Le.some(Ne=>$[Ne])),Pe});let Oe=ne;["lon_de","lat_de","timezone","mqtt_prt"].includes(vt)?Oe=ne===""||ne===null?0:Number(ne):["onsunrise","onsunset","check_ip","check_mqtt","usehttps"].includes(vt)&&(Oe=ne?1:0),k(Me=>({...Me,[vt]:Oe})),vt==="usehttps"&&(te({}),pe(!1))},ve=()=>fetch("/api/mysett/get").then(vt=>vt.json()).then(vt=>{if(vt.offldt){const{date:ne,time:fe}=Te(vt.offldt);vt.offdate=ne,vt.offtime=fe}return k(vt),vt}).catch(vt=>{console.error("Error fetching settings:",vt),Zt("Ошибка при загрузке настроек","error")});if(lt(()=>{ve().then(vt=>{vt!=null&&vt.tls_key&&$e(!0),vt!=null&&vt.tls_cert&&ye(!0),vt!=null&&vt.tls_ca&&Se(!0),vt!=null&&vt.telegram_token&&ke(!0),ie(!1)})},[]),lt(()=>{pe(!ht($,pt))},[$,pt]),Ie)return Et`<div>Loading...</div>`;if(!$)return"";const Ee=(vt="")=>Et`
     <button
       type="submit"
       class=${`relative inline-flex items-center justify-center px-8 py-3 overflow-hidden font-bold text-white transition-all duration-300 rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_25px_rgba(20,184,166,0.5)] hover:-translate-y-0.5 active:translate-y-0 ${re?"opacity-50 cursor-not-allowed bg-slate-400":"bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-400 hover:to-cyan-500"} ${vt}`}
@@ -3836,7 +3836,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
 
         <form ref=${mt} onSubmit=${de} class="w-full max-w-4xl flex flex-col gap-6 relative">
 
-          <div class="flex justify-end w-full">${ke()}</div>
+          <div class="flex justify-end w-full">${Ee()}</div>
 
           <!-- ============================================================
                User data
@@ -3855,7 +3855,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                 <${FieldRow} label=${vt.label} tip=${_e(vt.tipLabel||vt.label)} index=${ne}>
                   <${pageSetting}
                     value=${$[vt.key]}
-                    setfn=${he=>be(vt.key,he)}
+                    setfn=${fe=>be(vt.key,fe)}
                     type=${vt.type}
                     options=${vt.options}
                     class=${`w-full px-3 py-2 bg-white/50 border ${pt[vt.key]?"border-red-500 ring-2 ring-red-500/50":"border-white/50"} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
@@ -3915,7 +3915,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                     <${FieldRow} label=${vt.label} tip=${_e(vt.tipLabel||vt.label)} index=${ne}>
                       <${pageSetting}
                         value=${$[vt.key]}
-                        setfn=${he=>be(vt.key,he)}
+                        setfn=${fe=>be(vt.key,fe)}
                         type=${vt.type}
                         class=${`w-full px-3 py-2 bg-white/50 border ${pt[vt.key]?"border-red-500 ring-2 ring-red-500/50":"border-white/50"} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                         error=${pt[vt.key]}
@@ -3977,7 +3977,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                   <${FieldRow} label=${vt.label} tip=${_e(vt.tipLabel||vt.label)} index=${ne}>
                     <${pageSetting}
                       value=${$[vt.key]}
-                      setfn=${he=>be(vt.key,he)}
+                      setfn=${fe=>be(vt.key,fe)}
                       type=${vt.type}
                       class=${`w-full px-3 py-2 bg-white/50 border ${pt[vt.key]?"border-red-500 ring-2 ring-red-500/50":"border-white/50"} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                       error=${pt[vt.key]}
@@ -4039,7 +4039,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                             ${vt.key==="tls_key"&&$.tls_key?Et`<div class="w-full px-3 py-2 bg-white/40 border border-white/50 rounded-lg text-slate-600 font-medium shadow-inner">Данные введены, но информация скрыта!</div>`:vt.key==="tls_cert"&&$.tls_cert?Et`<div class="w-full px-3 py-2 bg-white/40 border border-white/50 rounded-lg text-slate-600 font-medium shadow-inner">Данные введены успешно!</div>`:Et`<textarea
                                     name=${vt.key}
                                     value=${$[vt.key]||""}
-                                    onInput=${he=>be(vt.key,he.target.value)}
+                                    onInput=${fe=>be(vt.key,fe.target.value)}
                                     class=${`w-full px-3 py-2 bg-white/50 border ${pt[vt.key]?"border-red-500 ring-2 ring-red-500/50":"border-white/50"} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                                     rows="1"
                                     placeholder="Enter ${vt.label}"
@@ -4049,7 +4049,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                               type="text"
                               name=${vt.key}
                               value=${$[vt.key]||""}
-                              onInput=${he=>be(vt.key,he.target.value)}
+                              onInput=${fe=>be(vt.key,fe.target.value)}
                               class=${`w-full px-3 py-2 bg-white/50 border ${pt[vt.key]?"border-red-500 ring-2 ring-red-500/50":"border-white/50"} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                               maxlength="30"
                               placeholder="Enter domain (e.g., zagotovka.ddns.net)"
@@ -4231,7 +4231,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             </div>
           `}
 
-          <div class="flex justify-end w-full mb-4">${ke()}</div>
+          <div class="flex justify-end w-full mb-4">${Ee()}</div>
 
         </form>
       </div>

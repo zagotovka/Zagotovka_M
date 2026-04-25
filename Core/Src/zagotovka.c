@@ -396,6 +396,8 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
         printf("Error sending LONG_PRESS to MQTT queue!\r\n");
       }
       /*********************************************************/
+      int usbnum = 1;
+      xQueueSend(usbQueueHandle, &usbnum, 0);
     } else {
       printf("Invalid id: %ld\n", onoffid);
     }
@@ -2526,16 +2528,19 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
       id = atoi(id_str);
       if (id >= 0 && id < NUMPIN) {
         if (strncmp(command, "switch", cmdlen) == 0) {
-          if (PinsConf[id].topin == 3) { // ONEWIRE
-            if (mg_http_get_var(&hm->query, "onoff", value_str,
+          if (PinsConf[id].topin == 3) { // SWITCH
+            /* Master Enable: если onoff == 0, отклоняем API-команду */
+            if (PinsConf[id].onoff == 0) {
+              mg_http_reply(c, 403, "Content-Type: text/plain\r\n",
+                            "Switch %d DISABLED (master off)\n", id);
+            } else if (mg_http_get_var(&hm->query, "state", value_str,
                                 sizeof(value_str)) > 0) {
               value = atoi(value_str);
               processPins(id, value);
-              PinsConf[id].onoff = value;
               mg_http_reply(c, 200, "Content-Type: text/plain\r\n",
                             "Switch %d set to %d\n", id, value);
             } else {
-              mg_http_reply(c, 400, NULL, "Missing onoff parameter\n");
+              mg_http_reply(c, 400, NULL, "Missing state parameter\n");
             }
           } else {
             mg_http_reply(c, 400, NULL,
@@ -3308,21 +3313,26 @@ void handle_sim800l_set(struct mg_connection *c, struct mg_http_message *hm) {
 void mqtt_message_handler(const char *topic, const char *payload) {
   char command[20];
   int id = -1;
-  //    printf("Received topic: %s, payload: %s\n", topic, payload);
+//  printf("[MQTT_HANDLER] topic='%s' payload='%s'\r\n", topic, payload);
+  const char *msg = NULL;
 
-  // Проверяем, начинается ли payload с токена из структуры
-  if (strncmp(payload, SetSettings.rxmqttop, strlen(SetSettings.rxmqttop)) !=
-          0 ||
-      payload[strlen(SetSettings.rxmqttop)] != '/') {
-    printf("Invalid token in payload: %s (expected: %s)\n", payload,
-           SetSettings.rxmqttop);
+  // Проверяем, начинается ли топик или полезная нагрузка с токена
+  if (strncmp(topic, SetSettings.rxmqttop, strlen(SetSettings.rxmqttop)) == 0 &&
+      topic[strlen(SetSettings.rxmqttop)] == '/') {
+    msg = topic;
+  } else if (strncmp(payload, SetSettings.rxmqttop, strlen(SetSettings.rxmqttop)) == 0 &&
+             payload[strlen(SetSettings.rxmqttop)] == '/') {
+    msg = payload;
+  } else {
+    printf("Invalid token in MQTT message (expected: %s). Topic: '%s', Payload: '%s'\n",
+           SetSettings.rxmqttop, topic, payload);
     return;
   }
 
-  // Пропускаем префикс в payload (токен + слэш)
-  const char *command_start = strchr(payload, '/');
+  // Пропускаем префикс (токен + слэш)
+  const char *command_start = strchr(msg, '/');
   if (!command_start) {
-    printf("Invalid payload format, no command found: %s\n", payload);
+    printf("Invalid message format, no command found: %s\n", msg);
     return;
   }
   command_start++; // Пропускаем слэш
@@ -3344,7 +3354,7 @@ void mqtt_message_handler(const char *topic, const char *payload) {
     return;
   }
 
-  //	printf("Parsed command: %s, id: %d\n", command, id);
+//  	printf("Parsed command: %s, id: %d\n", command, id);
   if (id < 0 || id >= NUMPIN) {
     printf("Invalid ID: %d\n", id);
     return;
@@ -3381,22 +3391,26 @@ void mqtt_message_handler(const char *topic, const char *payload) {
     }
   } else if (strcmp(command, "switch") == 0) {
     if (PinsConf[id].topin == 3) { // SWITCH
-      const char *onoff_part = strstr(command_start, "onoff=");
-      if (onoff_part) {
-        int value;
-        if (sscanf(onoff_part + 6, "%d", &value) == 1) {
-          if (value == 0 || value == 1) {
-            processPins(id, value);
-            PinsConf[id].onoff = value;
-            printf("Switch %d set to %d by mqtt!\n", id, value);
+      /* Master Enable: если onoff == 0, игнорируем MQTT-команду */
+      if (PinsConf[id].onoff == 0) {
+        printf("Switch %d DISABLED (master off), MQTT cmd ignored!\n", id);
+      } else {
+        const char *state_part = strstr(command_start, "state=");
+        if (state_part) {
+          int value;
+          if (sscanf(state_part + 6, "%d", &value) == 1) {
+            if (value == 0 || value == 1) {
+              processPins(id, value);
+              printf("Switch id=%d set to %d by mqtt!\n", id, value);
+            } else {
+              printf("Invalid state value for switch: %d\n", value);
+            }
           } else {
-            printf("Invalid onoff value for switch: %d\n", value);
+            printf("Invalid state format in payload\n");
           }
         } else {
-          printf("Invalid onoff format in payload\n");
+          printf("No state value found in payload\n");
         }
-      } else {
-        printf("No onoff value found in payload\n");
       }
     } else {
       printf("Error, switch with id = %d doesn't exist or has incorrect topin "
@@ -3479,6 +3493,7 @@ void action_handler(uint8_t button_id, const char *action_str,
           /* Если рубильник (Master Enable) отключен, игнорируем любые команды!
            */
           if (PinsConf[id].onoff == 0) {
+            printf("[action_handler] Switch %d DISABLED (master off), action %d blocked\n", id, action);
             break;
           }
 
@@ -3664,7 +3679,13 @@ void processPins(
     uint8_t i,
     uint8_t action) { // TODO Будет время откажись от этой логики и от
                       // process_actions() в пользу action_handler()!!!
+//    printf("[processPins] i=%d action=%d onoff=%d\r\n", i, action, PinsConf[i].onoff);
   //	printf("processPins called with i=%d, action=%d\r\n", i, action);
+  /* Master Enable: вторая линия защиты — если onoff выключен, блокируем */
+  if (PinsConf[i].onoff == 0) {
+    printf("[processPins] Switch %d DISABLED (master off), action %d blocked\r\n", i, action);
+    return;
+  }
   for (uint8_t a = 0; a < NUMPINLINKS; a++) {
     if (PinsLinks[a].idin == i) {
       data_pin_t data_pin = {0}; /* A3: локальная копия */

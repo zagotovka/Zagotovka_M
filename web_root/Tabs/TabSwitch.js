@@ -313,19 +313,19 @@ function TabSwitch({ }) {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">
-                  http://192.168.1.24:8000/api/Zerg/switch?id=27&onoff=1
+                <td class="border px-4 py-2 whitespace-nowrap">
+                  http://192.168.1.24:8000/api/Zerg/switch?id=27&state=1
                 </td>
                 <td class="border px-4 py-2">
-                  Данная команда ВКЛючит выключатель с id = 27. Где "Zerg" это Ваш 'Token'.
+                  Данная команда ВКЛючает все пины, указанные в поле “Device connection”, для строки с id = 27. Где “Zerg” — это ваш “Token”.
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">
-                  http://192.168.1.24:8000/api/Zerg/switch?id=27&onoff=0
+                <td class="border px-4 py-2 whitespace-nowrap">
+                  http://192.168.1.24:8000/api/Zerg/switch?id=27&state=0
                 </td>
                 <td class="border px-4 py-2">
-                  Данная команда ОТКлючит выключатель с id = 27. Где "Zerg" это Ваш 'Token'.
+                  Данная команда ОТКлючает все пины, указанные в поле “Device connection”, для строки с id = 27. Где “Zerg” — это ваш “Token”.
                 </td>
               </tr>
             </tbody>
@@ -347,15 +347,15 @@ function TabSwitch({ }) {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">Swarm/switch/id=27/onoff=1</td>
+                <td class="border px-4 py-2">Zagotovka/switch/id=27/state=1</td>
                 <td class="border px-4 py-2">
-                  Данная MQTT команда ВКЛючит выключатель с id = 27. Где "Swarm" это Ваш 'TX topic'.
+                  Данная MQTT команда ВКЛючает все пины, указанные в поле “Device connection”, для строки с id = 27. Где "Zagotovka" это Ваш 'RX topic'.
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">Swarm/switch/id=27/onoff=0</td>
+                <td class="border px-4 py-2">Zagotovka/switch/id=27/state=0</td>
                 <td class="border px-4 py-2">
-                  Данная MQTT команда ОТКлючит выключатель с id = 27. Где "Swarm" это Ваш 'TX topic'.
+                  Данная MQTT команда ОТКлючает все пины, указанные в поле “Device connection”, для строки с id = 27. Где "Zagotovka" это Ваш 'RX topic'.
                 </td>
               </tr>
             </tbody>
@@ -372,10 +372,10 @@ function TabSwitch({ }) {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">Swarm/switch/</td>
+                <td class="border px-4 py-2 whitespace-nowrap">Zagotovka/switch/</td>
                 <td class="border px-4 py-2">
-                  Данная страница отслеживает изменения выключателей и автоматически отправляет каждое изменение по MQTT на топик: Swarm/switch/.
-                  Где "Swarm" это Ваш 'TX topic'.
+                  Данная страница отслеживает изменения выключателей и автоматически отправляет каждое изменение по MQTT на топик: Zagotovka/switch/.
+                  Где "Zagotovka" это Ваш 'RX topic'.
                 </td>
               </tr>
             </tbody>
@@ -392,16 +392,16 @@ function TabSwitch({ }) {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">14#1*</td>
-                <td class="border px-4 py-2">Данная команда ВКЛючит выключатель с id = 14. Работает как по SMS, так и в тональном наборе (DTMF) во время звонка.</td>
+                <td class="border px-4 py-2">14#1*#</td>
+                <td class="border px-4 py-2">Данная команда ВКЛючает все пины, указанные в поле “Device connection” для строки с id = 14. Она работает как по SMS, так и с помощью тонального набора (DTMF) во время звонка.</td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">14#0*</td>
-                <td class="border px-4 py-2">Данная команда ОТКлючит выключатель с id = 14.</td>
+                <td class="border px-4 py-2">14#0*#</td>
+                <td class="border px-4 py-2">Данная команда ОТКлючает все пины, указанные в поле “Device connection” для строки с id = 14. Она работает как по SMS, так и с помощью тонального набора (DTMF) во время звонка.</td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">14#2*</td>
-                <td class="border px-4 py-2">Данная команда переключит (TOGGLE) состояние выключателя с id = 14 на противоположное.</td>
+                <td class="border px-4 py-2">14#2*#</td>
+                <td class="border px-4 py-2">Данная команда переключит (TOGGLE) все пины, указанные в поле “Device connection” для строки с id = 14 на противоположное.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">14#1*15#0*#</td>
@@ -409,14 +409,14 @@ function TabSwitch({ }) {
               </tr>
               <tr>
                 <td class="border px-4 py-2">Ответ</td>
-                <td class="border px-4 py-2">Если (On/Off) в какой-либо строке таблицы выключен, то команда будет проигнорирована для этой строки, а в ответном SMS придет подобное сообщение <b>14:DISABLED</b>.</td>
+                <td class="border px-4 py-2">Если главный рубильник (On/Off) в какой-либо строке таблицы выключен, то команда будет проигнорирована для этой строки, а в ответном SMS придет подобное сообщение <b>14:DISABLED</b>.</td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
     `,
-    en: html`
+        en: html`
       <div class="mytext space-y-6">
         <div>
           <pre class="mb-4">
@@ -437,19 +437,19 @@ function TabSwitch({ }) {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">
-                  http://192.168.1.24:8000/api/Zerg/switch?id=15&onoff=1
+                <td class="border px-4 py-2 whitespace-nowrap">
+                  http://192.168.1.24:8000/api/Zerg/switch?id=27&state=1
                 </td>
                 <td class="border px-4 py-2">
-                  Where "Zerg" is your 'Token'. This command will turn on the switch with id = 15.
+                  This command turns ON all pins specified in the "Device connection" field for the row with id = 27. Where "Zerg" is your "Token".
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">
-                  http://192.168.1.24:8000/api/Zerg/switch?id=15&onoff=0
+                <td class="border px-4 py-2 whitespace-nowrap">
+                  http://192.168.1.24:8000/api/Zerg/switch?id=27&state=0
                 </td>
                 <td class="border px-4 py-2">
-                  Where "Zerg" is your 'Token'. This command will turn off the switch with id = 15.
+                  This command turns OFF all pins specified in the "Device connection" field for the row with id = 27. Where "Zerg" is your "Token".
                 </td>
               </tr>
             </tbody>
@@ -471,15 +471,15 @@ function TabSwitch({ }) {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">Swarm/switch/id=27/onoff=1</td>
+                <td class="border px-4 py-2 whitespace-nowrap">Zagotovka/switch/id=27/state=1</td>
                 <td class="border px-4 py-2">
-                  Where "Swarm" is your 'RX topic'. This command will turn ON the switch with id = 27.
+                  This MQTT command turns ON all pins specified in the "Device connection" field for the row with id = 27. Where "Zagotovka" is your 'RX topic'.
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">Swarm/switch/id=27/onoff=0</td>
+                <td class="border px-4 py-2 whitespace-nowrap">Zagotovka/switch/id=27/state=0</td>
                 <td class="border px-4 py-2">
-                  Where "Swarm" is your 'RX topic'. This command will turn OFF the switch with id = 27.
+                  This MQTT command turns OFF all pins specified in the "Device connection" field for the row with id = 27. Where "Zagotovka" is your 'RX topic'.
                 </td>
               </tr>
             </tbody>
@@ -496,10 +496,10 @@ function TabSwitch({ }) {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">Swarm/switch/</td>
+                <td class="border px-4 py-2">Zagotovka/switch/</td>
                 <td class="border px-4 py-2">
-                  This page tracks changes in switches and automatically sends each change via MQTT to the topic: Swarm/switch/.
-                  Where "Swarm" is your 'RX topic'.
+                  This page tracks switch changes and automatically sends each change via MQTT to the topic: Zagotovka/switch/.
+                  Where "Zagotovka" is your 'RX topic'.
                 </td>
               </tr>
             </tbody>
@@ -516,24 +516,24 @@ function TabSwitch({ }) {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">14#1*</td>
-                <td class="border px-4 py-2">This command will turn ON the switch with id = 14. Works via SMS and DTMF during a voice call.</td>
+                <td class="border px-4 py-2">14#1*#</td>
+                <td class="border px-4 py-2">This command turns ON all pins specified in the "Device connection" field for the row with id = 14. Works via both SMS and DTMF tone dialing during a voice call.</td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">14#0*</td>
-                <td class="border px-4 py-2">This command will turn OFF the switch with id = 14.</td>
+                <td class="border px-4 py-2">14#0*#</td>
+                <td class="border px-4 py-2">This command turns OFF all pins specified in the "Device connection" field for the row with id = 14. Works via both SMS and DTMF tone dialing during a voice call.</td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">14#2*</td>
-                <td class="border px-4 py-2">This command will TOGGLE the state of the switch with id = 14.</td>
+                <td class="border px-4 py-2">14#2*#</td>
+                <td class="border px-4 py-2">This command will TOGGLE all pins specified in the "Device connection" field for the row with id = 14 to the opposite state.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">14#1*15#0*#</td>
-                <td class="border px-4 py-2">You can chain multiple commands! You must append the <b>#</b> symbol at the very end of the string to terminate the command sequence.</td>
+                <td class="border px-4 py-2">You can chain multiple commands into one! At the end of the string you must append the <b>#</b> symbol to close the command.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">Response</td>
-                <td class="border px-4 py-2">If (On/Off) in any row of the table, the command will be ignored for this row, and a similar message <b>14:DISABLED</b> in the SMS response.</td>
+                <td class="border px-4 py-2">If the master switch (On/Off) in any row of the table is turned off, the command will be ignored for that row, and a message like <b>14:DISABLED</b> will be sent in the SMS response.</td>
               </tr>
             </tbody>
           </table>

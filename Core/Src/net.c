@@ -735,6 +735,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
       //mg_tls_init(c, &opts);
     }
   } else if (ev == MG_EV_MQTT_OPEN) {// MQTT connect is successful
+	printf("[MQTT_OPEN] s_sub_topic='%s' rxmqttop='%s'\r\n",s_sub_topic, SetSettings.rxmqttop);
     struct mg_str subt = mg_str(s_sub_topic);
     struct mg_str pubt = mg_str(get_mqtt_topic()), data = mg_str("Hello from stm32!");
     MG_INFO(("%lu CONNECTED to %s", c->id, get_mqtt_url()));
@@ -744,6 +745,13 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     sub_opts.qos = s_qos;
     mg_mqtt_sub(c, &sub_opts);
     MG_INFO(("%lu SUBSCRIBED to %.*s", c->id, (int) subt.len, subt.buf));
+
+    /* Subscribe to wildcard topic as well to catch Swarm/switch/... */
+    char subt_wildcard[64];
+    snprintf(subt_wildcard, sizeof(subt_wildcard), "%s/#", s_sub_topic);
+    sub_opts.topic = mg_str(subt_wildcard);
+    mg_mqtt_sub(c, &sub_opts);
+    MG_INFO(("%lu SUBSCRIBED to %s", c->id, subt_wildcard));
     struct mg_mqtt_opts pub_opts;
     memset(&pub_opts, 0, sizeof(pub_opts));
     pub_opts.topic = pubt;
@@ -754,7 +762,22 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
   } else if (ev == MG_EV_MQTT_MSG) {
     // When we get echo response, print it
     struct mg_mqtt_message *mm = (struct mg_mqtt_message *) ev_data;
+//    printf("[MQTT_MSG] topic='%.*s' data='%.*s'\r\n",
+//               (int)mm->topic.len, mm->topic.buf,
+//               (int)mm->data.len, mm->data.buf);
    MG_INFO(("%lu RECEIVED %.*s <- %.*s", c->id, (int) mm->data.len, mm->data.buf, (int) mm->topic.len, mm->topic.buf));
+    /* Dispatch received payload to command handler */
+    {
+      char topic_buf[64];
+      char data_buf[256];
+      size_t tlen = mm->topic.len < sizeof(topic_buf) - 1 ? mm->topic.len : sizeof(topic_buf) - 1;
+      size_t dlen = mm->data.len  < sizeof(data_buf)  - 1 ? mm->data.len  : sizeof(data_buf)  - 1;
+      memcpy(topic_buf, mm->topic.buf, tlen);
+      topic_buf[tlen] = '\0';
+      memcpy(data_buf,  mm->data.buf,  dlen);
+      data_buf[dlen] = '\0';
+      mqtt_message_handler(topic_buf, data_buf);
+    }
   } else if (ev == MG_EV_CLOSE) {
     MG_INFO(("%lu CLOSED", c->id));
     s_conn = NULL;  // Mark that we're closed

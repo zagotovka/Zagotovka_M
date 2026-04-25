@@ -181,13 +181,6 @@ const osThreadAttr_t EncoderTask_attributes = {
   .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for mqttTask */
-osThreadId_t mqttTaskHandle;
-const osThreadAttr_t mqttTask_attributes = {
-  .name = "mqttTask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
 /* Definitions for ds18b20Task */
 osThreadId_t ds18b20TaskHandle;
 const osThreadAttr_t ds18b20Task_attributes = {
@@ -278,7 +271,6 @@ void StartOutputTask(void *argument);
 void StartCronTask(void *argument);
 void StartInputTask(void *argument);
 void StartEncoderTask(void *argument);
-void StartMqttTask(void *argument);
 void StartDs18b20Task(void *argument);
 void StartDht22Task(void *argument);
 void StartServiceTask(void *argument);
@@ -705,9 +697,6 @@ int main(void)
 
   /* creation of EncoderTask */
   EncoderTaskHandle = osThreadNew(StartEncoderTask, NULL, &EncoderTask_attributes);
-
-  /* creation of mqttTask */
-  mqttTaskHandle = osThreadNew(StartMqttTask, NULL, &mqttTask_attributes);
 
   /* creation of ds18b20Task */
   ds18b20TaskHandle = osThreadNew(StartDs18b20Task, NULL, &ds18b20Task_attributes);
@@ -1310,7 +1299,6 @@ void StartConfigTask(void *argument)
           xTaskNotifyGive(EncoderTaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ PWMTask
 
           xTaskNotifyGive(ServiceTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ TechnolTask
-          xTaskNotifyGive(mqttTaskHandle);     // И ВКЛЮЧАЕМ ЗАДАЧУ mqttTask
           xTaskNotifyGive(SecurityTaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ SecurityTask
 
           osDelay(100);
@@ -1328,7 +1316,6 @@ void StartConfigTask(void *argument)
           xTaskNotifyGive(OutputTaskHandle);    // ВКЛЮЧАЕМ ЗАДАЧУ OutputTask
           xTaskNotifyGive(InputTaskHandle);     // ВКЛЮЧАЕМ ЗАДАЧУ InputTask
           xTaskNotifyGive(EncoderTaskHandle);   // ВКЛЮЧАЕМ ЗАДАЧУ PWMTask
-          xTaskNotifyGive(mqttTaskHandle);      // ВКЛЮЧАЕМ ЗАДАЧУ mqttTask
 
           osDelay(100);
           xTaskNotifyGive(ServiceTaskHandle);  // ВКЛЮЧАЕМ ЗАДАЧУ TechnolTask
@@ -1623,13 +1610,27 @@ void StartWebServerTask(void *argument)
       publish_dht22_changes(s_conn);
     }
 
-    /* Диагностический heartbeat — каждые 30 секунд */
+    /* Диагностический heartbeat — только при изменении heap */
     {
-      static uint32_t hb_tick = 0;
-      if (HAL_GetTick() - hb_tick >= 30000) {
-        hb_tick = HAL_GetTick();
-        printf("[WebServerTask] alive, heap=%lu\r\n", (unsigned long)xPortGetFreeHeapSize());
-      }
+        static uint32_t hb_tick = 0;
+        static size_t prev_heap = 0;
+        static uint8_t first_run = 1;
+
+        if (HAL_GetTick() - hb_tick >= 5000) {
+            hb_tick = HAL_GetTick();
+            size_t cur_heap = xPortGetFreeHeapSize();
+
+            if (first_run) {
+                printf("[WebServerTask] heap=%lu\r\n", (unsigned long)cur_heap);
+                prev_heap = cur_heap;
+                first_run = 0;
+            } else if (cur_heap != prev_heap) {
+                printf("[WebServerTask] heap=%lu (delta=%+ld)\r\n",
+                       (unsigned long)cur_heap,
+                       (long)cur_heap - (long)prev_heap);
+                prev_heap = cur_heap;
+            }
+        }
     }
   }
   mg_mgr_free(mgr);
@@ -1866,6 +1867,16 @@ void StartInputTask(void *argument)
           printf("Error reading GPIO pin %d\r\n", i);
           continue;
         }
+        /* Master Enable: если onoff == 0, игнорируем физический выключатель.
+           Обновляем pinLevel/pinTimes, чтобы при включении onoff не произошёл
+           ложный фронт. */
+        if (PinsConf[i].onoff == 0) {
+          if (pinLevel[i] != pinStates[i]) {
+            pinLevel[i] = pinStates[i];
+            pinTimes[i] = millis;
+          }
+          continue;
+        }
         // Инвертируем логику для pull-up выключателей
         // Когда выключатель замкнут (нажат) - на входе 0
         if (pinStates[i] == 0 && (millis - pinTimes[i]) >= 200 &&
@@ -1873,7 +1884,6 @@ void StartInputTask(void *argument)
           pinLevel[i] = pinStates[i];
           pinTimes[i] = millis;
           processPins(i, 1); // Отправляем 1, т.к. выключатель включен
-          PinsConf[i].onoff = 1;
           // Локальная копия — без гонки данных на глобальной mqttMsg
           {
             MqttMessage_t msg = {0};
@@ -1891,7 +1901,6 @@ void StartInputTask(void *argument)
           pinLevel[i] = pinStates[i];
           pinTimes[i] = millis;
           processPins(i, 0); // Отправляем 0, т.к. выключатель выключен
-          PinsConf[i].onoff = 0;
           // Локальная копия — без гонки данных на глобальной mqttMsg
           {
             MqttMessage_t msg = {0};
@@ -1999,27 +2008,6 @@ void StartEncoderTask(void *argument)
 	       osDelay(1);
   }
   /* USER CODE END StartEncoderTask */
-}
-
-/* USER CODE BEGIN Header_StartMqttTask */
-/**
- * @brief Function implementing the mqttTask thread.
- * @param argument: Not used
- * @retval None
- */
-/* USER CODE END Header_StartMqttTask */
-void StartMqttTask(void *argument)
-{
-  /* USER CODE BEGIN StartMqttTask */
-  /* 
-   * MQTT logic has been moved to StartWebServerTask to prevent 
-   * race conditions and memory corruption inside Mongoose.
-   * This task is intentionally left empty but running so CubeMX doesn't complain.
-   */
-  for (;;) {
-    osDelay(1000);
-  }
-  /* USER CODE END StartMqttTask */
 }
 
 /* USER CODE BEGIN Header_StartDs18b20Task */
