@@ -4373,8 +4373,10 @@ void DHT22_Init(uint8_t index, uint8_t id) {
 
 uint8_t DHT22_Start(uint8_t index) {
   uint8_t Response = 0;
-  GPIO_TypeDef *port = get_gpio_port(dht22[index].pin);
-  uint16_t pin = get_gpio_pin_number(dht22[index].pin);
+  if (dht22[index].id >= NUMPIN) return 0; // Safety check
+  GPIO_TypeDef *port = PinsInfo[dht22[index].id].gpio_name;
+  uint16_t pin = PinsInfo[dht22[index].id].hal_pin;
+  if (!port) return 0; // Protection against uninitialized pins
   //    ENTER_CRITICAL();
   GPIO_InitTypeDef GPIO_InitStructPrivate = {0};
   GPIO_InitStructPrivate.Pin = pin;
@@ -4408,8 +4410,10 @@ uint8_t DHT22_Start(uint8_t index) {
 }
 
 uint8_t DHT22_Read(uint8_t index) {
-  GPIO_TypeDef *port = get_gpio_port(dht22[index].pin);
-  uint16_t pin = get_gpio_pin_number(dht22[index].pin);
+  if (dht22[index].id >= NUMPIN) return 0; // Safety check
+  GPIO_TypeDef *port = PinsInfo[dht22[index].id].gpio_name;
+  uint16_t pin = PinsInfo[dht22[index].id].hal_pin;
+  if (!port) return 0; // Protection against uninitialized pins
   uint8_t data = 0;
   //    ENTER_CRITICAL();
   for (uint8_t i = 0; i < 8; i++) {
@@ -4440,7 +4444,7 @@ void process_dht22(uint8_t indx) {
   ENTER_CRITICAL();
   if (DHT22_Start(indx)) {
     uint8_t data[5] = {0};
-    for (uint8_t i = 0; i < MAX_DHT22_P; i++) {
+    for (uint8_t i = 0; i < 5; i++) {
       data[i] = DHT22_Read(indx);
     }
     if (data[4] == ((data[0] + data[1] + data[2] + data[3]) & 0xFF)) {

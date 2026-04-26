@@ -1,42 +1,100 @@
 {
-  "lang": "en",
+  "lang": "ru",
   "pins": [
     {
-      "id": 22,
-      "pin": "PC3",
+      "id": 75,
+      "pin": "PF14",
       "typsensr": 1,
-      "numsens": 3,
+      "numsens": 4,
       "onoff": 1,
       "sensors": [
         {
-          "s_number": "28008E5F50500458",
-          "t": 22.125,
-          "valid": true,
-          "ut": 11,
-          "lt": 22,
-          "action_ut": "33",
-          "action_lt": "44",
-          "info": "Test-458"
+          "s_number": "2818BC75D0013C63",
+          "t": 0,
+          "valid": false,
+          "ut": 0,
+          "lt": 0,
+          "action_ut": "",
+          "action_lt": "",
+          "info": ""
         },
         {
-          "s_number": "2800291750500598",
-          "t": 22.25,
-          "valid": true,
-          "ut": 55,
-          "lt": 66,
-          "action_ut": "77",
-          "action_lt": "88",
-          "info": "Test-598"
+          "s_number": "28B63A75D0013C7B",
+          "t": 0,
+          "valid": false,
+          "ut": 0,
+          "lt": 0,
+          "action_ut": "",
+          "action_lt": "",
+          "info": ""
         },
         {
-          "s_number": "2800655550500655",
-          "t": 22.3125,
-          "valid": true,
-          "ut": 11,
-          "lt": 22,
-          "action_ut": "33",
-          "action_lt": "44",
-          "info": "Test-655"
+          "s_number": "2849F575D0013C60",
+          "t": 0,
+          "valid": false,
+          "ut": 0,
+          "lt": 0,
+          "action_ut": "",
+          "action_lt": "",
+          "info": ""
+        },
+        {
+          "s_number": "28F58575D0013C77",
+          "t": 0,
+          "valid": false,
+          "ut": 0,
+          "lt": 0,
+          "action_ut": "",
+          "action_lt": "",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "pin": "PC3",
+      "typsensr": 2,
+      "numsens": 1,
+      "onoff": 1,
+      "sensors": [
+        {
+          "s_number": "DHT22",
+          "t": 0,
+          "humidity": 0,
+          "valid": false,
+          "ut": 0,
+          "lt": 0,
+          "action_ut": "",
+          "action_lt": "",
+          "upphumid": 0,
+          "humlolim": 0,
+          "actuphum": "",
+          "actlowhum": "",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "pin": "PE1",
+      "typsensr": 2,
+      "numsens": 1,
+      "onoff": 1,
+      "sensors": [
+        {
+          "s_number": "DHT22",
+          "t": 0,
+          "humidity": 0,
+          "valid": false,
+          "ut": 0,
+          "lt": 0,
+          "action_ut": "",
+          "action_lt": "",
+          "upphumid": 0,
+          "humlolim": 0,
+          "actuphum": "",
+          "actlowhum": "",
+          "info": ""
         }
       ]
     }

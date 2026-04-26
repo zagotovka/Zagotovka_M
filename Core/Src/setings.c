@@ -1761,6 +1761,7 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
   static int ds18b20_count = 0;
   static int dht22_count = 0;
   static bool expecting_id = false; // Новый флаг для отслеживания ожидания id
+  static char temp_pin[16] = {0};
   //	printf("DEBUG: Processing - Key: %s, Value: %s, NestLevel: %d\n", key,
   // value, nestLevel); 	printf("DEBUG: Current state - temp_id: %d,
   // typensor: %d, pinindex: %d\n", temp_id, typensor, pinindex);
@@ -1774,6 +1775,7 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
     if (expecting_id && strcmp(key, "pins") == 0) {
       temp_id = atoi(value);
       expecting_id = false; // Сбрасываем флаг
+      temp_pin[0] = '\0'; // Сброс temp_pin для нового объекта
       //			printf("DEBUG: Found new ID through pins: %d\n",
       // temp_id);
       return;
@@ -1781,7 +1783,12 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
     // Существующая обработка id (оставляем для обратной совместимости)
     if (strcmp(key, "id") == 0) {
       temp_id = atoi(value);
+      temp_pin[0] = '\0'; // Сброс temp_pin для нового объекта
       //			printf("DEBUG: Found new ID: %d\n", temp_id);
+      return;
+    }
+    if (strcmp(key, "pin") == 0) {
+      strncpy(temp_pin, value, sizeof(temp_pin) - 1);
       return;
     }
     if (strcmp(key, "typsensr") == 0) {
@@ -1792,6 +1799,7 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
         pinindex = ds18b20_count;
         ds18b20[pinindex].id = temp_id;
         ds18b20[pinindex].typsensr = typensor;
+        if (temp_pin[0] != '\0') strncpy(ds18b20[pinindex].pin, temp_pin, sizeof(ds18b20[pinindex].pin) - 1);
         sensidx = 0;
         ds18b20_count++;
         //				printf("New DS18B20 pin found! ID: %d,
@@ -1801,6 +1809,7 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
         pinindex = dht22_count;
         dht22[pinindex].id = temp_id;
         dht22[pinindex].typsensr = typensor;
+        if (temp_pin[0] != '\0') strncpy(dht22[pinindex].pin, temp_pin, sizeof(dht22[pinindex].pin) - 1);
         sensidx = 1;
         dht22_count++;
         //				printf("New DHT22 pin found! ID: %d,
@@ -1808,17 +1817,6 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
       } else {
         printf("DEBUG: ERROR - typsensr found but no valid ID or maximum "
                "devices reached!\n");
-      }
-    } else if (strcmp(key, "pin") == 0) {
-      if (typensor == 1 && pinindex >= 0) {
-        strncpy(ds18b20[pinindex].pin, value,
-                sizeof(ds18b20[pinindex].pin) - 1);
-        //				printf("DS18B20 PIN saved: %s at index
-        //%d\n", value, pinindex);
-      } else if (typensor == 2 && pinindex >= 0) {
-        strncpy(dht22[pinindex].pin, value, sizeof(dht22[pinindex].pin) - 1);
-        //				printf("DHT22 PIN saved: %s at index
-        //%d\n", value, pinindex);
       }
     } else if (strcmp(key, "numsens") == 0) {
       if (typensor == 1 && pinindex >= 0) {
@@ -1846,7 +1844,6 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
     // PinIndex: %d, SensIdx: %d\n", temp_id, typensor, pinindex, sensidx);
     if (typensor == 1 && pinindex >= 0) {
       if (strcmp(key, "s_number") == 0) {
-        // Увеличиваем sensidx только после успешного сохранения адреса
         if (sensidx < ds18b20[pinindex].numsens) {
           for (int i = 0; i < 8; i++) {
             char hexByte[3] = {value[i * 2], value[i * 2 + 1], '\0'};
@@ -1857,7 +1854,6 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
           }
           //					printf("Address saved for pin %d
           // sensor %d\n", pinindex, sensidx);
-          sensidx++; // Увеличиваем только после успешного сохранения адреса
         }
       } else if (strcmp(key, "t") == 0) {
         if (sensidx < ds18b20[pinindex].numsens) {
@@ -1908,6 +1904,7 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
                   sizeof(ds18b20[pinindex].sensors[sensidx].info) - 1);
           //					printf("Info saved for pin %d
           // sensor %d\n", pinindex, sensidx);
+          sensidx++; // Увеличиваем sensidx после обработки всех свойств сенсора
         }
       }
     } else if (typensor == 2 && pinindex >= 0) {
@@ -2029,6 +2026,7 @@ void GetOneWireConfig() {
         if (valuePos > 0 && !isKey) {
           value[valuePos] = '\0';
           ProcessKeyValuePair(key, value, nestLevel);
+          valuePos = 0;
         }
         nestLevel--;
         if (nestLevel == 1) {

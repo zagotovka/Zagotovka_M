@@ -372,10 +372,10 @@ function TabSwitch({ }) {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2 whitespace-nowrap">Zagotovka/switch/</td>
+                <td class="border px-4 py-2 whitespace-nowrap">Swarm/switch/</td>
                 <td class="border px-4 py-2">
-                  Данная страница отслеживает изменения выключателей и автоматически отправляет каждое изменение по MQTT на топик: Zagotovka/switch/.
-                  Где "Zagotovka" это Ваш 'RX topic'.
+                  Данная страница отслеживает изменения выключателей и автоматически отправляет каждое изменение по MQTT на топик: Swarm/switch/.
+                  Где "Swarm" это Ваш 'TX topic'.
                 </td>
               </tr>
             </tbody>
@@ -496,10 +496,10 @@ function TabSwitch({ }) {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">Zagotovka/switch/</td>
+                <td class="border px-4 py-2">Swarm/switch/</td>
                 <td class="border px-4 py-2">
-                  This page tracks switch changes and automatically sends each change via MQTT to the topic: Zagotovka/switch/.
-                  Where "Zagotovka" is your 'RX topic'.
+                  This page tracks switch changes and automatically sends each change via MQTT to the topic: Swarm/switch/.
+                  Where "Swarm" is your 'TX topic'.
                 </td>
               </tr>
             </tbody>

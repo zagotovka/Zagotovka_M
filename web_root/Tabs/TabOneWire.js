@@ -42,7 +42,6 @@ function initGlobalTooltip() {
     clearTimeout(hideTimer);
     tip.innerHTML = el.dataset.tip;
     tip.style.display = 'block';
-
     tip.style.opacity = '0';
     tip.style.left = '0px';
     tip.style.top  = '0px';
@@ -85,13 +84,24 @@ function initGlobalTooltip() {
 // ---------------------------------------------------------------------------
 
 const TabOneWire = () => {
-  const [varonewire, setOneWire] = useState([]);
-  const [error, setError] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [varonewire, setOneWire]       = useState([]);
+  const [error, setError]              = useState(null);
+  const [isModalOpen, setIsModalOpen]  = useState(false);
   const [selectedSensor, setSelectedSensor] = useState(null);
   const [editingOneWire, setEditingOneWire] = useState(null);
-  const [language, setLanguage] = useState('ru');
-  const [modalType, setModalType] = useState(null);
+  const [language, setLanguage]        = useState('ru');
+  const [modalType, setModalType]      = useState(null);
+
+  // ── Collapsible state ───────────────────────────────────────────────────
+  const [expandedPins, setExpandedPins] = useState({});
+
+  const togglePin = (id) =>
+    setExpandedPins(prev => ({ ...prev, [id]: !prev[id] }));
+
+  // Вспомогательная очистка строки от мусорных байт (для S/N)
+  const clean = (s) =>
+    typeof s === 'string' ? s.replace(/[^\x20-\x7E\u0400-\u04FF]/g, '') : s;
+  // ───────────────────────────────────────────────────────────────────────
 
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => { initGlobalTooltip(); }, []);
@@ -231,9 +241,7 @@ const TabOneWire = () => {
     return lines.join('<br>');
   };
 
-  // -------------------------------------------------------------------------
-  // Th — заголовок таблицы с tooltip через data-tip (портал в body)
-  // -------------------------------------------------------------------------
+  // ── Th — заголовок таблицы с tooltip (портал в body) ──────────────────
   const Th = (props) => html`
     <th
       class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
@@ -243,46 +251,67 @@ const TabOneWire = () => {
     </th>
   `;
 
+  // ── ArrayOneWire — строка устройства + сворачиваемая группа сенсоров ──
+  //
+  // Каждое устройство обёрнуто в отдельный <tbody>.
+  // Это единственный валидный способ вставлять пары <tr>…</tr> в таблицу
+  // без нарушения структуры DOM (HTML5 допускает несколько <tbody>).
+  //
+  // stopPropagation на <td> с MyPolzunok и Edit — чтобы клик по контролам
+  // не сворачивал/разворачивал строку.
+  // ───────────────────────────────────────────────────────────────────────
   const ArrayOneWire = ({ device, index }) => {
-    const pinValue = device.pins || device.pin;
-    const sensorType = device.typsensor || device.typsensr || 0;
-    const numDevices = device.numdevices || device.numsens || 0;
+    const isExpanded  = !!expandedPins[device.id];
+    const pinValue    = device.pins || device.pin;
+    const sensorType  = device.typsensor || device.typsensr || 0;
+    const numDevices  = device.numdevices || device.numsens || 0;
+    const hasChildren = sensorType !== 0 && numDevices > 0;
 
     return html`
-      <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
-        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${device.id}</td>
-        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${pinValue}</td>
-        <td class="px-6 py-4 text-sm text-slate-700 font-medium">${['None', 'DS18B20', 'DHT22'][sensorType]}</td>
-        <td class="px-6 py-4 text-sm text-slate-700 font-medium">${numDevices}</td>
-        <td class="px-6 py-4">
-          <${MyPolzunok}
-            value=${device.onoff || 0}
-            onChange=${(value) => handleOWOnOffChange({ ...device, onoff: value })}
-          />
-        </td>
-        <td class="px-6 py-4">
-          <button
-            class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap"
-            onclick=${() => openOneWireModal(device)}
-          >
-            Edit
-          </button>
-        </td>
-      </tr>
-      ${sensorType !== 0 && numDevices > 0
-        ? html`
-            <tr class="bg-white/40">
-              <td colspan="6" class="p-4 md:p-6">
-                <div class="w-full">
-                  <${SensorTable} d=${device} />
-                </div>
-              </td>
-            </tr>
-          `
-        : ''}
+      <tbody key=${'db-' + device.id}>
+        <tr
+          class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors ${hasChildren ? 'cursor-pointer' : ''}"
+          onclick=${() => hasChildren && togglePin(device.id)}
+        >
+          <td class="px-6 py-4 text-sm text-slate-800 font-medium">${device.id}</td>
+          <td class="px-6 py-4 text-sm text-slate-800 font-medium">${pinValue}</td>
+          <td class="px-6 py-4 text-sm text-slate-700 font-medium">${['None', 'DS18B20', 'DHT22'][sensorType]}</td>
+          <td class="px-6 py-4 text-sm text-slate-700 font-medium">${numDevices}</td>
+          <td class="px-6 py-4" onclick=${(e) => e.stopPropagation()}>
+            <${MyPolzunok}
+              value=${device.onoff || 0}
+              onChange=${(value) => handleOWOnOffChange({ ...device, onoff: value })}
+            />
+          </td>
+          <td class="px-6 py-4" onclick=${(e) => e.stopPropagation()}>
+            <button
+              class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap"
+              onclick=${() => openOneWireModal(device)}
+            >
+              Edit
+            </button>
+            ${hasChildren && html`
+              <span class="ml-3 text-slate-400 text-xs select-none pointer-events-none">
+                ${isExpanded ? '▲' : '▼'}
+              </span>
+            `}
+          </td>
+        </tr>
+
+        ${isExpanded && hasChildren ? html`
+          <tr onclick=${(e) => e.stopPropagation()}>
+            <td colspan="6" class="px-4 py-3 bg-gradient-to-r from-cyan-50/80 via-slate-50/60 to-blue-50/80 border-t border-cyan-100/60">
+              <div class="w-full">
+                <${SensorTable} d=${device} />
+              </div>
+            </td>
+          </tr>
+        ` : ''}
+      </tbody>
     `;
   };
 
+  // ── SensorTable — оригинальное содержимое раскрытой группы (без изменений)
   const SensorTable = ({ d }) => {
     const sensorType = d.typsensor || d.typsensr || 0;
     const numDevices = d.numdevices || d.numsens || 0;
@@ -297,87 +326,139 @@ const TabOneWire = () => {
 
     let sensors = d.sensors || [];
 
+    // Цвета строк чередуются: тёплый cyan и голубой slate
+    const rowBg = [
+      'bg-cyan-50/60 border-cyan-200/50',
+      'bg-slate-100/70 border-slate-200/50',
+    ];
+
     const renderSensor = (sensorData, idx) => {
       const isDHT22 = sensorType === 2;
+      const sn      = clean(sensorData.s_number) || '';
+
+      const copySN = (e) => {
+        e.stopPropagation();
+        if (!sn) return;
+        const btn = e.currentTarget;
+        navigator.clipboard.writeText(sn).then(() => {
+          btn.textContent = '✅ copied!';
+          btn.style.background = '#059669';
+          setTimeout(() => {
+            btn.textContent = '📋 copy';
+            btn.style.background = '';
+          }, 1500);
+        }).catch(() => {
+          btn.textContent = '❌ error';
+          setTimeout(() => { btn.textContent = '📋 copy'; }, 1500);
+        });
+      };
+
       return html`
-        <div class="bg-white/70 backdrop-blur-md p-6 rounded-2xl shadow-lg border border-white/60 mb-4 transition-all hover:shadow-xl">
-          <div class="font-extrabold text-xl text-slate-700 mb-4 flex justify-between items-center border-b border-slate-200/60 pb-3">
-            <span class="tracking-tight drop-shadow-sm">
-              ${isDHT22 ? `DHT22 Sensor` : `DS18B20 Sensor (S/N: ${sensorData.s_number})`}
+        <div class="w-full flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3
+                    rounded-xl border ${rowBg[idx % 2]}
+                    backdrop-blur-sm shadow-sm hover:shadow-md transition-all">
+
+          <!-- S/N полностью + кнопка копирования -->
+          ${isDHT22
+            ? html`<span class="font-mono text-base font-semibold text-teal-700 shrink-0">DHT22</span>`
+            : html`
+                <span class="flex items-center gap-2 shrink-0">
+                  <span class="font-mono text-base font-semibold text-slate-500 select-none">SN</span>
+                  <span class="font-mono text-base text-slate-700 select-all" title="Serial number">
+                    ${sn}
+                  </span>
+                  <button
+                    style="transition: background 0.08s, transform 0.08s, box-shadow 0.08s;"
+                    class="text-xs text-white font-bold px-3 py-1 rounded-lg
+                           bg-emerald-500 hover:bg-emerald-600
+                           shadow-md hover:shadow-lg
+                           active:scale-95 active:shadow-inner active:bg-emerald-700
+                           leading-none shrink-0"
+                    onmousedown=${(e) => {
+                      e.currentTarget.style.transform = 'scale(0.93)';
+                      e.currentTarget.style.boxShadow = 'inset 0 2px 6px rgba(0,0,0,0.25)';
+                    }}
+                    onmouseup=${(e) => {
+                      e.currentTarget.style.transform = '';
+                      e.currentTarget.style.boxShadow = '';
+                    }}
+                    onmouseleave=${(e) => {
+                      e.currentTarget.style.transform = '';
+                      e.currentTarget.style.boxShadow = '';
+                    }}
+                    onclick=${copySN}
+                    title="Copy S/N to clipboard"
+                  >📋 copy</button>
+                </span>
+              `}
+
+          <span class="text-slate-300 select-none text-base">|</span>
+
+          <!-- Температура -->
+          <span class="font-bold text-cyan-700 text-base shrink-0">
+            🌡 ${sensorData.t ?? '—'}°C
+          </span>
+
+          ${isDHT22 && 'humidity' in sensorData ? html`
+            <span class="font-bold text-teal-600 text-base shrink-0">
+              💧 ${sensorData.humidity}%
             </span>
-            <a
-              href="#"
-              class="text-blue-600 hover:text-blue-800 font-semibold text-sm transition-colors uppercase tracking-wider bg-white/50 hover:bg-white/80 px-4 py-1.5 rounded-lg shadow-sm"
-              onclick=${(e) => {
-                e.preventDefault();
-                setSelectedSensor({
-                  ...sensorData,
-                  oneWireId: d.id,
-                  sensorType: sensorType,
-                  pins: d.pins || d.pin
-                });
-                setIsModalOpen(true);
-              }}
-            >
-              Edit
-            </a>
-          </div>
-          <table class="w-full text-sm text-slate-700">
-            <tbody>
-              <tr class="hover:bg-slate-100/50 transition-colors rounded-lg">
-                <td class="font-semibold py-2 px-2 text-slate-800">Current Temperature:</td>
-                <td class="font-mono text-cyan-700 font-bold py-2 px-2 text-right">${sensorData.t}°C</td>
-              </tr>
-              ${isDHT22 && 'humidity' in sensorData
-                ? html`
-                    <tr class="hover:bg-slate-100/50 transition-colors rounded-lg">
-                      <td class="font-semibold py-2 px-2 text-slate-800">Current Humidity:</td>
-                      <td class="font-mono text-teal-700 font-bold py-2 px-2 text-right">${sensorData.humidity}%</td>
-                    </tr>
-                  `
-                : ''}
-              <tr class="hover:bg-slate-100/50 transition-colors rounded-lg border-t border-slate-100">
-                <td class="font-medium py-2 px-2 text-slate-600">Upper Temp. Limit = ${sensorData.ut}°C</td>
-                <td class="py-2 px-2 text-right">
-                  <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${sensorData.action_ut}</span>
-                </td>
-              </tr>
-              <tr class="hover:bg-slate-100/50 transition-colors rounded-lg">
-                <td class="font-medium py-2 px-2 text-slate-600">Lower Temp. Limit = ${sensorData.lt}°C</td>
-                <td class="py-2 px-2 text-right">
-                  <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${sensorData.action_lt}</span>
-                </td>
-              </tr>
-              ${isDHT22 && 'upphumid' in sensorData
-                ? html`
-                    <tr class="hover:bg-slate-100/50 transition-colors rounded-lg border-t border-slate-100">
-                      <td class="font-medium py-2 px-2 text-slate-600">Upper Humidity Limit = ${sensorData.upphumid}%</td>
-                      <td class="py-2 px-2 text-right">
-                        <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${sensorData.actuphum}</span>
-                      </td>
-                    </tr>
-                    <tr class="hover:bg-slate-100/50 transition-colors rounded-lg">
-                      <td class="font-medium py-2 px-2 text-slate-600">Lower Humidity Limit = ${sensorData.humlolim}%</td>
-                      <td class="py-2 px-2 text-right">
-                        <span class="px-2 py-1 bg-slate-200/70 rounded-md text-xs font-bold text-slate-600">Action: ${sensorData.actlowhum}</span>
-                      </td>
-                    </tr>
-                  `
-                : ''}
-              <tr class="hover:bg-slate-100/50 transition-colors rounded-lg border-t border-slate-200/60 mt-2">
-                <td class="font-semibold py-3 px-2 text-slate-800">Info:</td>
-                <td class="text-slate-600 py-3 px-2 text-right italic">${sensorData.info}</td>
-              </tr>
-            </tbody>
-          </table>
+          ` : ''}
+
+          <span class="text-slate-300 select-none text-base">|</span>
+
+          <!-- Лимиты температуры -->
+          <span
+            class="px-2.5 py-1 bg-orange-100 text-orange-700 rounded-md text-sm font-semibold shrink-0"
+            title="Upper temperature limit"
+          >↑${sensorData.ut}°C → ${sensorData.action_ut}</span>
+          <span
+            class="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-md text-sm font-semibold shrink-0"
+            title="Lower temperature limit"
+          >↓${sensorData.lt}°C → ${sensorData.action_lt}</span>
+
+          ${isDHT22 && 'upphumid' in sensorData ? html`
+            <span class="text-slate-300 select-none text-base">|</span>
+            <span
+              class="px-2.5 py-1 bg-orange-50 text-orange-600 rounded-md text-sm font-semibold shrink-0"
+              title="Upper humidity limit"
+            >💧↑${sensorData.upphumid}% → ${sensorData.actuphum}</span>
+            <span
+              class="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-md text-sm font-semibold shrink-0"
+              title="Lower humidity limit"
+            >💧↓${sensorData.humlolim}% → ${sensorData.actlowhum}</span>
+          ` : ''}
+
+          ${sensorData.info ? html`
+            <span class="text-slate-300 select-none text-base">|</span>
+            <span class="text-sm text-slate-500 italic" title=${sensorData.info}>
+              ${sensorData.info}
+            </span>
+          ` : ''}
+
+          <!-- Edit — прижат вправо -->
+          <a
+            href="#"
+            class="ml-auto text-blue-600 hover:text-blue-800 font-semibold text-sm uppercase tracking-wide bg-white/70 hover:bg-white/95 px-3 py-1 rounded-lg shadow-sm transition-colors shrink-0"
+            onclick=${(e) => {
+              e.preventDefault();
+              setSelectedSensor({
+                ...sensorData,
+                oneWireId: d.id,
+                sensorType: sensorType,
+                pins: d.pins || d.pin
+              });
+              setIsModalOpen(true);
+            }}
+          >Edit</a>
         </div>
       `;
     };
 
     return sensors.length > 0 && Object.keys(sensors[0]).length > 0
-      ? html`<div class="space-y-4 w-full">${sensors.map((sensor, idx) => renderSensor(sensor, idx))}</div>`
+      ? html`<div class="flex flex-col gap-2 w-full">${sensors.map((sensor, idx) => renderSensor(sensor, idx))}</div>`
       : html`
-          <div class="px-4 py-4 text-slate-500 font-medium bg-white/50 backdrop-blur-sm rounded-xl border border-white/40 text-center">
+          <div class="px-4 py-4 text-slate-500 font-medium bg-white/50 backdrop-blur-sm rounded-xl border border-white/40 text-center w-full">
             No sensor data available for this OneWire pin.
           </div>
         `;
@@ -400,27 +481,27 @@ const TabOneWire = () => {
                 <table class="w-full text-left border-collapse whitespace-nowrap">
                   <thead>
                     <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                      <${Th} title="ID" tooltipIndex=${1} />
-                      <${Th} title="Pin" tooltipIndex=${2} />
-                      <${Th} title="Selected sensor" tooltipIndex=${3} />
-                      <${Th} title="Count of sensors" tooltipIndex=${4} />
-                      <${Th} title="On/Off" tooltipIndex=${5} />
-                      <${Th} title="Actions" tooltipIndex=${6} />
+                      <${Th} title="ID"                tooltipIndex=${1} />
+                      <${Th} title="Pin"               tooltipIndex=${2} />
+                      <${Th} title="Selected sensor"   tooltipIndex=${3} />
+                      <${Th} title="Count of sensors"  tooltipIndex=${4} />
+                      <${Th} title="On/Off"            tooltipIndex=${5} />
+                      <${Th} title="Actions"           tooltipIndex=${6} />
                     </tr>
                   </thead>
-                  <tbody id="tab1" class="divide-y divide-white/40">
-                    ${varonewire.length > 0
-                      ? varonewire.map(
-                          (device, index) => html`<${ArrayOneWire} device=${device} index=${index} key=${device.id} />`
-                        )
-                      : html`
+                  ${varonewire.length > 0
+                    ? varonewire.map(
+                        (device, index) => html`<${ArrayOneWire} device=${device} index=${index} key=${device.id} />`
+                      )
+                    : html`
+                        <tbody>
                           <tr>
                             <td colspan="6" class="px-4 py-2">
                               ${error ? `Error fetching sensor data: ${error}` : 'No available pins configured as OneWire!'}
                             </td>
                           </tr>
-                        `}
-                  </tbody>
+                        </tbody>
+                      `}
                 </table>
               </div>
             </div>
