@@ -1300,6 +1300,16 @@ void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm) {
   }
 }
 
+static int cjson_get_int(cJSON *json, const char *name, int default_val) {
+  cJSON *item = cJSON_GetObjectItem(json, name);
+  if (cJSON_IsNumber(item)) {
+    return item->valueint;
+  } else if (cJSON_IsString(item)) {
+    return atoi(item->valuestring);
+  }
+  return default_val;
+}
+
 void parse_numline_json(char *json_string, struct dbSettings *SetSettings) {
   if (json_string == NULL || SetSettings == NULL) {
     fprintf(stderr, "Invalid input parameters\n");
@@ -1315,15 +1325,10 @@ void parse_numline_json(char *json_string, struct dbSettings *SetSettings) {
     }
     return;
   }
-  cJSON *numline_item = cJSON_GetObjectItem(root, "numline");
-  if (cJSON_IsNumber(numline_item)) {
-    if (numline_item->valueint > 0 && numline_item->valueint <= MAXSIZE) {
-      SetSettings->numline = (uint8_t)numline_item->valueint;
-    } else {
-      //            fprintf(stderr, "Invalid 'numline' value: %d\n",
-      //            numline_item->valueint);
-    }
-  } else {
+  int numline = cjson_get_int(root, "numline", -1);
+  if (numline > 0 && numline <= MAXSIZE) {
+    SetSettings->numline = (uint8_t)numline;
+  } else if (numline == -1) {
     fprintf(stderr, "Missing or invalid 'numline' in JSON\n");
   }
   cJSON_Delete(root);
@@ -3004,19 +3009,19 @@ bool parse_sensor_json(const char *json_string) {
     // Обновление параметров DHT22
     cJSON *ut = cJSON_GetObjectItemCaseSensitive(json, "ut");
     if (cJSON_IsNumber(ut))
-      t_dht22->upt = ut->valuedouble;
+      t_dht22->upt = (float)ut->valuedouble;
 
     cJSON *lt = cJSON_GetObjectItemCaseSensitive(json, "lt");
     if (cJSON_IsNumber(lt))
-      t_dht22->lowt = lt->valuedouble;
+      t_dht22->lowt = (float)lt->valuedouble;
 
     cJSON *uh = cJSON_GetObjectItemCaseSensitive(json, "upphumid");
     if (cJSON_IsNumber(uh))
-      t_dht22->uph = uh->valuedouble;
+      t_dht22->uph = (float)uh->valuedouble;
 
     cJSON *lh = cJSON_GetObjectItemCaseSensitive(json, "humlolim");
     if (cJSON_IsNumber(lh))
-      t_dht22->lowh = lh->valuedouble;
+      t_dht22->lowh = (float)lh->valuedouble;
 
     cJSON *acut = cJSON_GetObjectItemCaseSensitive(json, "action_ut");
     if (!acut)
@@ -3078,11 +3083,11 @@ bool parse_sensor_json(const char *json_string) {
     // Обновление параметров DS18B20
     cJSON *ut = cJSON_GetObjectItemCaseSensitive(json, "ut");
     if (cJSON_IsNumber(ut))
-      t_ds18b20->sensors[sensor_index].upt = ut->valuedouble;
+      t_ds18b20->sensors[sensor_index].upt = (float)ut->valuedouble;
 
     cJSON *lt = cJSON_GetObjectItemCaseSensitive(json, "lt");
     if (cJSON_IsNumber(lt))
-      t_ds18b20->sensors[sensor_index].lowt = lt->valuedouble;
+      t_ds18b20->sensors[sensor_index].lowt = (float)lt->valuedouble;
 
     cJSON *acut = cJSON_GetObjectItemCaseSensitive(json, "action_ut");
     if (!acut)
@@ -3588,16 +3593,20 @@ void action_handler(uint8_t button_id, const char *action_str,
 }
 /****************************** Sunrise/Sunset
  * *******************************/
-void safe_split(const char *input, char *first_part, char *second_part,
-                char delimiter) {
+void safe_split(const char *input, char *first_part, size_t first_max,
+                char *second_part, size_t second_max, char delimiter) {
   const char *delim_pos = strchr(input, delimiter);
   if (delim_pos) {
-    size_t first_part_len = delim_pos - input;
+    size_t first_part_len = (size_t)(delim_pos - input);
+    if (first_part_len >= first_max)
+      first_part_len = first_max - 1;
     strncpy(first_part, input, first_part_len);
     first_part[first_part_len] = '\0';
-    strcpy(second_part, delim_pos + 1);
+    strncpy(second_part, delim_pos + 1, second_max - 1);
+    second_part[second_max - 1] = '\0';
   } else {
-    strcpy(first_part, input);
+    strncpy(first_part, input, first_max - 1);
+    first_part[first_max - 1] = '\0';
     second_part[0] = '\0';
   }
 }
@@ -3634,7 +3643,7 @@ void Check_SunriseSunset_Actions() {
   lastchk = curtime;
   if (SetSettings.onsunrise && !srise_ok) {
     char offstr[20], acts[100];
-    safe_split(SetSettings.srise_pins, offstr, acts, '/');
+    safe_split(SetSettings.srise_pins, offstr, sizeof(offstr), acts, sizeof(acts), '/');
     if (offstr[0] != '\0' && acts[0] != '\0') {
       int offset = atoi(offstr);
       time_t tgttime = srisetime + offset;
@@ -3655,7 +3664,7 @@ void Check_SunriseSunset_Actions() {
   }
   if (SetSettings.onsunset && !sset_ok) {
     char offstr[20], acts[100];
-    safe_split(SetSettings.sset_pins, offstr, acts, '/');
+    safe_split(SetSettings.sset_pins, offstr, sizeof(offstr), acts, sizeof(acts), '/');
     if (offstr[0] != '\0' && acts[0] != '\0') {
       int offset = atoi(offstr);
       time_t tgttime = ssettime + offset;
@@ -3790,28 +3799,15 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
     printf("Error parsing JSON\n");
     return;
   }
-  cJSON *id_item = cJSON_GetObjectItem(root, "id");
-  if (!cJSON_IsNumber(id_item)) {
-    printf("Error: 'id' is not a number or not found\n");
-    cJSON_Delete(root);
-    if (my_DgnTaskHandle)
-      xTaskNotifyGive(my_DgnTaskHandle);
-    return;
-  }
-  int id = id_item->valueint;
+  int id = cjson_get_int(root, "id", -1);
   if (id < 0 || id >= count) {
-    printf("button ID out of bounds %d\r\n", id);
+    printf("button ID out of bounds or not found %d\r\n", id);
     cJSON_Delete(root);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
-  cJSON *ptype_item = cJSON_GetObjectItem(root, "ptype");
-  if (cJSON_IsString(ptype_item)) {
-    PinsConf[id].ptype = (uint8_t)atoi(ptype_item->valuestring);
-  } else if (cJSON_IsNumber(ptype_item)) {
-    PinsConf[id].ptype = (uint8_t)ptype_item->valueint;
-  }
+  PinsConf[id].ptype = (uint8_t)cjson_get_int(root, "ptype", PinsConf[id].ptype);
   cJSON *action_item = cJSON_GetObjectItem(root, "action");
   if (cJSON_IsString(action_item)) {
     strncpy(PinsConf[id].sclick, action_item->valuestring,
@@ -3830,10 +3826,7 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
             sizeof(PinsConf[id].info) - 1);
     PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
   }
-  cJSON *onoff_item = cJSON_GetObjectItem(root, "onoff");
-  if (cJSON_IsNumber(onoff_item)) {
-    PinsConf[id].onoff = (uint8_t)onoff_item->valueint;
-  }
+  PinsConf[id].onoff = (uint8_t)cjson_get_int(root, "onoff", PinsConf[id].onoff);
   int usbnum = 1;
   xQueueSend(usbQueueHandle, &usbnum, 0);
   //	printf("RESULT - PinsConf[id].send_sms = %s PinsConf[id].info = %s
@@ -4328,29 +4321,6 @@ GPIO_TypeDef *get_gpio_port(const char *pin_str) {
   }
 }
 
-const char *get_gpio_pin_name(uint16_t pin, GPIO_TypeDef *port, uint8_t index) {
-  static char pin_name[16];
-  uint8_t pin_number = 0;
-  uint16_t temp = pin;
-  while (temp > 1) {
-    temp = temp >> 1;
-    pin_number++;
-  }
-  snprintf(pin_name, sizeof(pin_name), "GPIO_PIN_%d", pin_number);
-
-  printf("Initializing DHT22 sensor-%d on port-%s, pin-%s\n", index,
-         (port == GPIOA)   ? "GPIOA"
-         : (port == GPIOB) ? "GPIOB"
-         : (port == GPIOC) ? "GPIOC"
-         : (port == GPIOD) ? "GPIOD"
-         : (port == GPIOE) ? "GPIOE"
-         : (port == GPIOF) ? "GPIOF"
-                           : "Unknown",
-         pin_name);
-
-  return pin_name;
-}
-
 void DHT22_Init(uint8_t index, uint8_t id) {
   dht22[index].id = id;
   strncpy(dht22[index].pin, PinsInfo[id].pins, sizeof(dht22[index].pin) - 1);
@@ -4448,7 +4418,7 @@ void process_dht22(uint8_t indx) {
       data[i] = DHT22_Read(indx);
     }
     if (data[4] == ((data[0] + data[1] + data[2] + data[3]) & 0xFF)) {
-      dht22[indx].humid = ((data[0] << 8) | data[1]) / 10.0;
+      dht22[indx].humid = ((data[0] << 8) | data[1]) / 10.0f;
 
       int16_t temp = (data[2] & 0x7F) << 8 | data[3];
       if (data[2] & 0x80) {
@@ -4649,41 +4619,35 @@ void calculateMoonPhase(DateTime current, DateTime *next) {
 }
 
 void checkPortClockStatus(GPIO_TypeDef *GPIO_Port) {
+  /* Универсальная функция включения тактирования GPIO.
+   * Покрывает все порты STM32F767 (A-K).
+   * Используется вместо дублирующей enablePort() в setings.c. */
   if (GPIO_Port == GPIOA) {
-    if (!(RCC->AHB1ENR & RCC_AHB1ENR_GPIOAEN)) {
-      RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
-      printf("GPIOA: Clock was disabled. ENABLING now.\n");
-    }
+    __HAL_RCC_GPIOA_CLK_ENABLE();
   } else if (GPIO_Port == GPIOB) {
-    if (!(RCC->AHB1ENR & RCC_AHB1ENR_GPIOBEN)) {
-      RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
-      printf("GPIOB: Clock was disabled. ENABLING now.\n");
-    }
+    __HAL_RCC_GPIOB_CLK_ENABLE();
   } else if (GPIO_Port == GPIOC) {
-    if (!(RCC->AHB1ENR & RCC_AHB1ENR_GPIOCEN)) {
-      RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;
-      printf("GPIOC: Clock was disabled. ENABLING now.\n");
-    }
+    __HAL_RCC_GPIOC_CLK_ENABLE();
   } else if (GPIO_Port == GPIOD) {
-    if (!(RCC->AHB1ENR & RCC_AHB1ENR_GPIODEN)) {
-      RCC->AHB1ENR |= RCC_AHB1ENR_GPIODEN;
-      printf("GPIOD: Clock was disabled. ENABLING now.\n");
-    }
+    __HAL_RCC_GPIOD_CLK_ENABLE();
   } else if (GPIO_Port == GPIOE) {
-    if (!(RCC->AHB1ENR & RCC_AHB1ENR_GPIOEEN)) {
-      RCC->AHB1ENR |= RCC_AHB1ENR_GPIOEEN;
-      printf("GPIOE: Clock was disabled. ENABLING now.\n");
-    }
+    __HAL_RCC_GPIOE_CLK_ENABLE();
   } else if (GPIO_Port == GPIOF) {
-    if (!(RCC->AHB1ENR & RCC_AHB1ENR_GPIOFEN)) {
-      RCC->AHB1ENR |= RCC_AHB1ENR_GPIOFEN;
-      printf("GPIOF: Clock was disabled. ENABLING now.\n");
-    }
+    __HAL_RCC_GPIOF_CLK_ENABLE();
   } else if (GPIO_Port == GPIOG) {
-    if (!(RCC->AHB1ENR & RCC_AHB1ENR_GPIOGEN)) {
-      RCC->AHB1ENR |= RCC_AHB1ENR_GPIOGEN;
-      printf("GPIOG: Clock was disabled. ENABLING now.\n");
-    }
+    __HAL_RCC_GPIOG_CLK_ENABLE();
+  } else if (GPIO_Port == GPIOH) {
+    __HAL_RCC_GPIOH_CLK_ENABLE();
+  } else if (GPIO_Port == GPIOI) {
+    __HAL_RCC_GPIOI_CLK_ENABLE();
+#ifdef GPIOJ
+  } else if (GPIO_Port == GPIOJ) {
+    __HAL_RCC_GPIOJ_CLK_ENABLE();
+#endif
+#ifdef GPIOK
+  } else if (GPIO_Port == GPIOK) {
+    __HAL_RCC_GPIOK_CLK_ENABLE();
+#endif
   }
 }
 
@@ -5675,24 +5639,21 @@ float pid_read_temperature(int slot) {
     return -999.0f;
 
   if (PidConf[slot].selsens == PID_SENS_DS18B20) {
-    /* Поиск по серийнику */
+    /* Быстрый путь: используем кэшированные sensor_pin_id / sensor_sub_idx
+     * (заполняются в parse_pid_json при выборе датчика).
+     * Вместо O(N*M) sprintf+strcmp — прямой доступ O(1).               */
+    uint8_t pin_id = PidConf[slot].sensor_pin_id;
+    uint8_t sub    = PidConf[slot].sensor_sub_idx;
     for (int p = 0; p < MAX_DS18B20_P; p++) {
-      if (ds18b20[p].typsensr != 1 || !ds18b20[p].onoff)
-        continue;
-      for (int s = 0; s < ds18b20[p].numsens; s++) {
-        char addr_str[17];
-        for (int k = 0; k < 8; k++) {
-          sprintf(addr_str + (k * 2), "%02X", ds18b20[p].sensors[s].addr[k]);
+      if (ds18b20[p].id == pin_id && ds18b20[p].typsensr == 1 &&
+          ds18b20[p].onoff) {
+        if (sub < ds18b20[p].numsens && ds18b20[p].sensors[sub].valid) {
+          return ds18b20[p].sensors[sub].temp;
         }
-        if (strcmp(addr_str, PidConf[slot].sernum) == 0) {
-          if (ds18b20[p].sensors[s].valid) {
-            return ds18b20[p].sensors[s].temp;
-          }
-          return -999.0f; /* не валидно */
-        }
+        return -999.0f; /* датчик не валиден или sub вне диапазона */
       }
     }
-    return -999.0f; /* не найден */
+    return -999.0f; /* пин не найден */
   } else if (PidConf[slot].selsens == PID_SENS_DHT22) {
     /* Поиск по pin ID */
     for (int p = 0; p < MAX_DHT22_P; p++) {

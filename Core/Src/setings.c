@@ -47,35 +47,27 @@ uint8_t typensor = 0;    // Current Type Sensor
 static int temp_id = -1; // Временное хранение ID до определения типа
 
 // Функция включает тактирование на указанном порту.
+// Обёртка над checkPortClockStatus() для обратной совместимости (char* → GPIO_TypeDef*).
 int enablePort(char *portName) {
-
-  switch (*portName) {
-  case 'A':
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
-    break;
-  case 'B':
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
-    break;
-  case 'C':
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;
-    break;
-  case 'D':
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIODEN;
-    break;
-  case 'E':
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOEEN;
-    break;
-  case 'F':
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOFEN;
-    break;
-  case 'G':
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOGEN;
-    break;
-  default:
-    printf("Invalid port '%s'!\n", portName);
-    return 0; // Вернем '0' если ошибка!
+  static const struct { char letter; GPIO_TypeDef *port; } map[] = {
+    {'A', GPIOA}, {'B', GPIOB}, {'C', GPIOC}, {'D', GPIOD},
+    {'E', GPIOE}, {'F', GPIOF}, {'G', GPIOG}, {'H', GPIOH},
+    {'I', GPIOI},
+#ifdef GPIOJ
+    {'J', GPIOJ},
+#endif
+#ifdef GPIOK
+    {'K', GPIOK},
+#endif
+  };
+  for (size_t i = 0; i < sizeof(map) / sizeof(map[0]); i++) {
+    if (*portName == map[i].letter) {
+      checkPortClockStatus(map[i].port);
+      return 1;
+    }
   }
-  return 1; // Вернем '1' если все OK!
+  printf("Invalid port '%s'!\n", portName);
+  return 0;
 }
 
 // Функция для проверки, включено ли тактирование порта
@@ -92,6 +84,21 @@ int enablePort(char *portName) {
 
 // Когда создаем новый "settings.ini" файл или когда сохраняем форму в файл
 // "setings.ini"
+static void writeField(FIL *file, char *buffer, const char *name, const char *format, ...) {
+  va_list args;
+  UINT bytesWritten;
+  va_start(args, format);
+  // Write field name
+  snprintf(buffer, JSON_BUF_SIZE, "\"%s\":", name);
+  f_write(file, buffer, strlen(buffer), &bytesWritten);
+  // Write field value
+  vsnprintf(buffer, JSON_BUF_SIZE, format, args);
+  f_write(file, buffer, strlen(buffer), &bytesWritten);
+  va_end(args);
+  // Write comma
+  f_write(file, ",", 1, &bytesWritten);
+}
+
 void SetSettingsConfig() {
   //    FRESULT fresult;
   UINT bytesWritten;
@@ -103,97 +110,83 @@ void SetSettingsConfig() {
   }
   // Write opening bracket
   f_write(&USBHFile, "{", 1, &bytesWritten);
-  // Helper function to write a field
-  void writeField(const char *name, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    // Write field name
-    snprintf(buffer, JSON_BUF_SIZE, "\"%s\":", name);
-    f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
-    // Write field value
-    vsnprintf(buffer, JSON_BUF_SIZE, format, args);
-    f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
-    va_end(args);
-    // Write comma
-    f_write(&USBHFile, ",", 1, &bytesWritten);
-  }
   // Write string fields
-  writeField("adm_name", "\"%s\"", SetSettings.adm_name);
-  writeField("adm_pswd", "\"%s\"", SetSettings.adm_pswd);
-  writeField("token", "\"%s\"", SetSettings.token);
-  writeField("lang", "\"%s\"", SetSettings.lang);
+  writeField(&USBHFile, buffer, "adm_name", "\"%s\"", SetSettings.adm_name);
+  writeField(&USBHFile, buffer, "adm_pswd", "\"%s\"", SetSettings.adm_pswd);
+  writeField(&USBHFile, buffer, "token", "\"%s\"", SetSettings.token);
+  writeField(&USBHFile, buffer, "lang", "\"%s\"", SetSettings.lang);
 
-  writeField("numline", "%d", SetSettings.numline);
-  writeField("pidline", "%d", SetSettings.pidline);
-  writeField("timezone", "%f", SetSettings.timezone);
-  writeField("lat_de", "%f", SetSettings.lat_de);
-  writeField("lon_de", "%f", SetSettings.lon_de);
-  writeField("onsunrise", "%hd", SetSettings.onsunrise);
-  writeField("onsunset", "%hd", SetSettings.onsunset);
+  writeField(&USBHFile, buffer, "numline", "%d", SetSettings.numline);
+  writeField(&USBHFile, buffer, "pidline", "%d", SetSettings.pidline);
+  writeField(&USBHFile, buffer, "timezone", "%f", SetSettings.timezone);
+  writeField(&USBHFile, buffer, "lat_de", "%f", SetSettings.lat_de);
+  writeField(&USBHFile, buffer, "lon_de", "%f", SetSettings.lon_de);
+  writeField(&USBHFile, buffer, "onsunrise", "%hd", SetSettings.onsunrise);
+  writeField(&USBHFile, buffer, "onsunset", "%hd", SetSettings.onsunset);
 
   if (strlen(SetSettings.dlength) > 0 && strlen(SetSettings.dlength) <= 6) {
-    writeField("dlength", "\"%s\"", SetSettings.dlength);
+    writeField(&USBHFile, buffer, "dlength", "\"%s\"", SetSettings.dlength);
   } else {
-    writeField("dlength", "\"n/a\"");
+    writeField(&USBHFile, buffer, "dlength", "\"n/a\"");
   }
-  writeField("sunrise", "\"%s\"", SetSettings.sunrise);
-  writeField("sunset", "\"%s\"", SetSettings.sunset);
-  writeField("srise_pins", "\"%s\"", SetSettings.srise_pins);
-  writeField("sset_pins", "\"%s\"", SetSettings.sset_pins);
+  writeField(&USBHFile, buffer, "sunrise", "\"%s\"", SetSettings.sunrise);
+  writeField(&USBHFile, buffer, "sunset", "\"%s\"", SetSettings.sunset);
+  writeField(&USBHFile, buffer, "srise_pins", "\"%s\"", SetSettings.srise_pins);
+  writeField(&USBHFile, buffer, "sset_pins", "\"%s\"", SetSettings.sset_pins);
 
-  writeField("ip1_sntp0", "%d", SetSettings.ip1_sntp0);
-  writeField("ip1_sntp1", "%d", SetSettings.ip1_sntp1);
-  writeField("ip1_sntp2", "%d", SetSettings.ip1_sntp2);
-  writeField("ip1_sntp3", "%d", SetSettings.ip1_sntp3);
+  writeField(&USBHFile, buffer, "ip1_sntp0", "%d", SetSettings.ip1_sntp0);
+  writeField(&USBHFile, buffer, "ip1_sntp1", "%d", SetSettings.ip1_sntp1);
+  writeField(&USBHFile, buffer, "ip1_sntp2", "%d", SetSettings.ip1_sntp2);
+  writeField(&USBHFile, buffer, "ip1_sntp3", "%d", SetSettings.ip1_sntp3);
 
-  writeField("ip2_sntp0", "%d", SetSettings.ip2_sntp0);
-  writeField("ip2_sntp1", "%d", SetSettings.ip2_sntp1);
-  writeField("ip2_sntp2", "%d", SetSettings.ip2_sntp2);
-  writeField("ip2_sntp3", "%d", SetSettings.ip2_sntp3);
+  writeField(&USBHFile, buffer, "ip2_sntp0", "%d", SetSettings.ip2_sntp0);
+  writeField(&USBHFile, buffer, "ip2_sntp1", "%d", SetSettings.ip2_sntp1);
+  writeField(&USBHFile, buffer, "ip2_sntp2", "%d", SetSettings.ip2_sntp2);
+  writeField(&USBHFile, buffer, "ip2_sntp3", "%d", SetSettings.ip2_sntp3);
 
-  writeField("ip3_sntp0", "%d", SetSettings.ip3_sntp0);
-  writeField("ip3_sntp1", "%d", SetSettings.ip3_sntp1);
-  writeField("ip3_sntp2", "%d", SetSettings.ip3_sntp2);
-  writeField("ip3_sntp3", "%d", SetSettings.ip3_sntp3);
+  writeField(&USBHFile, buffer, "ip3_sntp0", "%d", SetSettings.ip3_sntp0);
+  writeField(&USBHFile, buffer, "ip3_sntp1", "%d", SetSettings.ip3_sntp1);
+  writeField(&USBHFile, buffer, "ip3_sntp2", "%d", SetSettings.ip3_sntp2);
+  writeField(&USBHFile, buffer, "ip3_sntp3", "%d", SetSettings.ip3_sntp3);
 
-  writeField("check_mqtt", "%d", SetSettings.check_mqtt);
-  writeField("mqtt_prt", "%d", SetSettings.mqtt_prt);
-  writeField("mqtt_clt", "\"%s\"", SetSettings.mqtt_clt);
-  writeField("mqtt_usr", "\"%s\"", SetSettings.mqtt_usr);
-  writeField("mqtt_pswd", "\"%s\"", SetSettings.mqtt_pswd);
-  writeField("txmqttop", "\"%s\"", SetSettings.txmqttop);
-  writeField("rxmqttop", "\"%s\"", SetSettings.rxmqttop);
+  writeField(&USBHFile, buffer, "check_mqtt", "%d", SetSettings.check_mqtt);
+  writeField(&USBHFile, buffer, "mqtt_prt", "%d", SetSettings.mqtt_prt);
+  writeField(&USBHFile, buffer, "mqtt_clt", "\"%s\"", SetSettings.mqtt_clt);
+  writeField(&USBHFile, buffer, "mqtt_usr", "\"%s\"", SetSettings.mqtt_usr);
+  writeField(&USBHFile, buffer, "mqtt_pswd", "\"%s\"", SetSettings.mqtt_pswd);
+  writeField(&USBHFile, buffer, "txmqttop", "\"%s\"", SetSettings.txmqttop);
+  writeField(&USBHFile, buffer, "rxmqttop", "\"%s\"", SetSettings.rxmqttop);
 
-  writeField("mqtt_hst0", "%d", SetSettings.mqtt_hst0);
-  writeField("mqtt_hst1", "%d", SetSettings.mqtt_hst1);
-  writeField("mqtt_hst2", "%d", SetSettings.mqtt_hst2);
-  writeField("mqtt_hst3", "%d", SetSettings.mqtt_hst3);
+  writeField(&USBHFile, buffer, "mqtt_hst0", "%d", SetSettings.mqtt_hst0);
+  writeField(&USBHFile, buffer, "mqtt_hst1", "%d", SetSettings.mqtt_hst1);
+  writeField(&USBHFile, buffer, "mqtt_hst2", "%d", SetSettings.mqtt_hst2);
+  writeField(&USBHFile, buffer, "mqtt_hst3", "%d", SetSettings.mqtt_hst3);
 
-  writeField("check_ip", "%d", SetSettings.check_ip);
-  writeField("ip_addr0", "%d", SetSettings.ip_addr0);
-  writeField("ip_addr1", "%d", SetSettings.ip_addr1);
-  writeField("ip_addr2", "%d", SetSettings.ip_addr2);
-  writeField("ip_addr3", "%d", SetSettings.ip_addr3);
+  writeField(&USBHFile, buffer, "check_ip", "%d", SetSettings.check_ip);
+  writeField(&USBHFile, buffer, "ip_addr0", "%d", SetSettings.ip_addr0);
+  writeField(&USBHFile, buffer, "ip_addr1", "%d", SetSettings.ip_addr1);
+  writeField(&USBHFile, buffer, "ip_addr2", "%d", SetSettings.ip_addr2);
+  writeField(&USBHFile, buffer, "ip_addr3", "%d", SetSettings.ip_addr3);
 
-  writeField("sb_mask0", "%d", SetSettings.sb_mask0);
-  writeField("sb_mask1", "%d", SetSettings.sb_mask1);
-  writeField("sb_mask2", "%d", SetSettings.sb_mask2);
-  writeField("sb_mask3", "%d", SetSettings.sb_mask3);
+  writeField(&USBHFile, buffer, "sb_mask0", "%d", SetSettings.sb_mask0);
+  writeField(&USBHFile, buffer, "sb_mask1", "%d", SetSettings.sb_mask1);
+  writeField(&USBHFile, buffer, "sb_mask2", "%d", SetSettings.sb_mask2);
+  writeField(&USBHFile, buffer, "sb_mask3", "%d", SetSettings.sb_mask3);
 
-  writeField("gateway0", "%d", SetSettings.gateway0);
-  writeField("gateway1", "%d", SetSettings.gateway1);
-  writeField("gateway2", "%d", SetSettings.gateway2);
-  writeField("gateway3", "%d", SetSettings.gateway3);
+  writeField(&USBHFile, buffer, "gateway0", "%d", SetSettings.gateway0);
+  writeField(&USBHFile, buffer, "gateway1", "%d", SetSettings.gateway1);
+  writeField(&USBHFile, buffer, "gateway2", "%d", SetSettings.gateway2);
+  writeField(&USBHFile, buffer, "gateway3", "%d", SetSettings.gateway3);
 
-  writeField("sim800l", "%d", SetSettings.sim800l);
+  writeField(&USBHFile, buffer, "sim800l", "%d", SetSettings.sim800l);
 
-  writeField("sec", "%d", SetSettings.sec);
-  writeField("min", "%d", SetSettings.min);
-  writeField("hour", "%d", SetSettings.hour);
-  writeField("mday", "%d", SetSettings.mday);
-  writeField("mon", "%d", SetSettings.mon);
-  writeField("year", "%d", SetSettings.year);
-  writeField("usehttps", "%d", SetSettings.usehttps);
+  writeField(&USBHFile, buffer, "sec", "%d", SetSettings.sec);
+  writeField(&USBHFile, buffer, "min", "%d", SetSettings.min);
+  writeField(&USBHFile, buffer, "hour", "%d", SetSettings.hour);
+  writeField(&USBHFile, buffer, "mday", "%d", SetSettings.mday);
+  writeField(&USBHFile, buffer, "mon", "%d", SetSettings.mon);
+  writeField(&USBHFile, buffer, "year", "%d", SetSettings.year);
+  writeField(&USBHFile, buffer, "usehttps", "%d", SetSettings.usehttps);
 
   snprintf(buffer, JSON_BUF_SIZE, "\"tel\":\"%s\"", SetSettings.tel);
   //    printf("+++Real size of SetSettings: %u bytes & SetSettings.usehttps =
@@ -218,89 +211,75 @@ void StartSettingsConfig() {
   // Write opening bracket
   f_write(&USBHFile, "{", 1, &bytesWritten);
 
-  // Helper function to write a field
-  void writeField(const char *name, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    // Write field name
-    snprintf(buffer, JSON_BUF_SIZE, "\"%s\":", name);
-    f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
-    // Write field value
-    vsnprintf(buffer, JSON_BUF_SIZE, format, args);
-    f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
-    va_end(args);
-    // Write comma
-    f_write(&USBHFile, ",", 1, &bytesWritten);
-  }
 
   // Write default string fields
-  writeField("adm_name", "\"%s\"", ADM_NAME);
-  writeField("adm_pswd", "\"%s\"", ADM_PASS);
-  writeField("token", "\"\"");
-  writeField("lang", "\"%s\"", LANG);
+  writeField(&USBHFile, buffer, "adm_name", "\"%s\"", ADM_NAME);
+  writeField(&USBHFile, buffer, "adm_pswd", "\"%s\"", ADM_PASS);
+  writeField(&USBHFile, buffer, "token", "\"\"");
+  writeField(&USBHFile, buffer, "lang", "\"%s\"", LANG);
 
   // Write numeric fields
-  writeField("timezone", "%d", TIMEZONE);
-  writeField("lon_de", "%d", 0);
-  writeField("lat_de", "%d", 0);
+  writeField(&USBHFile, buffer, "timezone", "%d", TIMEZONE);
+  writeField(&USBHFile, buffer, "lon_de", "%d", 0);
+  writeField(&USBHFile, buffer, "lat_de", "%d", 0);
 
   // Write empty string fields
-  writeField("sunrise", "\"\"");
-  writeField("sunset", "\"\"");
-  writeField("srise_pins", "\"\"");
-  writeField("sset_pins", "\"\"");
-  writeField("dlength", "\"\"");
+  writeField(&USBHFile, buffer, "sunrise", "\"\"");
+  writeField(&USBHFile, buffer, "sunset", "\"\"");
+  writeField(&USBHFile, buffer, "srise_pins", "\"\"");
+  writeField(&USBHFile, buffer, "sset_pins", "\"\"");
+  writeField(&USBHFile, buffer, "dlength", "\"\"");
 
   // Write additional boolean fields
-  writeField("onsunrise", "%d", 0);
-  writeField("onsunset", "%d", 0);
+  writeField(&USBHFile, buffer, "onsunrise", "%d", 0);
+  writeField(&USBHFile, buffer, "onsunset", "%d", 0);
 
   // Write SNTP IP addresses
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 4; j++) {
-      writeField("ip%d_sntp%d", "%d", i + 1, j, 0);
+      writeField(&USBHFile, buffer, "ip%d_sntp%d", "%d", i + 1, j, 0);
     }
   }
 
   // Write MQTT settings
-  writeField("check_mqtt", "%d", CHECK_MQTT);
-  writeField("mqtt_prt", "%d", MQTT_PRT);
-  writeField("mqtt_qos", "%d", MQTT_QOS);
-  writeField("mqtt_clt", "\"\"");
-  writeField("mqtt_usr", "\"\"");
-  writeField("mqtt_pswd", "\"\"");
-  writeField("txmqttop", "\"%s\"", MQTT_TPC);
-  writeField("rxmqttop", "\"\"");
+  writeField(&USBHFile, buffer, "check_mqtt", "%d", CHECK_MQTT);
+  writeField(&USBHFile, buffer, "mqtt_prt", "%d", MQTT_PRT);
+  writeField(&USBHFile, buffer, "mqtt_qos", "%d", MQTT_QOS);
+  writeField(&USBHFile, buffer, "mqtt_clt", "\"\"");
+  writeField(&USBHFile, buffer, "mqtt_usr", "\"\"");
+  writeField(&USBHFile, buffer, "mqtt_pswd", "\"\"");
+  writeField(&USBHFile, buffer, "txmqttop", "\"%s\"", MQTT_TPC);
+  writeField(&USBHFile, buffer, "rxmqttop", "\"\"");
 
   // Write MQTT host
   for (int i = 0; i < 4; i++) {
-    writeField("mqtt_hst%d", "%d", i, 0);
+    writeField(&USBHFile, buffer, "mqtt_hst%d", "%d", i, 0);
   }
 
   // Write IP settings
-  writeField("check_ip", "%d", CHECK_IP);
+  writeField(&USBHFile, buffer, "check_ip", "%d", CHECK_IP);
 
   //    // Write IP address
-  //    writeField("ip_addr0", "%d", IP_ADDR0);
-  //    writeField("ip_addr1", "%d", IP_ADDR1);
-  //    writeField("ip_addr2", "%d", IP_ADDR2);
-  //    writeField("ip_addr3", "%d", IP_ADDR3);
+  //    writeField(&USBHFile, buffer, "ip_addr0", "%d", IP_ADDR0);
+  //    writeField(&USBHFile, buffer, "ip_addr1", "%d", IP_ADDR1);
+  //    writeField(&USBHFile, buffer, "ip_addr2", "%d", IP_ADDR2);
+  //    writeField(&USBHFile, buffer, "ip_addr3", "%d", IP_ADDR3);
   //
   //    // Write subnet mask
-  //    writeField("sb_mask0", "%d", SB_MASK0);
-  //    writeField("sb_mask1", "%d", SB_MASK1);
-  //    writeField("sb_mask2", "%d", SB_MASK2);
-  //    writeField("sb_mask3", "%d", SB_MASK3);
+  //    writeField(&USBHFile, buffer, "sb_mask0", "%d", SB_MASK0);
+  //    writeField(&USBHFile, buffer, "sb_mask1", "%d", SB_MASK1);
+  //    writeField(&USBHFile, buffer, "sb_mask2", "%d", SB_MASK2);
+  //    writeField(&USBHFile, buffer, "sb_mask3", "%d", SB_MASK3);
   //
   //    // Write gateway
-  //    writeField("gateway0", "%d", GATEWAY0);
-  //    writeField("gateway1", "%d", GATEWAY1);
-  //    writeField("gateway2", "%d", GATEWAY2);
-  //    writeField("gateway3", "%d", GATEWAY3);
+  //    writeField(&USBHFile, buffer, "gateway0", "%d", GATEWAY0);
+  //    writeField(&USBHFile, buffer, "gateway1", "%d", GATEWAY1);
+  //    writeField(&USBHFile, buffer, "gateway2", "%d", GATEWAY2);
+  //    writeField(&USBHFile, buffer, "gateway3", "%d", GATEWAY3);
 
   // Write MAC address (last field, no comma needed for the last one)
   for (int i = 0; i < 5; i++) {
-    writeField("macaddr%d", "%d", i, 0);
+    writeField(&USBHFile, buffer, "macaddr%d", "%d", i, 0);
   }
   // Write the last MAC address field without comma
   snprintf(buffer, JSON_BUF_SIZE, "\"macaddr5\":%d", 0);
@@ -839,25 +818,13 @@ void SetCronConfig() {
     return;
   }
   f_write(&USBHFile, "[", 1, &bytesWritten); // Write opening bracket for array
-  // Helper function to write a JSON object field
-  void writeField(const char *name, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    snprintf(buffer, JSON_BUF_SIZE, "\"%s\":", name); // Write field name
-    f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
-    // Write field value
-    vsnprintf(buffer, JSON_BUF_SIZE, format, args);
-    f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
-    va_end(args);
-    f_write(&USBHFile, ",", 1, &bytesWritten); // Write comma
-  }
   for (int i = 0; i < MAXSIZE; i++) {
     f_write(&USBHFile, "{", 1,
             &bytesWritten); // Write opening bracket for object
-    writeField("cron", "\"%s\"", dbCrontxt[i].cron);
-    writeField("activ", "\"%s\"", dbCrontxt[i].activ);
-    writeField("ptime", "%d", 0);
-    writeField("onoff", "%d", dbCrontxt[i].onoff);
+    writeField(&USBHFile, buffer, "cron", "\"%s\"", dbCrontxt[i].cron);
+    writeField(&USBHFile, buffer, "activ", "\"%s\"", dbCrontxt[i].activ);
+    writeField(&USBHFile, buffer, "ptime", "%d", 0);
+    writeField(&USBHFile, buffer, "onoff", "%d", dbCrontxt[i].onoff);
     f_write(&USBHFile, ",", 1, &bytesWritten);
     snprintf(buffer, JSON_BUF_SIZE, "\"info\":\"%s\"", dbCrontxt[i].info);
     f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
@@ -1857,7 +1824,7 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
         }
       } else if (strcmp(key, "t") == 0) {
         if (sensidx < ds18b20[pinindex].numsens) {
-          ds18b20[pinindex].sensors[sensidx].temp = atof(value);
+          ds18b20[pinindex].sensors[sensidx].temp = (float)atof(value);
           //					printf("Temperature saved: %.2f
           // for pin %d sensor %d\n", ds18b20[pinindex].sensors[sensidx].temp,
           // pinindex, sensidx);
@@ -1872,14 +1839,14 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
         }
       } else if (strcmp(key, "ut") == 0) {
         if (sensidx < ds18b20[pinindex].numsens) {
-          ds18b20[pinindex].sensors[sensidx].upt = atof(value);
+          ds18b20[pinindex].sensors[sensidx].upt = (float)atof(value);
           //					printf("Upper temperature saved:
           //%.2f for pin %d sensor %d\n",
           // ds18b20[pinindex].sensors[sensidx].upt, pinindex, sensidx);
         }
       } else if (strcmp(key, "lt") == 0) {
         if (sensidx < ds18b20[pinindex].numsens) {
-          ds18b20[pinindex].sensors[sensidx].lowt = atof(value);
+          ds18b20[pinindex].sensors[sensidx].lowt = (float)atof(value);
           //					printf("Lower temperature saved:
           //%.2f for pin %d sensor %d\n",
           // ds18b20[pinindex].sensors[sensidx].lowt, pinindex, sensidx);
@@ -1909,7 +1876,7 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
       }
     } else if (typensor == 2 && pinindex >= 0) {
       if (strcmp(key, "t") == 0) {
-        dht22[pinindex].temp = atof(value);
+        dht22[pinindex].temp = (float)atof(value);
         //				printf("DHT22 temperature saved:
         //%.2f\n", dht22[pinindex].temp);
       } else if (strcmp(key, "valid") == 0) {
@@ -1917,23 +1884,23 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
         //				printf("DHT22 valid flag saved: %d\n",
         // dht22[pinindex].valid);
       } else if (strcmp(key, "humidity") == 0) {
-        dht22[pinindex].humid = atof(value);
+        dht22[pinindex].humid = (float)atof(value);
         //				printf("DHT22 humidity saved: %.2f\n",
         // dht22[pinindex].humid);
       } else if (strcmp(key, "ut") == 0) {
-        dht22[pinindex].upt = atof(value);
+        dht22[pinindex].upt = (float)atof(value);
         //				printf("DHT22 upper temperature saved:
         //%.2f\n", dht22[pinindex].upt);
       } else if (strcmp(key, "lt") == 0) {
-        dht22[pinindex].lowt = atof(value);
+        dht22[pinindex].lowt = (float)atof(value);
         //				printf("DHT22 lower temperature saved:
         //%.2f\n", dht22[pinindex].lowt);
       } else if (strcmp(key, "upphumid") == 0) {
-        dht22[pinindex].uph = atof(value);
+        dht22[pinindex].uph = (float)atof(value);
         //				printf("DHT22 upper humidity saved:
         //%.2f\n", dht22[pinindex].uph);
       } else if (strcmp(key, "humlolim") == 0) {
-        dht22[pinindex].lowh = atof(value);
+        dht22[pinindex].lowh = (float)atof(value);
         //				printf("DHT22 lower humidity saved:
         //%.2f\n", dht22[pinindex].lowh);
       } else if (strcmp(key, "action_ut") == 0) {
