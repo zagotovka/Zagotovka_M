@@ -87,10 +87,11 @@ void log_headers(const char *headers) {
   memcpy(header_copy, headers, len);
   header_copy[len] = '\0';
 
-  char *line = strtok(header_copy, "\r\n");
+  char *saveptr = NULL;
+  char *line = strtok_r(header_copy, "\r\n", &saveptr);
   while (line != NULL) {
     MG_INFO(("  %s", line));
-    line = strtok(NULL, "\r\n");
+    line = strtok_r(NULL, "\r\n", &saveptr);
   }
 }
 
@@ -3478,7 +3479,8 @@ void action_handler(uint8_t button_id, const char *action_str,
   memcpy(str_buf, action_str, slen);
   str_buf[slen] = '\0';
   char *str = str_buf;
-  char *token = strtok(str, ",");
+  char *saveptr = NULL;
+  char *token = strtok_r(str, ",", &saveptr);
   while (token != NULL) {
     //        printf("Current token: %s\n", token);
     int id;
@@ -3586,7 +3588,7 @@ void action_handler(uint8_t button_id, const char *action_str,
     } else {
       printf("Failed to parse token: %s (expected format: %%d:%%d)\n", token);
     }
-    token = strtok(NULL, ",");
+    token = strtok_r(NULL, ",", &saveptr);
   }
   //    printf("Finished processing %s actions for button %d\n", press_type,
   //    button_id);
@@ -3896,9 +3898,10 @@ void process_actions(
   memcpy(str_buf, actions, slen);
   str_buf[slen] = '\0';
   char *str = str_buf;
-  data_pin_t data_pin; // Временная структура для отправки в очередь
+  data_pin_t data_pin = {0}; /* A3: локальная инициализированная копия */
+  char *saveptr = NULL;
   char *token =
-      strtok(str, ", "); // Разбираем строку действий по разделителю ","
+      strtok_r(str, ", ", &saveptr); // Разбираем строку действий по разделителю ","
   while (token != NULL) {
     uint8_t id = 0, action = 0;
     char *colon = strchr(token, ':');
@@ -3925,7 +3928,7 @@ void process_actions(
     } else {
       printf("Invalid token format (missing colon): %s\n", token);
     }
-    token = strtok(NULL, ", ");
+    token = strtok_r(NULL, ", ", &saveptr);
   }
   /* str — стековый буфер, free не нужен */
 }
@@ -3937,7 +3940,7 @@ void check_DHT22_limits(void) {
       continue;
     }
     float temp = dht22[pin].temp;
-    double humid = dht22[pin].humid;
+    float humid = dht22[pin].humid;
 
     if (temp >= dht22[pin].upt) {
       if (dht22[pin].actup[0] != '\0' && !dht22[pin].upflag) {

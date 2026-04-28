@@ -13,15 +13,30 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Optimization C2.md",
+                "file": "Welcome.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Optimization C2"
+              "title": "Welcome"
+            }
+          },
+          {
+            "id": "aedab5e5a70a7616",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Debug_PID_Hysteresis.md.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Debug_PID_Hysteresis.md"
             }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -181,13 +196,14 @@
       "bases:Create new base": false
     }
   },
-  "active": "22962145349a0867",
+  "active": "aedab5e5a70a7616",
   "lastOpenFiles": [
-    "Optimization C2.md",
-    "Optimization C1.md",
     "Welcome.md",
     "MCU_Info.md",
+    "Debug_PID_Hysteresis.md.md",
+    "Optimization C2.md",
     "Optimization B5.md",
+    "Optimization C1.md",
     "Optimization B4.md",
     "create a link.md",
     "Optimization B3..md",

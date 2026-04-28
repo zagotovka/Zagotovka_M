@@ -2176,6 +2176,89 @@ void StartDht22Task(void *argument)
  * @param argument: Not used
  * @retval None
  */
+/* ── Вспомогательные функции для sunrise/sunset ──
+ * Вынесены из StartServiceTask — GCC nested functions используют трамплины
+ * на стеке, что вызывает HardFault на Cortex-M7 (XN-protected SRAM). */
+static double svc_degToRad(double degree) { return (degree * PI / 180.0); }
+static double svc_radToDeg(double radian) { return (radian * 180.0 / PI); }
+
+static int svc_dayOfYear(int yr, uint8_t mon, uint8_t d) {
+  int N1 = floor(275 * mon / 9);
+  int N2 = floor((mon + 9) / 12);
+  int N3 = (1 + floor((yr - 4 * floor(yr / 4) + 2) / 3));
+  return N1 - (N2 * N3) + d - 30;
+}
+
+static double svc_calculateSunriseOrSunset(int isSunrise) {
+  int N = svc_dayOfYear(year, month, day);
+  // Convert the SetSettings.lon_de to hour value and calculate an approximate
+  // time
+  double lngHour = SetSettings.lon_de / 15.0;
+  double t = N + ((isSunrise ? 6 : 18) - lngHour) / 24;
+  // Calculate the Sun's mean anomaly
+  double M = (0.9856 * t) - 3.289;
+  // Calculate the Sun's true longitude
+  double L = fmod(M + (1.916 * sin(svc_degToRad(M))) +
+                      (0.020 * sin(2 * svc_degToRad(M))) + 282.634,
+                  360.0);
+  // Calculate the Sun's right ascension
+  double RA = fmod(svc_radToDeg(atan(0.91764 * tan(svc_degToRad(L)))), 360.0);
+  // Right ascension value needs to be in the same quadrant as L
+  double Lquadrant = floor(L / 90) * 90;
+  double RAquadrant = floor(RA / 90) * 90;
+  RA = RA + (Lquadrant - RAquadrant);
+  // Right ascension value needs to be converted into hours
+  RA = RA / 15;
+  // Calculate the Sun's declination
+  double sinDec = 0.39782 * sin(svc_degToRad(L));
+  double cosDec = cos(asin(sinDec));
+  // Calculate the Sun's local hour angle
+  double cosH =
+      (sin(svc_degToRad(ZENITH)) - (sinDec * sin(svc_degToRad(SetSettings.lat_de)))) /
+      (cosDec * cos(svc_degToRad(SetSettings.lat_de)));
+  if (cosH > 1 || cosH < -1) {
+    return -1; // The sun never rises/sets on this location on the specified
+               // date
+  }
+  // Finish calculating H and convert into hours
+  double H = isSunrise ? 360 - svc_radToDeg(acos(cosH)) : svc_radToDeg(acos(cosH));
+  H = H / 15;
+  // Calculate local mean time of rising/setting
+  double T = H + RA - (0.06571 * t) - 6.622;
+  // Adjust back to UTC
+  double UT = fmod(T - lngHour + 24.0, 24.0);
+  // Convert UT value to local time zone of
+  // SetSettings.lat_de/SetSettings.lon_de
+  double localT = fmod(UT + SetSettings.timezone + 24.0, 24.0);
+  return localT;
+}
+
+static void svc_printResults(void) {
+  double sunrise = svc_calculateSunriseOrSunset(1);
+  double sunset = svc_calculateSunriseOrSunset(0);
+  if (sunrise == -1 || sunset == -1) {
+    printf("The sun doesn't rise or set on this day at this location.\n");
+  } else {
+    int sunriseHour = (int)sunrise;
+    int sunriseMinute = (int)((sunrise - sunriseHour) * 60);
+    int sunsetHour = (int)sunset;
+    int sunsetMinute = (int)((sunset - sunsetHour) * 60);
+    // Сохранение времени восхода солнца
+    sprintf(SetSettings.sunrise, "%02d:%02d", sunriseHour, sunriseMinute);
+    // Сохранение времени заката солнца
+    sprintf(SetSettings.sunset, "%02d:%02d", sunsetHour, sunsetMinute);
+    // Calculate day length
+    double dayLength = sunset - sunrise;
+    if (dayLength < 0)
+      dayLength += 24;
+    int dayLengthHours = (int)dayLength;
+    int dayLengthMinutes = (int)((dayLength - dayLengthHours) * 60);
+    // Сохранение длины светового дня
+    sprintf(SetSettings.dlength, "%02d:%02d", dayLengthHours,
+            dayLengthMinutes);
+  }
+}
+
 /* USER CODE END Header_StartServiceTask */
 void StartServiceTask(void *argument)
 {
@@ -2186,102 +2269,6 @@ void StartServiceTask(void *argument)
   static uint8_t prevmin = 0xFF; // Для отслеживания смены минуты
   //	DateTime nextfullmoon; // Declare nextFullMoon outside the loop
   DateTime nextfullmnlcl; // Local time version of nextFullMoon
-  double degToRad(double degree) { return (degree * PI / 180); }
-  // Convert radian to degree
-  double radToDeg(double radian) { return (radian * 180 / PI); }
-  // Calculate the day of the year
-  int dayOfYear(int year, uint8_t month, uint8_t day) {
-    int N1 = floor(275 * month / 9);
-    int N2 = floor((month + 9) / 12);
-    int N3 = (1 + floor((year - 4 * floor(year / 4) + 2) / 3));
-    return N1 - (N2 * N3) + day - 30;
-  }
-  // Calculate sunrise or sunset
-  double calculateSunriseOrSunset(int isSunrise) {
-    int N = dayOfYear(year, month, day);
-    // Convert the SetSettings.lon_de to hour value and calculate an approximate
-    // time
-    double lngHour = SetSettings.lon_de / 15.0;
-    double t = N + ((isSunrise ? 6 : 18) - lngHour) / 24;
-    // Calculate the Sun's mean anomaly
-    double M = (0.9856 * t) - 3.289;
-    // Calculate the Sun's true SetSettings.lon_de
-    double L = fmod(M + (1.916 * sin(degToRad(M))) +
-                        (0.020 * sin(2 * degToRad(M))) + 282.634,
-                    360.0);
-    // Calculate the Sun's right ascension
-    double RA = fmod(radToDeg(atan(0.91764 * tan(degToRad(L)))), 360.0);
-    // Right ascension value needs to be in the same quadrant as L
-    double Lquadrant = floor(L / 90) * 90;
-    double RAquadrant = floor(RA / 90) * 90;
-    RA = RA + (Lquadrant - RAquadrant);
-    // Right ascension value needs to be converted into hours
-    RA = RA / 15;
-    // Calculate the Sun's declination
-    double sinDec = 0.39782 * sin(degToRad(L));
-    double cosDec = cos(asin(sinDec));
-    // Calculate the Sun's local hour angle
-    double cosH =
-        (sin(degToRad(ZENITH)) - (sinDec * sin(degToRad(SetSettings.lat_de)))) /
-        (cosDec * cos(degToRad(SetSettings.lat_de)));
-    if (cosH > 1 || cosH < -1) {
-      return -1; // The sun never rises/sets on this location on the specified
-                 // date
-    }
-    // Finish calculating H and convert into hours
-    double H = isSunrise ? 360 - radToDeg(acos(cosH)) : radToDeg(acos(cosH));
-    H = H / 15;
-    // Calculate local mean time of rising/setting
-    double T = H + RA - (0.06571 * t) - 6.622;
-    // Adjust back to UTC
-    double UT = fmod(T - lngHour + 24.0, 24.0);
-    // Convert UT value to local time zone of
-    // SetSettings.lat_de/SetSettings.lon_de
-    double localT = fmod(UT + SetSettings.timezone + 24.0, 24.0);
-    return localT;
-  }
-  void printResults() {
-    double sunrise = calculateSunriseOrSunset(1);
-    double sunset = calculateSunriseOrSunset(0);
-    if (sunrise == -1 || sunset == -1) {
-      printf("The sun doesn't rise or set on this day at this location.\n");
-    } else {
-      int sunriseHour = (int)sunrise;
-      int sunriseMinute = (int)((sunrise - sunriseHour) * 60);
-      int sunsetHour = (int)sunset;
-      int sunsetMinute = (int)((sunset - sunsetHour) * 60);
-      //			printf("ServiceTask: date: %d-%d-%d\n", year,
-      // month, day); 			printf("Location: %.4f, %.4f\n",
-      // SetSettings.lat_de, SetSettings.lon_de);
-      // printf("SetSettings.timezone: UTC%f\n", SetSettings.timezone);
-      // printf("Sunrise: %02d:%02d\n", sunriseHour, sunriseMinute);
-      // printf("Sunset: %02d:%02d\n", sunsetHour, sunsetMinute);
-      // Сохранение времени восхода солнца
-      sprintf(SetSettings.sunrise, "%02d:%02d", sunriseHour, sunriseMinute);
-      // Сохранение времени заката солнца
-      sprintf(SetSettings.sunset, "%02d:%02d", sunsetHour, sunsetMinute);
-      // Calculate day length
-      double dayLength = sunset - sunrise;
-      if (dayLength < 0)
-        dayLength += 24;
-      int dayLengthHours = (int)dayLength;
-      int dayLengthMinutes = (int)((dayLength - dayLengthHours) * 60);
-      // Сохранение длины светового дня
-      sprintf(SetSettings.dlength, "%02d:%02d", dayLengthHours,
-              dayLengthMinutes);
-      //			printf("Day length: %02d hours and %02d
-      // minutes\n", dayLengthHours, dayLengthMinutes);
-      //			printf("---SetSettings.lat_de %.4f\n",
-      // SetSettings.lat_de); 			printf("---SetSettings.lon_de
-      // %.4f\n", SetSettings.lon_de);
-      // printf("---SetSettings.timezone: UTC%+.1f\n", SetSettings.timezone);
-      // printf("Today's date: %02d.%02d.%d\n", day, month, year);
-      // printf("Sunrise: %s\n", SetSettings.sunrise);
-      // printf("Sunset: %s\n",
-      // SetSettings.sunset); 			printf("Day light: %s\n",
-      // SetSettings.dlength);
-    }
-  }
   /* ── PWM Fade тик-счётчик ── */
   static uint32_t fade_tick = 0;
   /* Infinite loop */
@@ -2370,7 +2357,7 @@ void StartServiceTask(void *argument)
     if (day != prevday) {
       prevday = day;
       // Calculate after system reboot
-      printResults();
+      svc_printResults();
       if (year != 0000) { // Ensure year is set
         calculateMoonPhase((DateTime){year, month, day, timez->tm_hour,
                                       timez->tm_min, timez->tm_sec},
