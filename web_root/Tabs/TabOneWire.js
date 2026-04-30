@@ -83,6 +83,111 @@ function initGlobalTooltip() {
 }
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Action helpers — парсинг строки "6:1,12:0,18:2" в читаемый вид
+// ---------------------------------------------------------------------------
+const _stateLabel = (s) =>
+  s === '1' ? 'ON' : s === '0' ? 'OFF' : s === '2' ? 'TG' : (s ?? '?');
+
+const _stateColor = (s) =>
+  s === '1' ? '#16a34a' : s === '0' ? '#dc2626' : s === '2' ? '#d97706' : '#64748b';
+
+const _parseAction = (str) => {
+  if (!str) return [];
+  return str.split(',').map(p => {
+    const [pin, state] = p.trim().split(':');
+    return { pin: pin?.trim(), state: state?.trim() };
+  }).filter(x => x.pin !== undefined && x.pin !== '');
+};
+
+// ActionBadge — единый бейдж вида:  ↑ 30°C: [id6:ON, id12:ON, id18:ON]
+//
+//   «id»      — светлый  #94a3b8, font-weight:400  (не сливается с номером)
+//   номер пина — тёмный  #334155, font-weight:700  (читается чётко)
+//
+//   isUpper  — true = верхний предел (оранжевый бейдж), false = нижний (синий)
+//   isHumid  — true = влажность (добавляет 💧 к стрелке)
+//   value    — числовое значение порога (температура или влажность)
+//   unit     — "°C" или "%"
+//   str      — строка действий "6:1,12:0,18:2"
+const ActionBadge = ({ isUpper, isHumid, value, unit, str }) => {
+  const parts       = _parseAction(str);
+  const arrow       = (isHumid ? '💧' : '') + (isUpper ? '↑' : '↓');
+  const borderColor = isUpper ? '#fdba74' : '#93c5fd';
+  const bg          = isUpper ? '#fff7ed' : '#eff6ff';
+  const labelColor  = isUpper ? '#9a3412' : '#1e3a5f';
+
+  return html`
+    <span style="
+      display:inline-flex;align-items:center;gap:4px;
+      background:${bg};border:1.5px solid ${borderColor};
+      border-radius:10px;padding:3px 10px;
+      font-size:12px;font-weight:600;white-space:nowrap;line-height:1.6;
+    ">
+      <span style="color:${labelColor};margin-right:2px;">
+        ${arrow} ${value ?? '—'}${unit}:
+      </span>
+      ${parts.length === 0
+        ? html`<span style="color:#94a3b8;">[—]</span>`
+        : html`
+            <span style="color:#475569;">[</span>
+            ${parts.map(({ pin, state }, i) => html`
+              <span>
+                <span style="color:#94a3b8;font-weight:400;">id</span><span style="color:#334155;font-weight:700;">${pin}</span><span style="color:#475569;">:</span><span style="color:${_stateColor(state)};font-weight:700;">${_stateLabel(state)}</span>${i < parts.length - 1 ? html`<span style="color:#94a3b8;">,${' '}</span>` : ''}
+              </span>
+            `)}
+            <span style="color:#475569;">]</span>
+          `}
+    </span>
+  `;
+};
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Контент блока "Help" (рыба-текст — заменить на реальный позже)
+// ---------------------------------------------------------------------------
+const HELP_CONTENT = {
+  ru: html`
+    <div style="line-height:1.8;font-size:14px;color:#334155;">
+      <p style="margin-bottom:12px;font-weight:700;font-size:15px;">OneWire — справка</p>
+      <p style="margin-bottom:10px;">
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+        Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+      </p>
+      <p style="margin-bottom:10px;">
+        Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+        Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+      </p>
+      <p>
+        Каждый сенсор имеет уникальный серийный номер (SN). Кнопка «copy SN» копирует его в буфер обмена.
+        Значение <b style="color:#16a34a;">ON</b> — включить пин при достижении порога,
+        <b style="color:#dc2626;">OFF</b> — выключить,
+        <b style="color:#d97706;">TG</b> — переключить (toggle).
+      </p>
+    </div>
+  `,
+  en: html`
+    <div style="line-height:1.8;font-size:14px;color:#334155;">
+      <p style="margin-bottom:12px;font-weight:700;font-size:15px;">OneWire — Help</p>
+      <p style="margin-bottom:10px;">
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+        Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+      </p>
+      <p style="margin-bottom:10px;">
+        Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+        Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+      </p>
+      <p>
+        Each sensor has a unique serial number (SN). The «copy SN» button copies it to the clipboard.
+        Value <b style="color:#16a34a;">ON</b> — turn the pin on when the threshold is reached,
+        <b style="color:#dc2626;">OFF</b> — turn it off,
+        <b style="color:#d97706;">TG</b> — toggle.
+      </p>
+    </div>
+  `,
+};
+// ---------------------------------------------------------------------------
+
 const TabOneWire = () => {
   const [varonewire, setOneWire]       = useState([]);
   const [error, setError]              = useState(null);
@@ -91,6 +196,7 @@ const TabOneWire = () => {
   const [editingOneWire, setEditingOneWire] = useState(null);
   const [language, setLanguage]        = useState('ru');
   const [modalType, setModalType]      = useState(null);
+  const [showHelp, setShowHelp]        = useState(false);
 
   // ── Collapsible state ───────────────────────────────────────────────────
   const [expandedPins, setExpandedPins] = useState({});
@@ -311,7 +417,7 @@ const TabOneWire = () => {
     `;
   };
 
-  // ── SensorTable — оригинальное содержимое раскрытой группы (без изменений)
+  // ── SensorTable — раскрытая группа сенсоров ────────────────────────────
   const SensorTable = ({ d }) => {
     const sensorType = d.typsensor || d.typsensr || 0;
     const numDevices = d.numdevices || d.numsens || 0;
@@ -336,22 +442,39 @@ const TabOneWire = () => {
       const isDHT22 = sensorType === 2;
       const sn      = clean(sensorData.s_number) || '';
 
-      const copySN = (e) => {
-        e.stopPropagation();
-        if (!sn) return;
-        const btn = e.currentTarget;
-        navigator.clipboard.writeText(sn).then(() => {
-          btn.textContent = '✅ copied!';
-          btn.style.background = '#059669';
-          setTimeout(() => {
-            btn.textContent = '📋 copy';
-            btn.style.background = '';
-          }, 1500);
-        }).catch(() => {
-          btn.textContent = '❌ error';
-          setTimeout(() => { btn.textContent = '📋 copy'; }, 1500);
-        });
+      // ── Кнопка "copy SN" ─────────────────────────────────────────────
+      //   bg-gradient-to-r from-teal-400 to-cyan-500, rounded-full, font-bold
+    const copySN = (e) => {
+      e.stopPropagation();
+      if (!sn) return;
+      const btn = e.currentTarget;
+
+      const done = (ok) => {
+        btn.textContent = ok ? 'Copied!' : 'Error';
+        setTimeout(() => { btn.textContent = 'copy SN'; }, 1500);
       };
+
+      // Secure context (localhost / https) — современный API
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(sn).then(() => done(true)).catch(() => done(false));
+        return;
+      }
+
+      // Fallback для http:// по реальному IP (execCommand устарел, но работает везде)
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = sn;
+        ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        done(ok);
+      } catch {
+        done(false);
+      }
+    };
 
       return html`
         <div class="w-full flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3
@@ -368,65 +491,69 @@ const TabOneWire = () => {
                     ${sn}
                   </span>
                   <button
-                    style="transition: background 0.08s, transform 0.08s, box-shadow 0.08s;"
-                    class="text-xs text-white font-bold px-3 py-1 rounded-lg
-                           bg-emerald-500 hover:bg-emerald-600
-                           shadow-md hover:shadow-lg
-                           active:scale-95 active:shadow-inner active:bg-emerald-700
+                    class="px-4 py-1.5 rounded-full text-sm font-bold text-white shadow-lg
+                           transition-all duration-300 transform
+                           hover:scale-105 active:scale-95
+                           bg-gradient-to-r from-teal-400 to-cyan-500
+                           hover:from-teal-500 hover:to-cyan-600
+                           hover:shadow-cyan-500/40
                            leading-none shrink-0"
-                    onmousedown=${(e) => {
-                      e.currentTarget.style.transform = 'scale(0.93)';
-                      e.currentTarget.style.boxShadow = 'inset 0 2px 6px rgba(0,0,0,0.25)';
-                    }}
-                    onmouseup=${(e) => {
-                      e.currentTarget.style.transform = '';
-                      e.currentTarget.style.boxShadow = '';
-                    }}
-                    onmouseleave=${(e) => {
-                      e.currentTarget.style.transform = '';
-                      e.currentTarget.style.boxShadow = '';
-                    }}
                     onclick=${copySN}
                     title="Copy S/N to clipboard"
-                  >📋 copy</button>
+                  >copy SN</button>
                 </span>
               `}
 
           <span class="text-slate-300 select-none text-base">|</span>
 
-          <!-- Температура -->
-          <span class="font-bold text-cyan-700 text-base shrink-0">
+          <!-- Текущая температура -->
+          <span class="font-bold text-cyan-700 text-base shrink-0"
+                title="Current temperature">
             🌡 ${sensorData.t ?? '—'}°C
           </span>
 
           ${isDHT22 && 'humidity' in sensorData ? html`
-            <span class="font-bold text-teal-600 text-base shrink-0">
+            <span class="font-bold text-teal-600 text-base shrink-0"
+                  title="Current humidity">
               💧 ${sensorData.humidity}%
             </span>
           ` : ''}
 
           <span class="text-slate-300 select-none text-base">|</span>
 
-          <!-- Лимиты температуры -->
-          <span
-            class="px-2.5 py-1 bg-orange-100 text-orange-700 rounded-md text-sm font-semibold shrink-0"
-            title="Upper temperature limit"
-          >↑${sensorData.ut}°C → ${sensorData.action_ut}</span>
-          <span
-            class="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-md text-sm font-semibold shrink-0"
-            title="Lower temperature limit"
-          >↓${sensorData.lt}°C → ${sensorData.action_lt}</span>
+          <!-- Лимиты температуры в виде читаемых бейджей -->
+          <${ActionBadge}
+            isUpper=${true}
+            isHumid=${false}
+            value=${sensorData.ut}
+            unit="°C"
+            str=${sensorData.action_ut}
+          />
+          <${ActionBadge}
+            isUpper=${false}
+            isHumid=${false}
+            value=${sensorData.lt}
+            unit="°C"
+            str=${sensorData.action_lt}
+          />
 
           ${isDHT22 && 'upphumid' in sensorData ? html`
             <span class="text-slate-300 select-none text-base">|</span>
-            <span
-              class="px-2.5 py-1 bg-orange-50 text-orange-600 rounded-md text-sm font-semibold shrink-0"
-              title="Upper humidity limit"
-            >💧↑${sensorData.upphumid}% → ${sensorData.actuphum}</span>
-            <span
-              class="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-md text-sm font-semibold shrink-0"
-              title="Lower humidity limit"
-            >💧↓${sensorData.humlolim}% → ${sensorData.actlowhum}</span>
+            <!-- Лимиты влажности -->
+            <${ActionBadge}
+              isUpper=${true}
+              isHumid=${true}
+              value=${sensorData.upphumid}
+              unit="%"
+              str=${sensorData.actuphum}
+            />
+            <${ActionBadge}
+              isUpper=${false}
+              isHumid=${true}
+              value=${sensorData.humlolim}
+              unit="%"
+              str=${sensorData.actlowhum}
+            />
           ` : ''}
 
           ${sensorData.info ? html`
@@ -507,7 +634,30 @@ const TabOneWire = () => {
             </div>
           </div>
         </div>
+
+        <!-- ── Нижняя панель: кнопка Show/Hide Help ── -->
+        <div class="w-full flex justify-between items-center mb-4 mt-2 bg-white/40 backdrop-blur-md border border-white/60 shadow-sm p-4 rounded-2xl">
+          <button
+            class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg
+                   transition-all duration-300 transform hover:scale-105 active:scale-95
+                   bg-gradient-to-r from-teal-400 to-cyan-500
+                   hover:from-teal-500 hover:to-cyan-600
+                   hover:shadow-cyan-500/40"
+            onclick=${() => setShowHelp(!showHelp)}
+          >
+            ${showHelp
+              ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help')
+              : (language === 'ru' ? 'Показать справку' : 'Show Help')}
+          </button>
+        </div>
       </div>
+
+      <!-- ── Блок справки (раскрывается/скрывается по кнопке) ── -->
+      ${showHelp && html`
+        <div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full">
+          ${HELP_CONTENT[language] || HELP_CONTENT['en']}
+        </div>
+      `}
     </div>
 
     ${isModalOpen &&

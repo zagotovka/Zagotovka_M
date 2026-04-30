@@ -1,5 +1,5 @@
 {
-  "lang": "ru",
+  "lang": "en",
   "pins": [
     {
       "id": 75,
@@ -12,11 +12,11 @@
           "s_number": "2818BC75D0013C63",
           "t": 0,
           "valid": false,
-          "ut": 0,
-          "lt": 0,
-          "action_ut": "",
-          "action_lt": "",
-          "info": ""
+          "ut": 30,
+          "lt": 20,
+          "action_ut": "6:1,12:1,18:2",
+          "action_lt": "6:0,12:0,18:2",
+          "info": "Kuhnya"
         },
         {
           "s_number": "28B63A75D0013C7B",
@@ -62,15 +62,15 @@
           "t": 0,
           "humidity": 0,
           "valid": false,
-          "ut": 0,
-          "lt": 0,
-          "action_ut": "",
-          "action_lt": "",
+          "ut": 10,
+          "lt": 5,
+          "action_ut": "18:1",
+          "action_lt": "18:0",
           "upphumid": 0,
           "humlolim": 0,
           "actuphum": "",
           "actlowhum": "",
-          "info": ""
+          "info": "Zal"
         }
       ]
     },
@@ -86,15 +86,15 @@
           "t": 0,
           "humidity": 0,
           "valid": false,
-          "ut": 0,
-          "lt": 0,
-          "action_ut": "",
-          "action_lt": "",
+          "ut": 20,
+          "lt": 10,
+          "action_ut": "12:1",
+          "action_lt": "12:1",
           "upphumid": 0,
           "humlolim": 0,
           "actuphum": "",
           "actlowhum": "",
-          "info": ""
+          "info": "Spalnya"
         }
       ]
     }
