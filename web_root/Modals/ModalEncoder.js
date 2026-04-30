@@ -3,6 +3,7 @@ import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
+import { pwmTimerMap } from '../Tabs/TabEncoder.js';
 
 function ModalEncoder({
   modalType,
@@ -244,11 +245,14 @@ function ModalEncoder({
                       >
                         <option value="">Select PWM connection</option>
                         ${pwmOptions.map(
-          (option) => html`
+          (option) => {
+            const timerName = pwmTimerMap[option.pins] || 'Unknown Timer';
+            return html`
                             <option value=${`${option.pins}|${option.id}`}>
-                              ${option.pins} (ID: ${option.id})
+                              ${option.pins} (${timerName}, ID: ${option.id})
                             </option>
                           `
+          }
         )}
                       </select>
                     </td>

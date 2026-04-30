@@ -1,5 +1,5 @@
-(function(){const k=document.createElement("link").relList;if(k&&k.supports&&k.supports("modulepreload"))return;for(const dt of document.querySelectorAll('link[rel="modulepreload"]'))ct(dt);new MutationObserver(dt=>{for(const _ of dt)if(_.type==="childList")for(const pt of _.addedNodes)pt.tagName==="LINK"&&pt.rel==="modulepreload"&&ct(pt)}).observe(document,{childList:!0,subtree:!0});function st(dt){const _={};return dt.integrity&&(_.integrity=dt.integrity),dt.referrerPolicy&&(_.referrerPolicy=dt.referrerPolicy),dt.crossOrigin==="use-credentials"?_.credentials="include":dt.crossOrigin==="anonymous"?_.credentials="omit":_.credentials="same-origin",_}function ct(dt){if(dt.ep)return;dt.ep=!0;const _=st(dt);fetch(dt.href,_)}})();var t,n,e,r,o,u,i,l,c,a,s,f={},p=[],h=/acit|ex(?:s|g|n|p|$)|rph|grid|ows|mnc|ntw|ine[ch]|zoo|^ord|itera/i,d=Array.isArray;function v($,k){for(var st in k)$[st]=k[st];return $}function m($){var k=$.parentNode;k&&k.removeChild($)}function y($,k,st){var ct,dt,_,pt={};for(_ in k)_=="key"?ct=k[_]:_=="ref"?dt=k[_]:pt[_]=k[_];if(arguments.length>2&&(pt.children=arguments.length>3?t.call(arguments,2):st),typeof $=="function"&&$.defaultProps!=null)for(_ in $.defaultProps)pt[_]===void 0&&(pt[_]=$.defaultProps[_]);return g($,pt,ct,dt,null)}function g($,k,st,ct,dt){var _={type:$,props:k,key:st,ref:ct,__k:null,__:null,__b:0,__e:null,__d:void 0,__c:null,constructor:void 0,__v:dt??++e,__i:-1,__u:0};return dt==null&&n.vnode!=null&&n.vnode(_),_}function b($){return $.children}function C($,k){this.props=$,this.context=k}function x($,k){if(k==null)return $.__?x($.__,$.__i+1):null;for(var st;k<$.__k.length;k++)if((st=$.__k[k])!=null&&st.__e!=null)return st.__e;return typeof $.type=="function"?x($):null}function w($){var k,st;if(($=$.__)!=null&&$.__c!=null){for($.__e=$.__c.base=null,k=0;k<$.__k.length;k++)if((st=$.__k[k])!=null&&st.__e!=null){$.__e=$.__c.base=st.__e;break}return w($)}}function P($){(!$.__d&&($.__d=!0)&&r.push($)&&!U.__r++||o!==n.debounceRendering)&&((o=n.debounceRendering)||u)(U)}function U(){var $,k,st,ct,dt,_,pt,ee;for(r.sort(i);$=r.shift();)$.__d&&(k=r.length,ct=void 0,_=(dt=(st=$).__v).__e,pt=[],ee=[],st.__P&&((ct=v({},dt)).__v=dt.__v+1,n.vnode&&n.vnode(ct),M(st.__P,ct,dt,st.__n,st.__P.namespaceURI,32&dt.__u?[_]:null,pt,_??x(dt),!!(32&dt.__u),ee),ct.__v=dt.__v,ct.__.__k[ct.__i]=ct,L(pt,ct,ee),ct.__e!=_&&w(ct)),r.length>k&&r.sort(i));U.__r=0}function H($,k,st,ct,dt,_,pt,ee,vt,te,ne){var Xt,se,re,ce,ge,ye=ct&&ct.__k||p,pe=k.length;for(st.__d=vt,E(st,k,ye),vt=st.__d,Xt=0;Xt<pe;Xt++)(re=st.__k[Xt])!=null&&typeof re!="boolean"&&typeof re!="function"&&(se=re.__i===-1?f:ye[re.__i]||f,re.__i=Xt,M($,re,se,dt,_,pt,ee,vt,te,ne),ce=re.__e,re.ref&&se.ref!=re.ref&&(se.ref&&F(se.ref,null,re),ne.push(re.ref,re.__c||ce,re)),ge==null&&ce!=null&&(ge=ce),65536&re.__u||se.__k===re.__k?(vt&&!vt.isConnected&&(vt=x(se)),vt=S(re,vt,$)):typeof re.type=="function"&&re.__d!==void 0?vt=re.__d:ce&&(vt=ce.nextSibling),re.__d=void 0,re.__u&=-196609);st.__d=vt,st.__e=ge}function E($,k,st){var ct,dt,_,pt,ee,vt=k.length,te=st.length,ne=te,Xt=0;for($.__k=[],ct=0;ct<vt;ct++)pt=ct+Xt,(dt=$.__k[ct]=(dt=k[ct])==null||typeof dt=="boolean"||typeof dt=="function"?null:typeof dt=="string"||typeof dt=="number"||typeof dt=="bigint"||dt.constructor==String?g(null,dt,null,null,null):d(dt)?g(b,{children:dt},null,null,null):dt.constructor===void 0&&dt.__b>0?g(dt.type,dt.props,dt.key,dt.ref?dt.ref:null,dt.__v):dt)!=null?(dt.__=$,dt.__b=$.__b+1,ee=D(dt,st,pt,ne),dt.__i=ee,_=null,ee!==-1&&(ne--,(_=st[ee])&&(_.__u|=131072)),_==null||_.__v===null?(ee==-1&&Xt--,typeof dt.type!="function"&&(dt.__u|=65536)):ee!==pt&&(ee===pt+1?Xt++:ee>pt?ne>vt-pt?Xt+=ee-pt:Xt--:ee<pt?ee==pt-1&&(Xt=ee-pt):Xt=0,ee!==ct+Xt&&(dt.__u|=65536))):(_=st[pt])&&_.key==null&&_.__e&&(131072&_.__u)==0&&(_.__e==$.__d&&($.__d=x(_)),I(_,_,!1),st[pt]=null,ne--);if(ne)for(ct=0;ct<te;ct++)(_=st[ct])!=null&&(131072&_.__u)==0&&(_.__e==$.__d&&($.__d=x(_)),I(_,_))}function S($,k,st){var ct,dt;if(typeof $.type=="function"){for(ct=$.__k,dt=0;ct&&dt<ct.length;dt++)ct[dt]&&(ct[dt].__=$,k=S(ct[dt],k,st));return k}$.__e!=k&&(st.insertBefore($.__e,k||null),k=$.__e);do k=k&&k.nextSibling;while(k!=null&&k.nodeType===8);return k}function A($,k){return k=k||[],$==null||typeof $=="boolean"||(d($)?$.some((function(st){A(st,k)})):k.push($)),k}function D($,k,st,ct){var dt=$.key,_=$.type,pt=st-1,ee=st+1,vt=k[st];if(vt===null||vt&&dt==vt.key&&_===vt.type&&(131072&vt.__u)==0)return st;if(ct>(vt!=null&&(131072&vt.__u)==0?1:0))for(;pt>=0||ee<k.length;){if(pt>=0){if((vt=k[pt])&&(131072&vt.__u)==0&&dt==vt.key&&_===vt.type)return pt;pt--}if(ee<k.length){if((vt=k[ee])&&(131072&vt.__u)==0&&dt==vt.key&&_===vt.type)return ee;ee++}}return-1}function N($,k,st){k[0]==="-"?$.setProperty(k,st??""):$[k]=st==null?"":typeof st!="number"||h.test(k)?st:st+"px"}function R($,k,st,ct,dt){var _;t:if(k==="style")if(typeof st=="string")$.style.cssText=st;else{if(typeof ct=="string"&&($.style.cssText=ct=""),ct)for(k in ct)st&&k in st||N($.style,k,"");if(st)for(k in st)ct&&st[k]===ct[k]||N($.style,k,st[k])}else if(k[0]==="o"&&k[1]==="n")_=k!==(k=k.replace(/(PointerCapture)$|Capture$/i,"$1")),k=k.toLowerCase()in $||k==="onFocusOut"||k==="onFocusIn"?k.toLowerCase().slice(2):k.slice(2),$.l||($.l={}),$.l[k+_]=st,st?ct?st.u=ct.u:(st.u=l,$.addEventListener(k,_?a:c,_)):$.removeEventListener(k,_?a:c,_);else{if(dt=="http://www.w3.org/2000/svg")k=k.replace(/xlink(H|:h)/,"h").replace(/sName$/,"s");else if(k!="width"&&k!="height"&&k!="href"&&k!="list"&&k!="form"&&k!="tabIndex"&&k!="download"&&k!="rowSpan"&&k!="colSpan"&&k!="role"&&k in $)try{$[k]=st??"";break t}catch{}typeof st=="function"||(st==null||st===!1&&k[4]!=="-"?$.removeAttribute(k):$.setAttribute(k,st))}}function T($){return function(k){if(this.l){var st=this.l[k.type+$];if(k.t==null)k.t=l++;else if(k.t<st.u)return;return st(n.event?n.event(k):k)}}}function M($,k,st,ct,dt,_,pt,ee,vt,te){var ne,Xt,se,re,ce,ge,ye,pe,he,be,$e,ke,_e,Oe,de,xe=k.type;if(k.constructor!==void 0)return null;128&st.__u&&(vt=!!(32&st.__u),_=[ee=k.__e=st.__e]),(ne=n.__b)&&ne(k);t:if(typeof xe=="function")try{if(pe=k.props,he=(ne=xe.contextType)&&ct[ne.__c],be=ne?he?he.props.value:ne.__:ct,st.__c?ye=(Xt=k.__c=st.__c).__=Xt.__E:("prototype"in xe&&xe.prototype.render?k.__c=Xt=new xe(pe,be):(k.__c=Xt=new C(pe,be),Xt.constructor=xe,Xt.render=V),he&&he.sub(Xt),Xt.props=pe,Xt.state||(Xt.state={}),Xt.context=be,Xt.__n=ct,se=Xt.__d=!0,Xt.__h=[],Xt._sb=[]),Xt.__s==null&&(Xt.__s=Xt.state),xe.getDerivedStateFromProps!=null&&(Xt.__s==Xt.state&&(Xt.__s=v({},Xt.__s)),v(Xt.__s,xe.getDerivedStateFromProps(pe,Xt.__s))),re=Xt.props,ce=Xt.state,Xt.__v=k,se)xe.getDerivedStateFromProps==null&&Xt.componentWillMount!=null&&Xt.componentWillMount(),Xt.componentDidMount!=null&&Xt.__h.push(Xt.componentDidMount);else{if(xe.getDerivedStateFromProps==null&&pe!==re&&Xt.componentWillReceiveProps!=null&&Xt.componentWillReceiveProps(pe,be),!Xt.__e&&(Xt.shouldComponentUpdate!=null&&Xt.shouldComponentUpdate(pe,Xt.__s,be)===!1||k.__v===st.__v)){for(k.__v!==st.__v&&(Xt.props=pe,Xt.state=Xt.__s,Xt.__d=!1),k.__e=st.__e,k.__k=st.__k,k.__k.forEach((function(Ee){Ee&&(Ee.__=k)})),$e=0;$e<Xt._sb.length;$e++)Xt.__h.push(Xt._sb[$e]);Xt._sb=[],Xt.__h.length&&pt.push(Xt);break t}Xt.componentWillUpdate!=null&&Xt.componentWillUpdate(pe,Xt.__s,be),Xt.componentDidUpdate!=null&&Xt.__h.push((function(){Xt.componentDidUpdate(re,ce,ge)}))}if(Xt.context=be,Xt.props=pe,Xt.__P=$,Xt.__e=!1,ke=n.__r,_e=0,"prototype"in xe&&xe.prototype.render){for(Xt.state=Xt.__s,Xt.__d=!1,ke&&ke(k),ne=Xt.render(Xt.props,Xt.state,Xt.context),Oe=0;Oe<Xt._sb.length;Oe++)Xt.__h.push(Xt._sb[Oe]);Xt._sb=[]}else do Xt.__d=!1,ke&&ke(k),ne=Xt.render(Xt.props,Xt.state,Xt.context),Xt.state=Xt.__s;while(Xt.__d&&++_e<25);Xt.state=Xt.__s,Xt.getChildContext!=null&&(ct=v(v({},ct),Xt.getChildContext())),se||Xt.getSnapshotBeforeUpdate==null||(ge=Xt.getSnapshotBeforeUpdate(re,ce)),H($,d(de=ne!=null&&ne.type===b&&ne.key==null?ne.props.children:ne)?de:[de],k,st,ct,dt,_,pt,ee,vt,te),Xt.base=k.__e,k.__u&=-161,Xt.__h.length&&pt.push(Xt),ye&&(Xt.__E=Xt.__=null)}catch(Ee){k.__v=null,vt||_!=null?(k.__e=ee,k.__u|=vt?160:32,_[_.indexOf(ee)]=null):(k.__e=st.__e,k.__k=st.__k),n.__e(Ee,k,st)}else _==null&&k.__v===st.__v?(k.__k=st.__k,k.__e=st.__e):k.__e=W(st.__e,k,st,ct,dt,_,pt,vt,te);(ne=n.diffed)&&ne(k)}function L($,k,st){k.__d=void 0;for(var ct=0;ct<st.length;ct++)F(st[ct],st[++ct],st[++ct]);n.__c&&n.__c(k,$),$.some((function(dt){try{$=dt.__h,dt.__h=[],$.some((function(_){_.call(dt)}))}catch(_){n.__e(_,dt.__v)}}))}function W($,k,st,ct,dt,_,pt,ee,vt){var te,ne,Xt,se,re,ce,ge,ye=st.props,pe=k.props,he=k.type;if(he==="svg"?dt="http://www.w3.org/2000/svg":he==="math"?dt="http://www.w3.org/1998/Math/MathML":dt||(dt="http://www.w3.org/1999/xhtml"),_!=null){for(te=0;te<_.length;te++)if((re=_[te])&&"setAttribute"in re==!!he&&(he?re.localName===he:re.nodeType===3)){$=re,_[te]=null;break}}if($==null){if(he===null)return document.createTextNode(pe);$=document.createElementNS(dt,he,pe.is&&pe),_=null,ee=!1}if(he===null)ye===pe||ee&&$.data===pe||($.data=pe);else{if(_=_&&t.call($.childNodes),ye=st.props||f,!ee&&_!=null)for(ye={},te=0;te<$.attributes.length;te++)ye[(re=$.attributes[te]).name]=re.value;for(te in ye)if(re=ye[te],te!="children"){if(te=="dangerouslySetInnerHTML")Xt=re;else if(te!=="key"&&!(te in pe)){if(te=="value"&&"defaultValue"in pe||te=="checked"&&"defaultChecked"in pe)continue;R($,te,null,re,dt)}}for(te in pe)re=pe[te],te=="children"?se=re:te=="dangerouslySetInnerHTML"?ne=re:te=="value"?ce=re:te=="checked"?ge=re:te==="key"||ee&&typeof re!="function"||ye[te]===re||R($,te,re,ye[te],dt);if(ne)ee||Xt&&(ne.__html===Xt.__html||ne.__html===$.innerHTML)||($.innerHTML=ne.__html),k.__k=[];else if(Xt&&($.innerHTML=""),H($,d(se)?se:[se],k,st,ct,he==="foreignObject"?"http://www.w3.org/1999/xhtml":dt,_,pt,_?_[0]:st.__k&&x(st,0),ee,vt),_!=null)for(te=_.length;te--;)_[te]!=null&&m(_[te]);ee||(te="value",ce!==void 0&&(ce!==$[te]||he==="progress"&&!ce||he==="option"&&ce!==ye[te])&&R($,te,ce,ye[te],dt),te="checked",ge!==void 0&&ge!==$[te]&&R($,te,ge,ye[te],dt))}return $}function F($,k,st){try{typeof $=="function"?$(k):$.current=k}catch(ct){n.__e(ct,st)}}function I($,k,st){var ct,dt;if(n.unmount&&n.unmount($),(ct=$.ref)&&(ct.current&&ct.current!==$.__e||F(ct,null,k)),(ct=$.__c)!=null){if(ct.componentWillUnmount)try{ct.componentWillUnmount()}catch(_){n.__e(_,k)}ct.base=ct.__P=null}if(ct=$.__k)for(dt=0;dt<ct.length;dt++)ct[dt]&&I(ct[dt],k,st||typeof $.type!="function");st||$.__e==null||m($.__e),$.__c=$.__=$.__e=$.__d=void 0}function V($,k,st){return this.constructor($,st)}function O($,k,st){var ct,dt,_,pt;n.__&&n.__($,k),dt=(ct=!1)?null:k.__k,_=[],pt=[],M(k,$=k.__k=y(b,null,[$]),dt||f,f,k.namespaceURI,dt?null:k.firstChild?t.call(k.childNodes):null,_,dt?dt.__e:k.firstChild,ct,pt),L(_,$,pt)}function j($,k,st){var ct,dt,_,pt,ee=v({},$.props);for(_ in $.type&&$.type.defaultProps&&(pt=$.type.defaultProps),k)_=="key"?ct=k[_]:_=="ref"?dt=k[_]:ee[_]=k[_]===void 0&&pt!==void 0?pt[_]:k[_];return arguments.length>2&&(ee.children=arguments.length>3?t.call(arguments,2):st),g($.type,ee,ct||$.key,dt||$.ref,null)}function q($,k){var st={__c:k="__cC"+s++,__:$,Consumer:function(ct,dt){return ct.children(dt)},Provider:function(ct){var dt,_;return this.getChildContext||(dt=[],(_={})[k]=this,this.getChildContext=function(){return _},this.shouldComponentUpdate=function(pt){this.props.value!==pt.value&&dt.some((function(ee){ee.__e=!0,P(ee)}))},this.sub=function(pt){dt.push(pt);var ee=pt.componentWillUnmount;pt.componentWillUnmount=function(){dt.splice(dt.indexOf(pt),1),ee&&ee.call(pt)}}),ct.children}};return st.Provider.__=st.Consumer.contextType=st}t=p.slice,n={__e:function($,k,st,ct){for(var dt,_,pt;k=k.__;)if((dt=k.__c)&&!dt.__)try{if((_=dt.constructor)&&_.getDerivedStateFromError!=null&&(dt.setState(_.getDerivedStateFromError($)),pt=dt.__d),dt.componentDidCatch!=null&&(dt.componentDidCatch($,ct||{}),pt=dt.__d),pt)return dt.__E=dt}catch(ee){$=ee}throw $}},e=0,C.prototype.setState=function($,k){var st;st=this.__s!=null&&this.__s!==this.state?this.__s:this.__s=v({},this.state),typeof $=="function"&&($=$(v({},st),this.props)),$&&v(st,$),$!=null&&this.__v&&(k&&this._sb.push(k),P(this))},C.prototype.forceUpdate=function($){this.__v&&(this.__e=!0,$&&this.__h.push($),P(this))},C.prototype.render=b,r=[],u=typeof Promise=="function"?Promise.prototype.then.bind(Promise.resolve()):setTimeout,i=function($,k){return $.__v.__b-k.__v.__b},U.__r=0,l=0,c=T(!1),a=T(!0),s=0;var B,K,z,G,J=0,Q=[],X=[],Y=n,Z=Y.__b,tt=Y.__r,nt=Y.diffed,et=Y.__c,_t=Y.unmount,rt=Y.__;function ot($,k){Y.__h&&Y.__h(K,$,J||k),J=0;var st=K.__H||(K.__H={__:[],__h:[]});return $>=st.__.length&&st.__.push({__V:X}),st.__[$]}function ut($){return J=1,it(wt,$)}function it($,k,st){var ct=ot(B++,2);if(ct.t=$,!ct.__c&&(ct.__=[wt(void 0,k),function(ee){var vt=ct.__N?ct.__N[0]:ct.__[0],te=ct.t(vt,ee);vt!==te&&(ct.__N=[te,ct.__[1]],ct.__c.setState({}))}],ct.__c=K,!K.u)){var dt=function(ee,vt,te){if(!ct.__c.__H)return!0;var ne=ct.__c.__H.__.filter((function(se){return!!se.__c}));if(ne.every((function(se){return!se.__N})))return!_||_.call(this,ee,vt,te);var Xt=!1;return ne.forEach((function(se){if(se.__N){var re=se.__[0];se.__=se.__N,se.__N=void 0,re!==se.__[0]&&(Xt=!0)}})),!(!Xt&&ct.__c.props===ee)&&(!_||_.call(this,ee,vt,te))};K.u=!0;var _=K.shouldComponentUpdate,pt=K.componentWillUpdate;K.componentWillUpdate=function(ee,vt,te){if(this.__e){var ne=_;_=void 0,dt(ee,vt,te),_=ne}pt&&pt.call(this,ee,vt,te)},K.shouldComponentUpdate=dt}return ct.__N||ct.__}function lt($,k){var st=ot(B++,3);!Y.__s&&xt(st.__H,k)&&(st.__=$,st.i=k,K.__H.__h.push(st))}function at($){return J=5,ft((function(){return{current:$}}),[])}function ft($,k){var st=ot(B++,7);return xt(st.__H,k)?(st.__V=$(),st.i=k,st.__h=$,st.__V):st.__}function yt(){for(var $;$=Q.shift();)if($.__P&&$.__H)try{$.__H.__h.forEach(bt),$.__H.__h.forEach(Ct),$.__H.__h=[]}catch(k){$.__H.__h=[],Y.__e(k,$.__v)}}Y.__b=function($){K=null,Z&&Z($)},Y.__=function($,k){$&&k.__k&&k.__k.__m&&($.__m=k.__k.__m),rt&&rt($,k)},Y.__r=function($){tt&&tt($),B=0;var k=(K=$.__c).__H;k&&(z===K?(k.__h=[],K.__h=[],k.__.forEach((function(st){st.__N&&(st.__=st.__N),st.__V=X,st.__N=st.i=void 0}))):(k.__h.forEach(bt),k.__h.forEach(Ct),k.__h=[],B=0)),z=K},Y.diffed=function($){nt&&nt($);var k=$.__c;k&&k.__H&&(k.__H.__h.length&&(Q.push(k)!==1&&G===Y.requestAnimationFrame||((G=Y.requestAnimationFrame)||kt)(yt)),k.__H.__.forEach((function(st){st.i&&(st.__H=st.i),st.__V!==X&&(st.__=st.__V),st.i=void 0,st.__V=X}))),z=K=null},Y.__c=function($,k){k.some((function(st){try{st.__h.forEach(bt),st.__h=st.__h.filter((function(ct){return!ct.__||Ct(ct)}))}catch(ct){k.some((function(dt){dt.__h&&(dt.__h=[])})),k=[],Y.__e(ct,st.__v)}})),et&&et($,k)},Y.unmount=function($){_t&&_t($);var k,st=$.__c;st&&st.__H&&(st.__H.__.forEach((function(ct){try{bt(ct)}catch(dt){k=dt}})),st.__H=void 0,k&&Y.__e(k,st.__v))};var gt=typeof requestAnimationFrame=="function";function kt($){var k,st=function(){clearTimeout(ct),gt&&cancelAnimationFrame(k),setTimeout($)},ct=setTimeout(st,100);gt&&(k=requestAnimationFrame(st))}function bt($){var k=K,st=$.__c;typeof st=="function"&&($.__c=void 0,st()),K=k}function Ct($){var k=K;$.__c=$.__(),K=k}function xt($,k){return!$||$.length!==k.length||k.some((function(st,ct){return st!==$[ct]}))}function wt($,k){return typeof k=="function"?k($):k}var Pt=function($,k,st,ct){var dt;k[0]=0;for(var _=1;_<k.length;_++){var pt=k[_++],ee=k[_]?(k[0]|=pt?1:2,st[k[_++]]):k[++_];pt===3?ct[0]=ee:pt===4?ct[1]=Object.assign(ct[1]||{},ee):pt===5?(ct[1]=ct[1]||{})[k[++_]]=ee:pt===6?ct[1][k[++_]]+=ee+"":pt?(dt=$.apply(ee,Pt($,ee,st,["",null])),ct.push(dt),ee[0]?k[0]|=2:(k[_-2]=0,k[_]=dt)):ct.push(ee)}return ct},Ut=new Map;function Ht($){var k=Ut.get(this);return k||(k=new Map,Ut.set(this,k)),(k=Pt(this,k.get($)||(k.set($,k=(function(st){for(var ct,dt,_=1,pt="",ee="",vt=[0],te=function(se){_===1&&(se||(pt=pt.replace(/^\s*\n\s*|\s*\n\s*$/g,"")))?vt.push(0,se,pt):_===3&&(se||pt)?(vt.push(3,se,pt),_=2):_===2&&pt==="..."&&se?vt.push(4,se,0):_===2&&pt&&!se?vt.push(5,0,!0,pt):_>=5&&((pt||!se&&_===5)&&(vt.push(_,0,pt,dt),_=6),se&&(vt.push(_,se,0,dt),_=6)),pt=""},ne=0;ne<st.length;ne++){ne&&(_===1&&te(),te(ne));for(var Xt=0;Xt<st[ne].length;Xt++)ct=st[ne][Xt],_===1?ct==="<"?(te(),vt=[vt],_=3):pt+=ct:_===4?pt==="--"&&ct===">"?(_=1,pt=""):pt=ct+pt[0]:ee?ct===ee?ee="":pt+=ct:ct==='"'||ct==="'"?ee=ct:ct===">"?(te(),_=1):_&&(ct==="="?(_=5,dt=pt,pt=""):ct==="/"&&(_<5||st[ne][Xt+1]===">")?(te(),_===3&&(vt=vt[0]),_=vt,(vt=vt[0]).push(2,0,_),_=0):ct===" "||ct==="	"||ct===`
-`||ct==="\r"?(te(),_=2):pt+=ct),_===3&&pt==="!--"&&(_=4,vt=vt[0])}return te(),vt})($)),k),arguments,[])).length>1?k:k[0]}var Et=Ht.bind(y),St={};function At($,k){for(var st in k)$[st]=k[st];return $}function Dt($,k,st){var ct,dt=/(?:\?([^#]*))?(#.*)?$/,_=$.match(dt),pt={};if(_&&_[1])for(var ee=_[1].split("&"),vt=0;vt<ee.length;vt++){var te=ee[vt].split("=");pt[decodeURIComponent(te[0])]=decodeURIComponent(te.slice(1).join("="))}$=Tt($.replace(dt,"")),k=Tt(k||"");for(var ne=Math.max($.length,k.length),Xt=0;Xt<ne;Xt++)if(k[Xt]&&k[Xt].charAt(0)===":"){var se=k[Xt].replace(/(^:|[+*?]+$)/g,""),re=(k[Xt].match(/[+*?]+$/)||St)[0]||"",ce=~re.indexOf("+"),ge=~re.indexOf("*"),ye=$[Xt]||"";if(!ye&&!ge&&(re.indexOf("?")<0||ce)){ct=!1;break}if(pt[se]=decodeURIComponent(ye),ce||ge){pt[se]=$.slice(Xt).map(decodeURIComponent).join("/");break}}else if(k[Xt]!==$[Xt]){ct=!1;break}return(st.default===!0||ct!==!1)&&pt}function Nt($,k){return $.rank<k.rank?1:$.rank>k.rank?-1:$.index-k.index}function Rt($,k){return $.index=k,$.rank=(function(st){return st.props.default?0:Tt(st.props.path).map(Mt).join("")})($),$.props}function Tt($){return $.replace(/(^\/+|\/+$)/g,"").split("/")}function Mt($){return $.charAt(0)==":"?1+"*+?".indexOf($.charAt($.length-1))||4:5}var Lt={},Wt=[],Ft=[],It=null,Vt={url:jt()},Ot=q(Vt);function jt(){var $;return""+(($=It&&It.location?It.location:It&&It.getCurrentLocation?It.getCurrentLocation():typeof location<"u"?location:Lt).pathname||"")+($.search||"")}function qt($,k){return k===void 0&&(k=!1),typeof $!="string"&&$.url&&(k=$.replace,$=$.url),(function(st){for(var ct=Wt.length;ct--;)if(Wt[ct].canRoute(st))return!0;return!1})($)&&(function(st,ct){ct===void 0&&(ct="push"),It&&It[ct]?It[ct](st):typeof history<"u"&&history[ct+"State"]&&history[ct+"State"](null,null,st)})($,k?"replace":"push"),Bt($)}function Bt($){for(var k=!1,st=0;st<Wt.length;st++)Wt[st].routeTo($)&&(k=!0);return k}function Kt($){if($&&$.getAttribute){var k=$.getAttribute("href"),st=$.getAttribute("target");if(k&&k.match(/^\//g)&&(!st||st.match(/^_?self$/i)))return qt(k)}}function zt($){return $.stopImmediatePropagation&&$.stopImmediatePropagation(),$.stopPropagation&&$.stopPropagation(),$.preventDefault(),!1}function Gt($){if(!($.ctrlKey||$.metaKey||$.altKey||$.shiftKey||$.button)){var k=$.target;do if(k.localName==="a"&&k.getAttribute("href")){if(k.hasAttribute("data-native")||k.hasAttribute("native"))return;if(Kt(k))return zt($)}while(k=k.parentNode)}}var Jt=!1;function Qt($){$.history&&(It=$.history),this.state={url:$.url||jt()}}At(Qt.prototype=new C,{shouldComponentUpdate:function($){return $.static!==!0||$.url!==this.props.url||$.onChange!==this.props.onChange},canRoute:function($){var k=A(this.props.children);return this.g(k,$)!==void 0},routeTo:function($){this.setState({url:$});var k=this.canRoute($);return this.p||this.forceUpdate(),k},componentWillMount:function(){this.p=!0},componentDidMount:function(){var $=this;Jt||(Jt=!0,It||addEventListener("popstate",(function(){Bt(jt())})),addEventListener("click",Gt)),Wt.push(this),It&&(this.u=It.listen((function(k){var st=k.location||k;$.routeTo(""+(st.pathname||"")+(st.search||""))}))),this.p=!1},componentWillUnmount:function(){typeof this.u=="function"&&this.u(),Wt.splice(Wt.indexOf(this),1)},componentWillUpdate:function(){this.p=!0},componentDidUpdate:function(){this.p=!1},g:function($,k){$=$.filter(Rt).sort(Nt);for(var st=0;st<$.length;st++){var ct=$[st],dt=Dt(k,ct.props.path,ct.props);if(dt)return[ct,dt]}},render:function($,k){var st,ct,dt=$.onChange,_=k.url,pt=this.c,ee=this.g(A($.children),_);if(ee&&(ct=j(ee[0],At(At({url:_,matches:st=ee[1]},st),{key:void 0,ref:void 0}))),_!==(pt&&pt.url)){At(Vt,pt=this.c={url:_,previous:pt&&pt.url,current:ct,path:ct?ct.props.path:null,matches:st}),pt.router=this,pt.active=ct?[ct]:[];for(var vt=Ft.length;vt--;)Ft[vt]({});typeof dt=="function"&&dt(pt)}return y(Ot.Provider,{value:pt},ct)}});const switchIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='652.000000pt'%20height='956.000000pt'%20viewBox='0%200%20652.000000%20956.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,956.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M1150%209540%20c-386%20-6%20-408%20-8%20-475%20-29%20-147%20-48%20-255%20-115%20-368%20-226%20-93%20-91%20-145%20-159%20-191%20-250%20-74%20-146%20-77%20-163%20-87%20-455%20-10%20-318%20-14%20-7639%20-4%20-7725%2025%20-214%20107%20-394%20245%20-539%20115%20-121%20227%20-192%20408%20-260%20l72%20-28%202418%20-1%20c2586%20-2%202582%20-2%202716%2047%20254%2092%20492%20346%20573%20611%2017%2058%2018%20211%2018%204095%20l0%204035%20-23%2075%20c-61%20193%20-204%20388%20-368%20501%20-76%2052%20-226%20118%20-294%20129%20-36%206%20-229%2015%20-430%2020%20-398%2010%20-3557%2010%20-4210%200z%20m4610%20-328%20c164%20-59%20291%20-175%20374%20-339%20l36%20-73%200%20-4016%200%20-4016%20-45%20-88%20c-25%20-48%20-70%20-115%20-101%20-148%20-64%20-71%20-175%20-148%20-242%20-168%20-103%20-32%20-400%20-35%20-2687%20-32%20-2180%203%20-2282%204%20-2335%2022%20-204%2068%20-363%20240%20-417%20452%20-17%2065%20-18%20275%20-18%203979%200%203785%201%203912%2019%203980%2024%2091%2084%20207%20140%20271%2055%2062%20182%20152%20244%20171%2027%208%20121%2018%20222%2022%2096%205%201203%208%202460%207%20l2285%20-1%2065%20-23z'/%3e%3cpath%20d='M1434%208128%20l-45%20-41%203%20-3291%20c3%20-3127%204%20-3293%2021%20-3323%209%20-18%2029%20-41%2044%20-50%2026%20-17%20125%20-18%201799%20-18%201918%200%201808%20-3%201834%2054%207%2014%2016%2067%2021%20116%205%2050%209%20789%209%201644%20l0%201554%20249%20981%20c358%201405%20401%201581%20401%201626%200%2051%204%2046%20-414%20468%20l-321%20322%20-1778%200%20-1777%200%20-46%20-42z%20m3636%20-425%20l165%20-168%20-185%20-6%20c-102%20-4%20-770%20-7%20-1485%20-8%20l-1300%20-1%20-145%20148%20c-80%2081%20-156%20159%20-170%20175%20l-23%2027%201489%200%201490%200%20164%20-167z%20m-3078%20-356%20l31%20-38%20-147%20-583%20c-81%20-320%20-153%20-602%20-160%20-626%20-12%20-39%20-13%20-23%20-19%20185%20-9%20291%20-9%20823%200%201123%20l6%20233%20129%20-128%20c71%20-70%20143%20-145%20160%20-166z%20m2900%20-136%20c278%20-3%20510%20-9%20513%20-13%2010%20-10%203%20-40%20-305%20-1260%20l-280%20-1107%200%20-1565%200%20-1566%20-1565%200%20-1565%200%200%201521%200%201520%20310%201226%20c171%20675%20313%201229%20316%201232%2014%2014%201788%2022%202576%2012z'/%3e%3cpath%20d='M3765%206820%20c-61%20-25%20-87%20-94%20-185%20-473%20-80%20-315%20-120%20-493%20-120%20-540%200%20-77%2078%20-141%20163%20-134%2069%206%20101%2040%20131%20141%2057%20190%20197%20746%20212%20843%205%2032%201%2053%20-19%2096%20-22%2048%20-30%2057%20-64%2066%20-44%2013%20-90%2013%20-118%201z'/%3e%3cpath%20d='M3098%203406%20c-104%20-37%20-216%20-134%20-264%20-227%20-24%20-47%20-28%20-71%20-35%20-184%20-19%20-311%20-7%20-500%2037%20-586%2040%20-80%20113%20-151%20201%20-195%20l76%20-39%20151%200%20151%200%2068%2034%20c81%2041%20167%20128%20215%20218%20l32%2061%200%20302%200%20302%20-41%2078%20c-65%20127%20-156%20201%20-284%20235%20-73%2019%20-255%2019%20-307%201z%20m262%20-311%20c58%20-30%2064%20-57%2068%20-301%204%20-219%204%20-222%20-19%20-253%20-65%20-88%20-230%20-95%20-286%20-13%20-16%2024%20-18%2055%20-21%20273%20l-3%20246%2038%2030%20c21%2017%2045%2033%2053%2036%2025%2011%20137%20-1%20170%20-18z'/%3e%3c/g%3e%3c/svg%3e",buttonIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='171.000000pt'%20height='171.000000pt'%20viewBox='0%200%20171.000000%20171.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,171.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M790%201280%20l0%20-420%2065%200%2065%200%200%20420%200%20420%20-65%200%20-65%200%200%20-420z'/%3e%3cpath%20d='M489%201612%20c-228%20-114%20-386%20-309%20-451%20-557%20-29%20-110%20-29%20-297%200%20-406%2081%20-301%20308%20-530%20607%20-610%20112%20-30%20307%20-30%20420%200%20294%2077%20529%20312%20606%20606%2029%20110%2030%20307%201%20416%20-67%20251%20-245%20462%20-477%20565%20l-55%2024%200%20-74%200%20-74%2072%20-42%20c280%20-167%20411%20-508%20313%20-817%20-35%20-110%20-88%20-196%20-175%20-283%20-87%20-87%20-172%20-139%20-285%20-177%20-70%20-23%20-96%20-27%20-210%20-27%20-114%200%20-140%204%20-210%2027%20-293%2097%20-495%20372%20-495%20673%200%2070%2025%20193%2055%20266%2054%20133%20182%20279%20299%20339%20l66%2034%200%2078%20c0%2042%20-1%2077%20-2%2077%20-2%200%20-37%20-18%20-79%20-38z'/%3e%3c/g%3e%3c/svg%3e",timerIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='171.000000pt'%20height='171.000000pt'%20viewBox='0%200%20171.000000%20171.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,171.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M818%201670%20c-24%20-15%20-31%20-77%20-23%20-221%208%20-141%2015%20-159%2064%20-159%2050%200%2060%2024%2063%20150%20l3%20115%2030%20-3%20c172%20-19%20366%20-132%20472%20-275%2094%20-129%20133%20-236%20140%20-392%206%20-142%20-12%20-230%20-73%20-355%20-82%20-165%20-236%20-296%20-419%20-357%20-71%20-24%20-95%20-27%20-215%20-27%20-118%200%20-145%203%20-212%2026%20-123%2041%20-204%2092%20-298%20187%20-68%2068%20-94%20103%20-127%20171%20-61%20125%20-76%20203%20-71%20352%206%20153%2036%20243%20122%20371%2064%2095%2068%20127%2021%20149%20-39%2017%20-68%202%20-113%20-59%20-94%20-127%20-150%20-285%20-159%20-449%20-23%20-399%20236%20-749%20632%20-855%20111%20-30%20297%20-30%20410%200%20449%20119%20716%20562%20610%201011%20-23%2095%20-105%20254%20-173%20336%20-111%20131%20-276%20234%20-442%20274%20-89%2021%20-213%2026%20-242%2010z'/%3e%3cpath%20d='M452%201258%20c-7%20-7%20-12%20-17%20-12%20-23%200%20-21%20330%20-469%20358%20-487%2043%20-28%20106%20-23%20143%2010%2043%2038%2052%20113%2020%20154%20-20%2025%20-454%20342%20-484%20354%20-7%202%20-18%20-1%20-25%20-8z'/%3e%3c/g%3e%3c/svg%3e",owIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='110.000000pt'%20height='52.000000pt'%20viewBox='0%200%20110.000000%2052.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,52.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M171%20500%20c-50%20-12%20-83%20-41%20-111%20-96%20-22%20-43%20-25%20-62%20-24%20-149%200%20-141%2027%20-199%20109%20-236%2073%20-33%20180%20-16%20227%2037%2067%2076%2074%20284%2013%20376%20-39%2059%20-133%2089%20-214%2068z%20m119%20-65%20c50%20-26%2065%20-67%2065%20-180%200%20-146%20-32%20-195%20-128%20-195%20-40%200%20-54%205%20-77%2028%20-16%2016%20-34%2049%20-40%2073%20-16%2056%20-7%20186%2014%20227%2030%2057%20105%2078%20166%2047z'/%3e%3cpath%20d='M482%20483%20c3%20-10%2029%20-120%2058%20-245%20l54%20-228%2038%200%20c43%200%2035%20-20%2089%20215%2017%2077%2035%20146%2038%20152%204%207%2026%20-73%2051%20-178%20l44%20-190%2039%203%2040%203%2058%20240%20c32%20132%2058%20241%2059%20243%200%202%20-15%202%20-32%200%20l-32%20-3%20-43%20-180%20c-23%20-99%20-44%20-187%20-46%20-195%20-2%20-8%20-25%2074%20-51%20183%20l-48%20198%20-36%20-3%20-36%20-3%20-45%20-194%20c-25%20-106%20-47%20-188%20-49%20-181%20-3%207%20-23%2095%20-46%20194%20l-42%20181%20-33%203%20c-28%203%20-33%201%20-29%20-15z'/%3e%3c/g%3e%3c/svg%3e",encoderIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='34.000000pt'%20height='52.000000pt'%20viewBox='0%200%2034.000000%2052.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,52.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M30%20255%20l0%20-245%20150%200%20150%200%200%2030%200%2030%20-115%200%20-115%200%200%2085%200%2085%2095%200%2095%200%200%2030%200%2030%20-95%200%20-95%200%200%2070%200%2070%20115%200%20115%200%200%2030%200%2030%20-150%200%20-150%200%200%20-245z'/%3e%3c/g%3e%3c/svg%3e",Icons={switchIcon:$=>Et`
+(function(){const k=document.createElement("link").relList;if(k&&k.supports&&k.supports("modulepreload"))return;for(const dt of document.querySelectorAll('link[rel="modulepreload"]'))ct(dt);new MutationObserver(dt=>{for(const _ of dt)if(_.type==="childList")for(const pt of _.addedNodes)pt.tagName==="LINK"&&pt.rel==="modulepreload"&&ct(pt)}).observe(document,{childList:!0,subtree:!0});function st(dt){const _={};return dt.integrity&&(_.integrity=dt.integrity),dt.referrerPolicy&&(_.referrerPolicy=dt.referrerPolicy),dt.crossOrigin==="use-credentials"?_.credentials="include":dt.crossOrigin==="anonymous"?_.credentials="omit":_.credentials="same-origin",_}function ct(dt){if(dt.ep)return;dt.ep=!0;const _=st(dt);fetch(dt.href,_)}})();var t,n,e,r,o,u,i,l,c,a,s,f={},p=[],h=/acit|ex(?:s|g|n|p|$)|rph|grid|ows|mnc|ntw|ine[ch]|zoo|^ord|itera/i,d=Array.isArray;function v($,k){for(var st in k)$[st]=k[st];return $}function m($){var k=$.parentNode;k&&k.removeChild($)}function y($,k,st){var ct,dt,_,pt={};for(_ in k)_=="key"?ct=k[_]:_=="ref"?dt=k[_]:pt[_]=k[_];if(arguments.length>2&&(pt.children=arguments.length>3?t.call(arguments,2):st),typeof $=="function"&&$.defaultProps!=null)for(_ in $.defaultProps)pt[_]===void 0&&(pt[_]=$.defaultProps[_]);return g($,pt,ct,dt,null)}function g($,k,st,ct,dt){var _={type:$,props:k,key:st,ref:ct,__k:null,__:null,__b:0,__e:null,__d:void 0,__c:null,constructor:void 0,__v:dt??++e,__i:-1,__u:0};return dt==null&&n.vnode!=null&&n.vnode(_),_}function b($){return $.children}function C($,k){this.props=$,this.context=k}function x($,k){if(k==null)return $.__?x($.__,$.__i+1):null;for(var st;k<$.__k.length;k++)if((st=$.__k[k])!=null&&st.__e!=null)return st.__e;return typeof $.type=="function"?x($):null}function w($){var k,st;if(($=$.__)!=null&&$.__c!=null){for($.__e=$.__c.base=null,k=0;k<$.__k.length;k++)if((st=$.__k[k])!=null&&st.__e!=null){$.__e=$.__c.base=st.__e;break}return w($)}}function P($){(!$.__d&&($.__d=!0)&&r.push($)&&!U.__r++||o!==n.debounceRendering)&&((o=n.debounceRendering)||u)(U)}function U(){var $,k,st,ct,dt,_,pt,ee;for(r.sort(i);$=r.shift();)$.__d&&(k=r.length,ct=void 0,_=(dt=(st=$).__v).__e,pt=[],ee=[],st.__P&&((ct=v({},dt)).__v=dt.__v+1,n.vnode&&n.vnode(ct),M(st.__P,ct,dt,st.__n,st.__P.namespaceURI,32&dt.__u?[_]:null,pt,_??x(dt),!!(32&dt.__u),ee),ct.__v=dt.__v,ct.__.__k[ct.__i]=ct,L(pt,ct,ee),ct.__e!=_&&w(ct)),r.length>k&&r.sort(i));U.__r=0}function H($,k,st,ct,dt,_,pt,ee,vt,te,ne){var Xt,le,re,ce,ge,ve=ct&&ct.__k||p,be=k.length;for(st.__d=vt,E(st,k,ve),vt=st.__d,Xt=0;Xt<be;Xt++)(re=st.__k[Xt])!=null&&typeof re!="boolean"&&typeof re!="function"&&(le=re.__i===-1?f:ve[re.__i]||f,re.__i=Xt,M($,re,le,dt,_,pt,ee,vt,te,ne),ce=re.__e,re.ref&&le.ref!=re.ref&&(le.ref&&F(le.ref,null,re),ne.push(re.ref,re.__c||ce,re)),ge==null&&ce!=null&&(ge=ce),65536&re.__u||le.__k===re.__k?(vt&&!vt.isConnected&&(vt=x(le)),vt=S(re,vt,$)):typeof re.type=="function"&&re.__d!==void 0?vt=re.__d:ce&&(vt=ce.nextSibling),re.__d=void 0,re.__u&=-196609);st.__d=vt,st.__e=ge}function E($,k,st){var ct,dt,_,pt,ee,vt=k.length,te=st.length,ne=te,Xt=0;for($.__k=[],ct=0;ct<vt;ct++)pt=ct+Xt,(dt=$.__k[ct]=(dt=k[ct])==null||typeof dt=="boolean"||typeof dt=="function"?null:typeof dt=="string"||typeof dt=="number"||typeof dt=="bigint"||dt.constructor==String?g(null,dt,null,null,null):d(dt)?g(b,{children:dt},null,null,null):dt.constructor===void 0&&dt.__b>0?g(dt.type,dt.props,dt.key,dt.ref?dt.ref:null,dt.__v):dt)!=null?(dt.__=$,dt.__b=$.__b+1,ee=D(dt,st,pt,ne),dt.__i=ee,_=null,ee!==-1&&(ne--,(_=st[ee])&&(_.__u|=131072)),_==null||_.__v===null?(ee==-1&&Xt--,typeof dt.type!="function"&&(dt.__u|=65536)):ee!==pt&&(ee===pt+1?Xt++:ee>pt?ne>vt-pt?Xt+=ee-pt:Xt--:ee<pt?ee==pt-1&&(Xt=ee-pt):Xt=0,ee!==ct+Xt&&(dt.__u|=65536))):(_=st[pt])&&_.key==null&&_.__e&&(131072&_.__u)==0&&(_.__e==$.__d&&($.__d=x(_)),I(_,_,!1),st[pt]=null,ne--);if(ne)for(ct=0;ct<te;ct++)(_=st[ct])!=null&&(131072&_.__u)==0&&(_.__e==$.__d&&($.__d=x(_)),I(_,_))}function S($,k,st){var ct,dt;if(typeof $.type=="function"){for(ct=$.__k,dt=0;ct&&dt<ct.length;dt++)ct[dt]&&(ct[dt].__=$,k=S(ct[dt],k,st));return k}$.__e!=k&&(st.insertBefore($.__e,k||null),k=$.__e);do k=k&&k.nextSibling;while(k!=null&&k.nodeType===8);return k}function A($,k){return k=k||[],$==null||typeof $=="boolean"||(d($)?$.some((function(st){A(st,k)})):k.push($)),k}function D($,k,st,ct){var dt=$.key,_=$.type,pt=st-1,ee=st+1,vt=k[st];if(vt===null||vt&&dt==vt.key&&_===vt.type&&(131072&vt.__u)==0)return st;if(ct>(vt!=null&&(131072&vt.__u)==0?1:0))for(;pt>=0||ee<k.length;){if(pt>=0){if((vt=k[pt])&&(131072&vt.__u)==0&&dt==vt.key&&_===vt.type)return pt;pt--}if(ee<k.length){if((vt=k[ee])&&(131072&vt.__u)==0&&dt==vt.key&&_===vt.type)return ee;ee++}}return-1}function N($,k,st){k[0]==="-"?$.setProperty(k,st??""):$[k]=st==null?"":typeof st!="number"||h.test(k)?st:st+"px"}function R($,k,st,ct,dt){var _;t:if(k==="style")if(typeof st=="string")$.style.cssText=st;else{if(typeof ct=="string"&&($.style.cssText=ct=""),ct)for(k in ct)st&&k in st||N($.style,k,"");if(st)for(k in st)ct&&st[k]===ct[k]||N($.style,k,st[k])}else if(k[0]==="o"&&k[1]==="n")_=k!==(k=k.replace(/(PointerCapture)$|Capture$/i,"$1")),k=k.toLowerCase()in $||k==="onFocusOut"||k==="onFocusIn"?k.toLowerCase().slice(2):k.slice(2),$.l||($.l={}),$.l[k+_]=st,st?ct?st.u=ct.u:(st.u=l,$.addEventListener(k,_?a:c,_)):$.removeEventListener(k,_?a:c,_);else{if(dt=="http://www.w3.org/2000/svg")k=k.replace(/xlink(H|:h)/,"h").replace(/sName$/,"s");else if(k!="width"&&k!="height"&&k!="href"&&k!="list"&&k!="form"&&k!="tabIndex"&&k!="download"&&k!="rowSpan"&&k!="colSpan"&&k!="role"&&k in $)try{$[k]=st??"";break t}catch{}typeof st=="function"||(st==null||st===!1&&k[4]!=="-"?$.removeAttribute(k):$.setAttribute(k,st))}}function T($){return function(k){if(this.l){var st=this.l[k.type+$];if(k.t==null)k.t=l++;else if(k.t<st.u)return;return st(n.event?n.event(k):k)}}}function M($,k,st,ct,dt,_,pt,ee,vt,te){var ne,Xt,le,re,ce,ge,ve,be,he,fe,$e,ke,_e,Pe,de,xe=k.type;if(k.constructor!==void 0)return null;128&st.__u&&(vt=!!(32&st.__u),_=[ee=k.__e=st.__e]),(ne=n.__b)&&ne(k);t:if(typeof xe=="function")try{if(be=k.props,he=(ne=xe.contextType)&&ct[ne.__c],fe=ne?he?he.props.value:ne.__:ct,st.__c?ve=(Xt=k.__c=st.__c).__=Xt.__E:("prototype"in xe&&xe.prototype.render?k.__c=Xt=new xe(be,fe):(k.__c=Xt=new C(be,fe),Xt.constructor=xe,Xt.render=V),he&&he.sub(Xt),Xt.props=be,Xt.state||(Xt.state={}),Xt.context=fe,Xt.__n=ct,le=Xt.__d=!0,Xt.__h=[],Xt._sb=[]),Xt.__s==null&&(Xt.__s=Xt.state),xe.getDerivedStateFromProps!=null&&(Xt.__s==Xt.state&&(Xt.__s=v({},Xt.__s)),v(Xt.__s,xe.getDerivedStateFromProps(be,Xt.__s))),re=Xt.props,ce=Xt.state,Xt.__v=k,le)xe.getDerivedStateFromProps==null&&Xt.componentWillMount!=null&&Xt.componentWillMount(),Xt.componentDidMount!=null&&Xt.__h.push(Xt.componentDidMount);else{if(xe.getDerivedStateFromProps==null&&be!==re&&Xt.componentWillReceiveProps!=null&&Xt.componentWillReceiveProps(be,fe),!Xt.__e&&(Xt.shouldComponentUpdate!=null&&Xt.shouldComponentUpdate(be,Xt.__s,fe)===!1||k.__v===st.__v)){for(k.__v!==st.__v&&(Xt.props=be,Xt.state=Xt.__s,Xt.__d=!1),k.__e=st.__e,k.__k=st.__k,k.__k.forEach((function(Se){Se&&(Se.__=k)})),$e=0;$e<Xt._sb.length;$e++)Xt.__h.push(Xt._sb[$e]);Xt._sb=[],Xt.__h.length&&pt.push(Xt);break t}Xt.componentWillUpdate!=null&&Xt.componentWillUpdate(be,Xt.__s,fe),Xt.componentDidUpdate!=null&&Xt.__h.push((function(){Xt.componentDidUpdate(re,ce,ge)}))}if(Xt.context=fe,Xt.props=be,Xt.__P=$,Xt.__e=!1,ke=n.__r,_e=0,"prototype"in xe&&xe.prototype.render){for(Xt.state=Xt.__s,Xt.__d=!1,ke&&ke(k),ne=Xt.render(Xt.props,Xt.state,Xt.context),Pe=0;Pe<Xt._sb.length;Pe++)Xt.__h.push(Xt._sb[Pe]);Xt._sb=[]}else do Xt.__d=!1,ke&&ke(k),ne=Xt.render(Xt.props,Xt.state,Xt.context),Xt.state=Xt.__s;while(Xt.__d&&++_e<25);Xt.state=Xt.__s,Xt.getChildContext!=null&&(ct=v(v({},ct),Xt.getChildContext())),le||Xt.getSnapshotBeforeUpdate==null||(ge=Xt.getSnapshotBeforeUpdate(re,ce)),H($,d(de=ne!=null&&ne.type===b&&ne.key==null?ne.props.children:ne)?de:[de],k,st,ct,dt,_,pt,ee,vt,te),Xt.base=k.__e,k.__u&=-161,Xt.__h.length&&pt.push(Xt),ve&&(Xt.__E=Xt.__=null)}catch(Se){k.__v=null,vt||_!=null?(k.__e=ee,k.__u|=vt?160:32,_[_.indexOf(ee)]=null):(k.__e=st.__e,k.__k=st.__k),n.__e(Se,k,st)}else _==null&&k.__v===st.__v?(k.__k=st.__k,k.__e=st.__e):k.__e=W(st.__e,k,st,ct,dt,_,pt,vt,te);(ne=n.diffed)&&ne(k)}function L($,k,st){k.__d=void 0;for(var ct=0;ct<st.length;ct++)F(st[ct],st[++ct],st[++ct]);n.__c&&n.__c(k,$),$.some((function(dt){try{$=dt.__h,dt.__h=[],$.some((function(_){_.call(dt)}))}catch(_){n.__e(_,dt.__v)}}))}function W($,k,st,ct,dt,_,pt,ee,vt){var te,ne,Xt,le,re,ce,ge,ve=st.props,be=k.props,he=k.type;if(he==="svg"?dt="http://www.w3.org/2000/svg":he==="math"?dt="http://www.w3.org/1998/Math/MathML":dt||(dt="http://www.w3.org/1999/xhtml"),_!=null){for(te=0;te<_.length;te++)if((re=_[te])&&"setAttribute"in re==!!he&&(he?re.localName===he:re.nodeType===3)){$=re,_[te]=null;break}}if($==null){if(he===null)return document.createTextNode(be);$=document.createElementNS(dt,he,be.is&&be),_=null,ee=!1}if(he===null)ve===be||ee&&$.data===be||($.data=be);else{if(_=_&&t.call($.childNodes),ve=st.props||f,!ee&&_!=null)for(ve={},te=0;te<$.attributes.length;te++)ve[(re=$.attributes[te]).name]=re.value;for(te in ve)if(re=ve[te],te!="children"){if(te=="dangerouslySetInnerHTML")Xt=re;else if(te!=="key"&&!(te in be)){if(te=="value"&&"defaultValue"in be||te=="checked"&&"defaultChecked"in be)continue;R($,te,null,re,dt)}}for(te in be)re=be[te],te=="children"?le=re:te=="dangerouslySetInnerHTML"?ne=re:te=="value"?ce=re:te=="checked"?ge=re:te==="key"||ee&&typeof re!="function"||ve[te]===re||R($,te,re,ve[te],dt);if(ne)ee||Xt&&(ne.__html===Xt.__html||ne.__html===$.innerHTML)||($.innerHTML=ne.__html),k.__k=[];else if(Xt&&($.innerHTML=""),H($,d(le)?le:[le],k,st,ct,he==="foreignObject"?"http://www.w3.org/1999/xhtml":dt,_,pt,_?_[0]:st.__k&&x(st,0),ee,vt),_!=null)for(te=_.length;te--;)_[te]!=null&&m(_[te]);ee||(te="value",ce!==void 0&&(ce!==$[te]||he==="progress"&&!ce||he==="option"&&ce!==ve[te])&&R($,te,ce,ve[te],dt),te="checked",ge!==void 0&&ge!==$[te]&&R($,te,ge,ve[te],dt))}return $}function F($,k,st){try{typeof $=="function"?$(k):$.current=k}catch(ct){n.__e(ct,st)}}function I($,k,st){var ct,dt;if(n.unmount&&n.unmount($),(ct=$.ref)&&(ct.current&&ct.current!==$.__e||F(ct,null,k)),(ct=$.__c)!=null){if(ct.componentWillUnmount)try{ct.componentWillUnmount()}catch(_){n.__e(_,k)}ct.base=ct.__P=null}if(ct=$.__k)for(dt=0;dt<ct.length;dt++)ct[dt]&&I(ct[dt],k,st||typeof $.type!="function");st||$.__e==null||m($.__e),$.__c=$.__=$.__e=$.__d=void 0}function V($,k,st){return this.constructor($,st)}function O($,k,st){var ct,dt,_,pt;n.__&&n.__($,k),dt=(ct=!1)?null:k.__k,_=[],pt=[],M(k,$=k.__k=y(b,null,[$]),dt||f,f,k.namespaceURI,dt?null:k.firstChild?t.call(k.childNodes):null,_,dt?dt.__e:k.firstChild,ct,pt),L(_,$,pt)}function j($,k,st){var ct,dt,_,pt,ee=v({},$.props);for(_ in $.type&&$.type.defaultProps&&(pt=$.type.defaultProps),k)_=="key"?ct=k[_]:_=="ref"?dt=k[_]:ee[_]=k[_]===void 0&&pt!==void 0?pt[_]:k[_];return arguments.length>2&&(ee.children=arguments.length>3?t.call(arguments,2):st),g($.type,ee,ct||$.key,dt||$.ref,null)}function q($,k){var st={__c:k="__cC"+s++,__:$,Consumer:function(ct,dt){return ct.children(dt)},Provider:function(ct){var dt,_;return this.getChildContext||(dt=[],(_={})[k]=this,this.getChildContext=function(){return _},this.shouldComponentUpdate=function(pt){this.props.value!==pt.value&&dt.some((function(ee){ee.__e=!0,P(ee)}))},this.sub=function(pt){dt.push(pt);var ee=pt.componentWillUnmount;pt.componentWillUnmount=function(){dt.splice(dt.indexOf(pt),1),ee&&ee.call(pt)}}),ct.children}};return st.Provider.__=st.Consumer.contextType=st}t=p.slice,n={__e:function($,k,st,ct){for(var dt,_,pt;k=k.__;)if((dt=k.__c)&&!dt.__)try{if((_=dt.constructor)&&_.getDerivedStateFromError!=null&&(dt.setState(_.getDerivedStateFromError($)),pt=dt.__d),dt.componentDidCatch!=null&&(dt.componentDidCatch($,ct||{}),pt=dt.__d),pt)return dt.__E=dt}catch(ee){$=ee}throw $}},e=0,C.prototype.setState=function($,k){var st;st=this.__s!=null&&this.__s!==this.state?this.__s:this.__s=v({},this.state),typeof $=="function"&&($=$(v({},st),this.props)),$&&v(st,$),$!=null&&this.__v&&(k&&this._sb.push(k),P(this))},C.prototype.forceUpdate=function($){this.__v&&(this.__e=!0,$&&this.__h.push($),P(this))},C.prototype.render=b,r=[],u=typeof Promise=="function"?Promise.prototype.then.bind(Promise.resolve()):setTimeout,i=function($,k){return $.__v.__b-k.__v.__b},U.__r=0,l=0,c=T(!1),a=T(!0),s=0;var B,K,z,G,J=0,Q=[],X=[],Y=n,Z=Y.__b,tt=Y.__r,nt=Y.diffed,et=Y.__c,_t=Y.unmount,rt=Y.__;function ot($,k){Y.__h&&Y.__h(K,$,J||k),J=0;var st=K.__H||(K.__H={__:[],__h:[]});return $>=st.__.length&&st.__.push({__V:X}),st.__[$]}function ut($){return J=1,it(wt,$)}function it($,k,st){var ct=ot(B++,2);if(ct.t=$,!ct.__c&&(ct.__=[wt(void 0,k),function(ee){var vt=ct.__N?ct.__N[0]:ct.__[0],te=ct.t(vt,ee);vt!==te&&(ct.__N=[te,ct.__[1]],ct.__c.setState({}))}],ct.__c=K,!K.u)){var dt=function(ee,vt,te){if(!ct.__c.__H)return!0;var ne=ct.__c.__H.__.filter((function(le){return!!le.__c}));if(ne.every((function(le){return!le.__N})))return!_||_.call(this,ee,vt,te);var Xt=!1;return ne.forEach((function(le){if(le.__N){var re=le.__[0];le.__=le.__N,le.__N=void 0,re!==le.__[0]&&(Xt=!0)}})),!(!Xt&&ct.__c.props===ee)&&(!_||_.call(this,ee,vt,te))};K.u=!0;var _=K.shouldComponentUpdate,pt=K.componentWillUpdate;K.componentWillUpdate=function(ee,vt,te){if(this.__e){var ne=_;_=void 0,dt(ee,vt,te),_=ne}pt&&pt.call(this,ee,vt,te)},K.shouldComponentUpdate=dt}return ct.__N||ct.__}function lt($,k){var st=ot(B++,3);!Y.__s&&xt(st.__H,k)&&(st.__=$,st.i=k,K.__H.__h.push(st))}function at($){return J=5,ft((function(){return{current:$}}),[])}function ft($,k){var st=ot(B++,7);return xt(st.__H,k)?(st.__V=$(),st.i=k,st.__h=$,st.__V):st.__}function yt(){for(var $;$=Q.shift();)if($.__P&&$.__H)try{$.__H.__h.forEach(bt),$.__H.__h.forEach(Ct),$.__H.__h=[]}catch(k){$.__H.__h=[],Y.__e(k,$.__v)}}Y.__b=function($){K=null,Z&&Z($)},Y.__=function($,k){$&&k.__k&&k.__k.__m&&($.__m=k.__k.__m),rt&&rt($,k)},Y.__r=function($){tt&&tt($),B=0;var k=(K=$.__c).__H;k&&(z===K?(k.__h=[],K.__h=[],k.__.forEach((function(st){st.__N&&(st.__=st.__N),st.__V=X,st.__N=st.i=void 0}))):(k.__h.forEach(bt),k.__h.forEach(Ct),k.__h=[],B=0)),z=K},Y.diffed=function($){nt&&nt($);var k=$.__c;k&&k.__H&&(k.__H.__h.length&&(Q.push(k)!==1&&G===Y.requestAnimationFrame||((G=Y.requestAnimationFrame)||kt)(yt)),k.__H.__.forEach((function(st){st.i&&(st.__H=st.i),st.__V!==X&&(st.__=st.__V),st.i=void 0,st.__V=X}))),z=K=null},Y.__c=function($,k){k.some((function(st){try{st.__h.forEach(bt),st.__h=st.__h.filter((function(ct){return!ct.__||Ct(ct)}))}catch(ct){k.some((function(dt){dt.__h&&(dt.__h=[])})),k=[],Y.__e(ct,st.__v)}})),et&&et($,k)},Y.unmount=function($){_t&&_t($);var k,st=$.__c;st&&st.__H&&(st.__H.__.forEach((function(ct){try{bt(ct)}catch(dt){k=dt}})),st.__H=void 0,k&&Y.__e(k,st.__v))};var gt=typeof requestAnimationFrame=="function";function kt($){var k,st=function(){clearTimeout(ct),gt&&cancelAnimationFrame(k),setTimeout($)},ct=setTimeout(st,100);gt&&(k=requestAnimationFrame(st))}function bt($){var k=K,st=$.__c;typeof st=="function"&&($.__c=void 0,st()),K=k}function Ct($){var k=K;$.__c=$.__(),K=k}function xt($,k){return!$||$.length!==k.length||k.some((function(st,ct){return st!==$[ct]}))}function wt($,k){return typeof k=="function"?k($):k}var Pt=function($,k,st,ct){var dt;k[0]=0;for(var _=1;_<k.length;_++){var pt=k[_++],ee=k[_]?(k[0]|=pt?1:2,st[k[_++]]):k[++_];pt===3?ct[0]=ee:pt===4?ct[1]=Object.assign(ct[1]||{},ee):pt===5?(ct[1]=ct[1]||{})[k[++_]]=ee:pt===6?ct[1][k[++_]]+=ee+"":pt?(dt=$.apply(ee,Pt($,ee,st,["",null])),ct.push(dt),ee[0]?k[0]|=2:(k[_-2]=0,k[_]=dt)):ct.push(ee)}return ct},Ut=new Map;function Ht($){var k=Ut.get(this);return k||(k=new Map,Ut.set(this,k)),(k=Pt(this,k.get($)||(k.set($,k=(function(st){for(var ct,dt,_=1,pt="",ee="",vt=[0],te=function(le){_===1&&(le||(pt=pt.replace(/^\s*\n\s*|\s*\n\s*$/g,"")))?vt.push(0,le,pt):_===3&&(le||pt)?(vt.push(3,le,pt),_=2):_===2&&pt==="..."&&le?vt.push(4,le,0):_===2&&pt&&!le?vt.push(5,0,!0,pt):_>=5&&((pt||!le&&_===5)&&(vt.push(_,0,pt,dt),_=6),le&&(vt.push(_,le,0,dt),_=6)),pt=""},ne=0;ne<st.length;ne++){ne&&(_===1&&te(),te(ne));for(var Xt=0;Xt<st[ne].length;Xt++)ct=st[ne][Xt],_===1?ct==="<"?(te(),vt=[vt],_=3):pt+=ct:_===4?pt==="--"&&ct===">"?(_=1,pt=""):pt=ct+pt[0]:ee?ct===ee?ee="":pt+=ct:ct==='"'||ct==="'"?ee=ct:ct===">"?(te(),_=1):_&&(ct==="="?(_=5,dt=pt,pt=""):ct==="/"&&(_<5||st[ne][Xt+1]===">")?(te(),_===3&&(vt=vt[0]),_=vt,(vt=vt[0]).push(2,0,_),_=0):ct===" "||ct==="	"||ct===`
+`||ct==="\r"?(te(),_=2):pt+=ct),_===3&&pt==="!--"&&(_=4,vt=vt[0])}return te(),vt})($)),k),arguments,[])).length>1?k:k[0]}var Et=Ht.bind(y),St={};function At($,k){for(var st in k)$[st]=k[st];return $}function Dt($,k,st){var ct,dt=/(?:\?([^#]*))?(#.*)?$/,_=$.match(dt),pt={};if(_&&_[1])for(var ee=_[1].split("&"),vt=0;vt<ee.length;vt++){var te=ee[vt].split("=");pt[decodeURIComponent(te[0])]=decodeURIComponent(te.slice(1).join("="))}$=Tt($.replace(dt,"")),k=Tt(k||"");for(var ne=Math.max($.length,k.length),Xt=0;Xt<ne;Xt++)if(k[Xt]&&k[Xt].charAt(0)===":"){var le=k[Xt].replace(/(^:|[+*?]+$)/g,""),re=(k[Xt].match(/[+*?]+$/)||St)[0]||"",ce=~re.indexOf("+"),ge=~re.indexOf("*"),ve=$[Xt]||"";if(!ve&&!ge&&(re.indexOf("?")<0||ce)){ct=!1;break}if(pt[le]=decodeURIComponent(ve),ce||ge){pt[le]=$.slice(Xt).map(decodeURIComponent).join("/");break}}else if(k[Xt]!==$[Xt]){ct=!1;break}return(st.default===!0||ct!==!1)&&pt}function Nt($,k){return $.rank<k.rank?1:$.rank>k.rank?-1:$.index-k.index}function Rt($,k){return $.index=k,$.rank=(function(st){return st.props.default?0:Tt(st.props.path).map(Mt).join("")})($),$.props}function Tt($){return $.replace(/(^\/+|\/+$)/g,"").split("/")}function Mt($){return $.charAt(0)==":"?1+"*+?".indexOf($.charAt($.length-1))||4:5}var Lt={},Wt=[],Ft=[],It=null,Vt={url:jt()},Ot=q(Vt);function jt(){var $;return""+(($=It&&It.location?It.location:It&&It.getCurrentLocation?It.getCurrentLocation():typeof location<"u"?location:Lt).pathname||"")+($.search||"")}function qt($,k){return k===void 0&&(k=!1),typeof $!="string"&&$.url&&(k=$.replace,$=$.url),(function(st){for(var ct=Wt.length;ct--;)if(Wt[ct].canRoute(st))return!0;return!1})($)&&(function(st,ct){ct===void 0&&(ct="push"),It&&It[ct]?It[ct](st):typeof history<"u"&&history[ct+"State"]&&history[ct+"State"](null,null,st)})($,k?"replace":"push"),Bt($)}function Bt($){for(var k=!1,st=0;st<Wt.length;st++)Wt[st].routeTo($)&&(k=!0);return k}function Kt($){if($&&$.getAttribute){var k=$.getAttribute("href"),st=$.getAttribute("target");if(k&&k.match(/^\//g)&&(!st||st.match(/^_?self$/i)))return qt(k)}}function zt($){return $.stopImmediatePropagation&&$.stopImmediatePropagation(),$.stopPropagation&&$.stopPropagation(),$.preventDefault(),!1}function Gt($){if(!($.ctrlKey||$.metaKey||$.altKey||$.shiftKey||$.button)){var k=$.target;do if(k.localName==="a"&&k.getAttribute("href")){if(k.hasAttribute("data-native")||k.hasAttribute("native"))return;if(Kt(k))return zt($)}while(k=k.parentNode)}}var Jt=!1;function Qt($){$.history&&(It=$.history),this.state={url:$.url||jt()}}At(Qt.prototype=new C,{shouldComponentUpdate:function($){return $.static!==!0||$.url!==this.props.url||$.onChange!==this.props.onChange},canRoute:function($){var k=A(this.props.children);return this.g(k,$)!==void 0},routeTo:function($){this.setState({url:$});var k=this.canRoute($);return this.p||this.forceUpdate(),k},componentWillMount:function(){this.p=!0},componentDidMount:function(){var $=this;Jt||(Jt=!0,It||addEventListener("popstate",(function(){Bt(jt())})),addEventListener("click",Gt)),Wt.push(this),It&&(this.u=It.listen((function(k){var st=k.location||k;$.routeTo(""+(st.pathname||"")+(st.search||""))}))),this.p=!1},componentWillUnmount:function(){typeof this.u=="function"&&this.u(),Wt.splice(Wt.indexOf(this),1)},componentWillUpdate:function(){this.p=!0},componentDidUpdate:function(){this.p=!1},g:function($,k){$=$.filter(Rt).sort(Nt);for(var st=0;st<$.length;st++){var ct=$[st],dt=Dt(k,ct.props.path,ct.props);if(dt)return[ct,dt]}},render:function($,k){var st,ct,dt=$.onChange,_=k.url,pt=this.c,ee=this.g(A($.children),_);if(ee&&(ct=j(ee[0],At(At({url:_,matches:st=ee[1]},st),{key:void 0,ref:void 0}))),_!==(pt&&pt.url)){At(Vt,pt=this.c={url:_,previous:pt&&pt.url,current:ct,path:ct?ct.props.path:null,matches:st}),pt.router=this,pt.active=ct?[ct]:[];for(var vt=Ft.length;vt--;)Ft[vt]({});typeof dt=="function"&&dt(pt)}return y(Ot.Provider,{value:pt},ct)}});const switchIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='652.000000pt'%20height='956.000000pt'%20viewBox='0%200%20652.000000%20956.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,956.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M1150%209540%20c-386%20-6%20-408%20-8%20-475%20-29%20-147%20-48%20-255%20-115%20-368%20-226%20-93%20-91%20-145%20-159%20-191%20-250%20-74%20-146%20-77%20-163%20-87%20-455%20-10%20-318%20-14%20-7639%20-4%20-7725%2025%20-214%20107%20-394%20245%20-539%20115%20-121%20227%20-192%20408%20-260%20l72%20-28%202418%20-1%20c2586%20-2%202582%20-2%202716%2047%20254%2092%20492%20346%20573%20611%2017%2058%2018%20211%2018%204095%20l0%204035%20-23%2075%20c-61%20193%20-204%20388%20-368%20501%20-76%2052%20-226%20118%20-294%20129%20-36%206%20-229%2015%20-430%2020%20-398%2010%20-3557%2010%20-4210%200z%20m4610%20-328%20c164%20-59%20291%20-175%20374%20-339%20l36%20-73%200%20-4016%200%20-4016%20-45%20-88%20c-25%20-48%20-70%20-115%20-101%20-148%20-64%20-71%20-175%20-148%20-242%20-168%20-103%20-32%20-400%20-35%20-2687%20-32%20-2180%203%20-2282%204%20-2335%2022%20-204%2068%20-363%20240%20-417%20452%20-17%2065%20-18%20275%20-18%203979%200%203785%201%203912%2019%203980%2024%2091%2084%20207%20140%20271%2055%2062%20182%20152%20244%20171%2027%208%20121%2018%20222%2022%2096%205%201203%208%202460%207%20l2285%20-1%2065%20-23z'/%3e%3cpath%20d='M1434%208128%20l-45%20-41%203%20-3291%20c3%20-3127%204%20-3293%2021%20-3323%209%20-18%2029%20-41%2044%20-50%2026%20-17%20125%20-18%201799%20-18%201918%200%201808%20-3%201834%2054%207%2014%2016%2067%2021%20116%205%2050%209%20789%209%201644%20l0%201554%20249%20981%20c358%201405%20401%201581%20401%201626%200%2051%204%2046%20-414%20468%20l-321%20322%20-1778%200%20-1777%200%20-46%20-42z%20m3636%20-425%20l165%20-168%20-185%20-6%20c-102%20-4%20-770%20-7%20-1485%20-8%20l-1300%20-1%20-145%20148%20c-80%2081%20-156%20159%20-170%20175%20l-23%2027%201489%200%201490%200%20164%20-167z%20m-3078%20-356%20l31%20-38%20-147%20-583%20c-81%20-320%20-153%20-602%20-160%20-626%20-12%20-39%20-13%20-23%20-19%20185%20-9%20291%20-9%20823%200%201123%20l6%20233%20129%20-128%20c71%20-70%20143%20-145%20160%20-166z%20m2900%20-136%20c278%20-3%20510%20-9%20513%20-13%2010%20-10%203%20-40%20-305%20-1260%20l-280%20-1107%200%20-1565%200%20-1566%20-1565%200%20-1565%200%200%201521%200%201520%20310%201226%20c171%20675%20313%201229%20316%201232%2014%2014%201788%2022%202576%2012z'/%3e%3cpath%20d='M3765%206820%20c-61%20-25%20-87%20-94%20-185%20-473%20-80%20-315%20-120%20-493%20-120%20-540%200%20-77%2078%20-141%20163%20-134%2069%206%20101%2040%20131%20141%2057%20190%20197%20746%20212%20843%205%2032%201%2053%20-19%2096%20-22%2048%20-30%2057%20-64%2066%20-44%2013%20-90%2013%20-118%201z'/%3e%3cpath%20d='M3098%203406%20c-104%20-37%20-216%20-134%20-264%20-227%20-24%20-47%20-28%20-71%20-35%20-184%20-19%20-311%20-7%20-500%2037%20-586%2040%20-80%20113%20-151%20201%20-195%20l76%20-39%20151%200%20151%200%2068%2034%20c81%2041%20167%20128%20215%20218%20l32%2061%200%20302%200%20302%20-41%2078%20c-65%20127%20-156%20201%20-284%20235%20-73%2019%20-255%2019%20-307%201z%20m262%20-311%20c58%20-30%2064%20-57%2068%20-301%204%20-219%204%20-222%20-19%20-253%20-65%20-88%20-230%20-95%20-286%20-13%20-16%2024%20-18%2055%20-21%20273%20l-3%20246%2038%2030%20c21%2017%2045%2033%2053%2036%2025%2011%20137%20-1%20170%20-18z'/%3e%3c/g%3e%3c/svg%3e",buttonIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='171.000000pt'%20height='171.000000pt'%20viewBox='0%200%20171.000000%20171.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,171.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M790%201280%20l0%20-420%2065%200%2065%200%200%20420%200%20420%20-65%200%20-65%200%200%20-420z'/%3e%3cpath%20d='M489%201612%20c-228%20-114%20-386%20-309%20-451%20-557%20-29%20-110%20-29%20-297%200%20-406%2081%20-301%20308%20-530%20607%20-610%20112%20-30%20307%20-30%20420%200%20294%2077%20529%20312%20606%20606%2029%20110%2030%20307%201%20416%20-67%20251%20-245%20462%20-477%20565%20l-55%2024%200%20-74%200%20-74%2072%20-42%20c280%20-167%20411%20-508%20313%20-817%20-35%20-110%20-88%20-196%20-175%20-283%20-87%20-87%20-172%20-139%20-285%20-177%20-70%20-23%20-96%20-27%20-210%20-27%20-114%200%20-140%204%20-210%2027%20-293%2097%20-495%20372%20-495%20673%200%2070%2025%20193%2055%20266%2054%20133%20182%20279%20299%20339%20l66%2034%200%2078%20c0%2042%20-1%2077%20-2%2077%20-2%200%20-37%20-18%20-79%20-38z'/%3e%3c/g%3e%3c/svg%3e",timerIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='171.000000pt'%20height='171.000000pt'%20viewBox='0%200%20171.000000%20171.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,171.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M818%201670%20c-24%20-15%20-31%20-77%20-23%20-221%208%20-141%2015%20-159%2064%20-159%2050%200%2060%2024%2063%20150%20l3%20115%2030%20-3%20c172%20-19%20366%20-132%20472%20-275%2094%20-129%20133%20-236%20140%20-392%206%20-142%20-12%20-230%20-73%20-355%20-82%20-165%20-236%20-296%20-419%20-357%20-71%20-24%20-95%20-27%20-215%20-27%20-118%200%20-145%203%20-212%2026%20-123%2041%20-204%2092%20-298%20187%20-68%2068%20-94%20103%20-127%20171%20-61%20125%20-76%20203%20-71%20352%206%20153%2036%20243%20122%20371%2064%2095%2068%20127%2021%20149%20-39%2017%20-68%202%20-113%20-59%20-94%20-127%20-150%20-285%20-159%20-449%20-23%20-399%20236%20-749%20632%20-855%20111%20-30%20297%20-30%20410%200%20449%20119%20716%20562%20610%201011%20-23%2095%20-105%20254%20-173%20336%20-111%20131%20-276%20234%20-442%20274%20-89%2021%20-213%2026%20-242%2010z'/%3e%3cpath%20d='M452%201258%20c-7%20-7%20-12%20-17%20-12%20-23%200%20-21%20330%20-469%20358%20-487%2043%20-28%20106%20-23%20143%2010%2043%2038%2052%20113%2020%20154%20-20%2025%20-454%20342%20-484%20354%20-7%202%20-18%20-1%20-25%20-8z'/%3e%3c/g%3e%3c/svg%3e",owIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='110.000000pt'%20height='52.000000pt'%20viewBox='0%200%20110.000000%2052.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,52.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M171%20500%20c-50%20-12%20-83%20-41%20-111%20-96%20-22%20-43%20-25%20-62%20-24%20-149%200%20-141%2027%20-199%20109%20-236%2073%20-33%20180%20-16%20227%2037%2067%2076%2074%20284%2013%20376%20-39%2059%20-133%2089%20-214%2068z%20m119%20-65%20c50%20-26%2065%20-67%2065%20-180%200%20-146%20-32%20-195%20-128%20-195%20-40%200%20-54%205%20-77%2028%20-16%2016%20-34%2049%20-40%2073%20-16%2056%20-7%20186%2014%20227%2030%2057%20105%2078%20166%2047z'/%3e%3cpath%20d='M482%20483%20c3%20-10%2029%20-120%2058%20-245%20l54%20-228%2038%200%20c43%200%2035%20-20%2089%20215%2017%2077%2035%20146%2038%20152%204%207%2026%20-73%2051%20-178%20l44%20-190%2039%203%2040%203%2058%20240%20c32%20132%2058%20241%2059%20243%200%202%20-15%202%20-32%200%20l-32%20-3%20-43%20-180%20c-23%20-99%20-44%20-187%20-46%20-195%20-2%20-8%20-25%2074%20-51%20183%20l-48%20198%20-36%20-3%20-36%20-3%20-45%20-194%20c-25%20-106%20-47%20-188%20-49%20-181%20-3%207%20-23%2095%20-46%20194%20l-42%20181%20-33%203%20c-28%203%20-33%201%20-29%20-15z'/%3e%3c/g%3e%3c/svg%3e",encoderIcon="data:image/svg+xml,%3c?xml%20version='1.0'%20standalone='no'?%3e%3c!DOCTYPE%20svg%20PUBLIC%20'-//W3C//DTD%20SVG%2020010904//EN'%20'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'%3e%3csvg%20version='1.0'%20xmlns='http://www.w3.org/2000/svg'%20width='34.000000pt'%20height='52.000000pt'%20viewBox='0%200%2034.000000%2052.000000'%20preserveAspectRatio='xMidYMid%20meet'%3e%3cg%20transform='translate(0.000000,52.000000)%20scale(0.100000,-0.100000)'%20fill='%23000000'%20stroke='none'%3e%3cpath%20d='M30%20255%20l0%20-245%20150%200%20150%200%200%2030%200%2030%20-115%200%20-115%200%200%2085%200%2085%2095%200%2095%200%200%2030%200%2030%20-95%200%20-95%200%200%2070%200%2070%20115%200%20115%200%200%2030%200%2030%20-150%200%20-150%200%200%20-245z'/%3e%3c/g%3e%3c/svg%3e",Icons={switchIcon:$=>Et`
     <img
       src=${switchIcon}
       class=${$.class}
@@ -208,7 +208,7 @@
         stroke-linejoin="round"
         d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
       />
-    </svg>`},tipColors={green:"bg-green-100 text-green-900 ring-green-300",yellow:"bg-yellow-100 text-yellow-900 ring-yellow-300"};function Button({title:$,onclick:k,disabled:st,cls:ct,icon:dt,ref:_,colors:pt,hovercolor:ee,disabledcolor:vt}){const[te,ne]=ut(!1),Xt=function(se){const re=k?k():null;re&&typeof re.catch=="function"&&(ne(!0),re.catch(()=>!1).then(()=>ne(!1)))};return pt||(pt="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400"),Et` <button
+    </svg>`},tipColors={green:"bg-green-100 text-green-900 ring-green-300",yellow:"bg-yellow-100 text-yellow-900 ring-yellow-300"};function Button({title:$,onclick:k,disabled:st,cls:ct,icon:dt,ref:_,colors:pt,hovercolor:ee,disabledcolor:vt}){const[te,ne]=ut(!1),Xt=function(le){const re=k?k():null;re&&typeof re.catch=="function"&&(ne(!0),re.catch(()=>!1).then(()=>ne(!1)))};return pt||(pt="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400"),Et` <button
     type="button"
     class="inline-flex justify-center items-center gap-2 rounded px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm ${pt} ${ct}"
     ref=${_}
@@ -217,7 +217,7 @@
   >
     ${$}
     <${te?Icons.refresh:dt} class="w-4 ${te?"animate-spin":""}" />
-  <//>`}function Login({loginFn:$,logoIcon:k,title:st,tipText:ct}){const[dt,_]=ut(""),[pt,ee]=ut(""),vt=function(te){const Xt={Authorization:"Basic "+btoa(dt+":"+pt)};return fetch("api/login",{headers:Xt}).then($).finally(se=>ee(""))};return Et` <div
+  <//>`}function Login({loginFn:$,logoIcon:k,title:st,tipText:ct}){const[dt,_]=ut(""),[pt,ee]=ut(""),vt=function(te){const Xt={Authorization:"Basic "+btoa(dt+":"+pt)};return fetch("api/login",{headers:Xt}).then($).finally(le=>ee(""))};return Et` <div
     class="h-full flex items-center justify-center bg-slate-200"
   >
     <div class="border rounded bg-white w-96 p-5">
@@ -285,7 +285,7 @@
         <//>
       <//>
     <//>
-  <//>`}const ruLangswitch=["","ID - уникальный числовой идентификатор выключателя. Присваивается автоматически.","Pin - Уникальный номер цифрового или аналогового пина.","Pullup type - тип подтяжки (EXTERNAL_PULLDOWN, INTERNAL_PULLUP, EXTERNAL_PULLUP).","Device connection - Здесь указаны пины одного или нескольких устройств, с которыми взаимодействует данный выключатель.",'INFO - Укажите название данного выключателя для быстрой навигации, например "Кухня", "Детская" и т.д. Не более 30-ти символов!',"On/Off - Включение или отключение обработчика состояния на данном пине.","Action - Кнопка Edit позволяет зайти в меню настроек и соединений выключателя."],ruLangselect=["","ID - уникальный числовой идентификатор. Присваивается автоматически.","Pin - Уникальный номер цифрового или аналогового пина.","Type(s) of pin(s) - Выберите режим работы данного пина из предложенных вариантов."],rulangbutton=["","ID - уникальный числовой идентификатор кнопки. Присваивается автоматически.","Pin - Уникальный номер цифрового или аналогового пина.","Pullup type - тип подтяжки (EXTERNAL_PULLDOWN, INTERNAL_PULLUP, EXTERNAL_PULLUP).","sclick - Выполняемая команда при одинарном клике кнопки.","dclick - Выполняемая команда при двойном клике кнопки.","lpress - Выполняемая команда при удержании кнопки.",'INFO - Укажите название данной кнопки для быстрой навигации, например "Кухня", "Детская" и т.д. Не более 30-ти символов!',"On/Off - Включение или отключение функции кнопки на данном пине.","Action - Кнопка Edit позволяет зайти в меню настроек кнопки."],ruencoder=["","ID - уникальный числовой идентификатор энкодера. Присваивается автоматически.","Pin - Уникальный номер пина.","Encoder A (ID) - Основной пин энкодера A (DT).","Encoder B (ID) - Дополнительный пин энкодера B (CLK).","PWM connection - Подключение ШИМ для управления яркостью (диммер).","Dimmer value (0-100) - Текущее значение диммера от 0 до 100.","Duty on restore - Восстановление значения скважности (яркости) при включении контроллера.","INFO - Укажите название данного энкодера для быстрой навигации.","On/Off - Включение или отключение обработчика энкодера.","Action - Кнопка Edit позволяет зайти в меню настроек энкодера.","PWM Frequency - Частота ШИМ управляемого устройства (в герцах).","Resolution (steps) - Максимальное количество шагов от 0 до 100% для ШИМ устройства."],rulangtimers=["","No - Уникальный числовой идентификатор задачи (cron). Присваивается автоматически.","Cron - Сконфигурируйте расписание (cron) для выполнения задачи.","Script - Какое действие (скрипт) должно выполниться в указанное в таймере время.",'Info - Дайте название выбранному таймеру для быстрой навигации, например "Полив газона". Не более 30-ти символов!',"On/Off - Вкл/Откл выполнение данной задачи.","Action - Кнопка Edit позволяет зайти в меню настроек задачи."],rulangsettings=["","Login - Введите имя пользователя для входа в систему. Используется при авторизации в веб-интерфейсе.","Password - Введите пароль для входа в систему. Рекомендуется использовать надёжный пароль.","Time zone UTC - Выберите свой часовой пояс. Влияет на отображение времени и расчёт восхода/заката.","IP address - Введите статический IP-адрес устройства. После перезагрузки STM32 будет доступен по этому адресу. Формат: 192.168.1.100","Subnet mask - Введите маску подсети. Определяет диапазон адресов вашей локальной сети. Формат: 255.255.255.0","Default gateway - Введите IP-адрес шлюза по умолчанию (обычно адрес вашего роутера). Формат: 192.168.1.1","Token - Секретный ключ для авторизации API-запросов. Используется в URL командах управления устройством. Пример: /api/Token/switch?id=1&onoff=1","Host - Введите IP-адрес или доменное имя MQTT-брокера. Пример: 192.168.1.50 или broker.hivemq.com","Port - Укажите порт MQTT-брокера. Стандартный порт: 1883 (без шифрования), 8883 (с TLS).","Client - Уникальный идентификатор клиента MQTT. Каждое устройство должно иметь свой уникальный Client ID.","User - Имя пользователя для подключения к MQTT-брокеру. Оставьте пустым, если брокер не требует авторизации.","Password - Пароль для подключения к MQTT-брокеру. Оставьте пустым, если брокер не требует авторизации.","TX topic - Исходящий топик MQTT. На этот топик устройство публикует свои данные и события. Пример: Swarm","RX topic - Входящий топик MQTT. С этого топика устройство получает команды управления. Пример: Swarm","HTTPS domain - Доменное имя для HTTPS-соединения. Необходим действующий SSL-сертификат для этого домена. Пример: zagotovka.ddns.net",'Private Key - Закрытый ключ SSL-сертификата в формате PEM. Начинается с "-----BEGIN EC PRIVATE KEY-----". Хранится в зашифрованном виде.','Public Key - Публичный сертификат SSL в формате PEM. Начинается с "-----BEGIN CERTIFICATE-----". Используется для HTTPS-соединения.',"Longitude - Долгота вашего местоположения для расчёта восхода и заката. Округлите до 3-х знаков после запятой. Пример: 37.618 (Москва)","Latitude - Широта вашего местоположения для расчёта восхода и заката. Округлите до 3-х знаков после запятой. Пример: 55.751 (Москва)","Sunrise - Время восхода солнца рассчитывается автоматически по заданным координатам. Ползунок включает/отключает выполнение действия на восходе.","Sunset - Время захода солнца рассчитывается автоматически по заданным координатам. Ползунок включает/отключает выполнение действия на закате.","Day Length - Продолжительность светового дня, рассчитывается автоматически на основе координат и текущей даты.","Next full moon - Дата и время следующего полнолуния, рассчитывается автоматически.","Date - Дата для автономного (offline) режима в формате дд.мм.гг. Используется когда нет доступа к NTP-серверу. Пример: 15.03.25","Time - Время для автономного (offline) режима в формате чч:мм:сс. Используется когда нет доступа к NTP-серверу. Пример: 14:30:00"],ruLangsecurity=["","RXD Pin - Пин приема данных (RX).","TXD Pin - Пин передачи данных (TX).","Phone Number - Номер телефона для отправки SMS и звонков.","Info - Дополнительная информация для быстрой навигации.","OnOff - Включение или отключение модуля SIM800L.","Action - Кнопка Edit позволяет зайти в меню настроек."],ruLangsecuritypins=["","ID - уникальный числовой идентификатор пина. Присваивается автоматически.","Pin - Уникальный номер цифрового или аналогового пина.","Type of sensor - Тип подключенного сенсора (PIR, Normal open, Normal close).","Action - Действие, выполняемое при срабатывании сенсора.","Send SMS - Отправлять ли SMS при срабатывании сенсора (YES/NO).","INFO - Дополнительная информация для быстрой навигации.","On/Off - Включение или отключение охранного пина.","Edit Pin - Редактирование настроек охранного пина."],rulange1Wire=["","ID - Уникальный числовой идентификатор. Присваивается автоматически.","Pin - Уникальный номер цифрового пина, к которому подключена шина 1-Wire.","Selected sensor - Адрес выбранного и привязанного к этому пину уникального 1-Wire датчика (например, DS18B20).","Count of sensors - Количество найденных 1-Wire температурных датчиков на данном пине.","On/Off - Функция включения или отключения опроса подключенных датчиков на данной шине.","Actions - Кнопка Edit для привязки конкретного датчика к этому соединению."],enLangswitch=["","ID - A unique numerical identifier of the switch. Assigned automatically","PIN - The unique number of the digital or analog pin.","Pullup type (EXTERNAL_PULLDOWN, INTERNAL_PULLUP, EXTERNAL_PULLUP)","Device connection - Here will appear one or more devices/relays of pin(s) with which this switch interacts.",'INFO - Give a name of this switch for quick navigation. Example: "Kitchen", "Children room", etc. Max. 30 characters!',"On/Off - Enable or disable the switch state handler on this pin.","Action - The Edit button allows you to access the switch settings menu."],enLangselect=["","ID - A unique numerical identifier. Assigned automatically.","Pin - The unique number of the digital or analog pin.","Type(s) of pin(s) - Select the operating mode of this pin from the provided options."],enlangbutton=["","ID - A unique numerical identifier of the button. Assigned automatically.","PIN - The unique number of the digital or analog pin.","Pullup type (EXTERNAL_PULLDOWN, INTERNAL_PULLUP, EXTERNAL_PULLUP)","sclick - Command to execute when the button is pressed once.","dclick - Command to execute when the button is pressed twice.","lpress - Command to execute when the button is long pressed.",'INFO - Give a name of this button for quick navigation. Example: "Kitchen", "Children room", etc. Max. 30 characters!',"On/Off - Enable or disable the button function on this pin.","Action - The Edit button allows you to access the button settings menu."],enencoder=["","ID - A unique numerical identifier of the encoder. Assigned automatically.","PIN - The unique number of the pin.","Encoder A (ID) - Main pin of encoder A (DT).","Encoder B (ID) - Additional pin of encoder B (CLK).","PWM connection - PWM connection for brightness control (dimmer).","Dimmer value (0-100) - Current dimmer value from 0 to 100.","Duty on restore - Value of duty cycle (brightness) to restore when the controller is turned on.","INFO - Give a name to this encoder for quick navigation.","On/Off - Enable or disable the encoder handler.","Action - The Edit button allows you to access the encoder settings menu.","PWM Frequency - PWM frequency of the controlled device (in Hertz).","Resolution (steps) - Maximum number of steps from 0 to 100% for the PWM device."],enlangtimers=["","No - A unique numerical identifier of the task (cron). Assigned automatically.","Cron - Configure a schedule (cron) to perform the action.","Script - What action (script) must be performed at the time specified in the timer.",'Info - Give a name to the selected timer for quick navigation, e.g."Lawn Watering", "Backyard Light", etc. No more than 30 characters!',"On/Off - Enable or disable the execution of this task.","Action - The Edit button allows you to access the task settings menu."],enlangsettings=["","Login - Enter the username for logging into the system. Used for web interface authentication.","Password - Enter your password for the system. It is recommended to use a strong password.","Time zone UTC - Select your time zone. Affects time display and sunrise/sunset calculations.","IP address - Enter a static IP address for the device. After reboot, STM32 will be available at this address. Format: 192.168.1.100","Subnet mask - Enter the subnet mask. Defines the range of addresses in your local network. Format: 255.255.255.0","Default gateway - Enter the default gateway IP address (usually your router address). Format: 192.168.1.1","Token - Secret key for API request authorization. Used in device control URL commands. Example: /api/Token/switch?id=1&onoff=1","Host - Enter the IP address or domain name of the MQTT broker. Example: 192.168.1.50 or broker.hivemq.com","Port - Specify the MQTT broker port. Standard port: 1883 (no encryption), 8883 (with TLS).","Client - Unique MQTT client identifier. Each device must have its own unique Client ID.","User - Username for connecting to the MQTT broker. Leave empty if the broker does not require authorization.","Password - Password for connecting to the MQTT broker. Leave empty if the broker does not require authorization.","TX topic - Outgoing MQTT topic. The device publishes its data and events to this topic. Example: Swarm","RX topic - Incoming MQTT topic. The device receives control commands from this topic. Example: Swarm","HTTPS domain - Domain name for HTTPS connection. A valid SSL certificate for this domain is required. Example: zagotovka.ddns.net",'Private Key - SSL certificate private key in PEM format. Starts with "-----BEGIN EC PRIVATE KEY-----". Stored in encrypted form.','Public Key - SSL public certificate in PEM format. Starts with "-----BEGIN CERTIFICATE-----". Used for HTTPS connection.',"Longitude - Longitude of your location for sunrise/sunset calculation. Round to 3 decimal places. Example: 37.618 (Moscow)","Latitude - Latitude of your location for sunrise/sunset calculation. Round to 3 decimal places. Example: 55.751 (Moscow)","Sunrise - Sunrise time is calculated automatically based on your coordinates. The slider enables/disables the action at sunrise.","Sunset - Sunset time is calculated automatically based on your coordinates. The slider enables/disables the action at sunset.","Day Length - Duration of daylight, calculated automatically based on coordinates and current date.","Next full moon - Date and time of the next full moon, calculated automatically.","Date - Date for offline mode in dd.mm.yy format. Used when there is no access to the NTP server. Example: 15.03.25","Time - Time for offline mode in hh:mm:ss format. Used when there is no access to the NTP server. Example: 14:30:00"],enLangsecurity=["","RXD Pin - Receive Data Pin (RX).","TXD Pin - Transmit Data Pin (TX).","Phone Number - Phone number for SMS notifications and calls.","Info - Additional information for quick navigation.","OnOff - Enable or disable the SIM800L module.","Action - The Edit button allows you to access the settings menu."],enLangsecuritypins=["","ID - A unique numerical identifier of the pin. Assigned automatically.","Pin - The unique number of the digital or analog pin.","Type of sensor - Type of connected sensor (PIR, Normal open, Normal close).","Action - Action to perform when the sensor is triggered.","Send SMS - Whether to send SMS when the sensor is triggered (YES/NO).","INFO - Additional information for quick navigation.","On/Off - Enable or disable the security pin.","Edit Pin - The Edit button allows you to access the security pin settings."],enlange1Wire=["","ID - A unique numerical identifier. Assigned automatically.","Pin - The unique number of the digital pin to which the 1-Wire bus is connected.","Selected sensor - Address of the selected and bound unique 1-Wire sensor to this pin (e.g., DS18B20).","Count of sensors - Number of found 1-Wire temperature sensors on this pin.","On/Off - The function of enabling or disabling polling of connected sensors on this bus.","Actions - The Edit button to bind a specific sensor to this connection."];function initGlobalTooltip$8(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,ee=window.innerWidth,vt=dt.getBoundingClientRect();let te=vt.left+vt.width/2-_/2;te=Math.max(8,Math.min(te,ee-_-8));let ne=vt.top-pt-8;ne<8&&(ne=vt.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}function TabSelect({}){const[$,k]=ut(null),[st,ct]=ut({}),[dt,_]=ut(null),[pt,ee]=ut(!1),[vt,te]=ut(3),[ne,Xt]=ut(!1),[se,re]=ut("ru");lt(()=>{initGlobalTooltip$8()},[]);const ce=de=>{Xt(de)},ge=de=>ne&&(de===1||de===35),ye=()=>fetch("api/select/get").then(de=>de.json()).then(de=>{const xe=de.data||de;k(xe),Xt(de.sim800l===1),de.lang&&re(de.lang);const Ee={};xe.forEach(we=>{Ee[`topin_${we.id}`]=we.topin.toString()}),ct(Ee)});lt(ye,[]),lt(()=>{let de;return pt&&vt>0?de=setTimeout(()=>{te(vt-1)},1e3):vt===0&&(ee(!1),_(null)),()=>clearTimeout(de)},[pt,vt]);const pe=async de=>{de.preventDefault();const xe=new FormData(de.target),Ee={lang:se,sim800l:ne?1:0,data:[]};$.forEach(we=>{const Te=xe.get(`topin_${we.id}`);Ee.data.push({id:we.id,pins:we.pins,topin:parseInt(Te),pwm:we.pwm,i2cdata:we.i2cdata,i2cclok:we.i2cclok})}),_("submitting"),ee(!0),te(3);try{const we=await fetch("api/select/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Ee)});if(!we.ok)throw new Error("Network response was not ok");const Te=await we.json();_("success"),console.log("Success:",Te);const me={};Ee.data.forEach(Ce=>{me[`topin_${Ce.id}`]=Ce.topin.toString()}),ct(Ce=>({...Ce,...me})),ye()}catch(we){_("error"),console.error("Error:",we)}},he=de=>{const{name:xe,value:Ee}=de.target;ct(we=>({...we,[xe]:Ee}))};if(!$)return"";const be=()=>({langselect:se==="ru"?ruLangselect:enLangselect}),$e=(de,xe)=>{const Ee=be(),Te=(Ee[de]&&Ee[de][xe]?Ee[de][xe]:"").split(" "),me=[];for(let Ce=0;Ce<Te.length;Ce+=15)me.push(Te.slice(Ce,Ce+15).join(" "));return me.join("<br>")},ke=de=>Et`
+  <//>`}const ruLangswitch=["","ID - уникальный числовой идентификатор выключателя. Присваивается автоматически.","Pin - Уникальный номер цифрового или аналогового пина.","Pullup type - тип подтяжки (EXTERNAL_PULLDOWN, INTERNAL_PULLUP, EXTERNAL_PULLUP).","Device connection - Здесь указаны пины одного или нескольких устройств, с которыми взаимодействует данный выключатель.",'INFO - Укажите название данного выключателя для быстрой навигации, например "Кухня", "Детская" и т.д. Не более 30-ти символов!',"On/Off - Включение или отключение обработчика состояния на данном пине.","Action - Кнопка Edit позволяет зайти в меню настроек и соединений выключателя."],ruLangselect=["","ID - уникальный числовой идентификатор. Присваивается автоматически.","Pin - Уникальный номер цифрового или аналогового пина.","Type(s) of pin(s) - Выберите режим работы данного пина из предложенных вариантов."],rulangbutton=["","ID - уникальный числовой идентификатор кнопки. Присваивается автоматически.","Pin - Уникальный номер цифрового или аналогового пина.","Pullup type - тип подтяжки (EXTERNAL_PULLDOWN, INTERNAL_PULLUP, EXTERNAL_PULLUP).","sclick - Выполняемая команда при одинарном клике кнопки.","dclick - Выполняемая команда при двойном клике кнопки.","lpress - Выполняемая команда при удержании кнопки.",'INFO - Укажите название данной кнопки для быстрой навигации, например "Кухня", "Детская" и т.д. Не более 30-ти символов!',"On/Off - Включение или отключение функции кнопки на данном пине.","Action - Кнопка Edit позволяет зайти в меню настроек кнопки."],ruencoder=["","ID - уникальный числовой идентификатор энкодера. Присваивается автоматически.","Pin - Уникальный номер пина.","Encoder A (ID) - Основной пин энкодера A (DT).","Encoder B (ID) - Дополнительный пин энкодера B (CLK).","PWM connection - Подключение ШИМ для управления яркостью (диммер).","Dimmer value (0-100) - Текущее значение диммера от 0 до 100.","Duty on restore - Восстановление значения скважности (яркости) при включении контроллера.","INFO - Укажите название данного энкодера для быстрой навигации.","On/Off - Включение или отключение обработчика энкодера.","Action - Кнопка Edit позволяет зайти в меню настроек энкодера.","PWM Frequency - Частота ШИМ управляемого устройства (в герцах).","Resolution (steps) - Максимальное количество шагов от 0 до 100% для ШИМ устройства."],rulangtimers=["","No - Уникальный числовой идентификатор задачи (cron). Присваивается автоматически.","Cron - Сконфигурируйте расписание (cron) для выполнения задачи.","Script - Какое действие (скрипт) должно выполниться в указанное в таймере время.",'Info - Дайте название выбранному таймеру для быстрой навигации, например "Полив газона". Не более 30-ти символов!',"On/Off - Вкл/Откл выполнение данной задачи.","Action - Кнопка Edit позволяет зайти в меню настроек задачи."],rulangsettings=["","Login - Введите имя пользователя для входа в систему. Используется при авторизации в веб-интерфейсе.","Password - Введите пароль для входа в систему. Рекомендуется использовать надёжный пароль.","Time zone UTC - Выберите свой часовой пояс. Влияет на отображение времени и расчёт восхода/заката.","IP address - Введите статический IP-адрес устройства. После перезагрузки STM32 будет доступен по этому адресу. Формат: 192.168.1.100","Subnet mask - Введите маску подсети. Определяет диапазон адресов вашей локальной сети. Формат: 255.255.255.0","Default gateway - Введите IP-адрес шлюза по умолчанию (обычно адрес вашего роутера). Формат: 192.168.1.1","Token - Секретный ключ для авторизации API-запросов. Используется в URL командах управления устройством. Пример: /api/Token/switch?id=1&onoff=1","Host - Введите IP-адрес или доменное имя MQTT-брокера. Пример: 192.168.1.50 или broker.hivemq.com","Port - Укажите порт MQTT-брокера. Стандартный порт: 1883 (без шифрования), 8883 (с TLS).","Client - Уникальный идентификатор клиента MQTT. Каждое устройство должно иметь свой уникальный Client ID.","User - Имя пользователя для подключения к MQTT-брокеру. Оставьте пустым, если брокер не требует авторизации.","Password - Пароль для подключения к MQTT-брокеру. Оставьте пустым, если брокер не требует авторизации.","TX topic - Исходящий топик MQTT. На этот топик устройство публикует свои данные и события. Пример: Swarm","RX topic - Входящий топик MQTT. С этого топика устройство получает команды управления. Пример: Swarm","HTTPS domain - Доменное имя для HTTPS-соединения. Необходим действующий SSL-сертификат для этого домена. Пример: zagotovka.ddns.net",'Private Key - Закрытый ключ SSL-сертификата в формате PEM. Начинается с "-----BEGIN EC PRIVATE KEY-----". Хранится в зашифрованном виде.','Public Key - Публичный сертификат SSL в формате PEM. Начинается с "-----BEGIN CERTIFICATE-----". Используется для HTTPS-соединения.',"Longitude - Долгота вашего местоположения для расчёта восхода и заката. Округлите до 3-х знаков после запятой. Пример: 37.618 (Москва)","Latitude - Широта вашего местоположения для расчёта восхода и заката. Округлите до 3-х знаков после запятой. Пример: 55.751 (Москва)","Sunrise - Время восхода солнца рассчитывается автоматически по заданным координатам. Ползунок включает/отключает выполнение действия на восходе.","Sunset - Время захода солнца рассчитывается автоматически по заданным координатам. Ползунок включает/отключает выполнение действия на закате.","Day Length - Продолжительность светового дня, рассчитывается автоматически на основе координат и текущей даты.","Next full moon - Дата и время следующего полнолуния, рассчитывается автоматически.","Date - Дата для автономного (offline) режима в формате дд.мм.гг. Используется когда нет доступа к NTP-серверу. Пример: 15.03.25","Time - Время для автономного (offline) режима в формате чч:мм:сс. Используется когда нет доступа к NTP-серверу. Пример: 14:30:00"],ruLangsecurity=["","RXD Pin - Пин приема данных (RX).","TXD Pin - Пин передачи данных (TX).","Phone Number - Номер телефона для отправки SMS и звонков.","Info - Дополнительная информация для быстрой навигации.","OnOff - Включение или отключение модуля SIM800L.","Action - Кнопка Edit позволяет зайти в меню настроек."],ruLangsecuritypins=["","ID - уникальный числовой идентификатор пина. Присваивается автоматически.","Pin - Уникальный номер цифрового или аналогового пина.","Type of sensor - Тип подключенного сенсора (PIR, Normal open, Normal close).","Action - Действие, выполняемое при срабатывании сенсора.","Send SMS - Отправлять ли SMS при срабатывании сенсора (YES/NO).","INFO - Дополнительная информация для быстрой навигации.","On/Off - Включение или отключение охранного пина.","Edit Pin - Редактирование настроек охранного пина."],rulange1Wire=["","ID - Уникальный числовой идентификатор. Присваивается автоматически.","Pin - Уникальный номер цифрового пина, к которому подключена шина 1-Wire.","Selected sensor - Адрес выбранного и привязанного к этому пину уникального 1-Wire датчика (например, DS18B20).","Count of sensors - Количество найденных 1-Wire температурных датчиков на данном пине.","On/Off - Функция включения или отключения опроса подключенных датчиков на данной шине.","Actions - Кнопка Edit для привязки конкретного датчика к этому соединению."],enLangswitch=["","ID - A unique numerical identifier of the switch. Assigned automatically","PIN - The unique number of the digital or analog pin.","Pullup type (EXTERNAL_PULLDOWN, INTERNAL_PULLUP, EXTERNAL_PULLUP)","Device connection - Here will appear one or more devices/relays of pin(s) with which this switch interacts.",'INFO - Give a name of this switch for quick navigation. Example: "Kitchen", "Children room", etc. Max. 30 characters!',"On/Off - Enable or disable the switch state handler on this pin.","Action - The Edit button allows you to access the switch settings menu."],enLangselect=["","ID - A unique numerical identifier. Assigned automatically.","Pin - The unique number of the digital or analog pin.","Type(s) of pin(s) - Select the operating mode of this pin from the provided options."],enlangbutton=["","ID - A unique numerical identifier of the button. Assigned automatically.","PIN - The unique number of the digital or analog pin.","Pullup type (EXTERNAL_PULLDOWN, INTERNAL_PULLUP, EXTERNAL_PULLUP)","sclick - Command to execute when the button is pressed once.","dclick - Command to execute when the button is pressed twice.","lpress - Command to execute when the button is long pressed.",'INFO - Give a name of this button for quick navigation. Example: "Kitchen", "Children room", etc. Max. 30 characters!',"On/Off - Enable or disable the button function on this pin.","Action - The Edit button allows you to access the button settings menu."],enencoder=["","ID - A unique numerical identifier of the encoder. Assigned automatically.","PIN - The unique number of the pin.","Encoder A (ID) - Main pin of encoder A (DT).","Encoder B (ID) - Additional pin of encoder B (CLK).","PWM connection - PWM connection for brightness control (dimmer).","Dimmer value (0-100) - Current dimmer value from 0 to 100.","Duty on restore - Value of duty cycle (brightness) to restore when the controller is turned on.","INFO - Give a name to this encoder for quick navigation.","On/Off - Enable or disable the encoder handler.","Action - The Edit button allows you to access the encoder settings menu.","PWM Frequency - PWM frequency of the controlled device (in Hertz).","Resolution (steps) - Maximum number of steps from 0 to 100% for the PWM device."],enlangtimers=["","No - A unique numerical identifier of the task (cron). Assigned automatically.","Cron - Configure a schedule (cron) to perform the action.","Script - What action (script) must be performed at the time specified in the timer.",'Info - Give a name to the selected timer for quick navigation, e.g."Lawn Watering", "Backyard Light", etc. No more than 30 characters!',"On/Off - Enable or disable the execution of this task.","Action - The Edit button allows you to access the task settings menu."],enlangsettings=["","Login - Enter the username for logging into the system. Used for web interface authentication.","Password - Enter your password for the system. It is recommended to use a strong password.","Time zone UTC - Select your time zone. Affects time display and sunrise/sunset calculations.","IP address - Enter a static IP address for the device. After reboot, STM32 will be available at this address. Format: 192.168.1.100","Subnet mask - Enter the subnet mask. Defines the range of addresses in your local network. Format: 255.255.255.0","Default gateway - Enter the default gateway IP address (usually your router address). Format: 192.168.1.1","Token - Secret key for API request authorization. Used in device control URL commands. Example: /api/Token/switch?id=1&onoff=1","Host - Enter the IP address or domain name of the MQTT broker. Example: 192.168.1.50 or broker.hivemq.com","Port - Specify the MQTT broker port. Standard port: 1883 (no encryption), 8883 (with TLS).","Client - Unique MQTT client identifier. Each device must have its own unique Client ID.","User - Username for connecting to the MQTT broker. Leave empty if the broker does not require authorization.","Password - Password for connecting to the MQTT broker. Leave empty if the broker does not require authorization.","TX topic - Outgoing MQTT topic. The device publishes its data and events to this topic. Example: Swarm","RX topic - Incoming MQTT topic. The device receives control commands from this topic. Example: Swarm","HTTPS domain - Domain name for HTTPS connection. A valid SSL certificate for this domain is required. Example: zagotovka.ddns.net",'Private Key - SSL certificate private key in PEM format. Starts with "-----BEGIN EC PRIVATE KEY-----". Stored in encrypted form.','Public Key - SSL public certificate in PEM format. Starts with "-----BEGIN CERTIFICATE-----". Used for HTTPS connection.',"Longitude - Longitude of your location for sunrise/sunset calculation. Round to 3 decimal places. Example: 37.618 (Moscow)","Latitude - Latitude of your location for sunrise/sunset calculation. Round to 3 decimal places. Example: 55.751 (Moscow)","Sunrise - Sunrise time is calculated automatically based on your coordinates. The slider enables/disables the action at sunrise.","Sunset - Sunset time is calculated automatically based on your coordinates. The slider enables/disables the action at sunset.","Day Length - Duration of daylight, calculated automatically based on coordinates and current date.","Next full moon - Date and time of the next full moon, calculated automatically.","Date - Date for offline mode in dd.mm.yy format. Used when there is no access to the NTP server. Example: 15.03.25","Time - Time for offline mode in hh:mm:ss format. Used when there is no access to the NTP server. Example: 14:30:00"],enLangsecurity=["","RXD Pin - Receive Data Pin (RX).","TXD Pin - Transmit Data Pin (TX).","Phone Number - Phone number for SMS notifications and calls.","Info - Additional information for quick navigation.","OnOff - Enable or disable the SIM800L module.","Action - The Edit button allows you to access the settings menu."],enLangsecuritypins=["","ID - A unique numerical identifier of the pin. Assigned automatically.","Pin - The unique number of the digital or analog pin.","Type of sensor - Type of connected sensor (PIR, Normal open, Normal close).","Action - Action to perform when the sensor is triggered.","Send SMS - Whether to send SMS when the sensor is triggered (YES/NO).","INFO - Additional information for quick navigation.","On/Off - Enable or disable the security pin.","Edit Pin - The Edit button allows you to access the security pin settings."],enlange1Wire=["","ID - A unique numerical identifier. Assigned automatically.","Pin - The unique number of the digital pin to which the 1-Wire bus is connected.","Selected sensor - Address of the selected and bound unique 1-Wire sensor to this pin (e.g., DS18B20).","Count of sensors - Number of found 1-Wire temperature sensors on this pin.","On/Off - The function of enabling or disabling polling of connected sensors on this bus.","Actions - The Edit button to bind a specific sensor to this connection."];function initGlobalTooltip$8(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,ee=window.innerWidth,vt=dt.getBoundingClientRect();let te=vt.left+vt.width/2-_/2;te=Math.max(8,Math.min(te,ee-_-8));let ne=vt.top-pt-8;ne<8&&(ne=vt.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}function TabSelect({}){const[$,k]=ut(null),[st,ct]=ut({}),[dt,_]=ut(null),[pt,ee]=ut(!1),[vt,te]=ut(3),[ne,Xt]=ut(!1),[le,re]=ut("ru");lt(()=>{initGlobalTooltip$8()},[]);const ce=de=>{Xt(de)},ge=de=>ne&&(de===1||de===35),ve=()=>fetch("api/select/get").then(de=>de.json()).then(de=>{const xe=de.data||de;k(xe),Xt(de.sim800l===1),de.lang&&re(de.lang);const Se={};xe.forEach(we=>{Se[`topin_${we.id}`]=we.topin.toString()}),ct(Se)});lt(ve,[]),lt(()=>{let de;return pt&&vt>0?de=setTimeout(()=>{te(vt-1)},1e3):vt===0&&(ee(!1),_(null)),()=>clearTimeout(de)},[pt,vt]);const be=async de=>{de.preventDefault();const xe=new FormData(de.target),Se={lang:le,sim800l:ne?1:0,data:[]};$.forEach(we=>{const Te=xe.get(`topin_${we.id}`);Se.data.push({id:we.id,pins:we.pins,topin:parseInt(Te),pwm:we.pwm,i2cdata:we.i2cdata,i2cclok:we.i2cclok})}),_("submitting"),ee(!0),te(3);try{const we=await fetch("api/select/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Se)});if(!we.ok)throw new Error("Network response was not ok");const Te=await we.json();_("success"),console.log("Success:",Te);const me={};Se.data.forEach(Ie=>{me[`topin_${Ie.id}`]=Ie.topin.toString()}),ct(Ie=>({...Ie,...me})),ve()}catch(we){_("error"),console.error("Error:",we)}},he=de=>{const{name:xe,value:Se}=de.target;ct(we=>({...we,[xe]:Se}))};if(!$)return"";const fe=()=>({langselect:le==="ru"?ruLangselect:enLangselect}),$e=(de,xe)=>{const Se=fe(),Te=(Se[de]&&Se[de][xe]?Se[de][xe]:"").split(" "),me=[];for(let Ie=0;Ie<Te.length;Ie+=15)me.push(Te.slice(Ie,Ie+15).join(" "));return me.join("<br>")},ke=de=>Et`
     <th
       class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
       style=${de.center?"text-align: center":""}
@@ -293,7 +293,7 @@
     >
       ${de.title}
     </th>
-  `,_e=({id:de,value:xe,label:Ee,disabled:we=!1,onChange:Te,checked:me})=>Et`
+  `,_e=({id:de,value:xe,label:Se,disabled:we=!1,onChange:Te,checked:me})=>Et`
     <div class="relative">
       <input
         id="${de}_${xe}"
@@ -304,7 +304,7 @@
         checked=${me}
         onChange=${Te}
         disabled=${we}
-        aria-label="${Ee}"
+        aria-label="${Se}"
       />
       <label
         for="${de}_${xe}"
@@ -312,10 +312,10 @@
                ${we?"text-gray-400 cursor-not-allowed opacity-60":"text-slate-700 hover:bg-black/5"}
                peer-checked:bg-gradient-to-r peer-checked:from-teal-500 peer-checked:to-cyan-500 peer-checked:text-white peer-checked:shadow-sm"
       >
-        ${Ee}
+        ${Se}
       </label>
     </div>
-  `,Oe=({d:de})=>Et`
+  `,Pe=({d:de})=>Et`
     <tr class="${ge(de.id)?"bg-red-200/50 opacity-50 pointer-events-none":de.id%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
       <td class="px-6 py-2 text-sm text-slate-800">${de.id}</td>
       <td class="px-6 py-2 text-sm text-slate-800 font-medium">${de.pins}</td>
@@ -344,7 +344,7 @@
           Select pin(s)
         </div>
 
-        <form onSubmit=${pe}>
+        <form onSubmit=${be}>
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
             <button
               type="submit"
@@ -392,7 +392,7 @@
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-white/40">
-                  ${$&&$.map(de=>Et`<${Oe} d=${de} />`)}
+                  ${$&&$.map(de=>Et`<${Pe} d=${de} />`)}
                 </tbody>
               </table>
             </div>
@@ -410,7 +410,7 @@
         </form>
       </div>
     </div>
-  `}function ModalSwitch({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedSwitch:_,onSwitchChange:pt,connectionOptions:ee,SliderComponent:vt=MyPolzunok}){const[te,ne]=ut((_==null?void 0:_.info)||""),[Xt,se]=ut((_==null?void 0:_.onoff)||0),[re,ce]=ut((_==null?void 0:_.ptype)||0),[ge,ye]=ut((_==null?void 0:_.setrpins)||""),[pe,he]=ut([]);lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store",headers:{"Content-Type":"application/json"}}).then(me=>{if(!me.ok)throw new Error(`HTTP error! status: ${me.status}`);return me.json()}).then(me=>{if(!me||!me.data||!Array.isArray(me.data)){console.error("Invalid data format:",me),he([]);return}const Ce=me.data.filter(Se=>Se.topin===2);he(Ce)}).catch(me=>{console.error("Error fetching pin config:",me),he([])})},[]);const be=me=>{me.preventDefault();const Ce=new FormData(me.target),Se=Object.fromEntries(Ce);if(Se.id=_.id,Se.pins=_.pins,$==="edit")Se.onoff=Xt;else if($==="connection"){const $t=pe.find(ht=>ht.pins===Se.setrpins);$t&&(Se.pinact={..._.pinact,[$t.id]:$t.pins})}fetch("/api/switch/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Se)}).then($t=>$t.json()).then($t=>{console.log("Success:",$t),pt({..._,...Se}),st(),window.location.href="/#/switch"}).catch($t=>{console.error("Error:",$t)})},$e=me=>{ye(me.target.value)},ke=me=>{ce(parseInt(me.target.value))},_e=me=>{ne(me.target.value)},Oe=me=>{se(me)},de=me=>{ct&&me.target===me.currentTarget&&st()},xe=()=>{ce(0),ne(""),se(0)},we=Et`
+  `}function ModalSwitch({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedSwitch:_,onSwitchChange:pt,connectionOptions:ee,SliderComponent:vt=MyPolzunok}){const[te,ne]=ut((_==null?void 0:_.info)||""),[Xt,le]=ut((_==null?void 0:_.onoff)||0),[re,ce]=ut((_==null?void 0:_.ptype)||0),[ge,ve]=ut((_==null?void 0:_.setrpins)||""),[be,he]=ut([]);lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store",headers:{"Content-Type":"application/json"}}).then(me=>{if(!me.ok)throw new Error(`HTTP error! status: ${me.status}`);return me.json()}).then(me=>{if(!me||!me.data||!Array.isArray(me.data)){console.error("Invalid data format:",me),he([]);return}const Ie=me.data.filter(Ee=>Ee.topin===2);he(Ie)}).catch(me=>{console.error("Error fetching pin config:",me),he([])})},[]);const fe=me=>{me.preventDefault();const Ie=new FormData(me.target),Ee=Object.fromEntries(Ie);if(Ee.id=_.id,Ee.pins=_.pins,$==="edit")Ee.onoff=Xt;else if($==="connection"){const $t=be.find(ht=>ht.pins===Ee.setrpins);$t&&(Ee.pinact={..._.pinact,[$t.id]:$t.pins})}fetch("/api/switch/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Ee)}).then($t=>$t.json()).then($t=>{console.log("Success:",$t),pt({..._,...Ee}),st(),window.location.href="/#/switch"}).catch($t=>{console.error("Error:",$t)})},$e=me=>{ve(me.target.value)},ke=me=>{ce(parseInt(me.target.value))},_e=me=>{ne(me.target.value)},Pe=me=>{le(me)},de=me=>{ct&&me.target===me.currentTarget&&st()},xe=()=>{ce(0),ne(""),le(0)},we=Et`
     <div
       class="fixed inset-0 z-[999] bg-black bg-opacity-50"
       style="margin-top: 7px;"
@@ -431,7 +431,7 @@
             </button>
           </div>
           ${(()=>{if(k==="TabSwitch"){if($==="connection")return Et`
-          <form onsubmit=${be}>
+          <form onsubmit=${fe}>
             <div class="modal-body">
               <table class="table-auto w-full">
                 <tbody>
@@ -448,12 +448,12 @@
                     <td class="p-2">
                       <select
                         name="setrpins"
-                        value=${pe.some(me=>me.pins===ge)?ge:""}
+                        value=${be.some(me=>me.pins===ge)?ge:""}
                         onchange=${$e}
                         class="border rounded p-2 w-full"
                       >
                         <option value="">Select a connection</option>
-                        ${pe.map(me=>Et`
+                        ${be.map(me=>Et`
                             <option value=${me.pins}>
                               ${me.pins} (ID: ${me.id})
                             </option>
@@ -474,7 +474,7 @@
             </div>
           </form>
         `;if($==="edit")return Et`
-          <form onsubmit=${be}>
+          <form onsubmit=${fe}>
             <div class="modal-body">
               <table class="table-auto w-full">
                 <tbody>
@@ -518,7 +518,7 @@
                     <td class="p-2">
                       <${vt}
                         value=${Xt}
-                        onChange=${Oe}
+                        onChange=${Pe}
                       />
                     </td>
                   </tr>
@@ -545,9 +545,9 @@
         </div>
       </div>
     </div>
-  `,Te=at(null);return lt(()=>{const me=document.createElement("div");return me.id="modal-portal",document.body.appendChild(me),Te.current=me,()=>{O(null,me),document.body.removeChild(me)}},[]),lt(()=>{Te.current&&O(we,Te.current)}),null}function initGlobalTooltip$7(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block";const _=dt.getBoundingClientRect();$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const pt=$.offsetWidth,ee=$.offsetHeight,vt=window.innerWidth;let te=_.left+_.width/2-pt/2;te=Math.max(8,Math.min(te,vt-pt-8));let ne=_.top-ee-8;ne<8&&(ne=_.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}function TabSwitch({}){const[$,k]=ut(null),[st,ct]=ut(null),[dt,_]=ut(!1),[pt,ee]=ut(null),[vt,te]=ut(null),[ne,Xt]=ut(!1),[se,re]=ut("ru"),[ce,ge]=ut(null),[ye,pe]=ut([]),[he,be]=ut(""),[$e,ke]=ut(!1);lt(()=>{initGlobalTooltip$7()},[]);const _e=()=>Promise.all([fetch("/api/switch/get").then(oe=>oe.json()),fetch("/api/pintopin/get").then(oe=>oe.json())]).then(([oe,Zt])=>{re(oe.lang),ge(oe.switches),k(oe),pe(Zt),be(`Pintopin data: ${JSON.stringify(Zt,null,2)}
+  `,Te=at(null);return lt(()=>{const me=document.createElement("div");return me.id="modal-portal",document.body.appendChild(me),Te.current=me,()=>{O(null,me),document.body.removeChild(me)}},[]),lt(()=>{Te.current&&O(we,Te.current)}),null}function initGlobalTooltip$7(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block";const _=dt.getBoundingClientRect();$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const pt=$.offsetWidth,ee=$.offsetHeight,vt=window.innerWidth;let te=_.left+_.width/2-pt/2;te=Math.max(8,Math.min(te,vt-pt-8));let ne=_.top-ee-8;ne<8&&(ne=_.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}function TabSwitch({}){const[$,k]=ut(null),[st,ct]=ut(null),[dt,_]=ut(!1),[pt,ee]=ut(null),[vt,te]=ut(null),[ne,Xt]=ut(!1),[le,re]=ut("ru"),[ce,ge]=ut(null),[ve,be]=ut([]),[he,fe]=ut(""),[$e,ke]=ut(!1);lt(()=>{initGlobalTooltip$7()},[]);const _e=()=>Promise.all([fetch("/api/switch/get").then(oe=>oe.json()),fetch("/api/pintopin/get").then(oe=>oe.json())]).then(([oe,Zt])=>{re(oe.lang),ge(oe.switches),k(oe),be(Zt),fe(`Pintopin data: ${JSON.stringify(Zt,null,2)}
 
-Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:",Zt),console.log("Switch data:",oe.switches)}).catch(oe=>{console.error("Error fetching data:",oe),be(`Error fetching data: ${oe.message}`)}),Oe=()=>{fetch("/api/switch/get").then(oe=>oe.json()).then(oe=>{ge(oe.switches),re(oe.lang),console.log("Updated switch data:",oe.switches)}).catch(oe=>{console.error("Error fetching switch data:",oe)})},de=()=>{fetch("/api/pintopin/get").then(oe=>oe.json()).then(oe=>{pe(oe),console.log("Updated pintopin data:",oe)}).catch(oe=>{console.error("Error fetching pintopin data:",oe)})};lt(()=>{Oe(),de();const oe=setInterval(()=>{Oe(),de()},1e3);return()=>clearInterval(oe)},[]);const xe=oe=>{const Zt=new Map,ie=ce.find(ae=>ae.id===oe);return ie&&ie.pinact&&Object.entries(ie.pinact).forEach(([ae,fe])=>{Zt.set(ae,{pin:ae,relayId:fe})}),ye.forEach(ae=>{if(ae.idin===oe){const fe=`${ae.pins}(${ae.idout})`;Zt.has(fe)||Zt.set(fe,{pin:ae.pins,relayId:ae.idout})}}),Array.from(Zt.values())},Ee=()=>({langswitch:se==="ru"?ruLangswitch:enLangswitch}),we=(oe,Zt)=>{const ie=Ee(),fe=(ie[oe]&&ie[oe][Zt]||"").split(" "),ve=[];let mt="";for(let le=0;le<fe.length;le++){const ue=fe[le];mt.length+ue.length+1<=200?mt+=(mt.length>0?" ":"")+ue:(mt.length>0&&ve.push(mt),mt=ue)}return mt.length>0&&ve.push(mt),ve.join("<br>")},Te=(oe,Zt)=>{console.log("Удаление соединения:",oe,Zt);const[ie,ae]=Zt.split("("),fe=ae?parseInt(ae):null;fetch("/api/connection/del",{method:"post",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:oe,pin:ie.trim()})}).then(ve=>ve.json()).then(ve=>{ct(ve),ge(mt=>mt.map(le=>{if(le.id===oe){const ue={...le.pinact};return delete ue[ie.trim()],{...le,pinact:ue}}return le})),pe(mt=>mt.filter(le=>!(le.idin===oe&&le.pins===ie.trim()&&(fe===null||le.idout===fe))))}).then(()=>{console.log("Соединение удалено успешно"),_e()}).catch(ve=>{console.error("Ошибка при удалении соединения:",ve)})},me=(oe,Zt)=>{ee(oe),te(Zt),_(!0)},Ce=()=>{_(!1),ee(null),te(null)},Se=oe=>{console.log("handleSwitchChange:",oe),fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:oe.id,onoff:oe.onoff})}).then(Zt=>Zt.json()).then(Zt=>{console.log("Response from /api/onoff/set:",Zt)}).catch(Zt=>{console.error("Error calling /api/onoff/set:",Zt)}),Ce()},$t={ru:Et`
+Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:",Zt),console.log("Switch data:",oe.switches)}).catch(oe=>{console.error("Error fetching data:",oe),fe(`Error fetching data: ${oe.message}`)}),Pe=()=>{fetch("/api/switch/get").then(oe=>oe.json()).then(oe=>{ge(oe.switches),re(oe.lang),console.log("Updated switch data:",oe.switches)}).catch(oe=>{console.error("Error fetching switch data:",oe)})},de=()=>{fetch("/api/pintopin/get").then(oe=>oe.json()).then(oe=>{be(oe),console.log("Updated pintopin data:",oe)}).catch(oe=>{console.error("Error fetching pintopin data:",oe)})};lt(()=>{Pe(),de();const oe=setInterval(()=>{Pe(),de()},1e3);return()=>clearInterval(oe)},[]);const xe=oe=>{const Zt=new Map,ie=ce.find(ae=>ae.id===oe);return ie&&ie.pinact&&Object.entries(ie.pinact).forEach(([ae,ue])=>{Zt.set(ae,{pin:ae,relayId:ue})}),ve.forEach(ae=>{if(ae.idin===oe){const ue=`${ae.pins}(${ae.idout})`;Zt.has(ue)||Zt.set(ue,{pin:ae.pins,relayId:ae.idout})}}),Array.from(Zt.values())},Se=()=>({langswitch:le==="ru"?ruLangswitch:enLangswitch}),we=(oe,Zt)=>{const ie=Se(),ue=(ie[oe]&&ie[oe][Zt]||"").split(" "),ye=[];let mt="";for(let se=0;se<ue.length;se++){const pe=ue[se];mt.length+pe.length+1<=200?mt+=(mt.length>0?" ":"")+pe:(mt.length>0&&ye.push(mt),mt=pe)}return mt.length>0&&ye.push(mt),ye.join("<br>")},Te=(oe,Zt)=>{console.log("Удаление соединения:",oe,Zt);const[ie,ae]=Zt.split("("),ue=ae?parseInt(ae):null;fetch("/api/connection/del",{method:"post",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:oe,pin:ie.trim()})}).then(ye=>ye.json()).then(ye=>{ct(ye),ge(mt=>mt.map(se=>{if(se.id===oe){const pe={...se.pinact};return delete pe[ie.trim()],{...se,pinact:pe}}return se})),be(mt=>mt.filter(se=>!(se.idin===oe&&se.pins===ie.trim()&&(ue===null||se.idout===ue))))}).then(()=>{console.log("Соединение удалено успешно"),_e()}).catch(ye=>{console.error("Ошибка при удалении соединения:",ye)})},me=(oe,Zt)=>{ee(oe),te(Zt),_(!0)},Ie=()=>{_(!1),ee(null),te(null)},Ee=oe=>{console.log("handleSwitchChange:",oe),fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:oe.id,onoff:oe.onoff})}).then(Zt=>Zt.json()).then(Zt=>{console.log("Response from /api/onoff/set:",Zt)}).catch(Zt=>{console.error("Error calling /api/onoff/set:",Zt)}),Ie()},$t={ru:Et`
       <div class="mytext space-y-6">
         <div>
           <pre class="mb-4">
@@ -808,11 +808,11 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
           ${["None","GPIO_PULLUP","GPIO_PULLDOWN"][oe.ptype]}
         </td>
         <td class="px-6 py-2 text-sm text-slate-700 font-mono">
-          ${ie.map(({pin:ae,relayId:fe})=>Et`
+          ${ie.map(({pin:ae,relayId:ue})=>Et`
               <span class="mr-2 inline-flex items-center">
-                ${ae}${fe!==void 0?`(${fe})`:""}
+                ${ae}${ue!==void 0?`(${ue})`:""}
                 <button
-                  onClick=${ve=>{ve.preventDefault(),Te(oe.id,`${ae}(${fe})`)}}
+                  onClick=${ye=>{ye.preventDefault(),Te(oe.id,`${ae}(${ue})`)}}
                   class="ml-1 text-red-500 hover:text-red-700 transition-colors font-bold"
                   title="Remove connection"
                 >
@@ -825,7 +825,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
         <td class="px-6 py-2">
           <${MyPolzunok}
             value=${oe.onoff}
-            onChange=${ae=>Se({...oe,onoff:ae})}
+            onChange=${ae=>Ee({...oe,onoff:ae})}
           />
         </td>
         <td class="px-6 py-2 text-sm">
@@ -889,7 +889,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
 
             ${ne&&Et`
                 <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
-                  ${$t[se]}
+                  ${$t[le]}
                 </div>
               `}
           </div>
@@ -899,10 +899,10 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
             <${ModalSwitch}
               modalType=${pt}
               page="TabSwitch"
-              hideModal=${Ce}
+              hideModal=${Ie}
               title=${pt==="connection"?"Edit Connection":"Edit switch"}
               selectedSwitch=${vt}
-              onSwitchChange=${Se}
+              onSwitchChange=${Ee}
             />
           `}
       </div>
@@ -1055,7 +1055,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
         ${page==="TabButton"&&modalType==="connection"?renderConnectionModal():renderEditModal()}
       </div>
     </div>
-  `,portalRef=at(null);return lt(()=>{const $=document.createElement("div");return $.id="modal-portal",document.body.appendChild($),portalRef.current=$,()=>{O(null,$),document.body.removeChild($)}},[]),lt(()=>{portalRef.current&&O(modalContent,portalRef.current)}),null};function initGlobalTooltip$6(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,ee=window.innerWidth,vt=dt.getBoundingClientRect();let te=vt.left+vt.width/2-_/2;te=Math.max(8,Math.min(te,ee-_-8));let ne=vt.top-pt-8;ne<8&&(ne=vt.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const TabButton=()=>{const[$,k]=ut(null),[st,ct]=ut([]),[dt,_]=ut(null),[pt,ee]=ut(null),[vt,te]=ut(!1),[ne,Xt]=ut(null),[se,re]=ut(null),[ce,ge]=ut(!1),[ye,pe]=ut("ru"),[he,be]=ut(""),[$e,ke]=ut(!0);lt(()=>{initGlobalTooltip$6()},[]);const _e={ru:Et`
+  `,portalRef=at(null);return lt(()=>{const $=document.createElement("div");return $.id="modal-portal",document.body.appendChild($),portalRef.current=$,()=>{O(null,$),document.body.removeChild($)}},[]),lt(()=>{portalRef.current&&O(modalContent,portalRef.current)}),null};function initGlobalTooltip$6(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,ee=window.innerWidth,vt=dt.getBoundingClientRect();let te=vt.left+vt.width/2-_/2;te=Math.max(8,Math.min(te,ee-_-8));let ne=vt.top-pt-8;ne<8&&(ne=vt.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const TabButton=()=>{const[$,k]=ut(null),[st,ct]=ut([]),[dt,_]=ut(null),[pt,ee]=ut(null),[vt,te]=ut(!1),[ne,Xt]=ut(null),[le,re]=ut(null),[ce,ge]=ut(!1),[ve,be]=ut("ru"),[he,fe]=ut(""),[$e,ke]=ut(!0);lt(()=>{initGlobalTooltip$6()},[]);const _e={ru:Et`
       <div class="mytext space-y-6">
         <div>
           <pre class="mb-4">
@@ -1376,12 +1376,12 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
           </div>
         </div>
       </div>
-    `},Oe=()=>{fetch("/api/button/get").then(ht=>ht.json()).then(ht=>{_(ht.buttons),pe(ht.lang),console.log("Updated button data:",ht.buttons)}).catch(ht=>{console.error("Error fetching button data:",ht)})};lt(()=>{Oe();let ht;return $e&&(ht=setInterval(()=>{Oe()},1e3)),()=>{ht&&clearInterval(ht)}},[$e]);const de=ht=>{const Yt=new Map,oe=dt.find(Zt=>Zt.id===ht);return oe&&oe.pinact&&Object.entries(oe.pinact).forEach(([Zt,ie])=>{Yt.set(Zt,{pin:Zt,relayId:ie})}),st.forEach(Zt=>{if(Zt.idin===ht){const ie=`${Zt.pins}(${Zt.idout})`;Yt.has(ie)||Yt.set(ie,{pin:Zt.pins,relayId:Zt.idout})}}),Array.from(Yt.values())},xe=()=>({langbutton:ye==="ru"?rulangbutton:enlangbutton}),Ee=(ht,Yt)=>{const oe=xe(),Zt=oe[ht]&&oe[ht][Yt]?oe[ht][Yt]:"";return we(Zt)},we=(ht,Yt=100)=>{if(!ht||typeof ht!="string")return"";const oe=[];let Zt="";const ie=ht.split(`
-`);return ie.forEach((ae,fe)=>{ae.split(" ").filter(mt=>mt.length>0).forEach(mt=>{const le=Zt.length===0?mt:" "+mt;Zt.length+le.length<=Yt?Zt+=le:(Zt.length>0&&oe.push(Zt),Zt=mt)}),Zt.length>0&&(oe.push(Zt),Zt=""),fe<ie.length-1&&oe.push("")}),Zt.length>0&&oe.push(Zt),oe.join(`
-`)},Te=(ht,Yt)=>{Xt(ht),re(Yt),te(!0),ke(!1)},me=()=>{te(!1),Xt(null),re(null),ke(!0)},Ce=ht=>{console.log("handleButtonChange:",ht),_(Yt=>Yt.map(oe=>oe.id===ht.id?{...oe,...ht}:oe)),fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ht.id,onoff:ht.onoff})}).then(Yt=>Yt.json()).then(Yt=>{console.log("Response from /api/onoff/set:",Yt)}).catch(Yt=>{console.error("Error calling /api/onoff/set:",Yt)}),me()},Se=ht=>Et`
+    `},Pe=()=>{fetch("/api/button/get").then(ht=>ht.json()).then(ht=>{_(ht.buttons),be(ht.lang),console.log("Updated button data:",ht.buttons)}).catch(ht=>{console.error("Error fetching button data:",ht)})};lt(()=>{Pe();let ht;return $e&&(ht=setInterval(()=>{Pe()},1e3)),()=>{ht&&clearInterval(ht)}},[$e]);const de=ht=>{const Yt=new Map,oe=dt.find(Zt=>Zt.id===ht);return oe&&oe.pinact&&Object.entries(oe.pinact).forEach(([Zt,ie])=>{Yt.set(Zt,{pin:Zt,relayId:ie})}),st.forEach(Zt=>{if(Zt.idin===ht){const ie=`${Zt.pins}(${Zt.idout})`;Yt.has(ie)||Yt.set(ie,{pin:Zt.pins,relayId:Zt.idout})}}),Array.from(Yt.values())},xe=()=>({langbutton:ve==="ru"?rulangbutton:enlangbutton}),Se=(ht,Yt)=>{const oe=xe(),Zt=oe[ht]&&oe[ht][Yt]?oe[ht][Yt]:"";return we(Zt)},we=(ht,Yt=100)=>{if(!ht||typeof ht!="string")return"";const oe=[];let Zt="";const ie=ht.split(`
+`);return ie.forEach((ae,ue)=>{ae.split(" ").filter(mt=>mt.length>0).forEach(mt=>{const se=Zt.length===0?mt:" "+mt;Zt.length+se.length<=Yt?Zt+=se:(Zt.length>0&&oe.push(Zt),Zt=mt)}),Zt.length>0&&(oe.push(Zt),Zt=""),ue<ie.length-1&&oe.push("")}),Zt.length>0&&oe.push(Zt),oe.join(`
+`)},Te=(ht,Yt)=>{Xt(ht),re(Yt),te(!0),ke(!1)},me=()=>{te(!1),Xt(null),re(null),ke(!0)},Ie=ht=>{console.log("handleButtonChange:",ht),_(Yt=>Yt.map(oe=>oe.id===ht.id?{...oe,...ht}:oe)),fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ht.id,onoff:ht.onoff})}).then(Yt=>Yt.json()).then(Yt=>{console.log("Response from /api/onoff/set:",Yt)}).catch(Yt=>{console.error("Error calling /api/onoff/set:",Yt)}),me()},Ee=ht=>Et`
     <th
       class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
-      data-tip=${Ee("langbutton",ht.tooltipIndex)}
+      data-tip=${Se("langbutton",ht.tooltipIndex)}
     >
       ${ht.title}
     </th>
@@ -1405,7 +1405,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
         <td class="px-6 py-2">
           <${MyPolzunok}
             value=${ht.onoff}
-            onChange=${oe=>Ce({...ht,onoff:oe})}
+            onChange=${oe=>Ie({...ht,onoff:oe})}
           />
         </td>
         <td class="px-6 py-2 text-sm">
@@ -1435,15 +1435,15 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                 <table class="w-full text-left border-collapse whitespace-nowrap">
                   <thead>
                     <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                      <${Se} title="ID" tooltipIndex=${1} />
-                      <${Se} title="Pin" tooltipIndex=${2} />
-                      <${Se} title="Pullup type" tooltipIndex=${3} />
-                      <${Se} title="SINGLE CLICK" tooltipIndex=${4} />
-                      <${Se} title="DOUBLE CLICK" tooltipIndex=${5} />
-                      <${Se} title="LONG PRESS" tooltipIndex=${6} />
-                      <${Se} title="INFO" tooltipIndex=${7} />
-                      <${Se} title="On/Off" tooltipIndex=${8} />
-                      <${Se} title="Action" tooltipIndex=${9} />
+                      <${Ee} title="ID" tooltipIndex=${1} />
+                      <${Ee} title="Pin" tooltipIndex=${2} />
+                      <${Ee} title="Pullup type" tooltipIndex=${3} />
+                      <${Ee} title="SINGLE CLICK" tooltipIndex=${4} />
+                      <${Ee} title="DOUBLE CLICK" tooltipIndex=${5} />
+                      <${Ee} title="LONG PRESS" tooltipIndex=${6} />
+                      <${Ee} title="INFO" tooltipIndex=${7} />
+                      <${Ee} title="On/Off" tooltipIndex=${8} />
+                      <${Ee} title="Action" tooltipIndex=${9} />
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-white/40">
@@ -1464,7 +1464,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
 
             ${ce&&Et`
                 <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
-                  ${_e[ye]}
+                  ${_e[ve]}
                 </div>
               `}
           </div>
@@ -1478,14 +1478,14 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
           page="TabButton"
           hideModal=${me}
           title=${ne==="connection"?"Edit Connection":"Edit Button pin"}
-          selectedButton=${se}
-          onButtonChange=${Ce}
+          selectedButton=${le}
+          onButtonChange=${Ie}
         />
       `}
-  `:""};function ModalEncoder({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedEncoder:_,handleEncoderChange:pt,connectionOptions:ee,SliderComponent:vt=MyPolzunok}){const[te,ne]=ut((_==null?void 0:_.info)||""),[Xt,se]=ut((_==null?void 0:_.onoff)===1),[re,ce]=ut({pin:(_==null?void 0:_.encdrbpin)||"",id:(_==null?void 0:_.encoderb)||""}),[ge,ye]=ut(Object.entries(_.pinact||{})[0]||["",""]),[pe,he]=ut([]),[be,$e]=ut([]),[ke,_e]=ut([]),Oe=_.pwmmax||100,[de,xe]=ut(_.dvalue||0),[Ee,we]=ut(_.ponr||0),[Te,me]=ut(_.pwm||1e7),Ce=le=>Math.round(le*Oe/100);lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store",headers:{"Content-Type":"application/json"}}).then(le=>{if(!le.ok)throw new Error(`HTTP error! status: ${le.status}`);return le.json()}).then(le=>{if(!le||!le.data||!Array.isArray(le.data)){console.error("Invalid data format:",le),he([]),$e([]),_e([]);return}const ue=le.data.filter(Pe=>Pe.topin===2),Ie=le.data.filter(Pe=>Pe.topin===9),Me=le.data.filter(Pe=>Pe.topin===5);if(he(ue),$e(Ie),_e(Me),_.encoderb||_.encdrbpin){const Pe=Ie.find(Ne=>String(Ne.id)===String(_.encoderb)||Ne.pins===_.encdrbpin);ce({pin:Pe?Pe.pins:"",id:Pe?Pe.id:""})}}).catch(le=>{console.error("Error fetching pin config:",le),he([]),$e([]),_e([])})},[_]);const Se=le=>{if(le.preventDefault(),!(le.target instanceof HTMLFormElement))return;let Ie={};if($==="edit")Ie={topin:8,id:_.id,pins:_.pins,pwm:parseInt(Te),pwmmax:_.pwmmax,dvalue:parseInt(de),ponr:parseInt(Ee),info:te,onoff:Xt?1:0};else if($==="connection"){const Pe=ge&&ge[0]&&ge[1]!==void 0?{[ge[0]]:parseInt(ge[1])}:{};Ie={id:_.id,pins:_.pins,pwm:parseInt(Te)},re&&re.id!==void 0&&re.id!==""?(Ie.encoderb=parseInt(re.id),Ie.encdrbpin=re.pin):(Ie.encoderb=255,Ie.encdrbpin=""),Ie.pinact=Pe}console.log("Sending JSON to STM32:",JSON.stringify(Ie)),fetch("/api/encoder/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Ie)}).then(Me=>Me.json()).then(Me=>{pt({..._,...Ie}),st()}).catch(Me=>console.error("Error saving encoder:",Me))},$t=le=>{ne(le.target.value)},ht=le=>{se(le)},Yt=le=>{const ue=be.find(Ie=>Ie.pins===le.target.value);ce({pin:le.target.value,id:ue?ue.id:""})},oe=le=>{if(!le.target.value)ye(["",""]);else{const ue=le.target.value.split("|");ye([ue[0],ue[1]])}},Zt=le=>{xe(le.target.value)},ie=le=>{we(le.target.value)},ae=le=>{const ue=le/1e3;return ue<=4e4?{cls:"text-green-600",msg:"Optimal range"}:ue<=2e5?{cls:"text-yellow-600",msg:"Precision might drop"}:{cls:"text-red-600",msg:"Expert mode: low precision"}},ve=Et`
+  `:""};function ModalEncoder({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedEncoder:_,handleEncoderChange:pt,connectionOptions:ee,SliderComponent:vt=MyPolzunok}){const[te,ne]=ut((_==null?void 0:_.info)||""),[Xt,le]=ut((_==null?void 0:_.onoff)===1),[re,ce]=ut({pin:(_==null?void 0:_.encdrbpin)||"",id:(_==null?void 0:_.encoderb)||""}),[ge,ve]=ut(Object.entries(_.pinact||{})[0]||["",""]),[be,he]=ut([]),[fe,$e]=ut([]),[ke,_e]=ut([]),Pe=_.pwmmax||100,[de,xe]=ut(_.dvalue||0),[Se,we]=ut(_.ponr||0),[Te,me]=ut(_.pwm||1e7),Ie=se=>Math.round(se*Pe/100);lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store",headers:{"Content-Type":"application/json"}}).then(se=>{if(!se.ok)throw new Error(`HTTP error! status: ${se.status}`);return se.json()}).then(se=>{if(!se||!se.data||!Array.isArray(se.data)){console.error("Invalid data format:",se),he([]),$e([]),_e([]);return}const pe=se.data.filter(Oe=>Oe.topin===2),Ce=se.data.filter(Oe=>Oe.topin===9),Me=se.data.filter(Oe=>Oe.topin===5);if(he(pe),$e(Ce),_e(Me),_.encoderb||_.encdrbpin){const Oe=Ce.find(Ne=>String(Ne.id)===String(_.encoderb)||Ne.pins===_.encdrbpin);ce({pin:Oe?Oe.pins:"",id:Oe?Oe.id:""})}}).catch(se=>{console.error("Error fetching pin config:",se),he([]),$e([]),_e([])})},[_]);const Ee=se=>{if(se.preventDefault(),!(se.target instanceof HTMLFormElement))return;let Ce={};if($==="edit")Ce={topin:8,id:_.id,pins:_.pins,pwm:parseInt(Te),pwmmax:_.pwmmax,dvalue:parseInt(de),ponr:parseInt(Se),info:te,onoff:Xt?1:0};else if($==="connection"){const Oe=ge&&ge[0]&&ge[1]!==void 0?{[ge[0]]:parseInt(ge[1])}:{};Ce={id:_.id,pins:_.pins,pwm:parseInt(Te)},re&&re.id!==void 0&&re.id!==""?(Ce.encoderb=parseInt(re.id),Ce.encdrbpin=re.pin):(Ce.encoderb=255,Ce.encdrbpin=""),Ce.pinact=Oe}console.log("Sending JSON to STM32:",JSON.stringify(Ce)),fetch("/api/encoder/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Ce)}).then(Me=>Me.json()).then(Me=>{pt({..._,...Ce}),st()}).catch(Me=>console.error("Error saving encoder:",Me))},$t=se=>{ne(se.target.value)},ht=se=>{le(se)},Yt=se=>{const pe=fe.find(Ce=>Ce.pins===se.target.value);ce({pin:se.target.value,id:pe?pe.id:""})},oe=se=>{if(!se.target.value)ve(["",""]);else{const pe=se.target.value.split("|");ve([pe[0],pe[1]])}},Zt=se=>{xe(se.target.value)},ie=se=>{we(se.target.value)},ae=se=>{const pe=se/1e3;return pe<=4e4?{cls:"text-green-600",msg:"Optimal range"}:pe<=2e5?{cls:"text-yellow-600",msg:"Precision might drop"}:{cls:"text-red-600",msg:"Expert mode: low precision"}},ye=Et`
     <div
       class="fixed inset-0 z-[999] bg-black bg-opacity-50 flex items-center justify-center p-4"
-      onClick=${le=>ct&&le.target===le.currentTarget&&st()}
+      onClick=${se=>ct&&se.target===se.currentTarget&&st()}
     >
       <div
         class="bg-white rounded-lg p-6 max-w-2xl w-full relative"
@@ -1501,7 +1501,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
           </button>
         </div>
         ${(()=>{if(k==="TabEncoder"){if($==="connection")return Et`
-          <form onsubmit=${Se}>
+          <form onsubmit=${Ee}>
             <div class="modal-body">
               <table class="table-auto w-full">
                 <tbody>
@@ -1518,14 +1518,14 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                     <td class="p-2">
                       <select
                         name="encdrb"
-                        value=${be.some(le=>le.pins===re.pin)?re.pin:""}
+                        value=${fe.some(se=>se.pins===re.pin)?re.pin:""}
                         onchange=${Yt}
                         class="border rounded p-2 w-full"
                       >
                         <option value="">Select Encoder B</option>
-                        ${be.map(le=>Et`
-                            <option value=${le.pins}>
-                              ${le.pins} (ID: ${le.id})
+                        ${fe.map(se=>Et`
+                            <option value=${se.pins}>
+                              ${se.pins} (ID: ${se.id})
                             </option>
                           `)}
                       </select>
@@ -1536,16 +1536,16 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                     <td class="p-2">
                       <select
                         name="pwmconnection"
-                        value=${ke.some(le=>String(le.pins)===String(ge[0]))?`${ge[0]}|${ge[1]}`:""}
+                        value=${ke.some(se=>String(se.pins)===String(ge[0]))?`${ge[0]}|${ge[1]}`:""}
                         onchange=${oe}
                         class="border rounded p-2 w-full"
                       >
                         <option value="">Select PWM connection</option>
-                        ${ke.map(le=>Et`
-                            <option value=${`${le.pins}|${le.id}`}>
-                              ${le.pins} (ID: ${le.id})
+                        ${ke.map(se=>{const pe=pwmTimerMap[se.pins]||"Unknown Timer";return Et`
+                            <option value=${`${se.pins}|${se.id}`}>
+                              ${se.pins} (${pe}, ID: ${se.id})
                             </option>
-                          `)}
+                          `})}
                       </select>
                     </td>
                   </tr>
@@ -1562,7 +1562,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
             </div>
           </form>
         `;if($==="edit")return Et`
-          <form onsubmit=${Se}>
+          <form onsubmit=${Ee}>
             <div class="modal-body">
               <table class="table-auto w-full">
                 <tbody>
@@ -1582,7 +1582,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                         min="50" 
                         max="2000000000"
                         value=${Te}
-                        oninput=${le=>me(le.target.value)} 
+                        oninput=${se=>me(se.target.value)} 
                         class="border rounded p-2 w-full font-mono" 
                         placeholder="50 - 2000000000"
                       />
@@ -1609,7 +1609,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                         class="border rounded p-2 w-full"
                       />
                       <div class="text-xs text-gray-500">
-                        ${de}% = ${Ce(parseInt(de)||0)} / ${Oe} steps
+                        ${de}% = ${Ie(parseInt(de)||0)} / ${Pe} steps
                       </div>
                     </td>
                   </tr>
@@ -1617,7 +1617,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                     <td class="p-2 font-bold">Duty on restore</td>
                     <td class="p-2">
                       <select
-                        value=${Ee}
+                        value=${Se}
                         onchange=${ie}
                         class="border rounded p-2 w-full"
                       >
@@ -1662,8 +1662,8 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
         `}})()}
       </div>
     </div>
-  `,mt=at(null);return lt(()=>{const le=document.createElement("div");return le.id="encoder-modal-portal",document.body.appendChild(le),mt.current=le,()=>{O(null,le),document.body.removeChild(le)}},[]),lt(()=>{mt.current&&O(ve,mt.current)}),null}function initGlobalTooltip$5(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,ee=window.innerWidth,vt=dt.getBoundingClientRect();let te=vt.left+vt.width/2-_/2;te=Math.max(8,Math.min(te,ee-_-8));let ne=vt.top-pt-8;ne<8&&(ne=vt.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}function TabEncoder({}){{const[$,k]=ut(null),[st,ct]=ut(null),[dt,_]=ut(!1),[pt,ee]=ut(null),[vt,te]=ut(null),[ne,Xt]=ut(!1),[se,re]=ut("ru"),[ce,ge]=ut([]),ye=at(!1);lt(()=>{initGlobalTooltip$5()},[]);const pe=()=>Promise.all([fetch("/api/encoder/get").then(ht=>ht.json()),fetch("/api/pintopin/get").then(ht=>ht.json())]).then(([ht,Yt])=>{re(ht.lang),k(ht.encoders),ge(Yt),console.log("Encoder data:",ht.encoders),console.log("Pintopin data:",Yt)}).catch(ht=>{console.error("Error fetching data:",ht)}),he=()=>{fetch("/api/encoder/get").then(ht=>ht.json()).then(ht=>{if(ye.current){console.log("Polling skip: onoff request in flight");return}k(ht.encoders),re(ht.lang),console.log("Updated encoder data:",ht.encoders)}).catch(ht=>{console.error("Error fetching encoder data:",ht)})},be=()=>{fetch("/api/pintopin/get").then(ht=>ht.json()).then(ht=>{ge(ht),console.log("Updated pintopin data:",ht)}).catch(ht=>{console.error("Error fetching pintopin data:",ht)})};lt(()=>{he(),be();const ht=setInterval(()=>{he(),be()},500);return()=>clearInterval(ht)},[]);const $e=ht=>{k(Yt=>Yt.map(oe=>oe.id===ht.id?ht:oe)),ye.current=!0,fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ht.id,onoff:ht.onoff})}).then(Yt=>Yt.json()).then(Yt=>{console.log("Response from /api/onoff/set (Encoder):",Yt)}).catch(Yt=>{console.error("Error calling /api/onoff/set (Encoder):",Yt)}).finally(()=>{ye.current=!1})},ke=ht=>{const Yt=$.find(Zt=>Zt.id===ht),oe=[];return Yt&&Yt.pinact&&Object.entries(Yt.pinact).forEach(([Zt,ie])=>{oe.push({pin:Zt,idout:ie})}),oe},_e=ht=>{const Yt=ht/1e3;return Yt<=4e4?{cls:"text-green-600",msg:"✓"}:Yt<=2e5?{cls:"text-yellow-600",msg:"~"}:{cls:"text-red-600",msg:"!"}},Oe=ht=>{if(!ht)return"—";const Yt=ht/1e3;return Yt>=1e6?`${(Yt/1e6).toFixed(2)} MHz`:Yt>=1e3?`${(Yt/1e3).toFixed(1)} kHz`:`${Yt} Hz`},de=()=>({langbutton:se==="ru"?ruencoder:enencoder}),xe=(ht,Yt)=>{const oe=de(),Zt=oe[ht]&&oe[ht][Yt]?oe[ht][Yt]:"";return Ee(Zt)},Ee=(ht,Yt=50)=>{if(!ht||typeof ht!="string")return"";const oe=ht.split(" ");let Zt=[],ie="";for(let ae=0;ae<oe.length;ae++)ie.length+oe[ae].length+1<=Yt?ie+=`${ie?" ":""}${oe[ae]}`:(ie&&Zt.push(ie.trim()),ie=oe[ae]);return ie&&Zt.push(ie.trim()),Zt.join(`
-`)},we=(ht,Yt)=>{console.log("Deleting connection:",ht,Yt);const oe=Yt.split("(")[0].trim();fetch("/api/connection/del",{method:"post",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ht,pin:oe})}).then(Zt=>Zt.ok?Zt.json():Zt.text().then(ie=>{throw new Error(`HTTP error! status: ${Zt.status}, message: ${ie}`)})).then(Zt=>{ct(Zt),k(ie=>ie.map(ae=>{if(ae.id===ht){const fe={...ae.pinact};return delete fe[oe],{...ae,pinact:fe}}return ae})),ge(ie=>ie.filter(ae=>!(ae.idin===ht&&ae.pins===oe)))}).then(()=>{console.log("Connection deleted successfully"),pe()}).catch(Zt=>{console.error("Error deleting connection:",Zt)})},Te=(ht,Yt)=>{console.log("Opening modal:",ht,Yt),ee(ht),te(Yt),_(!0)},me=()=>{_(!1),ee(null),te(null)},Ce={ru:Et`
+  `,mt=at(null);return lt(()=>{const se=document.createElement("div");return se.id="encoder-modal-portal",document.body.appendChild(se),mt.current=se,()=>{O(null,se),document.body.removeChild(se)}},[]),lt(()=>{mt.current&&O(ye,mt.current)}),null}function initGlobalTooltip$5(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,ee=window.innerWidth,vt=dt.getBoundingClientRect();let te=vt.left+vt.width/2-_/2;te=Math.max(8,Math.min(te,ee-_-8));let ne=vt.top-pt-8;ne<8&&(ne=vt.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const pwmTimerMap={PA0:"TIM2",PA3:"TIM2",PB10:"TIM2",PA6:"TIM3",PB1:"TIM3",PB15:"TIM12",PC6:"TIM8",PC7:"TIM8",PC8:"TIM8",PC9:"TIM8",PD12:"TIM4",PD13:"TIM4",PD14:"TIM4",PD15:"TIM4",PE5:"TIM9",PE6:"TIM9",PE9:"TIM1",PE11:"TIM1",PE13:"TIM1",PE14:"TIM1",PF6:"TIM10",PF7:"TIM11",PF8:"TIM13",PF9:"TIM14"};function TabEncoder({}){{const[$,k]=ut(null),[st,ct]=ut(null),[dt,_]=ut(!1),[pt,ee]=ut(null),[vt,te]=ut(null),[ne,Xt]=ut(!1),[le,re]=ut("ru"),[ce,ge]=ut([]),ve=at(!1);lt(()=>{initGlobalTooltip$5()},[]);const be=()=>Promise.all([fetch("/api/encoder/get").then(ht=>ht.json()),fetch("/api/pintopin/get").then(ht=>ht.json())]).then(([ht,Yt])=>{re(ht.lang),k(ht.encoders),ge(Yt),console.log("Encoder data:",ht.encoders),console.log("Pintopin data:",Yt)}).catch(ht=>{console.error("Error fetching data:",ht)}),he=()=>{fetch("/api/encoder/get").then(ht=>ht.json()).then(ht=>{if(ve.current){console.log("Polling skip: onoff request in flight");return}k(ht.encoders),re(ht.lang),console.log("Updated encoder data:",ht.encoders)}).catch(ht=>{console.error("Error fetching encoder data:",ht)})},fe=()=>{fetch("/api/pintopin/get").then(ht=>ht.json()).then(ht=>{ge(ht),console.log("Updated pintopin data:",ht)}).catch(ht=>{console.error("Error fetching pintopin data:",ht)})};lt(()=>{he(),fe();const ht=setInterval(()=>{he(),fe()},500);return()=>clearInterval(ht)},[]);const $e=ht=>{k(Yt=>Yt.map(oe=>oe.id===ht.id?ht:oe)),ve.current=!0,fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ht.id,onoff:ht.onoff})}).then(Yt=>Yt.json()).then(Yt=>{console.log("Response from /api/onoff/set (Encoder):",Yt)}).catch(Yt=>{console.error("Error calling /api/onoff/set (Encoder):",Yt)}).finally(()=>{ve.current=!1})},ke=ht=>{const Yt=$.find(Zt=>Zt.id===ht),oe=[];return Yt&&Yt.pinact&&Object.entries(Yt.pinact).forEach(([Zt,ie])=>{oe.push({pin:Zt,idout:ie})}),oe},_e=ht=>{const Yt=ht/1e3;return Yt<=4e4?{cls:"text-green-600",msg:"✓"}:Yt<=2e5?{cls:"text-yellow-600",msg:"~"}:{cls:"text-red-600",msg:"!"}},Pe=ht=>{if(!ht)return"—";const Yt=ht/1e3;return Yt>=1e6?`${(Yt/1e6).toFixed(2)} MHz`:Yt>=1e3?`${(Yt/1e3).toFixed(1)} kHz`:`${Yt} Hz`},de=()=>({langbutton:le==="ru"?ruencoder:enencoder}),xe=(ht,Yt)=>{const oe=de(),Zt=oe[ht]&&oe[ht][Yt]?oe[ht][Yt]:"";return Se(Zt)},Se=(ht,Yt=50)=>{if(!ht||typeof ht!="string")return"";const oe=ht.split(" ");let Zt=[],ie="";for(let ae=0;ae<oe.length;ae++)ie.length+oe[ae].length+1<=Yt?ie+=`${ie?" ":""}${oe[ae]}`:(ie&&Zt.push(ie.trim()),ie=oe[ae]);return ie&&Zt.push(ie.trim()),Zt.join(`
+`)},we=(ht,Yt)=>{console.log("Deleting connection:",ht,Yt);const oe=Yt.split("(")[0].trim();fetch("/api/connection/del",{method:"post",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ht,pin:oe})}).then(Zt=>Zt.ok?Zt.json():Zt.text().then(ie=>{throw new Error(`HTTP error! status: ${Zt.status}, message: ${ie}`)})).then(Zt=>{ct(Zt),k(ie=>ie.map(ae=>{if(ae.id===ht){const ue={...ae.pinact};return delete ue[oe],{...ae,pinact:ue}}return ae})),ge(ie=>ie.filter(ae=>!(ae.idin===ht&&ae.pins===oe)))}).then(()=>{console.log("Connection deleted successfully"),be()}).catch(Zt=>{console.error("Error deleting connection:",Zt)})},Te=(ht,Yt)=>{console.log("Opening modal:",ht,Yt),ee(ht),te(Yt),_(!0)},me=()=>{_(!1),ee(null),te(null)},Ie={ru:Et`
         <div class="mytext space-y-6">
           <div>
             <pre class="mb-4">
@@ -1717,6 +1717,61 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div>
+            <h2 class="text-xl font-bold mb-2 text-indigo-700">Ограничения аппаратных таймеров (Hardware Timers)</h2>
+            <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-100 text-sm">
+              <p class="mb-2"><strong>Важно:</strong> Вы можете установить желаемую частоту ШИМ от <strong>0.05 Hz до 2 MHz</strong>. Однако, генерация ШИМ зависит от аппаратных таймеров микроконтроллера (например, TIM1, TIM2 и т.д.).</p>
+              <p class="mb-2"><strong>Один таймер не может генерировать разные частоты одновременно!</strong> Если вы назначите разные пины, которые используют <em>один и тот же таймер</em>, к разным энкодерам и зададите им разную частоту, применится последняя установленная частота ко всем пинам этого таймера.</p>
+              <p class="mb-2">Чтобы использовать разную частоту для разных устройств, выбирайте пины, привязанные к <strong>разным таймерам</strong>.</p>
+              <p class="mt-4 font-semibold text-indigo-800">Карта привязки пинов ШИМ к таймерам и их возможности:</p>
+              <ul class="list-disc pl-5 mt-2 space-y-3 text-slate-700">
+                <li>
+                  <strong>TIM1 (16-bit Advanced):</strong> PE9, PE11, PE13, PE14<br/>
+                  <span class="text-sm text-slate-500">Высокоскоростной таймер. Оптимален для средних и высоких частот (от 10 Hz до 2 MHz).</span>
+                </li>
+                <li>
+                  <strong>TIM2 (32-bit):</strong> PA0, PA3, PB10<br/>
+                  <span class="text-sm text-slate-500">За счет 32-битного счетчика аппаратно поддерживает сверхнизкие частоты с максимальным разрешением (от 0.05 Hz до 100 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM3 (16-bit General):</strong> PA6, PB1<br/>
+                  <span class="text-sm text-slate-500">Базовый ШИМ таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM4 (16-bit General):</strong> PD12, PD13, PD14, PD15<br/>
+                  <span class="text-sm text-slate-500">Базовый ШИМ таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM8 (16-bit Advanced):</strong> PC6, PC7, PC8, PC9<br/>
+                  <span class="text-sm text-slate-500">Высокоскоростной таймер. Оптимален для средних и высоких частот (от 10 Hz до 2 MHz).</span>
+                </li>
+                <li>
+                  <strong>TIM9 (16-bit):</strong> PE5, PE6<br/>
+                  <span class="text-sm text-slate-500">Вспомогательный таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM10 (16-bit):</strong> PF6<br/>
+                  <span class="text-sm text-slate-500">Вспомогательный таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM11 (16-bit):</strong> PF7<br/>
+                  <span class="text-sm text-slate-500">Вспомогательный таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM12 (16-bit):</strong> PB15<br/>
+                  <span class="text-sm text-slate-500">Вспомогательный таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM13 (16-bit):</strong> PF8<br/>
+                  <span class="text-sm text-slate-500">Вспомогательный таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM14 (16-bit):</strong> PF9<br/>
+                  <span class="text-sm text-slate-500">Вспомогательный таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       `,en:Et`
@@ -1774,26 +1829,81 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
               </tbody>
             </table>
           </div>
+          <div>
+            <h2 class="text-xl font-bold mb-2 text-indigo-700">Hardware Timer Limitations</h2>
+            <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-100 text-sm">
+              <p class="mb-2"><strong>Important:</strong> You can set the desired PWM frequency from <strong>0.05 Hz to 2 MHz</strong>. However, PWM generation depends on the microcontroller's hardware timers (e.g., TIM1, TIM2, etc.).</p>
+              <p class="mb-2"><strong>A single timer cannot generate different frequencies simultaneously!</strong> If you assign different pins that share the <em>same timer</em> to different encoders and set different frequencies, the last set frequency will apply to all pins sharing that timer.</p>
+              <p class="mb-2">To use different frequencies for different devices, choose pins connected to <strong>different hardware timers</strong>.</p>
+              <p class="mt-4 font-semibold text-indigo-800">PWM Pin to Timer Mapping and Capabilities:</p>
+              <ul class="list-disc pl-5 mt-2 space-y-3 text-slate-700">
+                <li>
+                  <strong>TIM1 (16-bit Advanced):</strong> PE9, PE11, PE13, PE14<br/>
+                  <span class="text-sm text-slate-500">High-speed timer. Optimal for medium and high frequencies (from 10 Hz to 2 MHz).</span>
+                </li>
+                <li>
+                  <strong>TIM2 (32-bit):</strong> PA0, PA3, PB10<br/>
+                  <span class="text-sm text-slate-500">32-bit counter natively supports ultra-low frequencies with maximum resolution (from 0.05 Hz to 100 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM3 (16-bit General):</strong> PA6, PB1<br/>
+                  <span class="text-sm text-slate-500">Standard PWM timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM4 (16-bit General):</strong> PD12, PD13, PD14, PD15<br/>
+                  <span class="text-sm text-slate-500">Standard PWM timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM8 (16-bit Advanced):</strong> PC6, PC7, PC8, PC9<br/>
+                  <span class="text-sm text-slate-500">High-speed timer. Optimal for medium and high frequencies (from 10 Hz to 2 MHz).</span>
+                </li>
+                <li>
+                  <strong>TIM9 (16-bit):</strong> PE5, PE6<br/>
+                  <span class="text-sm text-slate-500">Auxiliary timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM10 (16-bit):</strong> PF6<br/>
+                  <span class="text-sm text-slate-500">Auxiliary timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM11 (16-bit):</strong> PF7<br/>
+                  <span class="text-sm text-slate-500">Auxiliary timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM12 (16-bit):</strong> PB15<br/>
+                  <span class="text-sm text-slate-500">Auxiliary timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM13 (16-bit):</strong> PF8<br/>
+                  <span class="text-sm text-slate-500">Auxiliary timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM14 (16-bit):</strong> PF9<br/>
+                  <span class="text-sm text-slate-500">Auxiliary timer (from 10 Hz to 500 kHz).</span>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
-      `},Se=({title:ht,tooltipIndex:Yt})=>Et`
+      `},Ee=({title:ht,tooltipIndex:Yt})=>Et`
       <th
         class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
         data-tip=${xe("langbutton",Yt)}
       >
         ${ht}
       </th>
-    `,$t=({d:ht,index:Yt})=>{const oe=ke(ht.id),Zt=_e(ht.pwm||0);return Et`
+    `,$t=({d:ht,index:Yt})=>{const oe=ke(ht.id),Zt=_e(ht.pwm||0),ie=oe.map(ae=>pwmTimerMap[ae.pin]).filter((ae,ue,ye)=>ae&&ye.indexOf(ae)===ue);return Et`
         <tr class="${Yt%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
           <td class="px-6 py-2 text-sm text-slate-800 font-medium">${ht.pins}(${ht.id})</td>
           <td class="px-6 py-2 text-sm text-slate-700">
             ${ht.encdrbpin?`${ht.encdrbpin}(${ht.encoderb})`:"Not set"}
           </td>
           <td class="px-6 py-2 text-sm text-slate-700 font-mono">
-            ${oe.length>0?oe.map(({pin:ie,idout:ae})=>Et`
+            ${oe.length>0?oe.map(({pin:ae,idout:ue})=>Et`
                     <span class="mr-2 inline-flex items-center">
-                      ${ie}(${ae})
+                      ${ae}(${ue})
                       <button
-                        onClick=${fe=>{fe.preventDefault(),we(ht.id,`${ie}(${ae})`)}}
+                        onClick=${ye=>{ye.preventDefault(),we(ht.id,`${ae}(${ue})`)}}
                         class="ml-1 text-red-500 hover:text-red-700 transition-colors font-bold"
                         title="Remove connection"
                       >
@@ -1803,8 +1913,9 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                   `):"Not set"}
           </td>
           <td class="px-6 py-2 text-sm">
-            <span class="font-mono text-slate-700">${Oe(ht.pwm)}</span>
+            <span class="font-mono text-slate-700">${Pe(ht.pwm)}</span>
             <span class="ml-1 font-bold ${Zt.cls}">${Zt.msg}</span>
+            ${ie.length>0?Et`<span class="ml-2 font-mono text-xs text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200 shadow-sm" title="Hardware Timer">${ie.join(", ")}</span>`:""}
           </td>
           <td class="px-6 py-2 font-mono text-sm text-blue-600">
             ${ht.pwmmax?`${ht.pwmmax} steps`:"—"}
@@ -1815,7 +1926,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
           <td class="px-6 py-2">
             <${MyPolzunok}
               value=${ht.onoff}
-              onChange=${ie=>$e({...ht,onoff:ie})}
+              onChange=${ae=>$e({...ht,onoff:ae})}
             />
           </td>
           <td class="px-6 py-2 text-sm whitespace-nowrap">
@@ -1851,16 +1962,16 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                   <table class="w-full text-left border-collapse whitespace-nowrap">
                     <thead>
                       <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                        <${Se} title="Encoder A (ID)" tooltipIndex=${3} />
-                        <${Se} title="Encoder B (ID)" tooltipIndex=${4} />
-                        <${Se} title="PWM connection" tooltipIndex=${5} />
-                        <${Se} title="PWM Frequency" tooltipIndex=${11} />
-                        <${Se} title="Resolution (steps)" tooltipIndex=${12} />
-                        <${Se} title="Dimmer value (0-100)" tooltipIndex=${6} />
-                        <${Se} title="Duty on restore" tooltipIndex=${7} />
-                        <${Se} title="INFO" tooltipIndex=${8} />
-                        <${Se} title="On/Off" tooltipIndex=${9} />
-                        <${Se} title="Action" tooltipIndex=${10} />
+                        <${Ee} title="Encoder A (ID)" tooltipIndex=${3} />
+                        <${Ee} title="Encoder B (ID)" tooltipIndex=${4} />
+                        <${Ee} title="PWM connection" tooltipIndex=${5} />
+                        <${Ee} title="PWM Frequency" tooltipIndex=${11} />
+                        <${Ee} title="Resolution (steps)" tooltipIndex=${12} />
+                        <${Ee} title="Dimmer value (0-100)" tooltipIndex=${6} />
+                        <${Ee} title="Duty on restore" tooltipIndex=${7} />
+                        <${Ee} title="INFO" tooltipIndex=${8} />
+                        <${Ee} title="On/Off" tooltipIndex=${9} />
+                        <${Ee} title="Action" tooltipIndex=${10} />
                       </tr>
                     </thead>
                     <tbody id="tab1" class="divide-y divide-white/40">
@@ -1881,7 +1992,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
 
               ${ne&&Et`
                   <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
-                    ${Ce[se]}
+                    ${Ie[le]}
                   </div>
                 `}
             </div>
@@ -1898,7 +2009,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
             `}
         </div>
       </div>
-    `:Et`<div class="flex items-center justify-center p-8 text-slate-500 font-medium">Loading...</div>`}}function ModalCron({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedCron:_,handleCronChange:pt,connectionOptions:ee,modalClass:vt,SliderComponent:te=MyPolzunok}){const[ne,Xt]=ut((_==null?void 0:_.info)||""),[se,re]=ut((_==null?void 0:_.onoff)===1),[ce,ge]=ut((_==null?void 0:_.activ)||""),[ye,pe]=ut((_==null?void 0:_.cron)||""),[he,be]=ut(_.setrpins||""),$e=Te=>{Te.preventDefault();const me=new FormData(Te.target),Ce=Object.fromEntries(me);Ce.id=_.id,Ce.pins=_.pins,$==="edit"?(Ce.onoff=se?1:0,Ce.info=ne,Ce.cron=ye,Ce.activ=ce):$==="connection"&&(Ce.setrpins=he),console.log("Data being sent to server:"),console.log(Ce),console.log("Stringified data:"),console.log(JSON.stringify(Ce)),fetch("/api/cron/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Ce)}).then(Se=>Se.json()).then(Se=>{console.log("Success:",Se),pt({..._,...Ce}),st(),window.location.href="/#/cron"}).catch(Se=>{console.error("Error:",Se)})};lt(()=>{Xt((_==null?void 0:_.info)||""),be((_==null?void 0:_.setrpins)||""),re((_==null?void 0:_.onoff)===1)},[_]);const ke=Te=>{pe(Te.target.value)},_e=Te=>{Xt(Te.target.value)},Oe=Te=>{re(Te)},de=Te=>{ge(Te.target.value)},xe=()=>{if(k==="TabCron"&&$==="edit")return Et`
+    `:Et`<div class="flex items-center justify-center p-8 text-slate-500 font-medium">Loading...</div>`}}function ModalCron({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedCron:_,handleCronChange:pt,connectionOptions:ee,modalClass:vt,SliderComponent:te=MyPolzunok}){const[ne,Xt]=ut((_==null?void 0:_.info)||""),[le,re]=ut((_==null?void 0:_.onoff)===1),[ce,ge]=ut((_==null?void 0:_.activ)||""),[ve,be]=ut((_==null?void 0:_.cron)||""),[he,fe]=ut(_.setrpins||""),$e=Te=>{Te.preventDefault();const me=new FormData(Te.target),Ie=Object.fromEntries(me);Ie.id=_.id,Ie.pins=_.pins,$==="edit"?(Ie.onoff=le?1:0,Ie.info=ne,Ie.cron=ve,Ie.activ=ce):$==="connection"&&(Ie.setrpins=he),console.log("Data being sent to server:"),console.log(Ie),console.log("Stringified data:"),console.log(JSON.stringify(Ie)),fetch("/api/cron/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Ie)}).then(Ee=>Ee.json()).then(Ee=>{console.log("Success:",Ee),pt({..._,...Ie}),st(),window.location.href="/#/cron"}).catch(Ee=>{console.error("Error:",Ee)})};lt(()=>{Xt((_==null?void 0:_.info)||""),fe((_==null?void 0:_.setrpins)||""),re((_==null?void 0:_.onoff)===1)},[_]);const ke=Te=>{be(Te.target.value)},_e=Te=>{Xt(Te.target.value)},Pe=Te=>{re(Te)},de=Te=>{ge(Te.target.value)},xe=()=>{if(k==="TabCron"&&$==="edit")return Et`
           <form onsubmit=${$e}>
             <div class="modal-body">
               <table class="table-auto w-full">
@@ -1906,7 +2017,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                   ${[{label:"ID",value:_.id},{label:"Cron",value:Et`
                         <input
                           type="text"
-                          value=${ye}
+                          value=${ve}
                           onInput=${ke}
                           class="border rounded p-2 w-full"
                         />
@@ -1925,8 +2036,8 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                           class="border rounded p-2 w-full"
                         />
                       `},{label:"On/Off",value:Et`<${te}
-                        value=${se}
-                        onChange=${Oe}
+                        value=${le}
+                        onChange=${Pe}
                       />`}].map((Te,me)=>Et`
                       <tr
                         class="${me%2===1?"bg-white":"bg-gray-200"}"
@@ -1947,7 +2058,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
               </button>
             </div>
           </form>
-        `},Ee=Et`
+        `},Se=Et`
     <div class=${`modal ${vt||""}`}>
       <div class="modal-content">
         <div
@@ -1976,7 +2087,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
         </div>
       </div>
     </div>
-  `,we=at(null);return lt(()=>{const Te=document.createElement("div");return Te.id="modal-portal",document.body.appendChild(Te),we.current=Te,()=>{O(null,Te),document.body.removeChild(Te)}},[]),lt(()=>{we.current&&O(Ee,we.current)}),null}function ModalPwmCron({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedCron:_,handleCronChange:pt,modalClass:ee,SliderComponent:vt=MyPolzunok}){let te="",ne="900",Xt="0",se="100";if(_!=null&&_.activ&&_.activ.startsWith("pwm:")){const ht=_.activ.substring(4).split(",");ht.length===4&&(te=ht[0],ne=ht[1],Xt=ht[2],se=ht[3])}const[re,ce]=ut((_==null?void 0:_.info)||""),[ge,ye]=ut((_==null?void 0:_.onoff)===1),[pe,he]=ut((_==null?void 0:_.cron)||""),[be,$e]=ut(te),[ke,_e]=ut(ne),[Oe,de]=ut(Xt),[xe,Ee]=ut(se),[we,Te]=ut([]);lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store"}).then(ht=>ht.json()).then(ht=>{if(ht&&ht.data&&Array.isArray(ht.data)){const Yt=ht.data.filter(oe=>oe.topin===5);Te(Yt),!be&&Yt.length>0&&$e(Yt[0].id.toString())}}).catch(ht=>console.error("Error fetching pin config:",ht))},[]);const me=ht=>{ht.preventDefault();const Yt=new FormData(ht.target),oe=Object.fromEntries(Yt);oe.id=_.id,oe.pins=_.pins,oe.onoff=ge?1:0,oe.info=re,oe.cron=pe,oe.activ=`pwm:${be},${ke},${Oe},${xe}`,fetch("/api/cron/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(oe)}).then(Zt=>Zt.json()).then(Zt=>{pt({..._,...oe}),st(),window.location.href="/#/cron"}).catch(Zt=>console.error("Error:",Zt))},Ce=()=>Et`
+  `,we=at(null);return lt(()=>{const Te=document.createElement("div");return Te.id="modal-portal",document.body.appendChild(Te),we.current=Te,()=>{O(null,Te),document.body.removeChild(Te)}},[]),lt(()=>{we.current&&O(Se,we.current)}),null}function ModalPwmCron({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedCron:_,handleCronChange:pt,modalClass:ee,SliderComponent:vt=MyPolzunok}){let te="",ne="900",Xt="0",le="100";if(_!=null&&_.activ&&_.activ.startsWith("pwm:")){const ht=_.activ.substring(4).split(",");ht.length===4&&(te=ht[0],ne=ht[1],Xt=ht[2],le=ht[3])}const[re,ce]=ut((_==null?void 0:_.info)||""),[ge,ve]=ut((_==null?void 0:_.onoff)===1),[be,he]=ut((_==null?void 0:_.cron)||""),[fe,$e]=ut(te),[ke,_e]=ut(ne),[Pe,de]=ut(Xt),[xe,Se]=ut(le),[we,Te]=ut([]);lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store"}).then(ht=>ht.json()).then(ht=>{if(ht&&ht.data&&Array.isArray(ht.data)){const Yt=ht.data.filter(oe=>oe.topin===5);Te(Yt),!fe&&Yt.length>0&&$e(Yt[0].id.toString())}}).catch(ht=>console.error("Error fetching pin config:",ht))},[]);const me=ht=>{ht.preventDefault();const Yt=new FormData(ht.target),oe=Object.fromEntries(Yt);oe.id=_.id,oe.pins=_.pins,oe.onoff=ge?1:0,oe.info=re,oe.cron=be,oe.activ=`pwm:${fe},${ke},${Pe},${xe}`,fetch("/api/cron/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(oe)}).then(Zt=>Zt.json()).then(Zt=>{pt({..._,...oe}),st(),window.location.href="/#/cron"}).catch(Zt=>console.error("Error:",Zt))},Ie=()=>Et`
       <form onsubmit=${me}>
         <div class="modal-body">
           <table class="table-auto w-full">
@@ -1989,7 +2100,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                 <td class="p-2 font-bold">PWM Pin</td>
                 <td class="p-2">
                   <select
-                    value=${be}
+                    value=${fe}
                     onChange=${ht=>$e(ht.target.value)}
                     class="border rounded p-2 w-full"
                     required
@@ -2003,7 +2114,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                 <td class="p-2">
                   <input
                     type="text"
-                    value=${pe}
+                    value=${be}
                     onInput=${ht=>he(ht.target.value)}
                     class="border rounded p-2 w-full"
                     placeholder="* * * * * * *"
@@ -2032,7 +2143,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                     type="number"
                     min="0"
                     max="100"
-                    value=${Oe}
+                    value=${Pe}
                     onInput=${ht=>de(ht.target.value)}
                     class="border rounded p-2 w-full"
                     required
@@ -2047,7 +2158,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                     min="0"
                     max="100"
                     value=${xe}
-                    onInput=${ht=>Ee(ht.target.value)}
+                    onInput=${ht=>Se(ht.target.value)}
                     class="border rounded p-2 w-full"
                     required
                   />
@@ -2067,7 +2178,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
               <tr class="bg-white">
                 <td class="p-2 font-bold">On/Off</td>
                 <td class="p-2">
-                  <${vt} value=${ge} onChange=${ye} />
+                  <${vt} value=${ge} onChange=${ve} />
                 </td>
               </tr>
             </tbody>
@@ -2079,7 +2190,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
           </button>
         </div>
       </form>
-    `,Se=Et`
+    `,Ee=Et`
     <div class=${`modal ${ee||""}`}>
       <div class="modal-content">
         <div
@@ -2096,12 +2207,12 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                 Close
               </button>
             </div>
-            ${Ce()}
+            ${Ie()}
           </div>
         </div>
       </div>
     </div>
-  `,$t=at(null);return lt(()=>{const ht=document.createElement("div");return ht.id="pwm-modal-portal",document.body.appendChild(ht),$t.current=ht,()=>{O(null,ht),document.body.removeChild(ht)}},[]),lt(()=>{$t.current&&O(Se,$t.current)}),null}function initGlobalTooltip$4(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,ee=window.innerWidth,vt=dt.getBoundingClientRect();let te=vt.left+vt.width/2-_/2;te=Math.max(8,Math.min(te,ee-_-8));let ne=vt.top-pt-8;ne<8&&(ne=vt.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}function TabCron({}){const[$,k]=ut(null),[st,ct]=ut(null);at(null);const[dt,_]=ut(!1),[pt,ee]=ut(null),[vt,te]=ut(null),[ne,Xt]=ut("ru"),[se,re]=ut(!1),[ce,ge]=ut(1),[ye,pe]=ut(0);lt(()=>{initGlobalTooltip$4()},[]);const he=()=>fetch("/api/cron/get").then($t=>$t.json()).then($t=>{console.log("API response:",$t),$t&&Array.isArray($t.timers)?(k($t.timers),Xt($t.lang||"ru"),typeof $t.numline=="number"&&(pe($t.numline),ge($t.numline))):(console.error("Unexpected API response structure:",$t),k([]))}).catch($t=>{console.error("Error fetching cron data:",$t),k([])});lt(()=>{he()},[]);const be=at(!0);lt(()=>{if(be.current){be.current=!1;return}$e(ye)},[ye]);const $e=$t=>{fetch("/api/numline/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({numline:$t})}).then(ht=>ht.json()).then(ht=>console.log("Numline sent to stm32:",ht)).catch(ht=>console.error("Error sending Crone line to stm32:",ht))},ke=()=>{if(ce<$.length){const $t=ce+1;ge($t),pe($t),$e($t)}},_e=()=>{if(ce>0){const $t=ce-1;ge($t),pe($t),$e($t)}},Oe={ru:Et`
+  `,$t=at(null);return lt(()=>{const ht=document.createElement("div");return ht.id="pwm-modal-portal",document.body.appendChild(ht),$t.current=ht,()=>{O(null,ht),document.body.removeChild(ht)}},[]),lt(()=>{$t.current&&O(Ee,$t.current)}),null}function initGlobalTooltip$4(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,ee=window.innerWidth,vt=dt.getBoundingClientRect();let te=vt.left+vt.width/2-_/2;te=Math.max(8,Math.min(te,ee-_-8));let ne=vt.top-pt-8;ne<8&&(ne=vt.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}function TabCron({}){const[$,k]=ut(null),[st,ct]=ut(null);at(null);const[dt,_]=ut(!1),[pt,ee]=ut(null),[vt,te]=ut(null),[ne,Xt]=ut("ru"),[le,re]=ut(!1),[ce,ge]=ut(1),[ve,be]=ut(0);lt(()=>{initGlobalTooltip$4()},[]);const he=()=>fetch("/api/cron/get").then($t=>$t.json()).then($t=>{console.log("API response:",$t),$t&&Array.isArray($t.timers)?(k($t.timers),Xt($t.lang||"ru"),typeof $t.numline=="number"&&(be($t.numline),ge($t.numline))):(console.error("Unexpected API response structure:",$t),k([]))}).catch($t=>{console.error("Error fetching cron data:",$t),k([])});lt(()=>{he()},[]);const fe=at(!0);lt(()=>{if(fe.current){fe.current=!1;return}$e(ve)},[ve]);const $e=$t=>{fetch("/api/numline/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({numline:$t})}).then(ht=>ht.json()).then(ht=>console.log("Numline sent to stm32:",ht)).catch(ht=>console.error("Error sending Crone line to stm32:",ht))},ke=()=>{if(ce<$.length){const $t=ce+1;ge($t),be($t),$e($t)}},_e=()=>{if(ce>0){const $t=ce-1;ge($t),be($t),$e($t)}},Pe={ru:Et`
       <div class="mytext">
         <div>
           <pre>
@@ -2326,14 +2437,14 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
           </tbody>
         </table>
       </div>
-    `};if($===null)return Et`<div>Loading...</div>`;const de=()=>({langtimers:ne==="ru"?rulangtimers:enlangtimers}),xe=($t,ht)=>{const Yt=de(),Zt=(Yt[$t]&&Yt[$t][ht]?Yt[$t][ht]:"").split(" "),ie=[];for(let ae=0;ae<Zt.length;ae+=15)ie.push(Zt.slice(ae,ae+15).join(" "));return ie.join("<br>")},Ee=($t,ht)=>{ee($t),te(ht),_(!0)},we=()=>{_(!1),ee(null),te(null)},Te=$t=>{console.log("handleCronChange:",$t),k($.map(ht=>ht.id===$t.id?$t:ht)),fetch("/api/cron/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify($t)}).then(ht=>ht.json()).then(ht=>{console.log("Cron job updated successfully:",ht)}).catch(ht=>{console.error("Error updating cron job:",ht)})},me=()=>Array.isArray(vt)?vt.flatMap($t=>$t.pinact?Object.keys($t.pinact).map(ht=>({value:ht,label:ht})):[]):vt&&vt.pinact?Object.keys(vt.pinact).map($t=>({value:$t,label:$t})):[],Ce=$t=>Et`
+    `};if($===null)return Et`<div>Loading...</div>`;const de=()=>({langtimers:ne==="ru"?rulangtimers:enlangtimers}),xe=($t,ht)=>{const Yt=de(),Zt=(Yt[$t]&&Yt[$t][ht]?Yt[$t][ht]:"").split(" "),ie=[];for(let ae=0;ae<Zt.length;ae+=15)ie.push(Zt.slice(ae,ae+15).join(" "));return ie.join("<br>")},Se=($t,ht)=>{ee($t),te(ht),_(!0)},we=()=>{_(!1),ee(null),te(null)},Te=$t=>{console.log("handleCronChange:",$t),k($.map(ht=>ht.id===$t.id?$t:ht)),fetch("/api/cron/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify($t)}).then(ht=>ht.json()).then(ht=>{console.log("Cron job updated successfully:",ht)}).catch(ht=>{console.error("Error updating cron job:",ht)})},me=()=>Array.isArray(vt)?vt.flatMap($t=>$t.pinact?Object.keys($t.pinact).map(ht=>({value:ht,label:ht})):[]):vt&&vt.pinact?Object.keys(vt.pinact).map($t=>({value:$t,label:$t})):[],Ie=$t=>Et`
     <th
       class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
       data-tip=${xe("langtimers",$t.tooltipIndex)}
     >
       ${$t.title}
     </th>
-  `,Se=({d:$t,index:ht})=>{const Yt=$t.activ&&$t.activ.startsWith("pwm:");let oe=$t.activ;if(Yt){const Zt=$t.activ.substring(4).split(",");Zt.length===4&&(oe=`pwmID=${Zt[0]} | ${Zt[1]}s | ${Zt[2]}%→${Zt[3]}%`)}return Et`
+  `,Ee=({d:$t,index:ht})=>{const Yt=$t.activ&&$t.activ.startsWith("pwm:");let oe=$t.activ;if(Yt){const Zt=$t.activ.substring(4).split(",");Zt.length===4&&(oe=`pwmID=${Zt[0]} | ${Zt[1]}s | ${Zt[2]}%→${Zt[3]}%`)}return Et`
     <tr class="${ht%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
       <td class="px-6 py-4 text-sm text-slate-800 font-medium">${$t.id}</td>
       <td class="px-6 py-4 text-sm text-slate-700 font-mono tracking-wider">${$t.cron}</td>
@@ -2348,26 +2459,26 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
      <td class="px-6 py-4 text-center">
         ${Yt?Et`
           <button
-            onclick=${()=>Ee("edit_pwm",$t)}
+            onclick=${()=>Se("edit_pwm",$t)}
             class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap mr-3"
           >
             Edit
           </button>
           <button
-            onclick=${()=>Ee("edit_pwm",$t)}
+            onclick=${()=>Se("edit_pwm",$t)}
             class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap ml-1"
           >
             PWM
           </button>
         `:Et`
        <button
-            onclick=${()=>Ee("edit",$t)}
+            onclick=${()=>Se("edit",$t)}
             class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap mr-2"
           >
             Edit
           </button>
           <button
-            onclick=${()=>Ee("edit_pwm",$t)}
+            onclick=${()=>Se("edit_pwm",$t)}
             class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap ml-3"
             title="Set as PWM Cron"
           >
@@ -2393,16 +2504,16 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                     <table class="w-full text-left border-collapse whitespace-nowrap">
                       <thead>
                         <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                          <${Ce} title="No" tooltipIndex=${1} />
-                          <${Ce} title="Cron" tooltipIndex=${2} />
-                          <${Ce} title="Script" tooltipIndex=${3} />
-                          <${Ce} title="Info" tooltipIndex=${4} />
-                          <${Ce} title="On/Off" tooltipIndex=${5} />
-                          <${Ce} title="Action" tooltipIndex=${6} />
+                          <${Ie} title="No" tooltipIndex=${1} />
+                          <${Ie} title="Cron" tooltipIndex=${2} />
+                          <${Ie} title="Script" tooltipIndex=${3} />
+                          <${Ie} title="Info" tooltipIndex=${4} />
+                          <${Ie} title="On/Off" tooltipIndex=${5} />
+                          <${Ie} title="Action" tooltipIndex=${6} />
                         </tr>
                       </thead>
                       <tbody class="divide-y divide-white/40">
-                        ${$.slice(0,ce).map(($t,ht)=>Et`<${Se} d=${$t} index=${ht} key=${$t.id} />`)}
+                        ${$.slice(0,ce).map(($t,ht)=>Et`<${Ee} d=${$t} index=${ht} key=${$t.id} />`)}
                       </tbody>
                     </table>
                   </div>
@@ -2412,9 +2523,9 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
         <div class="w-full flex justify-between items-center mb-4 mt-2 bg-white/40 backdrop-blur-md border border-white/60 shadow-sm p-4 rounded-2xl">
           <button
             class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
-            onclick=${()=>re(!se)}
+            onclick=${()=>re(!le)}
           >
-            ${se?"Hide Help":"Show Help"}
+            ${le?"Hide Help":"Show Help"}
           </button>
           <div class="font-semibold text-slate-600 tracking-wide">
             ${$&&$.length-ce>0?`Still available: ${$.length-ce} cron jobs`:"No available: cron jobs!"}
@@ -2438,9 +2549,9 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
         </div>
       </div>
 
-      ${se&&Et`
+      ${le&&Et`
         <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700 w-full">
-          ${Oe[ne]}
+          ${Pe[ne]}
         </div>
       `}
 
@@ -2467,14 +2578,14 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
         />
       `:null}
     </div>
-  `}const PRESETS$1={ru:[{value:"1",label:"Паяльная станция T max=125°C, T min=-55°C"},{value:"2",label:"Кулер / вентилятор T max=70°C, T min=-55°C"},{value:"3",label:"3D‑принтер (стол) T max=120°C, T min=0°C"},{value:"4",label:"Форточный нагреватель T max=60°C, T min=-55°C"},{value:"5",label:"Тёплый пол T max=45°C, T min=0°C"},{value:"6",label:"Холодильник T max=100°C, T min=-55°C"},{value:"7",label:"Аквариум / бойлер T max=80°C, T min=0°C"},{value:"8",label:"Инкубатор T max=45°C, T min=0°C"},{value:"9",label:"Теплица / комната T max=50°C, T min=-55°C"}],en:[{value:"1",label:"Soldering station T max=125°C, T min=-55°C"},{value:"2",label:"Cooler / fan T max=70°C, T min=-55°C"},{value:"3",label:"3D printer (table) T max=120°C, T min=0°C"},{value:"4",label:"Vent heater T max=60°C, T min=-55°C"},{value:"5",label:"Warm floor T max=45°C, T min=0°C"},{value:"6",label:"Refrigerator T max=100°C, T min=-55°C"},{value:"7",label:"Aquarium / boiler T max=80°C, T min=0°C"},{value:"8",label:"Incubator T max=45°C, T min=0°C"},{value:"9",label:"Greenhouse / room T max=50°C, T min=-55°C"}]},SENSOR_OPTIONS$1=[{value:"1",label:"DS18B20"},{value:"2",label:"DHT-22"}];function ModalPid({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedPid:_,handlePidChange:pt,language:ee="en",modalClass:vt,SliderComponent:te=MyPolzunok}){const[ne,Xt]=ut((_==null?void 0:_.info)||""),[se,re]=ut((_==null?void 0:_.onoff)===1),[ce,ge]=ut((_==null?void 0:_.selsens)||"1"),[ye,pe]=ut((_==null?void 0:_.sernum)||""),[he,be]=ut((_==null?void 0:_.presets)||"1"),[$e,ke]=ut((_==null?void 0:_.tmpset)||""),[_e,Oe]=ut((_==null?void 0:_.tmpcur)||""),[de,xe]=ut([]),[Ee,we]=ut(Object.entries((_==null?void 0:_.pinact)||{})[0]||["",""]);lt(()=>{Xt((_==null?void 0:_.info)||""),re((_==null?void 0:_.onoff)===1),ge((_==null?void 0:_.selsens)||"1"),pe((_==null?void 0:_.sernum)||""),be((_==null?void 0:_.presets)||"1"),ke((_==null?void 0:_.tmpset)||""),Oe((_==null?void 0:_.tmpcur)||""),we(Object.entries((_==null?void 0:_.pinact)||{})[0]||["",""])},[_]),lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store",headers:{"Content-Type":"application/json"}}).then(Yt=>{if(!Yt.ok)throw new Error(`HTTP error! status: ${Yt.status}`);return Yt.json()}).then(Yt=>{if(!Yt||!Yt.data||!Array.isArray(Yt.data)){console.error("Invalid data format:",Yt),xe([]);return}const oe=Yt.data.filter(Zt=>Zt.topin===5);xe(oe)}).catch(Yt=>{console.error("Error fetching pin config:",Yt),xe([])})},[_]);const Te=Yt=>{Yt.preventDefault();const oe=Ee[0]&&Ee[1]!==void 0&&Ee[1]!=="",Zt={id:_.id,pins:Ee[0],pinact:oe?{[Ee[0]]:parseInt(Ee[1])}:{},selsens:ce,sernum:ye,presets:he,tmpset:$e,tmpcur:_e,info:ne,onoff:se?1:0};console.log("Data being sent to server:",Zt),fetch("/api/pid/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Zt)}).then(ie=>ie.json()).then(ie=>{console.log("Success:",ie),pt({..._,...Zt}),st(),window.location.href="/#/pid"}).catch(ie=>{console.error("Error:",ie)})},me=Yt=>{if(!Yt.target.value)we(["",""]);else{const oe=Yt.target.value.split("|");we([oe[0],oe[1]])}},Ce=PRESETS$1[ee]||PRESETS$1.en,Se=()=>k==="TabPid"&&$==="edit"?Et`
+  `}const PRESETS$1={ru:[{value:"1",label:"Паяльная станция T max=125°C, T min=-55°C"},{value:"2",label:"Кулер / вентилятор T max=70°C, T min=-55°C"},{value:"3",label:"3D‑принтер (стол) T max=120°C, T min=0°C"},{value:"4",label:"Форточный нагреватель T max=60°C, T min=-55°C"},{value:"5",label:"Тёплый пол T max=45°C, T min=0°C"},{value:"6",label:"Холодильник T max=100°C, T min=-55°C"},{value:"7",label:"Аквариум / бойлер T max=80°C, T min=0°C"},{value:"8",label:"Инкубатор T max=45°C, T min=0°C"},{value:"9",label:"Теплица / комната T max=50°C, T min=-55°C"}],en:[{value:"1",label:"Soldering station T max=125°C, T min=-55°C"},{value:"2",label:"Cooler / fan T max=70°C, T min=-55°C"},{value:"3",label:"3D printer (table) T max=120°C, T min=0°C"},{value:"4",label:"Vent heater T max=60°C, T min=-55°C"},{value:"5",label:"Warm floor T max=45°C, T min=0°C"},{value:"6",label:"Refrigerator T max=100°C, T min=-55°C"},{value:"7",label:"Aquarium / boiler T max=80°C, T min=0°C"},{value:"8",label:"Incubator T max=45°C, T min=0°C"},{value:"9",label:"Greenhouse / room T max=50°C, T min=-55°C"}]},SENSOR_OPTIONS$1=[{value:"1",label:"DS18B20"},{value:"2",label:"DHT-22"}];function ModalPid({modalType:$,page:k,hideModal:st,closeOnOverlayClick:ct=!0,title:dt,selectedPid:_,handlePidChange:pt,language:ee="en",modalClass:vt,SliderComponent:te=MyPolzunok}){const[ne,Xt]=ut((_==null?void 0:_.info)||""),[le,re]=ut((_==null?void 0:_.onoff)===1),[ce,ge]=ut((_==null?void 0:_.selsens)||"1"),[ve,be]=ut((_==null?void 0:_.sernum)||""),[he,fe]=ut((_==null?void 0:_.presets)||"1"),[$e,ke]=ut((_==null?void 0:_.tmpset)||""),[_e,Pe]=ut((_==null?void 0:_.tmpcur)||""),[de,xe]=ut([]),[Se,we]=ut(Object.entries((_==null?void 0:_.pinact)||{})[0]||["",""]);lt(()=>{Xt((_==null?void 0:_.info)||""),re((_==null?void 0:_.onoff)===1),ge((_==null?void 0:_.selsens)||"1"),be((_==null?void 0:_.sernum)||""),fe((_==null?void 0:_.presets)||"1"),ke((_==null?void 0:_.tmpset)||""),Pe((_==null?void 0:_.tmpcur)||""),we(Object.entries((_==null?void 0:_.pinact)||{})[0]||["",""])},[_]),lt(()=>{fetch("/api/select/get",{method:"GET",cache:"no-store",headers:{"Content-Type":"application/json"}}).then(Yt=>{if(!Yt.ok)throw new Error(`HTTP error! status: ${Yt.status}`);return Yt.json()}).then(Yt=>{if(!Yt||!Yt.data||!Array.isArray(Yt.data)){console.error("Invalid data format:",Yt),xe([]);return}const oe=Yt.data.filter(Zt=>Zt.topin===5);xe(oe)}).catch(Yt=>{console.error("Error fetching pin config:",Yt),xe([])})},[_]);const Te=Yt=>{Yt.preventDefault();const oe=Se[0]&&Se[1]!==void 0&&Se[1]!=="",Zt={id:_.id,pins:Se[0],pinact:oe?{[Se[0]]:parseInt(Se[1])}:{},selsens:ce,sernum:ve,presets:he,tmpset:$e,tmpcur:_e,info:ne,onoff:le?1:0};console.log("Data being sent to server:",Zt),fetch("/api/pid/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Zt)}).then(ie=>ie.json()).then(ie=>{console.log("Success:",ie),pt({..._,...Zt}),st(),window.location.href="/#/pid"}).catch(ie=>{console.error("Error:",ie)})},me=Yt=>{if(!Yt.target.value)we(["",""]);else{const oe=Yt.target.value.split("|");we([oe[0],oe[1]])}},Ie=PRESETS$1[ee]||PRESETS$1.en,Ee=()=>k==="TabPid"&&$==="edit"?Et`
         <form onsubmit=${Te}>
           <div class="modal-body">
             <table class="table-auto w-full">
               <tbody>
                 ${[{label:"ID",value:_.id},{label:"PWM Pin",value:Et`
                         <select
-                          value=${de.some(Yt=>String(Yt.pins)===String(Ee[0]))?`${Ee[0]}|${Ee[1]}`:""}
+                          value=${de.some(Yt=>String(Yt.pins)===String(Se[0]))?`${Se[0]}|${Se[1]}`:""}
                           onChange=${me}
                           class="border rounded p-2 w-full"
                         >
@@ -2503,8 +2614,8 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                     `},{label:"Dev. ser. number",value:ce==="1"?Et`
                           <input
                             type="text"
-                            value=${ye}
-                            onInput=${Yt=>pe(Yt.target.value)}
+                            value=${ve}
+                            onInput=${Yt=>be(Yt.target.value)}
                             class="border rounded p-2 w-full font-mono"
                             placeholder="e.g. xxxxxxxxxxxxxxxx"
                           />
@@ -2518,10 +2629,10 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                         `},{label:"Presets",value:Et`
                       <select
                         value=${he}
-                        onChange=${Yt=>be(Yt.target.value)}
+                        onChange=${Yt=>fe(Yt.target.value)}
                         class="border rounded p-2 w-full"
                       >
-                        ${Ce.map(Yt=>Et`
+                        ${Ie.map(Yt=>Et`
                             <option
                               value=${Yt.value}
                               selected=${Yt.value===he}
@@ -2555,7 +2666,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                       />
                     `},{label:"On/Off",value:Et`
                       <${te}
-                        value=${se}
+                        value=${le}
                         onChange=${Yt=>re(Yt)}
                       />
                     `}].map((Yt,oe)=>Et`
@@ -2598,7 +2709,7 @@ Switch data: ${JSON.stringify(oe.switches,null,2)}`),console.log("Pintopin data:
                 Close
               </button>
             </div>
-            ${Se()}
+            ${Ee()}
           </div>
         </div>
       </div>
@@ -2631,19 +2742,19 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
       from { width: 0%; }
       to   { width: 100%; }
     }
-  `,document.head.appendChild($)}function TabPid({}){const[$,k]=ut(null),[st,ct]=ut(null);at(null);const[dt,_]=ut(!1),[pt,ee]=ut(null),[vt,te]=ut(null),[ne,Xt]=ut("ru"),[se,re]=ut(!1),[ce,ge]=ut(0),[ye,pe]=ut(0),he=at(!1);lt(()=>{initGlobalTooltip$3(),initTuneStyles()},[]);const be=()=>{fetch("/api/pid/get").then(Zt=>Zt.json()).then(Zt=>{he.current||Zt&&Array.isArray(Zt.pid)&&(k(Zt.pid),Xt(Zt.lang||"ru"),typeof Zt.pidline=="number"&&(pe(Zt.pidline),ge(Zt.pidline)))}).catch(Zt=>console.error("Error fetching PID data:",Zt))};lt(()=>{be();const Zt=setInterval(()=>{be()},500);return()=>clearInterval(Zt)},[]);const $e=at(!0);lt(()=>{if($e.current){$e.current=!1;return}ke(ye)},[ye]);const ke=Zt=>{fetch("/api/pidline/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pidline:Zt})}).then(ie=>ie.json()).then(ie=>console.log("Pidline sent to stm32:",ie)).catch(ie=>console.error("Error sending PID line to stm32:",ie))},_e=()=>{if(ce<PID_MAX_SLOTS){const Zt=ce+1;ge(Zt),pe(Zt)}},Oe=()=>{if(ce>0){const Zt=ce-1;ge(Zt),pe(Zt)}};if($===null)return Et`<div>Loading...</div>`;const de=()=>({langtimers:ne==="ru"?rulangtimers:enlangtimers}),xe=(Zt,ie)=>{const ae=de(),ve=(ae[Zt]&&ae[Zt][ie]?ae[Zt][ie]:"").split(" "),mt=[];for(let le=0;le<ve.length;le+=15)mt.push(ve.slice(le,le+15).join(" "));return mt.join("<br>")},Ee=(Zt,ie)=>{ee(Zt),te(ie),_(!0)},we=()=>{_(!1),ee(null),te(null)},Te=Zt=>{console.log("handlePidChange:",Zt),k($.map(ie=>ie.id===Zt.id?Zt:ie)),he.current=!0,fetch("/api/pid/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Zt)}).then(ie=>ie.json()).then(ie=>{console.log("PID job updated successfully:",ie)}).catch(ie=>{console.error("Error updating PID job:",ie)}).finally(()=>{he.current=!1})},me=Zt=>{const ie=Zt.id,ae=Zt.tune_state||0;if(!(ae===TUNE_STEP||ae===TUNE_BIAS)){if(ae===TUNE_ERROR){Ce(ie);return}console.log("Run tune for id:",ie),fetch("/api/pid/tune",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ie,action:"start"})}).then(fe=>fe.json()).then(fe=>{console.log("Tune start response:",fe)}).catch(fe=>{console.error("Error starting tune:",fe)})}},Ce=Zt=>{console.log("Stop tune for id:",Zt),fetch("/api/pid/tune",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:Zt,action:"stop"})}).then(ie=>ie.json()).then(ie=>{console.log("Tune stop response:",ie)}).catch(ie=>{console.error("Error stopping tune:",ie)})},Se=PRESETS[ne]||PRESETS.en,$t=Zt=>{const ie=Se.find(ae=>ae.value===String(Zt));return ie?ie.label:Zt},ht=Zt=>{const ie=SENSOR_OPTIONS.find(ae=>ae.value===String(Zt));return ie?ie.label:Zt},Yt=Zt=>Et`
+  `,document.head.appendChild($)}function TabPid({}){const[$,k]=ut(null),[st,ct]=ut(null);at(null);const[dt,_]=ut(!1),[pt,ee]=ut(null),[vt,te]=ut(null),[ne,Xt]=ut("ru"),[le,re]=ut(!1),[ce,ge]=ut(0),[ve,be]=ut(0),he=at(!1);lt(()=>{initGlobalTooltip$3(),initTuneStyles()},[]);const fe=()=>{fetch("/api/pid/get").then(Zt=>Zt.json()).then(Zt=>{he.current||Zt&&Array.isArray(Zt.pid)&&(k(Zt.pid),Xt(Zt.lang||"ru"),typeof Zt.pidline=="number"&&(be(Zt.pidline),ge(Zt.pidline)))}).catch(Zt=>console.error("Error fetching PID data:",Zt))};lt(()=>{fe();const Zt=setInterval(()=>{fe()},500);return()=>clearInterval(Zt)},[]);const $e=at(!0);lt(()=>{if($e.current){$e.current=!1;return}ke(ve)},[ve]);const ke=Zt=>{fetch("/api/pidline/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pidline:Zt})}).then(ie=>ie.json()).then(ie=>console.log("Pidline sent to stm32:",ie)).catch(ie=>console.error("Error sending PID line to stm32:",ie))},_e=()=>{if(ce<PID_MAX_SLOTS){const Zt=ce+1;ge(Zt),be(Zt)}},Pe=()=>{if(ce>0){const Zt=ce-1;ge(Zt),be(Zt)}};if($===null)return Et`<div>Loading...</div>`;const de=()=>({langtimers:ne==="ru"?rulangtimers:enlangtimers}),xe=(Zt,ie)=>{const ae=de(),ye=(ae[Zt]&&ae[Zt][ie]?ae[Zt][ie]:"").split(" "),mt=[];for(let se=0;se<ye.length;se+=15)mt.push(ye.slice(se,se+15).join(" "));return mt.join("<br>")},Se=(Zt,ie)=>{ee(Zt),te(ie),_(!0)},we=()=>{_(!1),ee(null),te(null)},Te=Zt=>{console.log("handlePidChange:",Zt),k($.map(ie=>ie.id===Zt.id?Zt:ie)),he.current=!0,fetch("/api/pid/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Zt)}).then(ie=>ie.json()).then(ie=>{console.log("PID job updated successfully:",ie)}).catch(ie=>{console.error("Error updating PID job:",ie)}).finally(()=>{he.current=!1})},me=Zt=>{const ie=Zt.id,ae=Zt.tune_state||0;if(!(ae===TUNE_STEP||ae===TUNE_BIAS)){if(ae===TUNE_ERROR){Ie(ie);return}console.log("Run tune for id:",ie),fetch("/api/pid/tune",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ie,action:"start"})}).then(ue=>ue.json()).then(ue=>{console.log("Tune start response:",ue)}).catch(ue=>{console.error("Error starting tune:",ue)})}},Ie=Zt=>{console.log("Stop tune for id:",Zt),fetch("/api/pid/tune",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:Zt,action:"stop"})}).then(ie=>ie.json()).then(ie=>{console.log("Tune stop response:",ie)}).catch(ie=>{console.error("Error stopping tune:",ie)})},Ee=PRESETS[ne]||PRESETS.en,$t=Zt=>{const ie=Ee.find(ae=>ae.value===String(Zt));return ie?ie.label:Zt},ht=Zt=>{const ie=SENSOR_OPTIONS.find(ae=>ae.value===String(Zt));return ie?ie.label:Zt},Yt=Zt=>Et`
     <th
       class="px-4 py-4 text-base font-bold text-slate-700 tracking-wide cursor-help"
       data-tip=${xe("langtimers",Zt.tooltipIndex)}
     >
       ${Zt.title}
     </th>
-  `,oe=(Zt,ie)=>{const ae=Zt.tune_state||0,fe=Zt.tune_progress||0,ve=ae===TUNE_STEP||ae===TUNE_BIAS,mt=ae===TUNE_DONE,le=ae===TUNE_ERROR,ue=mt?"background:linear-gradient(to right,#4ade80,#10b981);box-shadow:0 4px 14px rgba(16,185,129,0.4);":le?"background:linear-gradient(to right,#dc2626,#b91c1c);box-shadow:0 4px 14px rgba(220,38,38,0.5);animation:tuneBlink 1s ease-in-out infinite;":"background:linear-gradient(to right,#ef4444,#e11d48);box-shadow:0 4px 14px rgba(239,68,68,0.4);",Ie="px-3 py-1 rounded-full text-sm font-bold text-white transition-all duration-300 transform hover:scale-105 active:scale-95 whitespace-nowrap",Me=mt?"Tuning Done":le?"⚠ Error!":"Run tune";if(ve){const Pe=fe.toFixed(1),De=`Auto Tune (${ae===TUNE_STEP?"Step test":"Bias search"})… ${fe}%`;return Et`
+  `,oe=(Zt,ie)=>{const ae=Zt.tune_state||0,ue=Zt.tune_progress||0,ye=ae===TUNE_STEP||ae===TUNE_BIAS,mt=ae===TUNE_DONE,se=ae===TUNE_ERROR,pe=mt?"background:linear-gradient(to right,#4ade80,#10b981);box-shadow:0 4px 14px rgba(16,185,129,0.4);":se?"background:linear-gradient(to right,#dc2626,#b91c1c);box-shadow:0 4px 14px rgba(220,38,38,0.5);animation:tuneBlink 1s ease-in-out infinite;":"background:linear-gradient(to right,#ef4444,#e11d48);box-shadow:0 4px 14px rgba(239,68,68,0.4);",Ce="px-3 py-1 rounded-full text-sm font-bold text-white transition-all duration-300 transform hover:scale-105 active:scale-95 whitespace-nowrap",Me=mt?"Tuning Done":se?"⚠ Error!":"Run tune";if(ye){const Oe=ue.toFixed(1),De=`Auto Tune (${ae===TUNE_STEP?"Step test":"Bias search"})… ${ue}%`;return Et`
         <tr key=${Zt.id} class="${ie%2===1?"bg-white/80":"bg-sky-200/40"}">
           <td colspan="11" class="px-2 py-2">
             <div style="position:relative;width:100%;height:2.5rem;border-radius:0.75rem;overflow:hidden;background:#d1d5db;box-shadow:inset 0 2px 6px rgba(0,0,0,0.12);">
               <div
-                style="position:absolute;left:0;top:0;bottom:0;width:${Pe}%;background:linear-gradient(90deg,#22c55e 0%,#16a34a 60%,#4ade80 100%);border-radius:inherit;transition:width 0.3s ease;box-shadow:0 0 14px rgba(34,197,94,0.55);"
+                style="position:absolute;left:0;top:0;bottom:0;width:${Oe}%;background:linear-gradient(90deg,#22c55e 0%,#16a34a 60%,#4ade80 100%);border-radius:inherit;transition:width 0.3s ease;box-shadow:0 0 14px rgba(34,197,94,0.55);"
               ></div>
               <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;user-select:none;">
                 <span style="font-size:0.875rem;font-weight:700;color:#111827;white-space:nowrap;">${De}</span>
@@ -2652,7 +2763,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
           </td>
           <td class="px-4 py-2 text-center">
             <button
-              onclick=${()=>Ce(Zt.id)}
+              onclick=${()=>Ie(Zt.id)}
               class="px-3 py-1 rounded-full text-sm font-bold text-white whitespace-nowrap transition-all duration-300 hover:scale-105 active:scale-95"
               style="background:linear-gradient(to right,#f97316,#ef4444);box-shadow:0 4px 14px rgba(239,68,68,0.4);"
             >Stop</button>
@@ -2662,7 +2773,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
       <tr key=${Zt.id} class="${ie%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
         <td class="px-4 py-3 text-sm text-slate-800 font-medium">${Zt.id}</td>
         <td class="px-4 py-3 text-sm text-slate-700 font-mono">
-          ${(()=>{const Pe=Object.entries(Zt.pinact||{});if(!Pe.length)return"—";const[Ne,De]=Pe[0];return`${Ne}(${De})`})()}
+          ${(()=>{const Oe=Object.entries(Zt.pinact||{});if(!Oe.length)return"—";const[Ne,De]=Oe[0];return`${Ne}(${De})`})()}
         </td>
         <td class="px-4 py-3 text-sm text-slate-700">${ht(Zt.selsens)}</td>
         <td class="px-4 py-3 text-sm font-mono ${Zt.selsens==="1"?"text-slate-700":"text-slate-400 italic"}">${Zt.selsens==="1"?Zt.sernum||"—":"N/A"}</td>
@@ -2674,20 +2785,20 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         <td class="px-4 py-3">
           <${MyPolzunok}
             value=${Zt.onoff}
-            onChange=${Pe=>Te({...Zt,onoff:Pe})}
+            onChange=${Oe=>Te({...Zt,onoff:Oe})}
           />
         </td>
         <td class="px-4 py-3 text-center">
           <button
-            onclick=${()=>Ee("edit",Zt)}
+            onclick=${()=>Se("edit",Zt)}
             class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap mr-2"
           >Edit</button>
         </td>
         <td class="px-4 py-3 text-center">
           <button
             onclick=${()=>me(Zt)}
-            class="${Ie}"
-            style="${ue}"
+            class="${Ce}"
+            style="${pe}"
           >${Me}</button>
         </td>
       </tr>
@@ -2733,9 +2844,9 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         <div class="w-full flex justify-between items-center mb-4 mt-2 bg-white/40 backdrop-blur-md border border-white/60 shadow-sm p-4 rounded-2xl">
           <button
             class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
-            onclick=${()=>re(!se)}
+            onclick=${()=>re(!le)}
           >
-            ${se?"Hide Help":"Show Help"}
+            ${le?"Hide Help":"Show Help"}
           </button>
           <div class="font-semibold text-slate-600 tracking-wide">
             ${$&&PID_MAX_SLOTS-ce>0?`Still available: ${PID_MAX_SLOTS-ce} PID jobs`:"No available: PID jobs!"}
@@ -2751,7 +2862,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             ${ce>0?Et`
                 <button
                   class="bg-rose-500 hover:bg-rose-600 shadow-md text-white font-black text-xl w-10 h-10 rounded-full transition-transform hover:scale-110 active:scale-95 flex items-center justify-center pb-1 shadow-rose-500/30"
-                  onclick=${Oe}
+                  onclick=${Pe}
                   title="Remove PID"
                 >-</button>
               `:null}
@@ -2759,7 +2870,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         </div>
       </div>
 
-      ${se&&Et`
+      ${le&&Et`
         <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700 w-full">
           ${HELP_CONTENT$1[ne]||HELP_CONTENT$1.en}
         </div>
@@ -2778,10 +2889,10 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         />
       `:null}
     </div>
-  `}function ModalEditSensor({typsensor:$,oneWireId:k,pins:st,onClose:ct,onUpdate:dt,sensorType:_,sensorData:pt,closeOnOverlayClick:ee=!0}){const[vt,te]=ut({ut:(pt==null?void 0:pt.ut)||$.ut,lt:(pt==null?void 0:pt.lt)||$.lt,action_ut:(pt==null?void 0:pt.action_ut)||$.action_ut,action_lt:(pt==null?void 0:pt.action_lt)||$.action_lt,upphumid:(pt==null?void 0:pt.upphumid)||$.upphumid||0,humlolim:(pt==null?void 0:pt.humlolim)||$.humlolim||0,actuphum:(pt==null?void 0:pt.actuphum)||$.actuphum||"",actlowhum:(pt==null?void 0:pt.actlowhum)||$.actlowhum||"",info:(pt==null?void 0:pt.info)||$.info,onoff:(pt==null?void 0:pt.onoff)||$.onoff||0,humidity:(pt==null?void 0:pt.humidity)||$.humidity||0}),[ne,Xt]=ut(!1),se=(be,$e,ke)=>{if(be===""||be==="-")return be;const _e=be.replace(",",".");if(!/^-?\d*\.?\d*$/.test(_e))return null;const Oe=parseFloat(_e);return isNaN(Oe)||Oe<$e||Oe>ke?null:_e},re=be=>{const{name:$e,value:ke}=be.target;if(["ut","lt"].includes($e)){const _e=se(ke,-55,125);_e!==null&&te(Oe=>({...Oe,[$e]:_e}))}else if(["upphumid","humlolim"].includes($e)){const _e=se(ke,0,100);_e!==null&&te(Oe=>({...Oe,[$e]:_e}))}else te(_e=>({..._e,[$e]:ke}))},ce=be=>{const $e=["ut","lt","upphumid","humlolim"],ke={...be};return $e.forEach(_e=>{ke[_e]===""||ke[_e]==="-"?ke[_e]=0:ke[_e]=parseFloat(ke[_e].toString().replace(",","."))}),ke},pe=Et`
+  `}function ModalEditSensor({typsensor:$,oneWireId:k,pins:st,onClose:ct,onUpdate:dt,sensorType:_,sensorData:pt,closeOnOverlayClick:ee=!0}){const[vt,te]=ut({ut:(pt==null?void 0:pt.ut)||$.ut,lt:(pt==null?void 0:pt.lt)||$.lt,action_ut:(pt==null?void 0:pt.action_ut)||$.action_ut,action_lt:(pt==null?void 0:pt.action_lt)||$.action_lt,upphumid:(pt==null?void 0:pt.upphumid)||$.upphumid||0,humlolim:(pt==null?void 0:pt.humlolim)||$.humlolim||0,actuphum:(pt==null?void 0:pt.actuphum)||$.actuphum||"",actlowhum:(pt==null?void 0:pt.actlowhum)||$.actlowhum||"",info:(pt==null?void 0:pt.info)||$.info,onoff:(pt==null?void 0:pt.onoff)||$.onoff||0,humidity:(pt==null?void 0:pt.humidity)||$.humidity||0}),[ne,Xt]=ut(!1),le=(fe,$e,ke)=>{if(fe===""||fe==="-")return fe;const _e=fe.replace(",",".");if(!/^-?\d*\.?\d*$/.test(_e))return null;const Pe=parseFloat(_e);return isNaN(Pe)||Pe<$e||Pe>ke?null:_e},re=fe=>{const{name:$e,value:ke}=fe.target;if(["ut","lt"].includes($e)){const _e=le(ke,-55,125);_e!==null&&te(Pe=>({...Pe,[$e]:_e}))}else if(["upphumid","humlolim"].includes($e)){const _e=le(ke,0,100);_e!==null&&te(Pe=>({...Pe,[$e]:_e}))}else te(_e=>({..._e,[$e]:ke}))},ce=fe=>{const $e=["ut","lt","upphumid","humlolim"],ke={...fe};return $e.forEach(_e=>{ke[_e]===""||ke[_e]==="-"?ke[_e]=0:ke[_e]=parseFloat(ke[_e].toString().replace(",","."))}),ke},be=Et`
     <div
       class="fixed inset-0 z-[999] bg-black bg-opacity-50 flex items-center justify-center p-4"
-      onclick=${be=>{ee&&be.target===be.currentTarget&&ct()}}
+      onclick=${fe=>{ee&&fe.target===fe.currentTarget&&ct()}}
     >
       <div
         class="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg relative"
@@ -2796,7 +2907,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             Close
           </button>
         </div>
-        <form onsubmit=${async be=>{be.preventDefault(),Xt(!0);const $e=ce(vt);try{if(!(await fetch("/api/sensor/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:k,pins:st,sensorNumber:$.s_number,...$e,s_number:$.s_number,t:$.t})})).ok)throw new Error("Network response was not ok");dt({...$,...$e,oneWireId:k,pins:st,s_number:$.s_number,t:$.t}),ct()}catch(ke){console.error("Error updating Sensor:",ke)}finally{Xt(!1)}}}>
+        <form onsubmit=${async fe=>{fe.preventDefault(),Xt(!0);const $e=ce(vt);try{if(!(await fetch("/api/sensor/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:k,pins:st,sensorNumber:$.s_number,...$e,s_number:$.s_number,t:$.t})})).ok)throw new Error("Network response was not ok");dt({...$,...$e,oneWireId:k,pins:st,s_number:$.s_number,t:$.t}),ct()}catch(ke){console.error("Error updating Sensor:",ke)}finally{Xt(!1)}}}>
           <div class="modal-body">
             <table class="table-auto w-full">
               <tbody>
@@ -2933,7 +3044,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         </form>
       </div>
     </div>
-  `,he=at(null);return lt(()=>{const be=document.createElement("div");return be.id="modal-portal-sensor",document.body.appendChild(be),he.current=be,()=>{O(null,be),document.body.removeChild(be)}},[]),lt(()=>{he.current&&O(pe,he.current)}),null}function ModalOneWire({oneWire:$,onClose:k,onUpdate:st,refresh:ct,closeOnOverlayClick:dt=!0}){console.log("oneWire object:",$);const[_,pt]=ut({typsensor:$.typsensor,numdevices:$.numdevices}),[ee,vt]=ut(!1),[te,ne]=ut($.onoff||0),Xt=pe=>{dt&&pe.target===pe.currentTarget&&k()},se=pe=>{const{name:he,value:be}=pe.target;let $e={..._,[he]:parseInt(be,10)};he==="typsensor"&&(be==="0"?$e.numdevices=0:be==="2"&&($e.numdevices=1)),pt($e)},re=pe=>{ne(pe)},ge=Et`
+  `,he=at(null);return lt(()=>{const fe=document.createElement("div");return fe.id="modal-portal-sensor",document.body.appendChild(fe),he.current=fe,()=>{O(null,fe),document.body.removeChild(fe)}},[]),lt(()=>{he.current&&O(be,he.current)}),null}function ModalOneWire({oneWire:$,onClose:k,onUpdate:st,refresh:ct,closeOnOverlayClick:dt=!0}){console.log("oneWire object:",$);const[_,pt]=ut({typsensor:$.typsensor,numdevices:$.numdevices}),[ee,vt]=ut(!1),[te,ne]=ut($.onoff||0),Xt=be=>{dt&&be.target===be.currentTarget&&k()},le=be=>{const{name:he,value:fe}=be.target;let $e={..._,[he]:parseInt(fe,10)};he==="typsensor"&&(fe==="0"?$e.numdevices=0:fe==="2"&&($e.numdevices=1)),pt($e)},re=be=>{ne(be)},ge=Et`
     <div
       class="fixed inset-0 z-[999] bg-black bg-opacity-50 flex items-center justify-center p-4"
       onclick=${Xt}
@@ -2952,7 +3063,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             Close
           </button>
         </div>
-        <form onsubmit=${async pe=>{pe.preventDefault(),vt(!0);const he={id:$.id,pin:$.pin,typsensor:_.typsensor,numdevices:_.numdevices,onoff:te};console.log("Sending data:",he);try{if(!(await fetch("api/onewire/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(he)})).ok)throw new Error("Network response was not ok");const $e={...$,..._,onoff:te};st($e),k()}catch(be){console.error("Error updating OneWire:",be)}finally{vt(!1)}}}>
+        <form onsubmit=${async be=>{be.preventDefault(),vt(!0);const he={id:$.id,pin:$.pin,typsensor:_.typsensor,numdevices:_.numdevices,onoff:te};console.log("Sending data:",he);try{if(!(await fetch("api/onewire/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(he)})).ok)throw new Error("Network response was not ok");const $e={...$,..._,onoff:te};st($e),k()}catch(fe){console.error("Error updating OneWire:",fe)}finally{vt(!1)}}}>
           <div class="modal-body">
             <table class="table-auto w-full">
               <tbody>
@@ -2986,7 +3097,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                     <select
                       name="typsensor"
                       value=${_.typsensor}
-                      onchange=${se}
+                      onchange=${le}
                       class="border rounded p-2 w-full"
                       disabled=${ee}
                     >
@@ -3003,7 +3114,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                       type="number"
                       name="numdevices"
                       value=${_.numdevices}
-                      oninput=${_.typsensor===1?se:void 0}
+                      oninput=${_.typsensor===1?le:void 0}
                       class="border rounded p-2 w-full ${_.typsensor!==1?"bg-gray-100":""}"
                       min="0"
                       max="10"
@@ -3036,7 +3147,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         </form>
       </div>
     </div>
-  `,ye=at(null);return lt(()=>{const pe=document.createElement("div");return pe.id="modal-portal-onewire",document.body.appendChild(pe),ye.current=pe,()=>{O(null,pe),document.body.removeChild(pe)}},[]),lt(()=>{ye.current&&O(ge,ye.current)}),null}function initGlobalTooltip$2(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,ee=window.innerWidth,vt=dt.getBoundingClientRect();let te=vt.left+vt.width/2-_/2;te=Math.max(8,Math.min(te,ee-_-8));let ne=vt.top-pt-8;ne<8&&(ne=vt.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const _stateLabel=$=>$==="1"?"ON":$==="0"?"OFF":$==="2"?"TG":$??"?",_stateColor=$=>$==="1"?"#16a34a":$==="0"?"#dc2626":$==="2"?"#d97706":"#64748b",_parseAction=$=>$?$.split(",").map(k=>{const[st,ct]=k.trim().split(":");return{pin:st==null?void 0:st.trim(),state:ct==null?void 0:ct.trim()}}).filter(k=>k.pin!==void 0&&k.pin!==""):[],ActionBadge=({isUpper:$,isHumid:k,value:st,unit:ct,str:dt})=>{const _=_parseAction(dt),pt=(k?"💧":"")+($?"↑":"↓");return Et`
+  `,ve=at(null);return lt(()=>{const be=document.createElement("div");return be.id="modal-portal-onewire",document.body.appendChild(be),ve.current=be,()=>{O(null,be),document.body.removeChild(be)}},[]),lt(()=>{ve.current&&O(ge,ve.current)}),null}function initGlobalTooltip$2(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,ee=window.innerWidth,vt=dt.getBoundingClientRect();let te=vt.left+vt.width/2-_/2;te=Math.max(8,Math.min(te,ee-_-8));let ne=vt.top-pt-8;ne<8&&(ne=vt.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const _stateLabel=$=>$==="1"?"ON":$==="0"?"OFF":$==="2"?"TG":$??"?",_stateColor=$=>$==="1"?"#16a34a":$==="0"?"#dc2626":$==="2"?"#d97706":"#64748b",_parseAction=$=>$?$.split(",").map(k=>{const[st,ct]=k.trim().split(":");return{pin:st==null?void 0:st.trim(),state:ct==null?void 0:ct.trim()}}).filter(k=>k.pin!==void 0&&k.pin!==""):[],ActionBadge=({isUpper:$,isHumid:k,value:st,unit:ct,str:dt})=>{const _=_parseAction(dt),pt=(k?"💧":"")+($?"↑":"↓");return Et`
     <span style="
       display:inline-flex;align-items:center;gap:4px;
       background:${$?"#fff7ed":"#eff6ff"};border:1.5px solid ${$?"#fdba74":"#93c5fd"};
@@ -3048,9 +3159,9 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
       </span>
       ${_.length===0?Et`<span style="color:#94a3b8;">[—]</span>`:Et`
             <span style="color:#475569;">[</span>
-            ${_.map(({pin:ne,state:Xt},se)=>Et`
+            ${_.map(({pin:ne,state:Xt},le)=>Et`
               <span>
-                <span style="color:#94a3b8;font-weight:400;">id</span><span style="color:#334155;font-weight:700;">${ne}</span><span style="color:#475569;">:</span><span style="color:${_stateColor(Xt)};font-weight:700;">${_stateLabel(Xt)}</span>${se<_.length-1?Et`<span style="color:#94a3b8;">,${" "}</span>`:""}
+                <span style="color:#94a3b8;font-weight:400;">id</span><span style="color:#334155;font-weight:700;">${ne}</span><span style="color:#475569;">:</span><span style="color:${_stateColor(Xt)};font-weight:700;">${_stateLabel(Xt)}</span>${le<_.length-1?Et`<span style="color:#94a3b8;">,${" "}</span>`:""}
               </span>
             `)}
             <span style="color:#475569;">]</span>
@@ -3092,14 +3203,14 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         <b style="color:#d97706;">TG</b> — toggle.
       </p>
     </div>
-  `},TabOneWire=()=>{const[$,k]=ut([]),[st,ct]=ut(null),[dt,_]=ut(!1),[pt,ee]=ut(null),[vt,te]=ut(null),[ne,Xt]=ut("ru"),[se,re]=ut(null),[ce,ge]=ut(!1),[ye,pe]=ut({}),he=$t=>pe(ht=>({...ht,[$t]:!ht[$t]})),be=$t=>typeof $t=="string"?$t.replace(/[^\x20-\x7E\u0400-\u04FF]/g,""):$t;lt(()=>{initGlobalTooltip$2()},[]);const $e=()=>{console.log("Calling initial refresh..."),fetch("/api/onewire/get").then($t=>$t.json()).then($t=>{console.log("Initial data received:",$t),Xt($t.lang||"ru"),k($t.pins||[]),console.log("Initial OneWire state set:",$t.pins),ct(null)}).catch($t=>{console.error("Error in refresh:",$t),ct($t.message),k([])})},ke=async()=>{try{const ht=await(await fetch("/api/temp/get")).json();k(Yt=>Yt.map(oe=>{if(!oe.sensors||oe.typsensor!==1&&oe.typsensr!==1&&oe.typsensor!==2&&oe.typsensr!==2)return oe;const Zt=oe.sensors.map(ie=>{var ae,fe;if(oe.typsensor===1||oe.typsensr===1){const ve=(ae=ht.ds18b20)==null?void 0:ae.find(mt=>mt.addr===ie.s_number);if(ve)return{...ie,t:ve.temp}}else if(oe.typsensor===2||oe.typsensr===2){const ve=(fe=ht.dht22)==null?void 0:fe.find(mt=>mt.id===oe.id);if(ve)return{...ie,t:ve.temp,humidity:ve.humidity}}return ie});return{...oe,sensors:Zt}}))}catch($t){console.error("Error in updateSensorData:",$t)}};lt(()=>{console.log("Setting up initial data and interval..."),$e();const $t=setInterval(ke,1e3);return()=>{clearInterval($t)}},[]);const _e=()=>{_(!1),ee(null),te(null)},Oe=$t=>{k(ht=>ht.map(Yt=>{var oe;if(Yt.id===$t.oneWireId){const Zt=((oe=Yt.sensors)==null?void 0:oe.map(ie=>ie.s_number===$t.s_number?{...ie,...$t}:ie))||[];return{...Yt,sensors:Zt}}return Yt})),_e()},de=$t=>{te($t),_(!0)},xe=$t=>{k(ht=>ht.map(Yt=>Yt.id===$t.id?{...Yt,onoff:$t.onoff}:Yt))},Ee=$t=>{k(ht=>ht.map(Yt=>Yt.id===$t.id?$t:Yt)),_e()};if(st)return Et`<div>Error fetching sensor data: ${st}</div>`;const we=()=>({lang1Wire:ne==="ru"?rulange1Wire:enlange1Wire}),Te=($t,ht)=>{const Yt=we(),Zt=(Yt[$t]&&Yt[$t][ht]?Yt[$t][ht]:"").split(" "),ie=[];for(let ae=0;ae<Zt.length;ae+=15)ie.push(Zt.slice(ae,ae+15).join(" "));return ie.join("<br>")},me=$t=>Et`
+  `},TabOneWire=()=>{const[$,k]=ut([]),[st,ct]=ut(null),[dt,_]=ut(!1),[pt,ee]=ut(null),[vt,te]=ut(null),[ne,Xt]=ut("ru"),[le,re]=ut(null),[ce,ge]=ut(!1),[ve,be]=ut({}),he=$t=>be(ht=>({...ht,[$t]:!ht[$t]})),fe=$t=>typeof $t=="string"?$t.replace(/[^\x20-\x7E\u0400-\u04FF]/g,""):$t;lt(()=>{initGlobalTooltip$2()},[]);const $e=()=>{console.log("Calling initial refresh..."),fetch("/api/onewire/get").then($t=>$t.json()).then($t=>{console.log("Initial data received:",$t),Xt($t.lang||"ru"),k($t.pins||[]),console.log("Initial OneWire state set:",$t.pins),ct(null)}).catch($t=>{console.error("Error in refresh:",$t),ct($t.message),k([])})},ke=async()=>{try{const ht=await(await fetch("/api/temp/get")).json();k(Yt=>Yt.map(oe=>{if(!oe.sensors||oe.typsensor!==1&&oe.typsensr!==1&&oe.typsensor!==2&&oe.typsensr!==2)return oe;const Zt=oe.sensors.map(ie=>{var ae,ue;if(oe.typsensor===1||oe.typsensr===1){const ye=(ae=ht.ds18b20)==null?void 0:ae.find(mt=>mt.addr===ie.s_number);if(ye)return{...ie,t:ye.temp}}else if(oe.typsensor===2||oe.typsensr===2){const ye=(ue=ht.dht22)==null?void 0:ue.find(mt=>mt.id===oe.id);if(ye)return{...ie,t:ye.temp,humidity:ye.humidity}}return ie});return{...oe,sensors:Zt}}))}catch($t){console.error("Error in updateSensorData:",$t)}};lt(()=>{console.log("Setting up initial data and interval..."),$e();const $t=setInterval(ke,1e3);return()=>{clearInterval($t)}},[]);const _e=()=>{_(!1),ee(null),te(null)},Pe=$t=>{k(ht=>ht.map(Yt=>{var oe;if(Yt.id===$t.oneWireId){const Zt=((oe=Yt.sensors)==null?void 0:oe.map(ie=>ie.s_number===$t.s_number?{...ie,...$t}:ie))||[];return{...Yt,sensors:Zt}}return Yt})),_e()},de=$t=>{te($t),_(!0)},xe=$t=>{k(ht=>ht.map(Yt=>Yt.id===$t.id?{...Yt,onoff:$t.onoff}:Yt))},Se=$t=>{k(ht=>ht.map(Yt=>Yt.id===$t.id?$t:Yt)),_e()};if(st)return Et`<div>Error fetching sensor data: ${st}</div>`;const we=()=>({lang1Wire:ne==="ru"?rulange1Wire:enlange1Wire}),Te=($t,ht)=>{const Yt=we(),Zt=(Yt[$t]&&Yt[$t][ht]?Yt[$t][ht]:"").split(" "),ie=[];for(let ae=0;ae<Zt.length;ae+=15)ie.push(Zt.slice(ae,ae+15).join(" "));return ie.join("<br>")},me=$t=>Et`
     <th
       class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
       data-tip=${Te("lang1Wire",$t.tooltipIndex)}
     >
       ${$t.title}
     </th>
-  `,Ce=({device:$t,index:ht})=>{const Yt=!!ye[$t.id],oe=$t.pins||$t.pin,Zt=$t.typsensor||$t.typsensr||0,ie=$t.numdevices||$t.numsens||0,ae=Zt!==0&&ie>0;return Et`
+  `,Ie=({device:$t,index:ht})=>{const Yt=!!ve[$t.id],oe=$t.pins||$t.pin,Zt=$t.typsensor||$t.typsensr||0,ie=$t.numdevices||$t.numsens||0,ae=Zt!==0&&ie>0;return Et`
       <tbody key=${"db-"+$t.id}>
         <tr
           class="${ht%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors ${ae?"cursor-pointer":""}"
@@ -3109,13 +3220,13 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
           <td class="px-6 py-4 text-sm text-slate-800 font-medium">${oe}</td>
           <td class="px-6 py-4 text-sm text-slate-700 font-medium">${["None","DS18B20","DHT22"][Zt]}</td>
           <td class="px-6 py-4 text-sm text-slate-700 font-medium">${ie}</td>
-          <td class="px-6 py-4" onclick=${fe=>fe.stopPropagation()}>
+          <td class="px-6 py-4" onclick=${ue=>ue.stopPropagation()}>
             <${MyPolzunok}
               value=${$t.onoff||0}
-              onChange=${fe=>xe({...$t,onoff:fe})}
+              onChange=${ue=>xe({...$t,onoff:ue})}
             />
           </td>
-          <td class="px-6 py-4" onclick=${fe=>fe.stopPropagation()}>
+          <td class="px-6 py-4" onclick=${ue=>ue.stopPropagation()}>
             <button
               class="text-blue-600 hover:text-blue-800 font-semibold transition-colors whitespace-nowrap"
               onclick=${()=>de($t)}
@@ -3131,26 +3242,26 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         </tr>
 
         ${Yt&&ae?Et`
-          <tr onclick=${fe=>fe.stopPropagation()}>
+          <tr onclick=${ue=>ue.stopPropagation()}>
             <td colspan="6" class="px-4 py-3 bg-gradient-to-r from-cyan-50/80 via-slate-50/60 to-blue-50/80 border-t border-cyan-100/60">
               <div class="w-full">
-                <${Se} d=${$t} />
+                <${Ee} d=${$t} />
               </div>
             </td>
           </tr>
         `:""}
       </tbody>
-    `},Se=({d:$t})=>{const ht=$t.typsensor||$t.typsensr||0,Yt=$t.numdevices||$t.numsens||0;if(ht===0||Yt===0)return Et`
+    `},Ee=({d:$t})=>{const ht=$t.typsensor||$t.typsensr||0,Yt=$t.numdevices||$t.numsens||0;if(ht===0||Yt===0)return Et`
         <div class="px-4 py-2 text-slate-500 font-medium">
           No connected sensors for this OneWire pin.
         </div>
-      `;let oe=$t.sensors||[];const Zt=["bg-cyan-50/60 border-cyan-200/50","bg-slate-100/70 border-slate-200/50"],ie=(ae,fe)=>{const ve=ht===2,mt=be(ae.s_number)||"",le=ue=>{if(ue.stopPropagation(),!mt)return;const Ie=ue.currentTarget,Me=Pe=>{Ie.textContent=Pe?"Copied!":"Error",setTimeout(()=>{Ie.textContent="copy SN"},1500)};if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(mt).then(()=>Me(!0)).catch(()=>Me(!1));return}try{const Pe=document.createElement("textarea");Pe.value=mt,Pe.style.cssText="position:fixed;top:-9999px;left:-9999px;opacity:0;",document.body.appendChild(Pe),Pe.focus(),Pe.select();const Ne=document.execCommand("copy");document.body.removeChild(Pe),Me(Ne)}catch{Me(!1)}};return Et`
+      `;let oe=$t.sensors||[];const Zt=["bg-cyan-50/60 border-cyan-200/50","bg-slate-100/70 border-slate-200/50"],ie=(ae,ue)=>{const ye=ht===2,mt=fe(ae.s_number)||"",se=pe=>{if(pe.stopPropagation(),!mt)return;const Ce=pe.currentTarget,Me=Oe=>{Ce.textContent=Oe?"Copied!":"Error",setTimeout(()=>{Ce.textContent="copy SN"},1500)};if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(mt).then(()=>Me(!0)).catch(()=>Me(!1));return}try{const Oe=document.createElement("textarea");Oe.value=mt,Oe.style.cssText="position:fixed;top:-9999px;left:-9999px;opacity:0;",document.body.appendChild(Oe),Oe.focus(),Oe.select();const Ne=document.execCommand("copy");document.body.removeChild(Oe),Me(Ne)}catch{Me(!1)}};return Et`
         <div class="w-full flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3
-                    rounded-xl border ${Zt[fe%2]}
+                    rounded-xl border ${Zt[ue%2]}
                     backdrop-blur-sm shadow-sm hover:shadow-md transition-all">
 
           <!-- S/N полностью + кнопка копирования -->
-          ${ve?Et`<span class="font-mono text-base font-semibold text-teal-700 shrink-0">DHT22</span>`:Et`
+          ${ye?Et`<span class="font-mono text-base font-semibold text-teal-700 shrink-0">DHT22</span>`:Et`
                 <span class="flex items-center gap-2 shrink-0">
                   <span class="font-mono text-base font-semibold text-slate-500 select-none">SN</span>
                   <span class="font-mono text-base text-slate-700 select-all" title="Serial number">
@@ -3164,7 +3275,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                            hover:from-teal-500 hover:to-cyan-600
                            hover:shadow-cyan-500/40
                            leading-none shrink-0"
-                    onclick=${le}
+                    onclick=${se}
                     title="Copy S/N to clipboard"
                   >copy SN</button>
                 </span>
@@ -3178,7 +3289,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             🌡 ${ae.t??"—"}°C
           </span>
 
-          ${ve&&"humidity"in ae?Et`
+          ${ye&&"humidity"in ae?Et`
             <span class="font-bold text-teal-600 text-base shrink-0"
                   title="Current humidity">
               💧 ${ae.humidity}%
@@ -3203,7 +3314,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             str=${ae.action_lt}
           />
 
-          ${ve&&"upphumid"in ae?Et`
+          ${ye&&"upphumid"in ae?Et`
             <span class="text-slate-300 select-none text-base">|</span>
             <!-- Лимиты влажности -->
             <${ActionBadge}
@@ -3233,10 +3344,10 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
           <a
             href="#"
             class="ml-auto text-blue-600 hover:text-blue-800 font-semibold text-sm uppercase tracking-wide bg-white/70 hover:bg-white/95 px-3 py-1 rounded-lg shadow-sm transition-colors shrink-0"
-            onclick=${ue=>{ue.preventDefault(),ee({...ae,oneWireId:$t.id,sensorType:ht,pins:$t.pins||$t.pin}),_(!0)}}
+            onclick=${pe=>{pe.preventDefault(),ee({...ae,oneWireId:$t.id,sensorType:ht,pins:$t.pins||$t.pin}),_(!0)}}
           >Edit</a>
         </div>
-      `};return oe.length>0&&Object.keys(oe[0]).length>0?Et`<div class="flex flex-col gap-2 w-full">${oe.map((ae,fe)=>ie(ae,fe))}</div>`:Et`
+      `};return oe.length>0&&Object.keys(oe[0]).length>0?Et`<div class="flex flex-col gap-2 w-full">${oe.map((ae,ue)=>ie(ae,ue))}</div>`:Et`
           <div class="px-4 py-4 text-slate-500 font-medium bg-white/50 backdrop-blur-sm rounded-xl border border-white/40 text-center w-full">
             No sensor data available for this OneWire pin.
           </div>
@@ -3265,7 +3376,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                       <${me} title="Actions"           tooltipIndex=${6} />
                     </tr>
                   </thead>
-                  ${$.length>0?$.map(($t,ht)=>Et`<${Ce} device=${$t} index=${ht} key=${$t.id} />`):Et`
+                  ${$.length>0?$.map(($t,ht)=>Et`<${Ie} device=${$t} index=${ht} key=${$t.id} />`):Et`
                         <tbody>
                           <tr>
                             <td colspan="6" class="px-4 py-2">
@@ -3309,7 +3420,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
               oneWireId=${pt.oneWireId}
               pins=${pt.pins}
               onClose=${_e}
-              onUpdate=${Oe}
+              onUpdate=${Pe}
               sensorType=${pt.sensorType}
               closeOnOverlayClick=${!0}
               refresh=${$e}
@@ -3318,12 +3429,12 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             <${ModalOneWire}
               oneWire=${vt}
               onClose=${_e}
-              onUpdate=${Ee}
+              onUpdate=${Se}
               closeOnOverlayClick=${!0}
               refresh=${$e}
             />
           `)}
-  `};function ModalSIM800L({hideModal:$,title:k,selectedGps:st,onSave:ct}){const[dt,_]=ut((st==null?void 0:st.tel)||""),[pt,ee]=ut((st==null?void 0:st.info)||""),[vt,te]=ut((st==null?void 0:st.onoff)===1),[ne,Xt]=ut(!0),se=pe=>/^\+\d{11,20}$/.test(pe),ge=Et`
+  `};function ModalSIM800L({hideModal:$,title:k,selectedGps:st,onSave:ct}){const[dt,_]=ut((st==null?void 0:st.tel)||""),[pt,ee]=ut((st==null?void 0:st.info)||""),[vt,te]=ut((st==null?void 0:st.onoff)===1),[ne,Xt]=ut(!0),le=be=>/^\+\d{11,20}$/.test(be),ge=Et`
     <div
       class="fixed inset-0 z-[999] bg-black bg-opacity-50"
       style="margin-top: 7px;"
@@ -3343,7 +3454,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             </button>
           </div>
 
-          <form onSubmit=${pe=>{if(pe.preventDefault(),!ne)return;const he={tel:dt,info:pt,onoff:vt?1:0};console.log("Сохраняемые данные:",he),fetch("/api/sim800l/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(he)}).then(be=>be.json()).then(be=>{typeof ct=="function"&&ct(he),$()}).catch(be=>{console.error("Error:",be)})}}>
+          <form onSubmit=${be=>{if(be.preventDefault(),!ne)return;const he={tel:dt,info:pt,onoff:vt?1:0};console.log("Сохраняемые данные:",he),fetch("/api/sim800l/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(he)}).then(fe=>fe.json()).then(fe=>{typeof ct=="function"&&ct(he),$()}).catch(fe=>{console.error("Error:",fe)})}}>
             <div class="modal-body">
               <table class="table-auto w-full">
                 <tbody>
@@ -3361,7 +3472,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                       <input
                         type="text"
                         value=${dt}
-                        onInput=${pe=>{const he=pe.target.value;_(he),Xt(se(he))}}
+                        onInput=${be=>{const he=be.target.value;_(he),Xt(le(he))}}
                         class=${`border rounded p-2 w-full ${!ne&&dt!==""?"border-red-500":""}`}
                         placeholder="+XXXXXXXXXXX"
                       />
@@ -3379,7 +3490,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                       <input
                         type="text"
                         value=${pt}
-                        onInput=${pe=>ee(pe.target.value)}
+                        onInput=${be=>ee(be.target.value)}
                         class="border rounded p-2 w-full"
                       />
                     </td>
@@ -3406,7 +3517,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         </div>
       </div>
     </div>
-  `,ye=at(null);return lt(()=>{const pe=document.createElement("div");return pe.id="modal-portal",document.body.appendChild(pe),ye.current=pe,()=>{O(null,pe),document.body.removeChild(pe)}},[]),lt(()=>{ye.current&&O(ge,ye.current)}),null}const ModalSecurity=({modalType:$,page:k,hideModal:st,title:ct,selectedSecurity:dt,onSecurityChange:_,SliderComponent:pt=MyPolzunok})=>{const[ee,vt]=ut((dt==null?void 0:dt.info)||""),[te,ne]=ut((dt==null?void 0:dt.onoff)||0),[Xt,se]=ut((dt==null?void 0:dt.ptype)||0),[re,ce]=ut((dt==null?void 0:dt.send_sms)||""),[ge,ye]=ut((dt==null?void 0:dt.action)||""),[pe,he]=ut([]),[be,$e]=ut({send_sms:null,action:null}),[ke,_e]=ut(null),Oe=/^(None|\d{1,2}:[012])(,\d{1,2}:[012])*$/,de=($t,ht)=>!ht||ht.trim()===""||ht.toLowerCase()==="none"?null:$t==="action"?Oe.test(ht)?null:'Incorrect format. Use "None" or "pin:value" format.':ht.length>100?"Text should not exceed 100 characters":null,xe=($t,ht)=>{const Yt=de($t,ht);switch($e(oe=>({...oe,[$t]:Yt})),$t){case"send_sms":ce(ht);break;case"action":ye(ht);break}};lt(()=>{fetch("/api/monitoring/get").then($t=>$t.json()).then($t=>{Array.isArray($t)?he($t.filter(ht=>ht.topin===2)):he([])}).catch($t=>{console.error("Error fetching pin config:",$t),he([])})},[]);const Ee=$t=>{if($t.preventDefault(),Object.values(be).some(Yt=>Yt!==null)){_e("Please correct the errors before submitting.");return}const ht={...dt,info:ee,send_sms:re||"NO",action:ge||"None",onoff:te,ptype:Xt};fetch("/api/monitoring/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ht)}).then(Yt=>{if(!Yt.ok)throw new Error("Network response was not ok");return Yt.json()}).then(Yt=>{if(Yt.error)throw new Error(Yt.error);_(ht),st()}).catch(Yt=>{console.error("Error:",Yt),_e("Failed to save changes. Please try again.")})},we=()=>{se(0),ce(""),ye(""),vt(""),ne(0),$e({send_sms:null,action:null})},Ce=Et`
+  `,ve=at(null);return lt(()=>{const be=document.createElement("div");return be.id="modal-portal",document.body.appendChild(be),ve.current=be,()=>{O(null,be),document.body.removeChild(be)}},[]),lt(()=>{ve.current&&O(ge,ve.current)}),null}const ModalSecurity=({modalType:$,page:k,hideModal:st,title:ct,selectedSecurity:dt,onSecurityChange:_,SliderComponent:pt=MyPolzunok})=>{const[ee,vt]=ut((dt==null?void 0:dt.info)||""),[te,ne]=ut((dt==null?void 0:dt.onoff)||0),[Xt,le]=ut((dt==null?void 0:dt.ptype)||0),[re,ce]=ut((dt==null?void 0:dt.send_sms)||""),[ge,ve]=ut((dt==null?void 0:dt.action)||""),[be,he]=ut([]),[fe,$e]=ut({send_sms:null,action:null}),[ke,_e]=ut(null),Pe=/^(None|\d{1,2}:[012])(,\d{1,2}:[012])*$/,de=($t,ht)=>!ht||ht.trim()===""||ht.toLowerCase()==="none"?null:$t==="action"?Pe.test(ht)?null:'Incorrect format. Use "None" or "pin:value" format.':ht.length>100?"Text should not exceed 100 characters":null,xe=($t,ht)=>{const Yt=de($t,ht);switch($e(oe=>({...oe,[$t]:Yt})),$t){case"send_sms":ce(ht);break;case"action":ve(ht);break}};lt(()=>{fetch("/api/monitoring/get").then($t=>$t.json()).then($t=>{Array.isArray($t)?he($t.filter(ht=>ht.topin===2)):he([])}).catch($t=>{console.error("Error fetching pin config:",$t),he([])})},[]);const Se=$t=>{if($t.preventDefault(),Object.values(fe).some(Yt=>Yt!==null)){_e("Please correct the errors before submitting.");return}const ht={...dt,info:ee,send_sms:re||"NO",action:ge||"None",onoff:te,ptype:Xt};fetch("/api/monitoring/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ht)}).then(Yt=>{if(!Yt.ok)throw new Error("Network response was not ok");return Yt.json()}).then(Yt=>{if(Yt.error)throw new Error(Yt.error);_(ht),st()}).catch(Yt=>{console.error("Error:",Yt),_e("Failed to save changes. Please try again.")})},we=()=>{le(0),ce(""),ve(""),vt(""),ne(0),$e({send_sms:null,action:null})},Ie=Et`
     <div
       class="fixed inset-0 z-[999] bg-black bg-opacity-50"
       style="margin-top: 7px;"
@@ -3426,7 +3537,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             </button>
           </div>
           ${k==="TabSecurity"&&$==="connection"?Et`
-    <form onSubmit=${Ee}>
+    <form onSubmit=${Se}>
       <div class="modal-body">
         <table class="table-auto w-full">
           <tbody>
@@ -3443,12 +3554,12 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
               <td class="p-2">
                 <select
                   name="setrpins"
-                  value=${pe.some($t=>$t.pins===(dt==null?void 0:dt.setrpins))?dt==null?void 0:dt.setrpins:""}
+                  value=${be.some($t=>$t.pins===(dt==null?void 0:dt.setrpins))?dt==null?void 0:dt.setrpins:""}
                   onChange=${$t=>_({...dt,setrpins:$t.target.value})}
                   class="border rounded p-2 w-full"
                 >
                   <option value="">Select a connection</option>
-                  ${pe.map($t=>Et`
+                  ${be.map($t=>Et`
                       <option value=${$t.pins}>
                         ${$t.pins} (ID: ${$t.id})
                       </option>
@@ -3469,7 +3580,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
       </div>
     </form>
   `:Et`
-    <form onSubmit=${Ee}>
+    <form onSubmit=${Se}>
       <div class="modal-body">
         <table class="table-auto w-full">
           <tbody>
@@ -3487,7 +3598,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                 <select
                   name="ptype"
                   value=${Xt}
-                  onChange=${$t=>se(parseInt($t.target.value))}
+                  onChange=${$t=>le(parseInt($t.target.value))}
                   class="border rounded p-2 w-full"
                 >
                   <option value="0">PIR</option>
@@ -3505,10 +3616,10 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                   name="action"
                   value=${ge}
                   onInput=${$t=>xe("action",$t.target.value)}
-                  class="border rounded p-2 w-full ${be.action?"border-red-500":""}"
+                  class="border rounded p-2 w-full ${fe.action?"border-red-500":""}"
                   placeholder="None"
                 />
-                ${be.action&&Et`<p class="text-red-500 text-sm">${be.action}</p>`}
+                ${fe.action&&Et`<p class="text-red-500 text-sm">${fe.action}</p>`}
               </td>
             </tr>
             <tr class="bg-white">
@@ -3518,12 +3629,12 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                   name="send_sms"
                   value=${re}
                   onchange=${$t=>xe("send_sms",$t.target.value)}
-                  class="border rounded p-2 w-full ${be.send_sms?"border-red-500":""}"
+                  class="border rounded p-2 w-full ${fe.send_sms?"border-red-500":""}"
                 >
                   <option value="NO">NO</option>
                   <option value="YES">YES</option>
                 </select>
-                ${be.send_sms&&Et` <p class="text-red-500 text-sm">${be.send_sms}</p> `}
+                ${fe.send_sms&&Et` <p class="text-red-500 text-sm">${fe.send_sms}</p> `}
               </td>
             </tr>
             <tr class="bg-white">
@@ -3568,14 +3679,14 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         </div>
       </div>
     </div>
-  `,Se=at(null);return lt(()=>{const $t=document.createElement("div");return $t.id="modal-portal",document.body.appendChild($t),Se.current=$t,()=>{O(null,$t),document.body.removeChild($t)}},[]),lt(()=>{Se.current&&O(Ce,Se.current)}),null};function initGlobalTooltip$1(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,ee=window.innerWidth,vt=dt.getBoundingClientRect();let te=vt.left+vt.width/2-_/2;te=Math.max(8,Math.min(te,ee-_-8));let ne=vt.top-pt-8;ne<8&&(ne=vt.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const TabSecurity=()=>{const[$,k]=ut({lang:"ru",sim800l:0,onoff:0,tel:"",info:""}),[st,ct]=ut(!1),[dt,_]=ut(!1),[pt,ee]=ut([]),[vt,te]=ut(!1),[ne,Xt]=ut("ru"),[se,re]=ut(!1),[ce,ge]=ut(""),[ye,pe]=ut(null),[he,be]=ut(!1),[$e,ke]=ut("connected"),[_e,Oe]=ut(0);lt(()=>{initGlobalTooltip$1()},[]);const de=()=>ne==="ru"?ruLangsecurity:enLangsecurity,xe=()=>ne==="ru"?ruLangsecuritypins:enLangsecuritypins,Ee=(fe,ve)=>{const le=(fe&&fe[ve]?fe[ve]:"").split(" "),ue=[];for(let Ie=0;Ie<le.length;Ie+=15)ue.push(le.slice(Ie,Ie+15).join(" "));return ue.join("<br>")},we=({title:fe,langArr:ve,tooltipIndex:mt})=>Et`
+  `,Ee=at(null);return lt(()=>{const $t=document.createElement("div");return $t.id="modal-portal",document.body.appendChild($t),Ee.current=$t,()=>{O(null,$t),document.body.removeChild($t)}},[]),lt(()=>{Ee.current&&O(Ie,Ee.current)}),null};function initGlobalTooltip$1(){if(document.__tipInited)return;document.__tipInited=!0;const $=document.createElement("div");$.id="__global_tip",Object.assign($.style,{position:"fixed",zIndex:"99999",maxWidth:"280px",background:"#1a2332",color:"#e8f4f8",padding:"8px 12px",borderRadius:"8px",border:"1px solid rgba(0,188,188,0.35)",fontSize:"12px",lineHeight:"1.6",boxShadow:"0 6px 20px rgba(0,0,0,0.45)",pointerEvents:"none",whiteSpace:"normal",display:"none",transition:"opacity 0.12s ease",opacity:"0"}),document.body.appendChild($);let k=null;function st(dt){clearTimeout(k),$.innerHTML=dt.dataset.tip,$.style.display="block",$.style.opacity="0",$.style.left="0px",$.style.top="0px",requestAnimationFrame(()=>{const _=$.offsetWidth,pt=$.offsetHeight,ee=window.innerWidth,vt=dt.getBoundingClientRect();let te=vt.left+vt.width/2-_/2;te=Math.max(8,Math.min(te,ee-_-8));let ne=vt.top-pt-8;ne<8&&(ne=vt.bottom+8),$.style.left=te+"px",$.style.top=ne+"px",$.style.opacity="1"})}function ct(){k=setTimeout(()=>{$.style.opacity="0",setTimeout(()=>{$.style.display="none"},120)},80)}document.addEventListener("mouseover",dt=>{const _=dt.target.closest("[data-tip]");_&&st(_)}),document.addEventListener("mouseout",dt=>{dt.target.closest("[data-tip]")&&ct()})}const TabSecurity=()=>{const[$,k]=ut({lang:"ru",sim800l:0,onoff:0,tel:"",info:""}),[st,ct]=ut(!1),[dt,_]=ut(!1),[pt,ee]=ut([]),[vt,te]=ut(!1),[ne,Xt]=ut("ru"),[le,re]=ut(!1),[ce,ge]=ut(""),[ve,be]=ut(null),[he,fe]=ut(!1),[$e,ke]=ut("connected"),[_e,Pe]=ut(0);lt(()=>{initGlobalTooltip$1()},[]);const de=()=>ne==="ru"?ruLangsecurity:enLangsecurity,xe=()=>ne==="ru"?ruLangsecuritypins:enLangsecuritypins,Se=(ue,ye)=>{const se=(ue&&ue[ye]?ue[ye]:"").split(" "),pe=[];for(let Ce=0;Ce<se.length;Ce+=15)pe.push(se.slice(Ce,Ce+15).join(" "));return pe.join("<br>")},we=({title:ue,langArr:ye,tooltipIndex:mt})=>Et`
     <th
       class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
-      data-tip=${Ee(ve,mt)}
+      data-tip=${Se(ye,mt)}
     >
-      ${fe}
+      ${ue}
     </th>
-  `,Te=(fe,ve)=>{let mt;return(...le)=>{clearTimeout(mt),mt=setTimeout(()=>fe(...le),ve)}},me=async(fe,ve={},mt=3)=>{try{const le=await fetch(fe,ve);if(!le.ok)throw new Error("Network response was not ok");return ke("connected"),le}catch(le){if(ke("error"),mt>0)return await new Promise(ue=>setTimeout(ue,1e3)),me(fe,ve,mt-1);throw ke("disconnected"),le}},Ce={ru:Et`
+  `,Te=(ue,ye)=>{let mt;return(...se)=>{clearTimeout(mt),mt=setTimeout(()=>ue(...se),ye)}},me=async(ue,ye={},mt=3)=>{try{const se=await fetch(ue,ye);if(!se.ok)throw new Error("Network response was not ok");return ke("connected"),se}catch(se){if(ke("error"),mt>0)return await new Promise(pe=>setTimeout(pe,1e3)),me(ue,ye,mt-1);throw ke("disconnected"),se}},Ie={ru:Et`
       <div class="mytext space-y-6">
         <div>
           <h2 class="text-xl font-bold mb-4 text-blue-600">Модуль SIM800L📱</h2>
@@ -3643,7 +3754,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
           </div>
         </div>
       </div>
-    `},Se={ru:Et`
+    `},Ee={ru:Et`
       <div class="mytext space-y-6">
         <div>
           <h2 class="text-xl font-bold mb-4 text-blue-600">Подключение датчиков 🔌</h2>
@@ -3741,7 +3852,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
           </div>
         </div>
       </div>
-    `},$t=async()=>{if(!(he||Date.now()-_e<500))try{const ve=await(await me("/api/sim800l/get")).json();k(ve)}catch(fe){console.error("Error fetching SIM800L data:",fe)}},ht=async()=>{if(!(he||Date.now()-_e<500))try{const ve=await(await me("/api/monitoring/get")).json();ee(ve.pins||[])}catch(fe){console.error("Error fetching monitoring data:",fe)}};lt(()=>{fetch("/api/monitoring/get").then(ve=>ve.json()).then(ve=>Xt(ve.lang||"ru")).catch(ve=>console.error("Error fetching initial language:",ve));const fe=setInterval(()=>{$t(),ht()},500);return()=>clearInterval(fe)},[]);const Yt=Te(async fe=>{be(!0);try{await me("/api/sim800l/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(fe)}),k(fe),Oe(Date.now())}catch(ve){console.error("Error updating SIM800L:",ve)}finally{be(!1)}},300),oe=async fe=>{try{const ve=await fetch("/api/monitoring/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(fe)});if(!ve.ok)throw new Error(`HTTP error! status: ${ve.status}`);ee(mt=>mt.map(le=>le.id===fe.id?fe:le)),await ht(),re(!1)}catch(ve){console.error("Error updating security:",ve),alert("Failed to save changes. Please try again."),await ht()}},Zt=fe=>{ee(ve=>ve.map(mt=>mt.id===fe.id?{...mt,...fe}:mt)),fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:fe.id,onoff:fe.onoff})}).then(ve=>ve.json()).then(ve=>console.log("Response from /api/onoff/set:",ve)).catch(ve=>console.error("Error calling /api/onoff/set:",ve)),ae()},ie=(fe,ve)=>{ge(fe),pe(ve),re(!0)},ae=()=>{re(!1),ge(""),pe(null)};return Et`
+    `},$t=async()=>{if(!(he||Date.now()-_e<500))try{const ye=await(await me("/api/sim800l/get")).json();k(ye)}catch(ue){console.error("Error fetching SIM800L data:",ue)}},ht=async()=>{if(!(he||Date.now()-_e<500))try{const ye=await(await me("/api/monitoring/get")).json();ee(ye.pins||[])}catch(ue){console.error("Error fetching monitoring data:",ue)}};lt(()=>{fetch("/api/monitoring/get").then(ye=>ye.json()).then(ye=>Xt(ye.lang||"ru")).catch(ye=>console.error("Error fetching initial language:",ye));const ue=setInterval(()=>{$t(),ht()},500);return()=>clearInterval(ue)},[]);const Yt=Te(async ue=>{fe(!0);try{await me("/api/sim800l/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ue)}),k(ue),Pe(Date.now())}catch(ye){console.error("Error updating SIM800L:",ye)}finally{fe(!1)}},300),oe=async ue=>{try{const ye=await fetch("/api/monitoring/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ue)});if(!ye.ok)throw new Error(`HTTP error! status: ${ye.status}`);ee(mt=>mt.map(se=>se.id===ue.id?ue:se)),await ht(),re(!1)}catch(ye){console.error("Error updating security:",ye),alert("Failed to save changes. Please try again."),await ht()}},Zt=ue=>{ee(ye=>ye.map(mt=>mt.id===ue.id?{...mt,...ue}:mt)),fetch("/api/onoff/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ue.id,onoff:ue.onoff})}).then(ye=>ye.json()).then(ye=>console.log("Response from /api/onoff/set:",ye)).catch(ye=>console.error("Error calling /api/onoff/set:",ye)),ae()},ie=(ue,ye)=>{ge(ue),be(ye),re(!0)},ae=()=>{re(!1),ge(""),be(null)};return Et`
     <div class="flex flex-col items-center w-full p-4">
       ${$e!=="connected"&&Et`
         <div class=${`w-full p-2 mb-4 text-white text-center rounded-xl shadow-md backdrop-blur-md 
@@ -3786,7 +3897,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                   <td class="px-6 py-4 text-sm text-slate-800 font-medium">
                     <${MyPolzunok}
                       value=${$.onoff}
-                      onChange=${fe=>Yt({...$,onoff:fe})}
+                      onChange=${ue=>Yt({...$,onoff:ue})}
                     />
                   </td>
                   <td class="px-6 py-4 text-sm text-slate-800 font-medium">
@@ -3812,7 +3923,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
           </div>
           ${dt&&Et`
             <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
-              ${Ce[ne]}
+              ${Ie[ne]}
             </div>
           `}
         </div>
@@ -3838,25 +3949,25 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                 </tr>
               </thead>
               <tbody class="divide-y divide-white/40">
-                ${pt.length>0?pt.map((fe,ve)=>Et`
-                      <tr class="${ve%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
-                        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${fe.id}</td>
-                        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${fe.pins}</td>
+                ${pt.length>0?pt.map((ue,ye)=>Et`
+                      <tr class="${ye%2===1?"bg-white/80":"bg-sky-200/40"} hover:bg-slate-200/80 transition-colors">
+                        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${ue.id}</td>
+                        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${ue.pins}</td>
                         <td class="px-6 py-4 text-sm text-slate-800 font-medium">
-                          ${["PIR","Normal open","Normal close"][fe.ptype]}
+                          ${["PIR","Normal open","Normal close"][ue.ptype]}
                         </td>
-                        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${fe.action}</td>
-                        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${fe.send_sms}</td>
-                        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${fe.info}</td>
+                        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${ue.action}</td>
+                        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${ue.send_sms}</td>
+                        <td class="px-6 py-4 text-sm text-slate-800 font-medium">${ue.info}</td>
                         <td class="px-6 py-4 text-sm text-slate-800 font-medium">
                           <${MyPolzunok}
-                            value=${fe.onoff}
-                            onChange=${mt=>Zt({...fe,onoff:mt})}
+                            value=${ue.onoff}
+                            onChange=${mt=>Zt({...ue,onoff:mt})}
                           />
                         </td>
                         <td class="px-6 py-4 text-sm text-slate-800 font-medium">
                           <button
-                            onClick=${()=>ie("edit",fe)}
+                            onClick=${()=>ie("edit",ue)}
                             class="text-teal-600 hover:text-cyan-600 font-bold transition-colors"
                           >
                             Edit
@@ -3884,7 +3995,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
           </div>
           ${vt&&Et`
             <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
-              ${Se[ne]}
+              ${Ee[ne]}
             </div>
           `}
         </div>
@@ -3898,13 +4009,13 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
           />
         `}
 
-        ${se&&Et`
+        ${le&&Et`
           <${ModalSecurity}
             modalType=${ce}
             page="TabSecurity"
             hideModal=${()=>re(!1)}
             title="Edit Security Settings"
-            selectedSecurity=${ye}
+            selectedSecurity=${ve}
             onSecurityChange=${oe}
           />
         `}
@@ -3922,7 +4033,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         ${dt}
       </td>
     </tr>
-  `};function Settings({}){const[$,k]=ut({}),[st,ct]=ut(null),[dt,_]=ut(null),[pt,ee]=ut({}),vt=at(null),[te,ne]=ut(null),[Xt,se]=ut(null),[re,ce]=ut(!1),[ge,ye]=ut(!1),[pe,he]=ut(!1),[be,$e]=ut(!1),[ke,_e]=ut(!1),[Oe,de]=ut(!0);lt(()=>{if(initGlobalTooltip(),!document.getElementById("__network_toggle_style")){const mt=document.createElement("style");mt.id="__network_toggle_style",mt.textContent=".network-toggle span { display: none !important; }",document.head.appendChild(mt)}},[]);const xe=mt=>getTip(mt,$.lang||"ru",rulangsettings,enlangsettings),Ee=[{value:"en",label:"English"},{value:"ru",label:"Russian"}],we=[[-12,"(GMT -12:00) Eniwetok, Kwajalein"],[-11,"(GMT -11:00) Midway Island, Samoa"],[-10,"(GMT -10:00) Hawaii"],[-9,"(GMT -9:00) Alaska"],[-8,"(GMT -8:00) Pacific Time (US & Canada)"],[-7,"(GMT -7:00) Mountain Time (US & Canada)"],[-6,"(GMT -6:00) Central Time (US & Canada), Mexico City"],[-5,"(GMT -5:00) Eastern Time (US & Canada), Bogota, Lima"],[-4,"(GMT -4:00) Atlantic Time (Canada), Caracas, La Paz"],[-3.3,"(GMT -3:30) Newfoundland"],[-3,"(GMT -3:00) Brazil, Buenos Aires, Georgetown"],[-2,"(GMT -2:00) Mid-Atlantic"],[-1,"(GMT -1:00) Azores, Cape Verde Islands"],[0,"(GMT +0:00) Western Europe Time, London, Lisbon, Casablanca"],[1,"(GMT +1:00) Brussels, Copenhagen, Madrid, Paris"],[2,"(GMT +2:00) Kaliningrad, South Africa"],[3,"(GMT +3:00) Moscow, St. Petersburg, Baghdad, Riyadh"],[3.3,"(GMT +3:30) Tehran"],[4,"(GMT +4:00) Abu Dhabi, Muscat, Baku, Tbilisi"],[4.3,"(GMT +4:30) Kabul"],[5,"(GMT +5:00) Ekaterinburg, Islamabad, Karachi, Tashkent"],[5.3,"(GMT +5:30) Bombay, Calcutta, Madras, New Delhi"],[5.45,"(GMT +5:45) Kathmandu"],[6,"(GMT +6:00) Almaty, Dhaka, Colombo"],[7,"(GMT +7:00) Bangkok, Hanoi, Jakarta"],[8,"(GMT +8:00) Beijing, Perth, Singapore, Hong Kong"],[9,"(GMT +9:00) Tokyo, Seoul, Osaka, Sapporo, Yakutsk"],[9.3,"(GMT +9:30) Adelaide, Darwin"],[10,"(GMT +10:00) Eastern Australia, Guam, Vladivostok"],[11,"(GMT +11:00) Magadan, Solomon Islands, New Caledonia"],[12,"(GMT +12:00) Auckland, Wellington, Fiji, Kamchatka"]],Te=/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/,me=/^(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)$/,Ce=mt=>{if(!mt)return{date:"",time:""};const le=mt.match(/d:(\d{1,2}\.\d{1,2}\.\d{2})/),ue=mt.match(/t:(\d{2}:\d{2}:\d{2})/);return{date:le?le[1]:"",time:ue?ue[1]:""}},Se=mt=>{if(!/^\d{1,2}\.\d{1,2}\.\d{2}$/.test(mt))return!1;const[ue,Ie,Me]=mt.split(".").map(Number);if(Ie<1||Ie>12||ue<1||ue>31||Me<0||Me>99)return!1;const Pe=new Date().getFullYear()%100;if(Me>Pe+5)return!1;const Ne=new Date(2e3+Me,Ie,0).getDate();return!(ue>Ne)},$t=mt=>/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/.test(mt),ht=(mt,le)=>{const ue=Object.values(le).some(Me=>Me!==null),Ie=mt.usehttps?mt.domain&&mt.domain.trim()!=="":!0;return!(ue||!Ie)},Yt=(mt,le)=>{ne({message:mt,type:le}),setTimeout(()=>{ne(null)},3e3)},oe=mt=>{se(mt),setTimeout(()=>{se(null)},3e3)},Zt=(mt,le)=>{let ue=null;if(!$.usehttps&&["domain","tls_key","tls_cert","tls_ca","telegram_token"].includes(mt))return null;if(!le&&["ip_addr","gateway","mqtt_hst","sb_mask","offdate","offtime","domain"].includes(mt))return"Поле не может быть пустым";switch(mt){case"ip_addr":case"gateway":case"mqtt_hst":Te.test(le)||(ue="Неверный IP-адрес");break;case"sb_mask":me.test(le)||(ue="Неверная маска подсети");break;case"offdate":Se(le)||(ue="Неверный формат даты (д.м.гг)");break;case"offtime":$t(le)||(ue="Неверный формат времени (чч:мм:сс)");break;case"domain":le.length>50?ue="Домен не должен превышать 50 символов":le.match(/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/)||(ue="Неверный формат домена");break;case"tls_key":le&&le.trim()!==""&&(le.length>512?ue="Private Key не должен превышать 512 символов":(!le.includes("BEGIN EC PRIVATE KEY")||!le.includes("END EC PRIVATE KEY"))&&(ue="Неверный формат Private Key"));break;case"tls_cert":le&&le.trim()!==""&&(le.length>1024?ue="Public Key не должен превышать 1024 символов":(!le.includes("BEGIN CERTIFICATE")||!le.includes("END CERTIFICATE"))&&(ue="Неверный формат Public Key"));break;case"tls_ca":le&&le.trim()!==""&&(le.length>1024?ue="Secret Key не должен превышать 1024 символов":(!le.includes("BEGIN CERTIFICATE")||!le.includes("END CERTIFICATE"))&&(ue="Неверный формат Secret Key"));break}return ue},ie=mt=>{mt.preventDefault();const le=new FormData(vt.current);let ue={...$};for(const[Ie,Me]of le.entries())["lon_de","lat_de","timezone","mqtt_prt"].includes(Ie)?ue[Ie]=Me===""||Me===null?0:Number(Me):ue[Ie]=Me;ue.usehttps||["tls_ca","tls_key","tls_cert","telegram_token","domain"].forEach(Ie=>delete ue[Ie]),ue.offdate&&ue.offtime?ue.offldt=`d:${ue.offdate} t:${ue.offtime}`:delete ue.offldt,["lon_de","lat_de","timezone","mqtt_prt"].forEach(Ie=>{(ue[Ie]===null||ue[Ie]==="")&&(ue[Ie]=0)}),ue.onsunrise=ue.onsunrise?1:0,ue.onsunset=ue.onsunset?1:0,ue.check_ip=ue.check_ip?1:0,ue.check_mqtt=ue.check_mqtt?1:0,ue.usehttps=ue.usehttps?1:0,fetch("/api/mysett/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ue)}).then(Ie=>{if(!Ie.ok)throw new Error("Ошибка сети");return Ie.json()}).then(Ie=>{_("success"),ct(Ie),Yt("Данные успешно сохранены","success"),oe("Данные успешно сохранены")}).catch(Ie=>{_("error"),ct(Ie),Yt("Ошибка при сохранении данных","error"),oe("Ошибка при сохранении данных")})},ae=(mt,le)=>{let ue=null;mt==="offdate"?ue=Se(le)?null:"Неверный формат даты (д.м.гг)":mt==="offtime"?ue=$t(le)?null:"Неверный формат времени (чч:мм:сс)":ue=Zt(mt,le),ee(Me=>{const Pe={...Me,[mt]:ue},Ne=["tls_key","tls_cert","tls_ca"],De=Object.keys(Pe).filter(Le=>!Ne.includes(Le)&&Le!=="telegram_token").some(Le=>Pe[Le]!==null);return ce(De||!$.usehttps&&Ne.some(Le=>$[Le])),Pe});let Ie=le;["lon_de","lat_de","timezone","mqtt_prt"].includes(mt)?Ie=le===""||le===null?0:Number(le):["onsunrise","onsunset","check_ip","check_mqtt","usehttps"].includes(mt)&&(Ie=le?1:0),k(Me=>({...Me,[mt]:Ie})),mt==="usehttps"&&(ee({}),ce(!1))},fe=()=>fetch("/api/mysett/get").then(mt=>mt.json()).then(mt=>{if(mt.offldt){const{date:le,time:ue}=Ce(mt.offldt);mt.offdate=le,mt.offtime=ue}return k(mt),mt}).catch(mt=>{console.error("Error fetching settings:",mt),Yt("Ошибка при загрузке настроек","error")});if(lt(()=>{fe().then(mt=>{mt!=null&&mt.tls_key&&ye(!0),mt!=null&&mt.tls_cert&&he(!0),mt!=null&&mt.tls_ca&&$e(!0),mt!=null&&mt.telegram_token&&_e(!0),de(!1)})},[]),lt(()=>{ce(!ht($,pt))},[$,pt]),Oe)return Et`<div>Loading...</div>`;if(!$)return"";const ve=(mt="")=>Et`
+  `};function Settings({}){const[$,k]=ut({}),[st,ct]=ut(null),[dt,_]=ut(null),[pt,ee]=ut({}),vt=at(null),[te,ne]=ut(null),[Xt,le]=ut(null),[re,ce]=ut(!1),[ge,ve]=ut(!1),[be,he]=ut(!1),[fe,$e]=ut(!1),[ke,_e]=ut(!1),[Pe,de]=ut(!0);lt(()=>{if(initGlobalTooltip(),!document.getElementById("__network_toggle_style")){const mt=document.createElement("style");mt.id="__network_toggle_style",mt.textContent=".network-toggle span { display: none !important; }",document.head.appendChild(mt)}},[]);const xe=mt=>getTip(mt,$.lang||"ru",rulangsettings,enlangsettings),Se=[{value:"en",label:"English"},{value:"ru",label:"Russian"}],we=[[-12,"(GMT -12:00) Eniwetok, Kwajalein"],[-11,"(GMT -11:00) Midway Island, Samoa"],[-10,"(GMT -10:00) Hawaii"],[-9,"(GMT -9:00) Alaska"],[-8,"(GMT -8:00) Pacific Time (US & Canada)"],[-7,"(GMT -7:00) Mountain Time (US & Canada)"],[-6,"(GMT -6:00) Central Time (US & Canada), Mexico City"],[-5,"(GMT -5:00) Eastern Time (US & Canada), Bogota, Lima"],[-4,"(GMT -4:00) Atlantic Time (Canada), Caracas, La Paz"],[-3.3,"(GMT -3:30) Newfoundland"],[-3,"(GMT -3:00) Brazil, Buenos Aires, Georgetown"],[-2,"(GMT -2:00) Mid-Atlantic"],[-1,"(GMT -1:00) Azores, Cape Verde Islands"],[0,"(GMT +0:00) Western Europe Time, London, Lisbon, Casablanca"],[1,"(GMT +1:00) Brussels, Copenhagen, Madrid, Paris"],[2,"(GMT +2:00) Kaliningrad, South Africa"],[3,"(GMT +3:00) Moscow, St. Petersburg, Baghdad, Riyadh"],[3.3,"(GMT +3:30) Tehran"],[4,"(GMT +4:00) Abu Dhabi, Muscat, Baku, Tbilisi"],[4.3,"(GMT +4:30) Kabul"],[5,"(GMT +5:00) Ekaterinburg, Islamabad, Karachi, Tashkent"],[5.3,"(GMT +5:30) Bombay, Calcutta, Madras, New Delhi"],[5.45,"(GMT +5:45) Kathmandu"],[6,"(GMT +6:00) Almaty, Dhaka, Colombo"],[7,"(GMT +7:00) Bangkok, Hanoi, Jakarta"],[8,"(GMT +8:00) Beijing, Perth, Singapore, Hong Kong"],[9,"(GMT +9:00) Tokyo, Seoul, Osaka, Sapporo, Yakutsk"],[9.3,"(GMT +9:30) Adelaide, Darwin"],[10,"(GMT +10:00) Eastern Australia, Guam, Vladivostok"],[11,"(GMT +11:00) Magadan, Solomon Islands, New Caledonia"],[12,"(GMT +12:00) Auckland, Wellington, Fiji, Kamchatka"]],Te=/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/,me=/^(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)\.(255|254|252|248|240|224|192|128|0)$/,Ie=mt=>{if(!mt)return{date:"",time:""};const se=mt.match(/d:(\d{1,2}\.\d{1,2}\.\d{2})/),pe=mt.match(/t:(\d{2}:\d{2}:\d{2})/);return{date:se?se[1]:"",time:pe?pe[1]:""}},Ee=mt=>{if(!/^\d{1,2}\.\d{1,2}\.\d{2}$/.test(mt))return!1;const[pe,Ce,Me]=mt.split(".").map(Number);if(Ce<1||Ce>12||pe<1||pe>31||Me<0||Me>99)return!1;const Oe=new Date().getFullYear()%100;if(Me>Oe+5)return!1;const Ne=new Date(2e3+Me,Ce,0).getDate();return!(pe>Ne)},$t=mt=>/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/.test(mt),ht=(mt,se)=>{const pe=Object.values(se).some(Me=>Me!==null),Ce=mt.usehttps?mt.domain&&mt.domain.trim()!=="":!0;return!(pe||!Ce)},Yt=(mt,se)=>{ne({message:mt,type:se}),setTimeout(()=>{ne(null)},3e3)},oe=mt=>{le(mt),setTimeout(()=>{le(null)},3e3)},Zt=(mt,se)=>{let pe=null;if(!$.usehttps&&["domain","tls_key","tls_cert","tls_ca","telegram_token"].includes(mt))return null;if(!se&&["ip_addr","gateway","mqtt_hst","sb_mask","offdate","offtime","domain"].includes(mt))return"Поле не может быть пустым";switch(mt){case"ip_addr":case"gateway":case"mqtt_hst":Te.test(se)||(pe="Неверный IP-адрес");break;case"sb_mask":me.test(se)||(pe="Неверная маска подсети");break;case"offdate":Ee(se)||(pe="Неверный формат даты (д.м.гг)");break;case"offtime":$t(se)||(pe="Неверный формат времени (чч:мм:сс)");break;case"domain":se.length>50?pe="Домен не должен превышать 50 символов":se.match(/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/)||(pe="Неверный формат домена");break;case"tls_key":se&&se.trim()!==""&&(se.length>512?pe="Private Key не должен превышать 512 символов":(!se.includes("BEGIN EC PRIVATE KEY")||!se.includes("END EC PRIVATE KEY"))&&(pe="Неверный формат Private Key"));break;case"tls_cert":se&&se.trim()!==""&&(se.length>1024?pe="Public Key не должен превышать 1024 символов":(!se.includes("BEGIN CERTIFICATE")||!se.includes("END CERTIFICATE"))&&(pe="Неверный формат Public Key"));break;case"tls_ca":se&&se.trim()!==""&&(se.length>1024?pe="Secret Key не должен превышать 1024 символов":(!se.includes("BEGIN CERTIFICATE")||!se.includes("END CERTIFICATE"))&&(pe="Неверный формат Secret Key"));break}return pe},ie=mt=>{mt.preventDefault();const se=new FormData(vt.current);let pe={...$};for(const[Ce,Me]of se.entries())["lon_de","lat_de","timezone","mqtt_prt"].includes(Ce)?pe[Ce]=Me===""||Me===null?0:Number(Me):pe[Ce]=Me;pe.usehttps||["tls_ca","tls_key","tls_cert","telegram_token","domain"].forEach(Ce=>delete pe[Ce]),pe.offdate&&pe.offtime?pe.offldt=`d:${pe.offdate} t:${pe.offtime}`:delete pe.offldt,["lon_de","lat_de","timezone","mqtt_prt"].forEach(Ce=>{(pe[Ce]===null||pe[Ce]==="")&&(pe[Ce]=0)}),pe.onsunrise=pe.onsunrise?1:0,pe.onsunset=pe.onsunset?1:0,pe.check_ip=pe.check_ip?1:0,pe.check_mqtt=pe.check_mqtt?1:0,pe.usehttps=pe.usehttps?1:0,fetch("/api/mysett/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(pe)}).then(Ce=>{if(!Ce.ok)throw new Error("Ошибка сети");return Ce.json()}).then(Ce=>{_("success"),ct(Ce),Yt("Данные успешно сохранены","success"),oe("Данные успешно сохранены")}).catch(Ce=>{_("error"),ct(Ce),Yt("Ошибка при сохранении данных","error"),oe("Ошибка при сохранении данных")})},ae=(mt,se)=>{let pe=null;mt==="offdate"?pe=Ee(se)?null:"Неверный формат даты (д.м.гг)":mt==="offtime"?pe=$t(se)?null:"Неверный формат времени (чч:мм:сс)":pe=Zt(mt,se),ee(Me=>{const Oe={...Me,[mt]:pe},Ne=["tls_key","tls_cert","tls_ca"],De=Object.keys(Oe).filter(Le=>!Ne.includes(Le)&&Le!=="telegram_token").some(Le=>Oe[Le]!==null);return ce(De||!$.usehttps&&Ne.some(Le=>$[Le])),Oe});let Ce=se;["lon_de","lat_de","timezone","mqtt_prt"].includes(mt)?Ce=se===""||se===null?0:Number(se):["onsunrise","onsunset","check_ip","check_mqtt","usehttps"].includes(mt)&&(Ce=se?1:0),k(Me=>({...Me,[mt]:Ce})),mt==="usehttps"&&(ee({}),ce(!1))},ue=()=>fetch("/api/mysett/get").then(mt=>mt.json()).then(mt=>{if(mt.offldt){const{date:se,time:pe}=Ie(mt.offldt);mt.offdate=se,mt.offtime=pe}return k(mt),mt}).catch(mt=>{console.error("Error fetching settings:",mt),Yt("Ошибка при загрузке настроек","error")});if(lt(()=>{ue().then(mt=>{mt!=null&&mt.tls_key&&ve(!0),mt!=null&&mt.tls_cert&&he(!0),mt!=null&&mt.tls_ca&&$e(!0),mt!=null&&mt.telegram_token&&_e(!0),de(!1)})},[]),lt(()=>{ce(!ht($,pt))},[$,pt]),Pe)return Et`<div>Loading...</div>`;if(!$)return"";const ye=(mt="")=>Et`
     <button
       type="submit"
       class=${`relative inline-flex items-center justify-center px-8 py-3 overflow-hidden font-bold text-white transition-all duration-300 rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_25px_rgba(20,184,166,0.5)] hover:-translate-y-0.5 active:translate-y-0 ${re?"opacity-50 cursor-not-allowed bg-slate-400":"bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-400 hover:to-cyan-500"} ${mt}`}
@@ -3945,7 +4056,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             onChange=${mt=>ae("lang",mt.target.value)}
             style="border: 2px solid #22d3ee; border-radius: 8px; padding: 4px 10px; font-size: 14px; font-weight: 600; background: white; color: #1e293b; cursor: pointer; outline: none;"
           >
-            ${Ee.map(mt=>Et`<option value=${mt.value}>${mt.label}</option>`)}
+            ${Se.map(mt=>Et`<option value=${mt.value}>${mt.label}</option>`)}
           </select>
         </div>
 
@@ -3957,7 +4068,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
 
         <form ref=${vt} onSubmit=${ie} class="w-full max-w-4xl flex flex-col gap-6 relative">
 
-          <div class="flex justify-end w-full">${ve()}</div>
+          <div class="flex justify-end w-full">${ye()}</div>
 
           <!-- ============================================================
                User data
@@ -3972,11 +4083,11 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                   </tr>
                 </thead>
                 <tbody>
-              ${[{label:"Login",key:"adm_name",type:"text"},{label:"Password",key:"adm_pswd",type:"password"},{label:"Time zone UTC",key:"timezone",type:"select",options:we}].map((mt,le)=>Et`
-                <${FieldRow} label=${mt.label} tip=${xe(mt.tipLabel||mt.label)} index=${le}>
+              ${[{label:"Login",key:"adm_name",type:"text"},{label:"Password",key:"adm_pswd",type:"password"},{label:"Time zone UTC",key:"timezone",type:"select",options:we}].map((mt,se)=>Et`
+                <${FieldRow} label=${mt.label} tip=${xe(mt.tipLabel||mt.label)} index=${se}>
                   <${pageSetting}
                     value=${$[mt.key]}
-                    setfn=${ue=>ae(mt.key,ue)}
+                    setfn=${pe=>ae(mt.key,pe)}
                     type=${mt.type}
                     options=${mt.options}
                     class=${`w-full px-3 py-2 bg-white/50 border ${pt[mt.key]?"border-red-500 ring-2 ring-red-500/50":"border-white/50"} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
@@ -4032,11 +4143,11 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                     </tr>
                   </thead>
                   <tbody>
-                  ${[{label:"IP address",key:"ip_addr",type:"text"},{label:"Subnet mask",key:"sb_mask",type:"text"},{label:"Default gateway",key:"gateway",type:"text"}].map((mt,le)=>Et`
-                    <${FieldRow} label=${mt.label} tip=${xe(mt.tipLabel||mt.label)} index=${le}>
+                  ${[{label:"IP address",key:"ip_addr",type:"text"},{label:"Subnet mask",key:"sb_mask",type:"text"},{label:"Default gateway",key:"gateway",type:"text"}].map((mt,se)=>Et`
+                    <${FieldRow} label=${mt.label} tip=${xe(mt.tipLabel||mt.label)} index=${se}>
                       <${pageSetting}
                         value=${$[mt.key]}
-                        setfn=${ue=>ae(mt.key,ue)}
+                        setfn=${pe=>ae(mt.key,pe)}
                         type=${mt.type}
                         class=${`w-full px-3 py-2 bg-white/50 border ${pt[mt.key]?"border-red-500 ring-2 ring-red-500/50":"border-white/50"} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                         error=${pt[mt.key]}
@@ -4094,11 +4205,11 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                     </tr>
                   </thead>
                   <tbody>
-                ${[{label:"Host",key:"mqtt_hst",type:"text"},{label:"Port",key:"mqtt_prt",type:"number"},{label:"Client",key:"mqtt_clt",type:"text"},{label:"User",key:"mqtt_usr",type:"text"},{label:"Password",key:"mqtt_pswd",type:"password",tipLabel:"Password (MQTT)"},{label:"TX topic",key:"txmqttop",type:"text"},{label:"RX topic",key:"rxmqttop",type:"text"}].map((mt,le)=>Et`
-                  <${FieldRow} label=${mt.label} tip=${xe(mt.tipLabel||mt.label)} index=${le}>
+                ${[{label:"Host",key:"mqtt_hst",type:"text"},{label:"Port",key:"mqtt_prt",type:"number"},{label:"Client",key:"mqtt_clt",type:"text"},{label:"User",key:"mqtt_usr",type:"text"},{label:"Password",key:"mqtt_pswd",type:"password",tipLabel:"Password (MQTT)"},{label:"TX topic",key:"txmqttop",type:"text"},{label:"RX topic",key:"rxmqttop",type:"text"}].map((mt,se)=>Et`
+                  <${FieldRow} label=${mt.label} tip=${xe(mt.tipLabel||mt.label)} index=${se}>
                     <${pageSetting}
                       value=${$[mt.key]}
-                      setfn=${ue=>ae(mt.key,ue)}
+                      setfn=${pe=>ae(mt.key,pe)}
                       type=${mt.type}
                       class=${`w-full px-3 py-2 bg-white/50 border ${pt[mt.key]?"border-red-500 ring-2 ring-red-500/50":"border-white/50"} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                       error=${pt[mt.key]}
@@ -4146,8 +4257,8 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                     </tr>
                   </thead>
                   <tbody>
-                ${[{label:"HTTPS domain",key:"domain",type:"text"},{label:"Private Key",key:"tls_key",type:"textarea"},{label:"Public Key",key:"tls_cert",type:"textarea"}].map((mt,le)=>Et`
-                  <tr class="transition-colors border-b border-slate-200 ${le%2===0?"bg-sky-200/40":"bg-white/80"} hover:bg-slate-200/80">
+                ${[{label:"HTTPS domain",key:"domain",type:"text"},{label:"Private Key",key:"tls_key",type:"textarea"},{label:"Public Key",key:"tls_cert",type:"textarea"}].map((mt,se)=>Et`
+                  <tr class="transition-colors border-b border-slate-200 ${se%2===0?"bg-sky-200/40":"bg-white/80"} hover:bg-slate-200/80">
                     <td
                       class="w-1/3 text-lg font-bold text-slate-700 px-6 border-r border-slate-500 py-4 cursor-help align-top"
                       data-tip=${xe(mt.label)}
@@ -4160,7 +4271,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                             ${mt.key==="tls_key"&&$.tls_key?Et`<div class="w-full px-3 py-2 bg-white/40 border border-white/50 rounded-lg text-slate-600 font-medium shadow-inner">Данные введены, но информация скрыта!</div>`:mt.key==="tls_cert"&&$.tls_cert?Et`<div class="w-full px-3 py-2 bg-white/40 border border-white/50 rounded-lg text-slate-600 font-medium shadow-inner">Данные введены успешно!</div>`:Et`<textarea
                                     name=${mt.key}
                                     value=${$[mt.key]||""}
-                                    onInput=${ue=>ae(mt.key,ue.target.value)}
+                                    onInput=${pe=>ae(mt.key,pe.target.value)}
                                     class=${`w-full px-3 py-2 bg-white/50 border ${pt[mt.key]?"border-red-500 ring-2 ring-red-500/50":"border-white/50"} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                                     rows="1"
                                     placeholder="Enter ${mt.label}"
@@ -4170,7 +4281,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
                               type="text"
                               name=${mt.key}
                               value=${$[mt.key]||""}
-                              onInput=${ue=>ae(mt.key,ue.target.value)}
+                              onInput=${pe=>ae(mt.key,pe.target.value)}
                               class=${`w-full px-3 py-2 bg-white/50 border ${pt[mt.key]?"border-red-500 ring-2 ring-red-500/50":"border-white/50"} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                               maxlength="30"
                               placeholder="Enter domain (e.g., zagotovka.ddns.net)"
@@ -4352,7 +4463,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
             </div>
           `}
 
-          <div class="flex justify-end w-full mb-4">${ve()}</div>
+          <div class="flex justify-end w-full mb-4">${ye()}</div>
 
         </form>
       </div>
@@ -4385,14 +4496,14 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         />
       </g>
     </g>
-  </svg>`;function Header({logout:$,user:k,setShowSidebar:st,showSidebar:ct}){const[dt,_]=ut(new Date),[pt,ee]=ut(null),vt=(se,re)=>new Date(se.year+1900,se.mon,se.mday,se.hour,se.min,se.sec),te=async()=>{try{const re=await(await fetch("/api/stm32-time")).text();let ce;try{ce=JSON.parse(re)}catch{return}ce.status&&ce.time?ee(vt(ce.time,ce.timezone)):ee(null)}catch{ee(null)}};lt(()=>{const se=setInterval(()=>_(new Date),1e3),re=setInterval(te,1e3);return te(),()=>{clearInterval(se),clearInterval(re)}},[]);const ne=se=>se.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"}),Xt=se=>se.toLocaleTimeString("ru-RU");return Et`
+  </svg>`;function Header({logout:$,user:k,setShowSidebar:st,showSidebar:ct}){const[dt,_]=ut(new Date),[pt,ee]=ut(null),vt=(le,re)=>new Date(le.year+1900,le.mon,le.mday,le.hour,le.min,le.sec),te=async()=>{try{const re=await(await fetch("/api/stm32-time")).text();let ce;try{ce=JSON.parse(re)}catch{return}ce.status&&ce.time?ee(vt(ce.time,ce.timezone)):ee(null)}catch{ee(null)}};lt(()=>{const le=setInterval(()=>_(new Date),1e3),re=setInterval(te,1e3);return te(),()=>{clearInterval(le),clearInterval(re)}},[]);const ne=le=>le.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"}),Xt=le=>le.toLocaleTimeString("ru-RU");return Et`
     <div
       class="bg-white/40 backdrop-blur-md border-b border-white/40 shadow-sm sticky top-0 z-[48] w-full py-2 ${ct?"pl-72":""} transition-all duration-300 transform"
     >
       <div class="px-4 w-full py-0 my-0 flex items-center justify-between">
         <button
           type="button"
-          onclick=${()=>st(se=>!se)}
+          onclick=${()=>st(le=>!le)}
           class="text-slate-500 hover:text-teal-500 transition-colors"
         >
           <${Icons.bars3} class="h-6" />
@@ -4509,7 +4620,7 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         />
       <//>
     <//>
-  <//>`}function Chart({data:$}){const k=$.length,st=20,ct=15,dt=100,_=5,pt=10,ee=25,vt=se=>(dt-pt)/_*(se+1),te=se=>(dt-pt)*se/100,ne=se=>dt-pt-te(se),Xt=(se,re,ce)=>Array.from({length:re},(ge,ye)=>ye*1+se);return Et` <div
+  <//>`}function Chart({data:$}){const k=$.length,st=20,ct=15,dt=100,_=5,pt=10,ee=25,vt=le=>(dt-pt)/_*(le+1),te=le=>(dt-pt)*le/100,ne=le=>dt-pt-te(le),Xt=(le,re,ce)=>Array.from({length:re},(ge,ve)=>ve*1+le);return Et` <div
     class="my-4 divide-y divide-gray-200 overflow-auto rounded bg-white"
   >
     <div class="font-light uppercase flex items-center text-gray-600 px-4 py-2">
@@ -4517,31 +4628,31 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
     <//>
     <div class="relative">
       <svg class="bg-yellow-x50 w-full p-4" viewBox="0 0 ${k*st+ct} ${dt}">
-        ${Xt(0,_).map(se=>Et`
+        ${Xt(0,_).map(le=>Et`
             <line
               x1="0"
-              y1=${vt(se)}
+              y1=${vt(le)}
               x2=${ct+k*st}
-              y2=${vt(se)}
+              y2=${vt(le)}
               stroke-width="0.3"
               class="stroke-slate-300"
               stroke-dasharray="1,1"
             />
-            <text x="0" y=${vt(se)-2} class="text-[6px] fill-slate-400"
-              >${ee-ee/_*(se+1)}<//
+            <text x="0" y=${vt(le)-2} class="text-[6px] fill-slate-400"
+              >${ee-ee/_*(le+1)}<//
             >
           `)}
-        ${Xt(0,k).map(se=>Et`
+        ${Xt(0,k).map(le=>Et`
             <rect
-              x=${ct+se*st}
-              y=${ne($[se]*100/ee)}
+              x=${ct+le*st}
+              y=${ne($[le]*100/ee)}
               width="12"
-              height=${te($[se]*100/ee)}
+              height=${te($[le]*100/ee)}
               rx="2"
               class="fill-cyan-500"
             />
-            <text x=${ct+se*st} y="100" class="text-[6px] fill-slate-400"
-              >${se*2}:00<//
+            <text x=${ct+le*st} y="100" class="text-[6px] fill-slate-400"
+              >${le*2}:00<//
             >
           `)}
       <//>
@@ -4615,23 +4726,23 @@ First, select the «PWM pin» parameter. Then specify the type of temperature se
         ${st}
       </div>
     </div>
-  `}function FirmwareUpdate({}){const[$,k]=ut([{},{}]),[st,ct]=ut(null),dt=()=>fetch("api/firmware/status").then(se=>se.json()).then(se=>k(se));lt(dt,[]),lt(()=>{if(st){const se=setTimeout(()=>{ct(null)},3e3);return()=>clearTimeout(se)}},[st]);const _=se=>fetch("api/firmware/commit").then(re=>re.json()).then(dt),pt=se=>fetch("api/reboot",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reboot:1})}).then(re=>re.json()).then(re=>new Promise(ce=>setTimeout(()=>{dt(),ce()},5e3))),ee=se=>fetch("api/firmware/rollback").then(pt),vt=se=>fetch("api/device/eraselast").then(dt),te=function(se){if(!se){ct({type:"yellow",message:"Error: No file selected."});return}const re=se.name.split(".").pop().toLowerCase();if(re!=="bin"&&re!=="hex"){ct({type:"red",message:"Error: Only .bin and .hex files are allowed!"});return}const ce=new FormData;ce.append("file",se),fetch("api/firmware/upload",{method:"POST",body:ce}).then(ge=>{if(!ge.ok)throw new Error(`HTTP error! status: ${ge.status}`);return ge.json()}).then(()=>{ct({type:"green",message:"Firmware uploaded successfully!"}),dt()}).catch(ge=>{ct({type:"yellow",message:`Error: Upload failed. ${ge.message}`})})},ne=({type:se,message:re})=>Et`
+  `}function FirmwareUpdate({}){const[$,k]=ut([{},{}]),[st,ct]=ut(null),dt=()=>fetch("api/firmware/status").then(le=>le.json()).then(le=>k(le));lt(dt,[]),lt(()=>{if(st){const le=setTimeout(()=>{ct(null)},3e3);return()=>clearTimeout(le)}},[st]);const _=le=>fetch("api/firmware/commit").then(re=>re.json()).then(dt),pt=le=>fetch("api/reboot",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reboot:1})}).then(re=>re.json()).then(re=>new Promise(ce=>setTimeout(()=>{dt(),ce()},5e3))),ee=le=>fetch("api/firmware/rollback").then(pt),vt=le=>fetch("api/device/eraselast").then(dt),te=function(le){if(!le){ct({type:"yellow",message:"Error: No file selected."});return}const re=le.name.split(".").pop().toLowerCase();if(re!=="bin"&&re!=="hex"){ct({type:"red",message:"Error: Only .bin and .hex files are allowed!"});return}const ce=new FormData;ce.append("file",le),fetch("api/firmware/upload",{method:"POST",body:ce}).then(ge=>{if(!ge.ok)throw new Error(`HTTP error! status: ${ge.status}`);return ge.json()}).then(()=>{ct({type:"green",message:"Firmware uploaded successfully!"}),dt()}).catch(ge=>{ct({type:"yellow",message:`Error: Upload failed. ${ge.message}`})})},ne=({type:le,message:re})=>Et`
       <div
-        class=${`fixed top-0 left-0 right-0 z-50 border-b-4 p-4 ${se==="red"?"bg-red-100 border-red-500 text-red-700":se==="yellow"?"bg-yellow-100 border-yellow-500 text-yellow-700":"bg-green-100 border-green-500 text-green-700"}`}
+        class=${`fixed top-0 left-0 right-0 z-50 border-b-4 p-4 ${le==="red"?"bg-red-100 border-red-500 text-red-700":le==="yellow"?"bg-yellow-100 border-yellow-500 text-yellow-700":"bg-green-100 border-green-500 text-green-700"}`}
         role="alert"
       >
         <p class="font-bold text-center">${re}</p>
       </div>
-    `,Xt=({title:se,onupload:re})=>Et`
+    `,Xt=({title:le,onupload:re})=>Et`
       <label
         class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded cursor-pointer"
       >
-        ${se}
+        ${le}
         <input
           type="file"
           class="hidden"
           accept=".bin,.hex"
-          onChange=${ge=>{const ye=ge.target.files[0];ye&&re(ye)}}
+          onChange=${ge=>{const ve=ge.target.files[0];ve&&re(ve)}}
         />
       </label>
     `;return Et`

@@ -83,6 +83,17 @@ function initGlobalTooltip() {
 }
 // ---------------------------------------------------------------------------
 
+export const pwmTimerMap = {
+  'PA0': 'TIM2', 'PA3': 'TIM2', 'PB10': 'TIM2',
+  'PA6': 'TIM3', 'PB1': 'TIM3',
+  'PB15': 'TIM12',
+  'PC6': 'TIM8', 'PC7': 'TIM8', 'PC8': 'TIM8', 'PC9': 'TIM8',
+  'PD12': 'TIM4', 'PD13': 'TIM4', 'PD14': 'TIM4', 'PD15': 'TIM4',
+  'PE5': 'TIM9', 'PE6': 'TIM9',
+  'PE9': 'TIM1', 'PE11': 'TIM1', 'PE13': 'TIM1', 'PE14': 'TIM1',
+  'PF6': 'TIM10', 'PF7': 'TIM11', 'PF8': 'TIM13', 'PF9': 'TIM14'
+};
+
 function TabEncoder({ }) {
   {
     const [varencoder, setEncoder] = useState(null);
@@ -355,6 +366,61 @@ function TabEncoder({ }) {
               </tbody>
             </table>
           </div>
+          <div>
+            <h2 class="text-xl font-bold mb-2 text-indigo-700">Ограничения аппаратных таймеров (Hardware Timers)</h2>
+            <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-100 text-sm">
+              <p class="mb-2"><strong>Важно:</strong> Вы можете установить желаемую частоту ШИМ от <strong>0.05 Hz до 2 MHz</strong>. Однако, генерация ШИМ зависит от аппаратных таймеров микроконтроллера (например, TIM1, TIM2 и т.д.).</p>
+              <p class="mb-2"><strong>Один таймер не может генерировать разные частоты одновременно!</strong> Если вы назначите разные пины, которые используют <em>один и тот же таймер</em>, к разным энкодерам и зададите им разную частоту, применится последняя установленная частота ко всем пинам этого таймера.</p>
+              <p class="mb-2">Чтобы использовать разную частоту для разных устройств, выбирайте пины, привязанные к <strong>разным таймерам</strong>.</p>
+              <p class="mt-4 font-semibold text-indigo-800">Карта привязки пинов ШИМ к таймерам и их возможности:</p>
+              <ul class="list-disc pl-5 mt-2 space-y-3 text-slate-700">
+                <li>
+                  <strong>TIM1 (16-bit Advanced):</strong> PE9, PE11, PE13, PE14<br/>
+                  <span class="text-sm text-slate-500">Высокоскоростной таймер. Оптимален для средних и высоких частот (от 10 Hz до 2 MHz).</span>
+                </li>
+                <li>
+                  <strong>TIM2 (32-bit):</strong> PA0, PA3, PB10<br/>
+                  <span class="text-sm text-slate-500">За счет 32-битного счетчика аппаратно поддерживает сверхнизкие частоты с максимальным разрешением (от 0.05 Hz до 100 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM3 (16-bit General):</strong> PA6, PB1<br/>
+                  <span class="text-sm text-slate-500">Базовый ШИМ таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM4 (16-bit General):</strong> PD12, PD13, PD14, PD15<br/>
+                  <span class="text-sm text-slate-500">Базовый ШИМ таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM8 (16-bit Advanced):</strong> PC6, PC7, PC8, PC9<br/>
+                  <span class="text-sm text-slate-500">Высокоскоростной таймер. Оптимален для средних и высоких частот (от 10 Hz до 2 MHz).</span>
+                </li>
+                <li>
+                  <strong>TIM9 (16-bit):</strong> PE5, PE6<br/>
+                  <span class="text-sm text-slate-500">Вспомогательный таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM10 (16-bit):</strong> PF6<br/>
+                  <span class="text-sm text-slate-500">Вспомогательный таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM11 (16-bit):</strong> PF7<br/>
+                  <span class="text-sm text-slate-500">Вспомогательный таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM12 (16-bit):</strong> PB15<br/>
+                  <span class="text-sm text-slate-500">Вспомогательный таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM13 (16-bit):</strong> PF8<br/>
+                  <span class="text-sm text-slate-500">Вспомогательный таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM14 (16-bit):</strong> PF9<br/>
+                  <span class="text-sm text-slate-500">Вспомогательный таймер (от 10 Hz до 500 kHz).</span>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
       `,
       en: html`
@@ -412,6 +478,61 @@ function TabEncoder({ }) {
               </tbody>
             </table>
           </div>
+          <div>
+            <h2 class="text-xl font-bold mb-2 text-indigo-700">Hardware Timer Limitations</h2>
+            <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-100 text-sm">
+              <p class="mb-2"><strong>Important:</strong> You can set the desired PWM frequency from <strong>0.05 Hz to 2 MHz</strong>. However, PWM generation depends on the microcontroller's hardware timers (e.g., TIM1, TIM2, etc.).</p>
+              <p class="mb-2"><strong>A single timer cannot generate different frequencies simultaneously!</strong> If you assign different pins that share the <em>same timer</em> to different encoders and set different frequencies, the last set frequency will apply to all pins sharing that timer.</p>
+              <p class="mb-2">To use different frequencies for different devices, choose pins connected to <strong>different hardware timers</strong>.</p>
+              <p class="mt-4 font-semibold text-indigo-800">PWM Pin to Timer Mapping and Capabilities:</p>
+              <ul class="list-disc pl-5 mt-2 space-y-3 text-slate-700">
+                <li>
+                  <strong>TIM1 (16-bit Advanced):</strong> PE9, PE11, PE13, PE14<br/>
+                  <span class="text-sm text-slate-500">High-speed timer. Optimal for medium and high frequencies (from 10 Hz to 2 MHz).</span>
+                </li>
+                <li>
+                  <strong>TIM2 (32-bit):</strong> PA0, PA3, PB10<br/>
+                  <span class="text-sm text-slate-500">32-bit counter natively supports ultra-low frequencies with maximum resolution (from 0.05 Hz to 100 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM3 (16-bit General):</strong> PA6, PB1<br/>
+                  <span class="text-sm text-slate-500">Standard PWM timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM4 (16-bit General):</strong> PD12, PD13, PD14, PD15<br/>
+                  <span class="text-sm text-slate-500">Standard PWM timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM8 (16-bit Advanced):</strong> PC6, PC7, PC8, PC9<br/>
+                  <span class="text-sm text-slate-500">High-speed timer. Optimal for medium and high frequencies (from 10 Hz to 2 MHz).</span>
+                </li>
+                <li>
+                  <strong>TIM9 (16-bit):</strong> PE5, PE6<br/>
+                  <span class="text-sm text-slate-500">Auxiliary timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM10 (16-bit):</strong> PF6<br/>
+                  <span class="text-sm text-slate-500">Auxiliary timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM11 (16-bit):</strong> PF7<br/>
+                  <span class="text-sm text-slate-500">Auxiliary timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM12 (16-bit):</strong> PB15<br/>
+                  <span class="text-sm text-slate-500">Auxiliary timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM13 (16-bit):</strong> PF8<br/>
+                  <span class="text-sm text-slate-500">Auxiliary timer (from 10 Hz to 500 kHz).</span>
+                </li>
+                <li>
+                  <strong>TIM14 (16-bit):</strong> PF9<br/>
+                  <span class="text-sm text-slate-500">Auxiliary timer (from 10 Hz to 500 kHz).</span>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
       `
     };
@@ -431,6 +552,10 @@ function TabEncoder({ }) {
     const ArrayEncoder = ({ d, index }) => {
       const connectedPins = getConnectedPins(d.id);
       const fStatus = getFreqStatus(d.pwm || 0);
+
+      const connectedTimers = connectedPins
+        .map(p => pwmTimerMap[p.pin])
+        .filter((t, i, arr) => t && arr.indexOf(t) === i);
 
       return html`
         <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
@@ -462,6 +587,7 @@ function TabEncoder({ }) {
           <td class="px-6 py-2 text-sm">
             <span class="font-mono text-slate-700">${formatPwmFreq(d.pwm)}</span>
             <span class="ml-1 font-bold ${fStatus.cls}">${fStatus.msg}</span>
+            ${connectedTimers.length > 0 ? html`<span class="ml-2 font-mono text-xs text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200 shadow-sm" title="Hardware Timer">${connectedTimers.join(', ')}</span>` : ''}
           </td>
           <td class="px-6 py-2 font-mono text-sm text-blue-600">
             ${d.pwmmax ? `${d.pwmmax} steps` : '—'}
