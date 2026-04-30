@@ -1375,6 +1375,23 @@ void StartConfigTask(void *argument)
  * @param argument: Not used
  * @retval None
  */
+/* Вынесена из StartWebServerTask — GCC nested functions используют трамплины
+ * на стеке, что вызывает HardFault на Cortex-M7 (XN-protected SRAM). */
+static void static_or_dynamic_ip(struct mg_tcpip_if *mif,
+                                 struct dbSettings *config) {
+  if (config->check_ip == 1) { // DHCP
+    MG_INFO(("2 - Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+             mif->mac[0], mif->mac[1], mif->mac[2], mif->mac[3], mif->mac[4],
+             mif->mac[5]));
+  } else { // Статический IP
+    mif->ip = mg_htonl(MG_U32(config->ip_addr0, config->ip_addr1,
+                              config->ip_addr2, config->ip_addr3));
+    mif->mask = mg_htonl(MG_U32(config->sb_mask0, config->sb_mask1,
+                                config->sb_mask2, config->sb_mask3));
+    mif->gw = mg_htonl(MG_U32(config->gateway0, config->gateway1,
+                                config->gateway2, config->gateway3));
+  }
+}
 /* USER CODE END Header_StartWebServerTask */
 void StartWebServerTask(void *argument)
 {
@@ -1443,21 +1460,6 @@ void StartWebServerTask(void *argument)
            mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4],
            mif.mac[5]));
 
-  void static_or_dynamic_ip(struct mg_tcpip_if * mif,
-                            struct dbSettings * config) {
-    if (config->check_ip == 1) { // DHCP
-      MG_INFO(("2 - Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
-               mif->mac[0], mif->mac[1], mif->mac[2], mif->mac[3], mif->mac[4],
-               mif->mac[5]));
-    } else { // Статический IP
-      mif->ip = mg_htonl(MG_U32(config->ip_addr0, config->ip_addr1,
-                                config->ip_addr2, config->ip_addr3));
-      mif->mask = mg_htonl(MG_U32(config->sb_mask0, config->sb_mask1,
-                                  config->sb_mask2, config->sb_mask3));
-      mif->gw = mg_htonl(MG_U32(config->gateway0, config->gateway1,
-                                config->gateway2, config->gateway3));
-    }
-  }
   static_or_dynamic_ip(&mif, &SetSettings);
 
   mg_tcpip_init(mgr, &mif);

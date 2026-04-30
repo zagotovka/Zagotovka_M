@@ -3942,9 +3942,10 @@ void check_DHT22_limits(void) {
     float temp = dht22[pin].temp;
     float humid = dht22[pin].humid;
 
+    /* ── Проверка порогов температуры ── */
     if (temp >= dht22[pin].upt) {
       if (dht22[pin].actup[0] != '\0' && !dht22[pin].upflag) {
-        process_actions(dht22[pin].actup);
+        action_handler(pin, dht22[pin].actup, "DHT22_HIGH_T");
         dht22[pin].upflag = 1;
         dht22[pin].lowflag = 0;
         printf("DHT22 Pin %d: Temperature HIGH trigger for %s: %.4f >= %.4f\n",
@@ -3952,7 +3953,7 @@ void check_DHT22_limits(void) {
       }
     } else if (temp <= dht22[pin].lowt) {
       if (dht22[pin].actlow[0] != '\0' && !dht22[pin].lowflag) {
-        process_actions(dht22[pin].actlow);
+        action_handler(pin, dht22[pin].actlow, "DHT22_LOW_T");
         dht22[pin].lowflag = 1;
         dht22[pin].upflag = 0;
         printf("DHT22 Pin %d: Temperature LOW trigger for %s: %.4f <= %.4f\n",
@@ -3960,9 +3961,10 @@ void check_DHT22_limits(void) {
       }
     }
 
+    /* ── Проверка порогов влажности ── */
     if (humid >= dht22[pin].uph) {
       if (dht22[pin].actuh[0] != '\0' && !dht22[pin].uphflg) {
-        process_actions(dht22[pin].actuh);
+        action_handler(pin, dht22[pin].actuh, "DHT22_HIGH_H");
         dht22[pin].uphflg = 1;
         dht22[pin].lowhflg = 0;
         printf("DHT22 Pin %d: Humidity HIGH trigger for %s: %.4f >= %.4f\n",
@@ -3970,7 +3972,7 @@ void check_DHT22_limits(void) {
       }
     } else if (humid <= dht22[pin].lowh) {
       if (dht22[pin].actlh[0] != '\0' && !dht22[pin].lowhflg) {
-        process_actions(dht22[pin].actlh);
+        action_handler(pin, dht22[pin].actlh, "DHT22_LOW_H");
         dht22[pin].lowhflg = 1;
         dht22[pin].uphflg = 0;
         printf("DHT22 Pin %d: Humidity LOW trigger for %s: %.4f <= %.4f\n", pin,
@@ -4286,9 +4288,9 @@ void DWT_Init(void) {
 
 void delay_us(uint32_t us) {
   uint32_t start = DWT->CYCCNT;
-  uint32_t end = start + (us * (SystemCoreClock / 1000000));
-  while (DWT->CYCCNT < end)
-    ;
+  uint32_t cycles = us * (SystemCoreClock / 1000000);
+  while ((DWT->CYCCNT - start) < cycles)
+    ; /* overflow-safe: unsigned subtraction wraps correctly */
 }
 /********************** END  DWT ****************************/
 // Функция для конвертации строки пина в GPIO_PIN_x
@@ -4375,8 +4377,9 @@ uint8_t DHT22_Start(uint8_t index) {
       Response = 1;
   }
 
-  uint32_t timeout = DWT->CYCCNT + (100 * (SystemCoreClock / 1000000));
-  while (HAL_GPIO_ReadPin(port, pin) && DWT->CYCCNT < timeout) {
+  uint32_t dht_start = DWT->CYCCNT;
+  uint32_t dht_cycles = 100 * (SystemCoreClock / 1000000);
+  while (HAL_GPIO_ReadPin(port, pin) && (DWT->CYCCNT - dht_start) < dht_cycles) {
   }
   //    EXIT_CRITICAL();
   return Response;
@@ -4390,16 +4393,18 @@ uint8_t DHT22_Read(uint8_t index) {
   uint8_t data = 0;
   //    ENTER_CRITICAL();
   for (uint8_t i = 0; i < 8; i++) {
-    uint32_t timeout = DWT->CYCCNT + (100 * (SystemCoreClock / 1000000));
-    while (!HAL_GPIO_ReadPin(port, pin) && DWT->CYCCNT < timeout)
+    uint32_t t_start = DWT->CYCCNT;
+    uint32_t t_cycles = 100 * (SystemCoreClock / 1000000);
+    while (!HAL_GPIO_ReadPin(port, pin) && (DWT->CYCCNT - t_start) < t_cycles)
       ;
 
     delay_us(40);
 
     if (HAL_GPIO_ReadPin(port, pin)) {
       data |= (1 << (7 - i));
-      timeout = DWT->CYCCNT + (100 * (SystemCoreClock / 1000000));
-      while (HAL_GPIO_ReadPin(port, pin) && DWT->CYCCNT < timeout)
+      uint32_t h_start = DWT->CYCCNT;
+      uint32_t h_cycles = 100 * (SystemCoreClock / 1000000);
+      while (HAL_GPIO_ReadPin(port, pin) && (DWT->CYCCNT - h_start) < h_cycles)
         ;
     }
   }
@@ -4413,13 +4418,21 @@ void process_dht22(uint8_t indx) {
     return;
   }
   dht22[indx].lastread = tnow;
-  //    printf("\nDHT22_%d: Starting new reading cycle...\r\n", indx);
+
+  /* Критическая секция ТОЛЬКО на bit-banging (timing-critical) */
+  uint8_t response;
+  uint8_t data[5] = {0};
   ENTER_CRITICAL();
-  if (DHT22_Start(indx)) {
-    uint8_t data[5] = {0};
+  response = DHT22_Start(indx);
+  if (response) {
     for (uint8_t i = 0; i < 5; i++) {
       data[i] = DHT22_Read(indx);
     }
+  }
+  EXIT_CRITICAL();
+
+  /* Обработка данных — ВНЕ критической секции */
+  if (response) {
     if (data[4] == ((data[0] + data[1] + data[2] + data[3]) & 0xFF)) {
       dht22[indx].humid = ((data[0] << 8) | data[1]) / 10.0f;
 
@@ -4431,14 +4444,10 @@ void process_dht22(uint8_t indx) {
       dht22[indx].valid = true;
       dht22[indx].errflag = false;
       check_dht22_changes(indx); // Проверка изменений temp для mqtt
-      //            printf("DHT22_%d: Valid reading - T=%.1fC, RH=%.1f%%\r\n",
-      //            indx, dht22[indx].temp, dht22[indx].humid);
-
     } else {
       if (!dht22[indx].errflag) {
         printf("DHT22_%d: Checksum error\r\n", indx);
         dht22[indx].errflag = true;
-        //                printf("DHT22_%d: Checksum error\r\n", indx);
       }
       dht22[indx].valid = false;
     }
@@ -4449,7 +4458,6 @@ void process_dht22(uint8_t indx) {
     }
     dht22[indx].valid = false;
   }
-  EXIT_CRITICAL();
 }
 
 /**********************************************/
