@@ -6,6 +6,7 @@
 #include "ds18b20.h"
 #include "ds18b20Config.h"
 #include "main.h"
+#include "compat_ota.h"
 
 extern ds18b20_pin_t ds18num[MAX_DS18B20_P];
 extern dht22_pin_t dht22num[MAX_DHT22_P];
@@ -29,12 +30,7 @@ const char *s_json_header =
     "Content-Type: application/json\r\n"
     "Cache-Control: no-cache\r\n";
 
-uint64_t s_boot_timestamp = 0;  // Updated by SNTP
 
-// This is for newlib and TLS (mbedTLS)
-uint64_t mg_now(void) {
-  return mg_millis() + s_boot_timestamp;
-}
 
 int ui_event_next(int no, struct ui_event *e) {
   if (no < 0 || no >= MAX_EVENTS_NO) return 0;
@@ -52,19 +48,13 @@ int ui_event_next(int no, struct ui_event *e) {
   return no + 1;
 }
 
-// SNTP connection event handler. When we get a response from an SNTP server,
-// adjust s_boot_timestamp. We'll get a valid time from that point on
+uint64_t s_boot_timestamp = 0;
+
 static void sfn(struct mg_connection *c, int ev, void *ev_data) {
-  uint64_t *expiration_time = (uint64_t *) c->data;
-  if (ev == MG_EV_OPEN) {
-    *expiration_time = mg_millis() + 3000;  // Store expiration time in 3s
-  } else if (ev == MG_EV_SNTP_TIME) {
+  if (ev == MG_EV_SNTP_TIME) {
     uint64_t t = *(uint64_t *) ev_data;
     s_boot_timestamp = t - mg_millis();
-    c->is_closing = 1;
     MG_INFO(("SNTP 1"));
-  } else if (ev == MG_EV_POLL) {
-    if (mg_millis() > *expiration_time) c->is_closing = 1;
   }
 }
 
@@ -278,7 +268,7 @@ static void *HTTPS_MARKER = (void *) 1; // Маркер для HTTPS-соеди�
 // HTTP, HTTPS, MQTT request handler function
 static const char *get_connection_header(struct mg_http_message *hm) {
     struct mg_str *conn_hdr = mg_http_get_header(hm, "Connection");
-    if (conn_hdr && mg_vcmp(conn_hdr, "close") == 0) {
+    if (conn_hdr && mg_strcmp(*conn_hdr, mg_str("close")) == 0) {
         return "Connection: close\r\n";
     }
     return "Connection: keep-alive\r\n";
@@ -429,7 +419,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
 			// Проверяем, запросил ли клиент Connection: close
 			struct mg_str *conn_value = mg_http_get_header(hm, "Connection");
-			bool is_connection_close = conn_value && mg_vcmp(conn_value, "close") == 0;
+			bool is_connection_close = conn_value && mg_strcmp(*conn_value, mg_str("close")) == 0;
 
 			if (is_connection_close) {
 				// Если клиент запросил Connection: close, используем кастомную отправку ответа
@@ -807,6 +797,9 @@ void timer_fn_mqtt(void *arg) {
 void web_init(struct mg_mgr *mgr) {
     // Инициализация настроек устройства
     s_settings.device_name = (char *)default_name;
+
+    // Подключение упакованной файловой системы
+    mg_mem_files = mg_packed_files;
 
     // Формируем URL для HTTP, HTTPS и MQTT
     char http_url[32], https_url[32], mqtt_url[32];

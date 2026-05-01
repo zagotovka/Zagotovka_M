@@ -2,14 +2,7 @@
 #include <string.h>
 #include <time.h>
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
-const char *mg_unlist(size_t no);
-const char *mg_unpack(const char *, size_t *, time_t *);
-#if defined(__cplusplus)
-}
-#endif
+#include "mongoose.h"
 
 static const unsigned char v1[] = {
   33, 102, 117, 110,  99, 116, 105, 111, 110,  40, 116,  44, // !function(t,
@@ -33655,33 +33648,10 @@ static const unsigned char v4[] = {
   10,  60,  47, 104, 116, 109, 108,  62,  10, 0 // .</html>.
 };
 
-static const struct packed_file {
-  const char *name;
-  const unsigned char *data;
-  size_t size;
-  time_t mtime;
-} packed_files[] = {
-  {"/web_root/history.min.js", v1, sizeof(v1), 1716299780},
-  {"/web_root/assets/index-6XaCu9Jv.css", v2, sizeof(v2), 1777560485},
-  {"/web_root/assets/index-DQiV2bSg.js", v3, sizeof(v3), 1777560485},
-  {"/web_root/index.html", v4, sizeof(v4), 1777560485},
+const struct mg_mem_file mg_packed_files[] = {
+  {"/web_root/history.min.js", v1, sizeof(v1) - 1, 1716299780},
+  {"/web_root/assets/index-6XaCu9Jv.css", v2, sizeof(v2) - 1, 1777560485},
+  {"/web_root/assets/index-DQiV2bSg.js", v3, sizeof(v3) - 1, 1777560485},
+  {"/web_root/index.html", v4, sizeof(v4) - 1, 1777560485},
   {NULL, NULL, 0, 0}
 };
-
-static int scmp(const char *a, const char *b) {
-  while (*a && (*a == *b)) a++, b++;
-  return *(const unsigned char *) a - *(const unsigned char *) b;
-}
-const char *mg_unlist(size_t no) {
-  return packed_files[no].name;
-}
-const char *mg_unpack(const char *name, size_t *size, time_t *mtime) {
-  const struct packed_file *p;
-  for (p = packed_files; p->name != NULL; p++) {
-    if (scmp(p->name, name) != 0) continue;
-    if (size != NULL) *size = p->size - 1;
-    if (mtime != NULL) *mtime = p->mtime;
-    return (const char *) p->data;
-  }
-  return NULL;
-}

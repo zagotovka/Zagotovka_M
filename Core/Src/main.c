@@ -318,13 +318,14 @@ static bool quick_network_check(void) {
 
 const char *s_sub_topic = SetSettings.rxmqttop; // Rx topic
 
-void mg_random(void *buf, size_t len) { // Use on-board RNG
+bool mg_random(void *buf, size_t len) { // Use on-board RNG
   extern RNG_HandleTypeDef hrng;
   for (size_t n = 0; n < len; n += sizeof(uint32_t)) {
     uint32_t r;
     HAL_RNG_GenerateRandomNumber(&hrng, &r);
     memcpy((char *)buf + n, &r, n + sizeof(r) > len ? len - n : sizeof(r));
   }
+  return true;
 }
 
 uint64_t mg_millis(void) { return HAL_GetTick(); }
