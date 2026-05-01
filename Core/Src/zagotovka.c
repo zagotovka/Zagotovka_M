@@ -3942,41 +3942,108 @@ void check_DHT22_limits(void) {
     float temp = dht22[pin].temp;
     float humid = dht22[pin].humid;
 
+    float t_hyst = 0.5f; // Гистерезис температуры
+    float h_hyst = 2.0f; // Гистерезис влажности
+
     /* ── Проверка порогов температуры ── */
-    if (temp >= dht22[pin].upt) {
-      if (dht22[pin].actup[0] != '\0' && !dht22[pin].upflag) {
-        action_handler(pin, dht22[pin].actup, "DHT22_HIGH_T");
-        dht22[pin].upflag = 1;
-        dht22[pin].lowflag = 0;
-        printf("DHT22 Pin %d: Temperature HIGH trigger for %s: %.4f >= %.4f\n",
-               pin, dht22[pin].info, temp, dht22[pin].upt);
+    if (dht22[pin].upt == dht22[pin].lowt) {
+      if (temp >= (dht22[pin].upt + t_hyst)) {
+        if (!dht22[pin].upflag) {
+          dht22[pin].upflag = 1;
+          dht22[pin].lowflag = 0;
+          if (dht22[pin].actup[0] != '\0') {
+            action_handler(pin, dht22[pin].actup, "DHT22_HIGH_T");
+            printf("DHT22 Pin %d: Temperature HIGH trigger for %s: %.4f >= %.4f\n",
+                   pin, dht22[pin].info, temp, dht22[pin].upt + t_hyst);
+          }
+        }
+      } else if (temp <= (dht22[pin].lowt - t_hyst)) {
+        if (!dht22[pin].lowflag) {
+          dht22[pin].lowflag = 1;
+          dht22[pin].upflag = 0;
+          if (dht22[pin].actlow[0] != '\0') {
+            action_handler(pin, dht22[pin].actlow, "DHT22_LOW_T");
+            printf("DHT22 Pin %d: Temperature LOW trigger for %s: %.4f <= %.4f\n",
+                   pin, dht22[pin].info, temp, dht22[pin].lowt - t_hyst);
+          }
+        }
       }
-    } else if (temp <= dht22[pin].lowt) {
-      if (dht22[pin].actlow[0] != '\0' && !dht22[pin].lowflag) {
-        action_handler(pin, dht22[pin].actlow, "DHT22_LOW_T");
-        dht22[pin].lowflag = 1;
+    } else {
+      if (temp >= dht22[pin].upt) {
+        if (!dht22[pin].upflag) {
+          dht22[pin].upflag = 1;
+          if (dht22[pin].actup[0] != '\0') {
+            action_handler(pin, dht22[pin].actup, "DHT22_HIGH_T");
+            printf("DHT22 Pin %d: Temperature HIGH trigger for %s: %.4f >= %.4f\n",
+                   pin, dht22[pin].info, temp, dht22[pin].upt);
+          }
+        }
+      } else if (temp <= (dht22[pin].upt - t_hyst)) {
         dht22[pin].upflag = 0;
-        printf("DHT22 Pin %d: Temperature LOW trigger for %s: %.4f <= %.4f\n",
-               pin, dht22[pin].info, temp, dht22[pin].lowt);
+      }
+
+      if (temp <= dht22[pin].lowt) {
+        if (!dht22[pin].lowflag) {
+          dht22[pin].lowflag = 1;
+          if (dht22[pin].actlow[0] != '\0') {
+            action_handler(pin, dht22[pin].actlow, "DHT22_LOW_T");
+            printf("DHT22 Pin %d: Temperature LOW trigger for %s: %.4f <= %.4f\n",
+                   pin, dht22[pin].info, temp, dht22[pin].lowt);
+          }
+        }
+      } else if (temp >= (dht22[pin].lowt + t_hyst)) {
+        dht22[pin].lowflag = 0;
       }
     }
 
     /* ── Проверка порогов влажности ── */
-    if (humid >= dht22[pin].uph) {
-      if (dht22[pin].actuh[0] != '\0' && !dht22[pin].uphflg) {
-        action_handler(pin, dht22[pin].actuh, "DHT22_HIGH_H");
-        dht22[pin].uphflg = 1;
-        dht22[pin].lowhflg = 0;
-        printf("DHT22 Pin %d: Humidity HIGH trigger for %s: %.4f >= %.4f\n",
-               pin, dht22[pin].info, humid, dht22[pin].uph);
+    if (dht22[pin].uph == dht22[pin].lowh) {
+      if (humid >= (dht22[pin].uph + h_hyst)) {
+        if (!dht22[pin].uphflg) {
+          dht22[pin].uphflg = 1;
+          dht22[pin].lowhflg = 0;
+          if (dht22[pin].actuh[0] != '\0') {
+            action_handler(pin, dht22[pin].actuh, "DHT22_HIGH_H");
+            printf("DHT22 Pin %d: Humidity HIGH trigger for %s: %.4f >= %.4f\n",
+                   pin, dht22[pin].info, humid, dht22[pin].uph + h_hyst);
+          }
+        }
+      } else if (humid <= (dht22[pin].lowh - h_hyst)) {
+        if (!dht22[pin].lowhflg) {
+          dht22[pin].lowhflg = 1;
+          dht22[pin].uphflg = 0;
+          if (dht22[pin].actlh[0] != '\0') {
+            action_handler(pin, dht22[pin].actlh, "DHT22_LOW_H");
+            printf("DHT22 Pin %d: Humidity LOW trigger for %s: %.4f <= %.4f\n",
+                   pin, dht22[pin].info, humid, dht22[pin].lowh - h_hyst);
+          }
+        }
       }
-    } else if (humid <= dht22[pin].lowh) {
-      if (dht22[pin].actlh[0] != '\0' && !dht22[pin].lowhflg) {
-        action_handler(pin, dht22[pin].actlh, "DHT22_LOW_H");
-        dht22[pin].lowhflg = 1;
+    } else {
+      if (humid >= dht22[pin].uph) {
+        if (!dht22[pin].uphflg) {
+          dht22[pin].uphflg = 1;
+          if (dht22[pin].actuh[0] != '\0') {
+            action_handler(pin, dht22[pin].actuh, "DHT22_HIGH_H");
+            printf("DHT22 Pin %d: Humidity HIGH trigger for %s: %.4f >= %.4f\n",
+                   pin, dht22[pin].info, humid, dht22[pin].uph);
+          }
+        }
+      } else if (humid <= (dht22[pin].uph - h_hyst)) {
         dht22[pin].uphflg = 0;
-        printf("DHT22 Pin %d: Humidity LOW trigger for %s: %.4f <= %.4f\n", pin,
-               dht22[pin].info, humid, dht22[pin].lowh);
+      }
+
+      if (humid <= dht22[pin].lowh) {
+        if (!dht22[pin].lowhflg) {
+          dht22[pin].lowhflg = 1;
+          if (dht22[pin].actlh[0] != '\0') {
+            action_handler(pin, dht22[pin].actlh, "DHT22_LOW_H");
+            printf("DHT22 Pin %d: Humidity LOW trigger for %s: %.4f <= %.4f\n",
+                   pin, dht22[pin].info, humid, dht22[pin].lowh);
+          }
+        }
+      } else if (humid >= (dht22[pin].lowh + h_hyst)) {
+        dht22[pin].lowhflg = 0;
       }
     }
   }
@@ -4140,46 +4207,70 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
         float upt = ds18b20[pin].sensors[sens].upt;
         float lowt = ds18b20[pin].sensors[sens].lowt;
 
-        // Проверка верхнего предела
-        if (temp >= upt) {
-          if (!ds18b20[pin].sensors[sens].upflag) {
-            ds18b20[pin].sensors[sens].upflag = 1;
-            ds18b20[pin].sensors[sens].lowflag = 0;
+        float t_hyst = 0.5f;
 
-            // Отправка в очередь при превышении верхнего предела
-            action_handler(pin, ds18b20[pin].sensors[sens].actup, "No Data!");
+        if (upt == lowt) {
+          // Режим термостата с одной точкой
+          if (temp >= (upt + t_hyst)) {
+            if (!ds18b20[pin].sensors[sens].upflag) {
+              ds18b20[pin].sensors[sens].upflag = 1;
+              ds18b20[pin].sensors[sens].lowflag = 0;
+              if (ds18b20[pin].sensors[sens].actup[0] != '\0') {
+                printf("DS18B20 Pin %d, Sensor %d Temperature HIGH trigger for %s: %.4f >= %.4f\n",
+                       pin, sens, ds18b20[pin].sensors[sens].info, temp, upt + t_hyst);
+                action_handler(pin, ds18b20[pin].sensors[sens].actup, "DS18B20_HIGH_T");
+              }
+            }
+          } else if (temp <= (lowt - t_hyst)) {
+            if (!ds18b20[pin].sensors[sens].lowflag) {
+              ds18b20[pin].sensors[sens].lowflag = 1;
+              ds18b20[pin].sensors[sens].upflag = 0;
+              if (ds18b20[pin].sensors[sens].actlow[0] != '\0') {
+                printf("DS18B20 Pin %d, Sensor %d with "
+                       "address:%02X%02X%02X%02X%02X%02X%02X%02X Temperature LOW "
+                       "trigger for %s: %.4f <= %.4f\n",
+                       pin, sens, ds18b20[pin].sensors[sens].addr[0],
+                       ds18b20[pin].sensors[sens].addr[1], ds18b20[pin].sensors[sens].addr[2],
+                       ds18b20[pin].sensors[sens].addr[3], ds18b20[pin].sensors[sens].addr[4],
+                       ds18b20[pin].sensors[sens].addr[5], ds18b20[pin].sensors[sens].addr[6],
+                       ds18b20[pin].sensors[sens].addr[7], ds18b20[pin].sensors[sens].info, temp, lowt - t_hyst);
+                action_handler(pin, ds18b20[pin].sensors[sens].actlow, "DS18B20_LOW_T");
+              }
+            }
           }
-        }
-        // Сброс верхнего флага при достижении нижнего предела T
-        else if (temp < lowt) {
-          ds18b20[pin].sensors[sens].upflag = 0;
-        }
-
-        // Проверка нижнего предела
-        if (temp <= lowt) {
-          if (!ds18b20[pin].sensors[sens].lowflag) {
-            ds18b20[pin].sensors[sens].lowflag = 1;
+        } else {
+          // Независимые пороги
+          if (temp >= upt) {
+            if (!ds18b20[pin].sensors[sens].upflag) {
+              ds18b20[pin].sensors[sens].upflag = 1;
+              if (ds18b20[pin].sensors[sens].actup[0] != '\0') {
+                printf("DS18B20 Pin %d, Sensor %d Temperature HIGH trigger for %s: %.4f >= %.4f\n",
+                       pin, sens, ds18b20[pin].sensors[sens].info, temp, upt);
+                action_handler(pin, ds18b20[pin].sensors[sens].actup, "DS18B20_HIGH_T");
+              }
+            }
+          } else if (temp <= (upt - t_hyst)) {
             ds18b20[pin].sensors[sens].upflag = 0;
-            printf("DS18B20 Pin %d, Sensor %d with "
-                   "address:%02X%02X%02X%02X%02X%02X%02X%02X Temperature LOW "
-                   "trigger for %s: %.4f <= %.4f\n",
-                   pin, sens, ds18b20[pin].sensors[sens].addr[0],
-                   ds18b20[pin].sensors[sens].addr[1],
-                   ds18b20[pin].sensors[sens].addr[2],
-                   ds18b20[pin].sensors[sens].addr[3],
-                   ds18b20[pin].sensors[sens].addr[4],
-                   ds18b20[pin].sensors[sens].addr[5],
-                   ds18b20[pin].sensors[sens].addr[6],
-                   ds18b20[pin].sensors[sens].addr[7],
-                   ds18b20[pin].sensors[sens].info, temp, lowt);
-
-            // Отправка в очередь при достижении нижнего предела
-            action_handler(pin, ds18b20[pin].sensors[sens].actlow, "No Data!");
           }
-        }
-        // Сброс нижнего флага при достижении верхнего предела T
-        else if (temp > upt) {
-          ds18b20[pin].sensors[sens].lowflag = 0;
+
+          if (temp <= lowt) {
+            if (!ds18b20[pin].sensors[sens].lowflag) {
+              ds18b20[pin].sensors[sens].lowflag = 1;
+              if (ds18b20[pin].sensors[sens].actlow[0] != '\0') {
+                printf("DS18B20 Pin %d, Sensor %d with "
+                       "address:%02X%02X%02X%02X%02X%02X%02X%02X Temperature LOW "
+                       "trigger for %s: %.4f <= %.4f\n",
+                       pin, sens, ds18b20[pin].sensors[sens].addr[0],
+                       ds18b20[pin].sensors[sens].addr[1], ds18b20[pin].sensors[sens].addr[2],
+                       ds18b20[pin].sensors[sens].addr[3], ds18b20[pin].sensors[sens].addr[4],
+                       ds18b20[pin].sensors[sens].addr[5], ds18b20[pin].sensors[sens].addr[6],
+                       ds18b20[pin].sensors[sens].addr[7], ds18b20[pin].sensors[sens].info, temp, lowt);
+                action_handler(pin, ds18b20[pin].sensors[sens].actlow, "DS18B20_LOW_T");
+              }
+            }
+          } else if (temp >= (lowt + t_hyst)) {
+            ds18b20[pin].sensors[sens].lowflag = 0;
+          }
         }
       } else {
         ds18b20[pin].sensors[sens].valid = false;
