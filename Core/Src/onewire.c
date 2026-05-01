@@ -78,6 +78,7 @@ inline uint8_t OneWire_Reset(OneWire_t* OneWireStruct)
 {
 	uint8_t i;
 	
+	portENTER_CRITICAL(); // Входим в критическую секцию
 	/* Line low, and wait 480us */
 	ONEWIRE_LOW(OneWireStruct);
 	ONEWIRE_OUTPUT(OneWireStruct);
@@ -88,6 +89,7 @@ inline uint8_t OneWire_Reset(OneWire_t* OneWireStruct)
 	ONEWIRE_DELAY(70);
 	/* Check bit value */
 	i = HAL_GPIO_ReadPin(OneWireStruct->GPIOx, OneWireStruct->GPIO_Pin);
+	portEXIT_CRITICAL(); // Выходим из критической секции
 	
 	/* Delay for 410 us */
 	ONEWIRE_DELAY(410);
