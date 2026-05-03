@@ -262,3 +262,19 @@ export const enlange1Wire = [
   'On/Off - The function of enabling or disabling polling of connected sensors on this bus.', // 5
   'Actions - The Edit button to bind a specific sensor to this connection.' // 6
 ];
+
+export const enlangpid = [
+  '', // 0
+  'No - Unique numeric identifier, assigned automatically.', // 1
+  'PWM Pin - The PWM pin you selected on the "Select pin" page.', // 2
+  'Sel. sensor - Specify one of the two types (DS18B20/DHT22) of temperature sensors.', // 3
+  'Dev. ser. number - Serial number of the selected DS18B20 sensor (from the "OneWire pin" page).', // 4
+  'Presets - Select the preset that best matches the desired temperature and timing parameters.', // 5
+  'T set. - Set the target temperature that the PID controller should maintain.', // 6
+  'T cur. - Current temperature of the selected sensor.', // 7
+  'Duty - Current PWM value.', // 8
+  'Info - Name of this PID controller for quick navigation (e.g., "Kids room warm floor").', // 9
+  'On/Off - Enable/Disable this PID controller.', // 10
+  'Action - Button to enter the PID controller settings menu.', // 11
+  'Auto tune - Automatic tuning of PID coefficients.' // 12
+];

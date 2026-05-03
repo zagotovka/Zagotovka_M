@@ -2,8 +2,8 @@ import { ModalPid } from '../Modals/ModalPid.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
-import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
-import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
+import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, rulangpid } from '../rulang.js';
+import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire, enlangpid } from '../enlang.js';
 
 // ---------------------------------------------------------------------------
 // Глобальный tooltip-хелпер (портал в document.body, position:fixed)
@@ -109,21 +109,23 @@ const SENSOR_OPTIONS = [
 
 const HELP_CONTENT = {
   ru: html`
-    <div class="mytext space-y-6">
-      <div>
-        <p class="mb-4">
-Сначала выберите параметр «PWM pin». Затем укажите тип температурного датчика: DS18B20 или DHT22. После этого выберите один из доступных пресетов, который максимально соответствует нужным температурным и временным параметрам. И задайте целевую температуру, которую должен поддерживать PID-контроллер.
-        </p>
-      </div>
+    <div class="mytext space-y-4">
+      <p>
+        Сначала выберите параметр «PWM pin». Затем укажите тип температурного датчика в "Selected sensor": DS18B20 или DHT22. Если выбран DS18B20, то на странице "OneWire pin" скопируйте серийный номер выбранного датчика и укажите его в поле "Dev. ser. number". После этого выберите один из доступных пресетов "Presets", который максимально соответствует нужным температурным и временным параметрам. И задайте целевую температуру "T set.", которую должен поддерживать PID-контроллер. Не забудьте включить ползунок "On/Off"!
+      </p>
+      <p>
+        После настройки "PID Controller" для выбранного пина, нажмите на красную кнопку "Run tune". Устройство автоматически подберет правильные коэффициенты, после чего красная кнопка станет зеленой, что символизирует об успешном подборе параметров для данного ШИМ пина.
+      </p>
     </div>
   `,
   en: html`
-    <div class="mytext space-y-6">
-      <div>
-        <p class="mb-4">
-First, select the «PWM pin» parameter. Then specify the type of temperature sensor: DS18B20 or DHT22. After that, select one of the available presets that closely matches the required temperature and timing parameters. Finally, set the target temperature that the PID controller should maintain.
-        </p>
-      </div>
+    <div class="mytext space-y-4">
+      <p>
+        First, select the «PWM pin» parameter. Then specify the temperature sensor type in "Selected sensor": DS18B20 or DHT22. If DS18B20 is selected, copy the serial number of the chosen sensor from the "OneWire pin" page and enter it in the "Dev. ser. number" field. After that, choose one of the available "Presets" that closely matches your desired temperature and timing parameters. Set the target temperature "T set." that the PID controller should maintain. Don't forget to toggle the "On/Off" switch!
+      </p>
+      <p>
+        After configuring the "PID Controller" for the selected pin, click the red "Run tune" button. The device will automatically find the correct coefficients, after which the red button will turn green, indicating successful parameter tuning for this PWM pin.
+      </p>
     </div>
   `
 };
@@ -246,7 +248,8 @@ function TabPid({ }) {
   }
 
   const getLangObject = () => ({
-    langtimers: language === 'ru' ? rulangtimers : enlangtimers
+    langtimers: language === 'ru' ? rulangtimers : enlangtimers,
+    langpid: language === 'ru' ? rulangpid : enlangpid
   });
 
   const getTooltipText = (key, index) => {
@@ -351,7 +354,7 @@ function TabPid({ }) {
   const Th = (props) => html`
     <th
       class="px-4 py-4 text-base font-bold text-slate-700 tracking-wide cursor-help"
-      data-tip=${getTooltipText('langtimers', props.tooltipIndex)}
+      data-tip=${getTooltipText('langpid', props.tooltipIndex)}
     >
       ${props.title}
     </th>
@@ -470,15 +473,15 @@ function TabPid({ }) {
                         <${Th} title="No" tooltipIndex=${1} />
                         <${Th} title="PWM Pin" tooltipIndex=${2} />
                         <${Th} title="Sel. sensor" tooltipIndex=${3} />
-                        <${Th} title="Dev. ser. number" tooltipIndex=${3} />
-                        <${Th} title="Presets" tooltipIndex=${4} />
-                        <${Th} title="T set." tooltipIndex=${5} />
-                        <${Th} title="T cur." tooltipIndex=${6} />
-                        <${Th} title="Duty" tooltipIndex=${7} />
-                        <${Th} title="Info" tooltipIndex=${4} />
-                        <${Th} title="On/Off" tooltipIndex=${5} />
-                        <${Th} title="Action" tooltipIndex=${6} />
-                        <${Th} title="Auto tune" tooltipIndex=${7} />
+                        <${Th} title="Dev. ser. number" tooltipIndex=${4} />
+                        <${Th} title="Presets" tooltipIndex=${5} />
+                        <${Th} title="T set." tooltipIndex=${6} />
+                        <${Th} title="T cur." tooltipIndex=${7} />
+                        <${Th} title="Duty" tooltipIndex=${8} />
+                        <${Th} title="Info" tooltipIndex=${9} />
+                        <${Th} title="On/Off" tooltipIndex=${10} />
+                        <${Th} title="Action" tooltipIndex=${11} />
+                        <${Th} title="Auto tune" tooltipIndex=${12} />
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-white/40">
