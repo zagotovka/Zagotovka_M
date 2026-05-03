@@ -151,7 +151,7 @@ const HELP_CONTENT = {
     <div style="line-height:1.8;font-size:14px;color:#334155;">
       <p style="margin-bottom:12px;font-weight:700;font-size:15px;">OneWire — справка</p>
       <p style="margin-bottom:10px;">
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+        Рыба текст dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
         Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
       </p>
       <p style="margin-bottom:10px;">
@@ -170,7 +170,7 @@ const HELP_CONTENT = {
     <div style="line-height:1.8;font-size:14px;color:#334155;">
       <p style="margin-bottom:12px;font-weight:700;font-size:15px;">OneWire — Help</p>
       <p style="margin-bottom:10px;">
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+        Kala teksti dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
         Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
       </p>
       <p style="margin-bottom:10px;">

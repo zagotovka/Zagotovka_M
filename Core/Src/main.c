@@ -1611,6 +1611,7 @@ void StartWebServerTask(void *argument)
       last_pub_tick = HAL_GetTick();
       publish_ds18b20_changes(s_conn);
       publish_dht22_changes(s_conn);
+      publish_pwm_changes(s_conn);
     }
 
     /* Диагностический heartbeat — только при изменении heap */

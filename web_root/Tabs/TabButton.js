@@ -163,21 +163,21 @@ const TabButton = () => {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">Swarm/button/id=30/single_click</td>
+                <td class="border px-4 py-2">Zagotovka/button/id=30/single_click</td>
                 <td class="border px-4 py-2">
-                  Данная MQTT команда выполнит команду, прописанную в 'SINGLE CLICK' c id = 30. Где "Swarm" это Ваш 'TX topic'.
+                  Данная MQTT команда выполнит команду, прописанную в 'SINGLE CLICK' c id = 30. Где "Zagotovka" это Ваш 'RX topic'.
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">Swarm/button/id=30/double_click</td>
+                <td class="border px-4 py-2">Zagotovka/button/id=30/double_click</td>
                 <td class="border px-4 py-2">
-                  Данная MQTT команда выполнит команду, прописанную в 'DOUBLE CLICK' c id = 30. Где "Swarm" это Ваш 'TX topic'.
+                  Данная MQTT команда выполнит команду, прописанную в 'DOUBLE CLICK' c id = 30. Где "Zagotovka" это Ваш 'RX topic'.
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">Swarm/button/id=30/long_press</td>
+                <td class="border px-4 py-2">Zagotovka/button/id=30/long_press</td>
                 <td class="border px-4 py-2">
-                  Данная MQTT команда выполнит команду, прописанную в 'LONG PRESS' c id = 30. Где "Swarm" это Ваш 'TX topic'.
+                  Данная MQTT команда выполнит команду, прописанную в 'LONG PRESS' c id = 30. Где "Zagotovka" это Ваш 'RX topic'.
                 </td>
               </tr>
             </tbody>
@@ -194,7 +194,7 @@ const TabButton = () => {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">Swarm/button/</td>
+                <td class="border px-4 py-2 whitespace-nowrap">Swarm/button/</td>
                 <td class="border px-4 py-2">
                   Данная страница отслеживает изменения кнопок и автоматически отправляет каждое изменение по MQTT на топик: Swarm/button/.
                   Где "Swarm" это Ваш 'TX topic'.
@@ -216,32 +216,32 @@ const TabButton = () => {
             <tbody>
               <tr>
                 <td class="border px-4 py-2">SMS</td>
-                <td class="border px-4 py-2">30#SL*</td>
+                <td class="border px-4 py-2">30#SC*#</td>
                 <td class="border px-4 py-2">Выполняет действие, прописанное в SINGLE CLICK для кнопки с id = 30.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">SMS</td>
-                <td class="border px-4 py-2">30#DC*</td>
+                <td class="border px-4 py-2">30#DC*#</td>
                 <td class="border px-4 py-2">Выполняет действие, прописанное в DOUBLE CLICK для кнопки с id = 30.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">SMS</td>
-                <td class="border px-4 py-2">30#LP*</td>
+                <td class="border px-4 py-2">30#LP*#</td>
                 <td class="border px-4 py-2">Выполняет действие, прописанное в LONG PRESS для кнопки с id = 30.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">DTMF (Звонок)</td>
-                <td class="border px-4 py-2">30#3*</td>
-                <td class="border px-4 py-2">Аналог 30#SL*. Выполняет SINGLE CLICK. (в тональном режиме букв нет)</td>
+                <td class="border px-4 py-2">30#3*#</td>
+                <td class="border px-4 py-2">Аналог 30#SC*#. Выполняет SINGLE CLICK. (в тональном режиме букв нет)</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">DTMF (Звонок)</td>
-                <td class="border px-4 py-2">30#4*</td>
+                <td class="border px-4 py-2">30#4*#</td>
                 <td class="border px-4 py-2">Аналог 30#DC*. Выполняет DOUBLE CLICK.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">DTMF (Звонок)</td>
-                <td class="border px-4 py-2">30#5*</td>
+                <td class="border px-4 py-2">30#5*#</td>
                 <td class="border px-4 py-2">Аналог 30#LP*. Выполняет LONG PRESS.</td>
               </tr>
               <tr>
@@ -257,7 +257,7 @@ const TabButton = () => {
             </tbody>
           </table>
           <div class="mt-2 text-sm text-slate-500">
-            Примечание: При желании, вы можете использовать цифровые команды (30#3*, 30#4*, 30#5*) в том числе и в SMS-сообщениях.
+            Примечание: При желании, вы можете использовать цифровые команды (30#3*#, 30#4*#, 30#5*#) в том числе и в SMS-сообщениях.
           </div>
         </div>
       </div>
@@ -325,21 +325,21 @@ const TabButton = () => {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">Swarm/button/id=30/single_click</td>
+                <td class="border px-4 py-2">Zagotovka/button/id=30/single_click</td>
                 <td class="border px-4 py-2">
-                  This MQTT command will execute the command specified in 'SINGLE CLICK' with id = 30. Where "Swarm" is your 'RX topic'.
+                  This MQTT command will execute the command specified in 'SINGLE CLICK' with id = 30. Where "Zagotovka" is your 'RX topic'.
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">Swarm/button/id=30/double_click</td>
+                <td class="border px-4 py-2">Zagotovka/button/id=30/double_click</td>
                 <td class="border px-4 py-2">
-                  This MQTT command will execute the command specified in 'DOUBLE CLICK' with id = 30. Where "Swarm" is your 'RX topic'.
+                  This MQTT command will execute the command specified in 'DOUBLE CLICK' with id = 30. Where "Zagotovka" is your 'RX topic'.
                 </td>
               </tr>
               <tr>
-                <td class="border px-4 py-2">Swarm/button/id=30/long_press</td>
+                <td class="border px-4 py-2">Zagotovka/button/id=30/long_press</td>
                 <td class="border px-4 py-2">
-                  This MQTT command will execute the command specified in 'LONG PRESS' with id = 30. Where "Swarm" is your 'RX topic'.
+                  This MQTT command will execute the command specified in 'LONG PRESS' with id = 30. Where "Zagotovka" is your 'RX topic'.
                 </td>
               </tr>
             </tbody>
@@ -356,9 +356,9 @@ const TabButton = () => {
             </thead>
             <tbody>
               <tr>
-                <td class="border px-4 py-2">Swarm/button/</td>
+                <td class="border px-4 py-2 whitespace-nowrap">Swarm/button/</td>
                 <td class="border px-4 py-2">
-                  This page tracks changes in buttons and automatically sends each change via MQTT to the topic: Swarm/button/. Where "Swarm" is your 'RX topic'.
+                  This page tracks changes in buttons and automatically sends each change via MQTT to the topic: Swarm/button/. Where "Swarm" is your 'TX topic'.
                 </td>
               </tr>
             </tbody>
@@ -377,33 +377,33 @@ const TabButton = () => {
             <tbody>
               <tr>
                 <td class="border px-4 py-2">SMS</td>
-                <td class="border px-4 py-2">30#SL*</td>
+                <td class="border px-4 py-2">30#SC*#</td>
                 <td class="border px-4 py-2">Executes the action specified in SINGLE CLICK for button with id = 30.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">SMS</td>
-                <td class="border px-4 py-2">30#DC*</td>
+                <td class="border px-4 py-2">30#DC*#</td>
                 <td class="border px-4 py-2">Executes the action specified in DOUBLE CLICK for button with id = 30.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">SMS</td>
-                <td class="border px-4 py-2">30#LP*</td>
+                <td class="border px-4 py-2">30#LP*#</td>
                 <td class="border px-4 py-2">Executes the action specified in LONG PRESS for button with id = 30.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">DTMF (Call)</td>
-                <td class="border px-4 py-2">30#3*</td>
-                <td class="border px-4 py-2">Same as 30#SL*. Executes SINGLE CLICK. (since letters are unavailable in DTMF)</td>
+                <td class="border px-4 py-2">30#3*#</td>
+                <td class="border px-4 py-2">Same as 30#SC*#. Executes SINGLE CLICK. (since letters are unavailable in DTMF)</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">DTMF (Call)</td>
-                <td class="border px-4 py-2">30#4*</td>
-                <td class="border px-4 py-2">Same as 30#DC*. Executes DOUBLE CLICK.</td>
+                <td class="border px-4 py-2">30#4*#</td>
+                <td class="border px-4 py-2">Same as 30#DC*#. Executes DOUBLE CLICK.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">DTMF (Call)</td>
-                <td class="border px-4 py-2">30#5*</td>
-                <td class="border px-4 py-2">Same as 30#LP*. Executes LONG PRESS.</td>
+                <td class="border px-4 py-2">30#5*#</td>
+                <td class="border px-4 py-2">Same as 30#LP*#. Executes LONG PRESS.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">SMS</td>
@@ -418,7 +418,7 @@ const TabButton = () => {
             </tbody>
           </table>
           <div class="mt-2 text-sm text-slate-500">
-            Note: You can also use the digital commands (30#3*, 30#4*, 30#5*) natively via SMS.
+            Note: You can also use the digital commands (30#3*#, 30#4*#, 30#5*#) natively via SMS.
           </div>
         </div>
       </div>

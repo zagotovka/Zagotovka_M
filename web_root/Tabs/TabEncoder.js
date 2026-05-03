@@ -336,7 +336,7 @@ function TabEncoder({ }) {
                     http://192.168.1.24:8000/api/Zerg/pwm?id=4&dvalue=25
                   </td>
                   <td class="border px-4 py-2">
-                    Данная API команда установит значение димера в 25 единиц с id = 4. Где "Zerg" это Ваш 'Token'.
+                    Данная API команда установит значение димера в 25% для PWM-пина с id = 4. Где "Zerg" это Ваш 'Token'.
                   </td>
                 </tr>
               </tbody>
@@ -358,9 +358,29 @@ function TabEncoder({ }) {
               </thead>
               <tbody>
                 <tr>
-                  <td class="border px-4 py-2">Swarm/pwm/id=4/dvalue=25</td>
+                  <td class="border px-4 py-2">Zerg/pwm/id=4/dvalue=25</td>
                   <td class="border px-4 py-2">
-                    Данная MQTT команда установит значение диммера в 25 едениц с id = 4. Где "Swarm" это Ваш 'TX topic'.
+                    Данная MQTT команда установит значение диммера в 25% для PWM-пина с id = 4. Где "Zerg" это Ваш 'RX topic'.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <h2 class="text-xl font-bold mb-2">Отслеживание изменений</h2>
+            <table class="w-full">
+              <thead>
+                <tr>
+                  <th class="border px-4 py-2">Топик</th>
+                  <th class="border px-4 py-2">Описание</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="border px-4 py-2 whitespace-nowrap">Swarm/pwm/</td>
+                  <td class="border px-4 py-2">
+                    Данная страница отслеживает состояние PWM и автоматически отправляет каждое изменение по MQTT на топик: Swarm/pwm/.
+                    Где "Swarm" это Ваш 'TX topic'.
                   </td>
                 </tr>
               </tbody>
@@ -448,7 +468,7 @@ function TabEncoder({ }) {
                     http://192.168.1.24:8000/api/Zerg/pwm?id=7&dvalue=25
                   </td>
                   <td class="border px-4 py-2">
-                    This command will set the dimmer to 25 for the device with ID 7. Where "Zerg" is your 'Token'.
+                    This command will set the dimmer to 25% for the PWM-pin with ID=7. Where "Zerg" is your 'Token'.
                   </td>
                 </tr>
               </tbody>
@@ -470,9 +490,29 @@ function TabEncoder({ }) {
               </thead>
               <tbody>
                 <tr>
-                  <td class="border px-4 py-2">Swarm/pwm/id=7/dvalue=25</td>
+                  <td class="border px-4 py-2">Zerg/pwm/id=7/dvalue=25</td>
                   <td class="border px-4 py-2">
-                    This command will set the dimmer to 25 for the device with ID 7. Where "Swarm" is your 'RX topic'.
+                    This command will set the dimmer to 25% for the PWM-pin with ID=7. Where "Zerg" is your 'RX topic'.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <h2 class="text-xl font-bold mb-2">Change Tracking</h2>
+            <table class="w-full">
+              <thead>
+                <tr>
+                  <th class="border px-4 py-2">Topic</th>
+                  <th class="border px-4 py-2">Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="border px-4 py-2 whitespace-nowrap">Swarm/pwm/</td>
+                  <td class="border px-4 py-2">
+                    This page monitors PWM changes and automatically sends each update via MQTT to the topic: Swarm/pwm/.
+                    Where "Swarm" is your 'TX topic'.
                   </td>
                 </tr>
               </tbody>

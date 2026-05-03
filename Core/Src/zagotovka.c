@@ -4923,6 +4923,23 @@ void publish_ds18b20_changes(struct mg_connection *conn) {
   }
 }
 
+/*** PWM change tracking — публикация при изменении dvalue ***/
+static int prev_pwm_dvalue[NUMPIN]; /* последнее опубликованное значение PWM */
+
+void publish_pwm_changes(struct mg_connection *conn) {
+  if (!conn) return;
+  char payload[64];
+
+  for (uint8_t i = 0; i < NUMPIN; i++) {
+    if (PinsConf[i].topin != 5) continue;  /* только PWM-пины */
+    if (PinsConf[i].dvalue == prev_pwm_dvalue[i]) continue;  /* не изменился */
+
+    snprintf(payload, sizeof(payload), "ID=%d/dvalue=%d", i, PinsConf[i].dvalue);
+    send_mqtt_message(conn, "/pwm/", payload);
+    prev_pwm_dvalue[i] = PinsConf[i].dvalue;
+  }
+}
+
 /*********************** OFFLINE TIME *******************************/
 uint8_t onlineFlg = 0; // Флаг онлайн статуса
 lwdtc_cron_ctx_t offlineTime;
