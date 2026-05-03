@@ -1102,6 +1102,7 @@ typedef struct {
     float    delta;
     uint32_t steps_left;
     int      end_duty;
+    int      cronindex;
 } FadeState_t;
 
 static FadeState_t fade_state[NUMPIN] = {0};
@@ -1112,7 +1113,7 @@ static FadeState_t fade_state[NUMPIN] = {0};
  * start_duty   — начальная яркость 0–100%
  * end_duty     — конечная яркость   0–100% */
 void start_pwm_fade(uint8_t pwm_id, uint32_t duration_sec,
-                    int start_duty, int end_duty) {
+                    int start_duty, int end_duty, int cronindex) {
     if (pwm_id >= NUMPIN || PinsConf[pwm_id].topin != 5) {
         printf("start_pwm_fade: bad id=%d\r\n", pwm_id);
         return;
@@ -1148,6 +1149,7 @@ void start_pwm_fade(uint8_t pwm_id, uint32_t duration_sec,
                                        / (float)steps;
     fade_state[pwm_id].steps_left   = steps;
     fade_state[pwm_id].end_duty     = end_duty;
+    fade_state[pwm_id].cronindex    = cronindex;
 
     /* Устанавливаем начальное значение немедленно */
     PinsConf[pwm_id].dvalue = start_duty;
@@ -1190,7 +1192,20 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
         dur = atoi(t2);
         sduty = atoi(t3);
         eduty = atoi(t4);
-        start_pwm_fade((uint8_t)pwm_id, (uint32_t)dur, sduty, eduty);
+        start_pwm_fade((uint8_t)pwm_id, (uint32_t)dur, sduty, eduty, cronindex);
+        /* Отправляем MQTT сообщение о срабатывании PWM-таймера */
+        if (!mqtt_sent) {
+            MqttMessage_t msg = {0};
+            msg.command = 9;  // PWM_TIMER
+            msg.deviceId = cronindex;
+            msg.state = (uint8_t)sduty;
+            msg.reserved = (uint8_t)pwm_id; // Передаем ID пина ШИМ
+
+            if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
+              printf("Error sending PWM_TIMER event to MQTT queue!\r\n");
+            }
+            mqtt_sent = 1;
+        }
       } else {
         printf("parse_string: bad pwm token: %s\r\n", token);
       }
@@ -1570,6 +1585,30 @@ void StartWebServerTask(void *argument)
             strcat(mqtt_payload, dbCrontxt[rxMsg.deviceId].activ);
             strcat(mqtt_payload, "/");
             strcat(mqtt_payload, dbCrontxt[rxMsg.deviceId].info);
+            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+          } else {
+            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+          }
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 9: // PWM_TIMER
+        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
+          if (check_mqtt_connection(s_conn)) {
+            memset(mqtt_topic, 0, sizeof(mqtt_topic));
+            memset(mqtt_payload, 0, sizeof(mqtt_payload));
+            strcpy(mqtt_topic, "/timer/");
+            
+            uint8_t pwm_pin_id = rxMsg.reserved;
+            uint8_t eduty = rxMsg.state;
+            
+            snprintf(mqtt_payload, sizeof(mqtt_payload),
+                     "PWM_TIMER/No=%d/ACTION=ID:%d,DUTY=%d/%.29s",
+                     rxMsg.deviceId,
+                     pwm_pin_id,
+                     eduty,
+                     dbCrontxt[rxMsg.deviceId].info);
             send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
           } else {
             if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
@@ -2347,11 +2386,24 @@ void StartServiceTask(void *argument)
 	          fade_state[i].active = false;
 //	          printf("PWM fade done: id=%d final=%d%%\r\n", i, d);
 	        }
+            
+            bool changed = (d != PinsConf[i].dvalue);
 
 	        PinsConf[i].dvalue = d;
 	        uint32_t pulse = (uint32_t)((uint64_t)d
 	                          * PinsConf[i].pwmmax / 100ULL);
 	        __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, pulse);
+            
+            if (changed) {
+                MqttMessage_t msg = {0};
+                msg.command = 9;  // PWM_TIMER
+                msg.deviceId = fade_state[i].cronindex;
+                msg.state = (uint8_t)d;
+                msg.reserved = (uint8_t)i;
+                if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
+                    // Queue is full, ignore intermediate updates
+                }
+            }
 	      }
 	    }
 /* ═══════════════════════════════════════════════

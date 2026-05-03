@@ -180,77 +180,75 @@ function TabCron({ }) {
             └────────────── секунда (0-59)
           </pre>
         </div>
-        <h2>Примеры CRON</h2>
-        <table>
+        <h2 class="text-xl font-bold mb-2 mt-6">Примеры CRON</h2>
+        <table class="w-full">
           <thead>
             <tr>
-              <th>CRON</th>
-              <th>Описание</th>
+              <th class="border px-4 py-2">CRON</th>
+              <th class="border px-4 py-2">Описание</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td>* * * * * * *</td><td>CRON выполняется каждую секунду.</td></tr>
-            <tr><td>0 * * * * * *</td><td>CRON выполняется в начале каждой минуты.</td></tr>
-            <tr><td>* * * * * 2 *</td><td>CRON выполняется каждый вторник в течение всего дня.</td></tr>
-            <tr><td>0 0 13-15 * * 2-4 *</td><td>CRON выполняется каждую минуту между 13 и 15 часами среды, четверга и пятницы.</td></tr>
-            <tr><td>*/5 * * * * * *</td><td>CRON выполняется каждые 5 секунд, начиная с 0.</td></tr>
-            <tr><td>*/5 */5 * * * * *</td><td>CRON выполняется каждые 5 секунд каждые 5 минут, с 00:00 до 55:55.</td></tr>
-            <tr><td>0 0 0 * * 5 *</td><td>CRON выполняется каждую пятницу в полночь.</td></tr>
-            <tr><td>0 0 */2 * * * *</td><td>CRON выполняется каждые 2 часа в начале часа.</td></tr>
-            <tr><td>* * */2 * * * *</td><td>CRON выполняется каждую секунду каждые 2 часа (0, 2, 4, ..., 22).</td></tr>
-            <tr><td>0 0 0 * * 1-5 *</td><td>CRON выполняется в полночь каждую неделю с понедельника по пятницу.</td></tr>
-            <tr><td>15 23 */6 * * * *</td><td>CRON выполняется каждые 6 часов в (мин:сек) 23:15.</td></tr>
-            <tr><td>0 0 0 1 * * *</td><td>CRON выполняется в начале каждого месяца в 00:00:00.</td></tr>
-            <tr><td>0 0 0 1 */3 * *</td><td>CRON выполняется в начале каждого квартала в 00:00:00.</td></tr>
-            <tr><td>10 15 20 * 8 6 *</td><td>CRON выполняется в 20:15:20 каждую субботу в августе.</td></tr>
-            <tr><td>10 15 20 8 * 6 *</td><td>CRON выполняется в 20:15:20 каждую субботу, которая также является 8-м днем месяца.</td></tr>
-            <tr><td>30-45 * * * * * *</td><td>CRON выполняется каждую секунду между 30 и 45.</td></tr>
-            <tr><td>30-45/3 * * * * * *</td><td>CRON выполняется каждые 3 секунды в каждой минуты, когда секунды находятся между 30 и 45.</td></tr>
-            <tr><td>0 23/1 * * * * *</td><td>CRON выполняется в начале каждой минуты, когда минуты находятся между 23 и 59.</td></tr>
-            <tr><td>50-10 * * * * * *</td><td>CRON выполняется каждую секунду в диапазоне от 50 до 59 и от 00 до 10 (режим переполнения).</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">* * * * * * *</td><td class="border px-4 py-2">CRON выполняется каждую секунду.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 * * * * * *</td><td class="border px-4 py-2">CRON выполняется в начале каждой минуты.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">* * * * * 2 *</td><td class="border px-4 py-2">CRON выполняется каждый вторник в течение всего дня.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 0 13-15 * * 2-4 *</td><td class="border px-4 py-2">CRON выполняется каждую минуту между 13 и 15 часами среды, четверга и пятницы.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">*/5 * * * * * *</td><td class="border px-4 py-2">CRON выполняется каждые 5 секунд, начиная с 0.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">*/5 */5 * * * * *</td><td class="border px-4 py-2">CRON выполняется каждые 5 секунд каждые 5 минут, с 00:00 до 55:55.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 0 0 * * 5 *</td><td class="border px-4 py-2">CRON выполняется каждую пятницу в полночь.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 0 */2 * * * *</td><td class="border px-4 py-2">CRON выполняется каждые 2 часа в начале часа.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">* * */2 * * * *</td><td class="border px-4 py-2">CRON выполняется каждую секунду каждые 2 часа (0, 2, 4, ..., 22).</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 0 0 * * 1-5 *</td><td class="border px-4 py-2">CRON выполняется в полночь каждую неделю с понедельника по пятницу.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">15 23 */6 * * * *</td><td class="border px-4 py-2">CRON выполняется каждые 6 часов в (мин:сек) 23:15.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 0 0 1 * * *</td><td class="border px-4 py-2">CRON выполняется в начале каждого месяца в 00:00:00.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 0 0 1 */3 * *</td><td class="border px-4 py-2">CRON выполняется в начале каждого квартала в 00:00:00.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">10 15 20 * 8 6 *</td><td class="border px-4 py-2">CRON выполняется в 20:15:20 каждую субботу в августе.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">10 15 20 8 * 6 *</td><td class="border px-4 py-2">CRON выполняется в 20:15:20 каждую субботу, которая также является 8-м днем месяца.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">30-45 * * * * * *</td><td class="border px-4 py-2">CRON выполняется каждую секунду между 30 и 45.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">30-45/3 * * * * * *</td><td class="border px-4 py-2">CRON выполняется каждые 3 секунды в каждой минуты, когда секунды находятся между 30 и 45.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 23/1 * * * * *</td><td class="border px-4 py-2">CRON выполняется в начале каждой минуты, когда минуты находятся между 23 и 59.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">50-10 * * * * * *</td><td class="border px-4 py-2">CRON выполняется каждую секунду в диапазоне от 50 до 59 и от 00 до 10 (режим переполнения).</td></tr>
           </tbody>
         </table>
-        <div>
-          <pre>
-            0 ── Откл
-            1 ── Вкл
-            2 ── Смена состояния
-            p ── Пауза
-            , ── Разделитель
-          </pre>
+        <h2 class="text-xl font-bold mb-2 mt-6">Примеры ACTION</h2>
+        <table class="w-full">
+          <thead>
+            <tr><th class="border px-4 py-2">ACTION</th><th class="border px-4 py-2">Описание</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="border px-4 py-2 whitespace-nowrap">18:1;p5;18:0</td>
+              <td class="border px-4 py-2">18-й пин включится (ON) в указанное время (CRON), будет гореть 5 сек. и после паузы отключится (OFF).</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2 whitespace-nowrap">12:2;p5</td>
+              <td class="border px-4 py-2">12-й пин будет менять своё состояние (TOGGLE) через 5 сек.</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="font-family: monospace; font-size: 13px; margin: 4px 0 8px 0; line-height: 1.8">
+          <div>0 ── Откл</div>
+          <div>1 ── Вкл</div>
+          <div>2 ── Смена состояния</div>
+          <div>p ── Пауза</div>
+          <div>, ── Разделитель</div>
         </div>
-        <h2>Примеры ACTION</h2>
-        <table>
+        <h2 class="text-xl font-bold mb-2 mt-6">Примеры PWM (Sunrise / Sunset)</h2>
+        <table class="w-full">
           <thead>
-            <tr><th>ACTION</th><th>Описание</th></tr>
+            <tr><th class="border px-4 py-2">Тип</th><th class="border px-4 py-2">Описание</th></tr>
           </thead>
           <tbody>
             <tr>
-              <td>18:1;p5;18:0</td>
-              <td>18-й пин включится (ON) в указанное время (CRON), будет гореть 5 сек. и после паузы отключится (OFF).</td>
-            </tr>
-            <tr>
-              <td>12:2;p5</td>
-              <td>12-й пин будет менять своё состояние (TOGGLE) через 5 сек.</td>
-            </tr>
-          </tbody>
-        </table>
-        <h2>Примеры PWM (Sunrise / Sunset)</h2>
-        <table>
-          <thead>
-            <tr><th>Тип</th><th>Описание</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Sunrise (Восход)</td>
-              <td>
+              <td class="border px-4 py-2 whitespace-nowrap">Sunrise (Восход)</td>
+              <td class="border px-4 py-2">
                 Нажмите кнопку <b>PWM</b> для настройки. Укажите <b>Start Duty</b> (Начальная скважность, например 0) и <b>End Duty</b> (Конечная скважность, например 100).
                 Плавное увеличение скважности (яркости) будет происходить в течение времени, заданного в <b>Duration (Sec)</b> (от 1 до 864000 секунд).
               </td>
             </tr>
             <tr>
-              <td>Sunset (Закат)</td>
-              <td>
+              <td class="border px-4 py-2 whitespace-nowrap">Sunset (Закат)</td>
+              <td class="border px-4 py-2">
                 Для эффекта заката укажите <b>Start Duty</b> = 100, а <b>End Duty</b> = 0.
                 Переход будет плавно уменьшать скважность на протяжении заданного в <b>Duration (Sec)</b> времени.
               </td>
@@ -259,7 +257,7 @@ function TabCron({ }) {
         </table>
       </div>
       <div>
-        <h2 class="text-xl font-bold mb-2">Отслеживание изменений</h2>
+        <h2 class="text-xl font-bold mb-2 mt-6">Отслеживание изменений</h2>
         <table class="w-full">
           <thead>
             <tr>
@@ -269,9 +267,9 @@ function TabCron({ }) {
           </thead>
           <tbody>
             <tr>
-              <td class="border px-4 py-2">Swarm/timer/</td>
+              <td class="border px-4 py-2 whitespace-nowrap">Swarm/timer/</td>
               <td class="border px-4 py-2">
-                Данная страница отслеживает изменения кнопок и автоматически отправляет каждое изменение по MQTT на топик: Swarm/timer/.
+                Данная страница отслеживает изменения таймеров и автоматически отправляет каждое изменение по MQTT на топик: Swarm/timer/.
                 Где "Swarm" это Ваш 'TX topic'.
               </td>
             </tr>
@@ -295,74 +293,73 @@ function TabCron({ }) {
             └────────────── second (0-59)
           </pre>
         </div>
-        <h2>Examples of CRON</h2>
-        <table>
+        <h2 class="text-xl font-bold mb-2 mt-6">Examples of CRON</h2>
+        <table class="w-full">
           <thead>
-            <tr><th>CRON</th><th>Description</th></tr>
+            <tr><th class="border px-4 py-2">CRON</th><th class="border px-4 py-2">Description</th></tr>
           </thead>
           <tbody>
-            <tr><td>* * * * * * *</td><td>CRON is valid all the time, will fire every second.</td></tr>
-            <tr><td>0 * * * * * *</td><td>CRON is valid at the beginning of each minute.</td></tr>
-            <tr><td>* * * * * 2 *</td><td>CRON is valid every Tuesday all day long.</td></tr>
-            <tr><td>0 0 13-15 * * 2-4 *</td><td>CRON is valid every beginning of the minute between hours 13-15, between Tuesday and Thursday.</td></tr>
-            <tr><td>*/5 * * * * * *</td><td>CRON is valid every 5 seconds starting at 0.</td></tr>
-            <tr><td>*/5 */5 * * * *</td><td>CRON is valid every 5 seconds each 5 minutes, from 00:00 to 55:55.</td></tr>
-            <tr><td>0 0 0 * * 5 *</td><td>Every Friday at midnight.</td></tr>
-            <tr><td>0 0 */2 * * *</td><td>Every 2 hours at beginning of the hour.</td></tr>
-            <tr><td>* * */2 * * *</td><td>Every second of every minute every 2 hours (0, 2, 4, .., 22).</td></tr>
-            <tr><td>0 0 0 * * 1-5 *</td><td>At midnight, 00:00 every week between Monday and Friday.</td></tr>
-            <tr><td>15 23 */6 * * *</td><td>Every 6 hours at (min:sec) 23:15.</td></tr>
-            <tr><td>0 0 0 1 * * *</td><td>At 00:00:00 beginning of the month.</td></tr>
-            <tr><td>0 0 0 1 */3 *</td><td>Every beginning of the quarter at 00:00:00.</td></tr>
-            <tr><td>10 15 20 * 8 6 *</td><td>At 20:15:20 every Saturday in August.</td></tr>
-            <tr><td>10 15 20 8 * 6 *</td><td>At 20:15:20 every Saturday that is also 8th day in month.</td></tr>
-            <tr><td>30-45 * * * * *</td><td>Every second between 30 and 45.</td></tr>
-            <tr><td>30-45/3 * * * * *</td><td>Every 3rd second in every minute, when seconds are between 30 and 45.</td></tr>
-            <tr><td>0 23/1 * * * *</td><td>Every beginning of a minute when minute is between 23 and 59.</td></tr>
-            <tr><td>50-10 * * * * *</td><td>Every second when seconds are from 50-59 and 00-10 (overflow mode).</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">* * * * * * *</td><td class="border px-4 py-2">CRON is valid all the time, will fire every second.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 * * * * * *</td><td class="border px-4 py-2">CRON is valid at the beginning of each minute.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">* * * * * 2 *</td><td class="border px-4 py-2">CRON is valid every Tuesday all day long.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 0 13-15 * * 2-4 *</td><td class="border px-4 py-2">CRON is valid every beginning of the minute between hours 13-15, between Tuesday and Thursday.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">*/5 * * * * * *</td><td class="border px-4 py-2">CRON is valid every 5 seconds starting at 0.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">*/5 */5 * * * *</td><td class="border px-4 py-2">CRON is valid every 5 seconds each 5 minutes, from 00:00 to 55:55.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 0 0 * * 5 *</td><td class="border px-4 py-2">Every Friday at midnight.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 0 */2 * * *</td><td class="border px-4 py-2">Every 2 hours at beginning of the hour.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">* * */2 * * *</td><td class="border px-4 py-2">Every second of every minute every 2 hours (0, 2, 4, .., 22).</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 0 0 * * 1-5 *</td><td class="border px-4 py-2">At midnight, 00:00 every week between Monday and Friday.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">15 23 */6 * * *</td><td class="border px-4 py-2">Every 6 hours at (min:sec) 23:15.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 0 0 1 * * *</td><td class="border px-4 py-2">At 00:00:00 beginning of the month.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 0 0 1 */3 *</td><td class="border px-4 py-2">Every beginning of the quarter at 00:00:00.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">10 15 20 * 8 6 *</td><td class="border px-4 py-2">At 20:15:20 every Saturday in August.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">10 15 20 8 * 6 *</td><td class="border px-4 py-2">At 20:15:20 every Saturday that is also 8th day in month.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">30-45 * * * * *</td><td class="border px-4 py-2">Every second between 30 and 45.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">30-45/3 * * * * *</td><td class="border px-4 py-2">Every 3rd second in every minute, when seconds are between 30 and 45.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">0 23/1 * * * *</td><td class="border px-4 py-2">Every beginning of a minute when minute is between 23 and 59.</td></tr>
+            <tr><td class="border px-4 py-2 whitespace-nowrap">50-10 * * * * *</td><td class="border px-4 py-2">Every second when seconds are from 50-59 and 00-10 (overflow mode).</td></tr>
           </tbody>
         </table>
-        <div>
-          <pre>
-            0 ── OFF
-            1 ── ON
-            2 ── TOGGLE
-            p ── PAUSE
-            , ── Separator
-          </pre>
+
+        <h2 class="text-xl font-bold mb-2 mt-6">Examples of ACTION</h2>
+        <table class="w-full">
+          <thead>
+            <tr><th class="border px-4 py-2">ACTION</th><th class="border px-4 py-2">Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="border px-4 py-2 whitespace-nowrap">18:1;p5;18:0</td>
+              <td class="border px-4 py-2">Pin 18 will turn on (ON) at the specified time (CRON), stay on for 5 seconds and turn off (OFF) after the pause.</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2 whitespace-nowrap">12:2;p5</td>
+              <td class="border px-4 py-2">Pin 12 will change its state (TOGGLE) after 5 seconds (p - PAUSE).</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="font-family: monospace; font-size: 13px; margin: 4px 0 8px 0; line-height: 1.8">
+          <div>0 ── OFF</div>
+          <div>1 ── ON</div>
+          <div>2 ── TOGGLE</div>
+          <div>p ── PAUSE</div>
+          <div>, ── Separator</div>
         </div>
-        <h2>Examples of ACTION</h2>
-        <table>
+        <h2 class="text-xl font-bold mb-2 mt-6">Examples of PWM (Sunrise and Sunset)</h2>
+        <table class="w-full">
           <thead>
-            <tr><th>ACTION</th><th>Description</th></tr>
+            <tr><th class="border px-4 py-2">Type</th><th class="border px-4 py-2">Description</th></tr>
           </thead>
           <tbody>
             <tr>
-              <td>18:1;p5;18:0</td>
-              <td>Pin 18 will turn on (ON) at the specified time (CRON), stay on for 5 seconds and turn off (OFF) after the pause.</td>
-            </tr>
-            <tr>
-              <td>12:2;p5</td>
-              <td>Pin 12 will change its state (TOGGLE) after 5 seconds (p - PAUSE).</td>
-            </tr>
-          </tbody>
-        </table>
-        <h2>Examples of PWM (Sunrise and Sunset)</h2>
-        <table>
-          <thead>
-            <tr><th>Type</th><th>Description</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Sunrise</td>
-              <td>
+              <td class="border px-4 py-2 whitespace-nowrap">Sunrise</td>
+              <td class="border px-4 py-2">
                 Click the <b>PWM</b> button to configure. Set <b>Start Duty</b> (e.g., 0) and <b>End Duty</b> (e.g., 100).
                 The duty cycle (brightness) will smoothly increase over the time specified in <b>Duration (Sec)</b> (from 1 to 864000 seconds).
               </td>
             </tr>
             <tr>
-              <td>Sunset</td>
-              <td>
+              <td class="border px-4 py-2 whitespace-nowrap">Sunset</td>
+              <td class="border px-4 py-2">
                 For a sunset effect, set <b>Start Duty</b> = 100 and <b>End Duty</b> = 0.
                 The duty cycle will smoothly decrease over the time specified in <b>Duration (Sec)</b>.
               </td>
@@ -371,7 +368,7 @@ function TabCron({ }) {
         </table>
       </div>
       <div>
-        <h2 class="text-xl font-bold mb-2">Change Tracking</h2>
+        <h2 class="text-xl font-bold mb-2 mt-6">Change Tracking</h2>
         <table class="w-full">
           <thead>
             <tr>
@@ -383,8 +380,8 @@ function TabCron({ }) {
             <tr>
               <td class="border px-4 py-2">Swarm/timer/</td>
               <td class="border px-4 py-2">
-                This page tracks changes in buttons and automatically sends each change via MQTT to the topic: Swarm/timer/.
-                Where "Swarm" is your 'RX topic'.
+                This page tracks changes of timers and automatically sends each change via MQTT to the topic: Swarm/timer/.
+                Where "Swarm" is your 'TX topic'.
               </td>
             </tr>
           </tbody>
