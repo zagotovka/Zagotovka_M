@@ -257,8 +257,8 @@ export const enlange1Wire = [
   '', // 0
   'ID - A unique numerical identifier. Assigned automatically.', // 1
   'Pin - The unique number of the digital pin to which the 1-Wire bus is connected.', // 2
-  'Selected sensor - Address of the selected and bound unique 1-Wire sensor to this pin (e.g., DS18B20).', // 3
-  'Count of sensors - Number of found 1-Wire temperature sensors on this pin.', // 4
+  'Selected sensor - Here you select the temperature sensor connected to the chosen pin: DS18B20 or DHT22.', // 3
+  'Count of sensors - Number of 1-Wire temperature sensors on this pin.', // 4
   'On/Off - The function of enabling or disabling polling of connected sensors on this bus.', // 5
   'Actions - The Edit button to bind a specific sensor to this connection.' // 6
 ];

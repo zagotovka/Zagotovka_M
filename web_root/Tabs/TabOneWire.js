@@ -147,44 +147,58 @@ const ActionBadge = ({ isUpper, isHumid, value, unit, str }) => {
 // Контент блока "Help" (рыба-текст — заменить на реальный позже)
 // ---------------------------------------------------------------------------
 const HELP_CONTENT = {
-  ru: html`
-    <div style="line-height:1.8;font-size:14px;color:#334155;">
-      <p style="margin-bottom:12px;font-weight:700;font-size:15px;">OneWire — справка</p>
-      <p style="margin-bottom:10px;">
-        Рыба текст dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-        Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-      </p>
-      <p style="margin-bottom:10px;">
-        Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
-        Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-      </p>
-      <p>
-        Каждый сенсор имеет уникальный серийный номер (SN). Кнопка «copy SN» копирует его в буфер обмена.
-        Значение <b style="color:#16a34a;">ON</b> — включить пин при достижении порога,
+  ru:html`
+  <div style="line-height:1.8; font-size:14px; color:#334155;">
+    <p style="margin-bottom:12px; font-weight:700; font-size:15px;">OneWire — справка</p>
+    
+    <p style="margin-bottom:10px;">
+      На этой странице для каждого сенсора, задайте действия, которые необходимо выполнить при достижении пределов температуры/влажности.
+    </p>
+    
+    <p style="margin-bottom:10px;">
+      Кнопка «copy SN» копирует уникальный серийный номер (SN) датчика DS18B20 в буфер обмена для привязки к PID-контроллеру на странице «PID controller».
+    </p>
+
+    <div style="margin-bottom:10px; line-height: 1.5;">
+      Значение:
+      <span style="display:block;">
+        <b style="color:#16a34a;">ON</b> — включить пин при достижении порога,
+      </span>
+      <span style="display:block;">
         <b style="color:#dc2626;">OFF</b> — выключить,
-        <b style="color:#d97706;">TG</b> — переключить (toggle).
-      </p>
+      </span>
+      <span style="display:block;">
+        <b style="color:#d97706;">TG</b> — переключить состояние пина (toggle).
+      </span>
     </div>
-  `,
+  </div>
+`,
   en: html`
-    <div style="line-height:1.8;font-size:14px;color:#334155;">
-      <p style="margin-bottom:12px;font-weight:700;font-size:15px;">OneWire — Help</p>
-      <p style="margin-bottom:10px;">
-        Kala teksti dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-        Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-      </p>
-      <p style="margin-bottom:10px;">
-        Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
-        Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-      </p>
-      <p>
-        Each sensor has a unique serial number (SN). The «copy SN» button copies it to the clipboard.
-        Value <b style="color:#16a34a;">ON</b> — turn the pin on when the threshold is reached,
-        <b style="color:#dc2626;">OFF</b> — turn it off,
-        <b style="color:#d97706;">TG</b> — toggle.
-      </p>
+  <div style="line-height:1.8; font-size:14px; color:#334155;">
+    <p style="margin-bottom:12px; font-weight:700; font-size:15px;">OneWire — Help</p>
+    
+    <p style="margin-bottom:10px;">
+      On this page, for each sensor, set the actions to perform when temperature/humidity limits are reached.
+    </p>
+    
+    <p style="margin-bottom:10px;">
+    The "copy SN" button copies the unique serial number (SN) of the DS18B20 sensor to the clipboard for linking with the PID controller on the "PID controller" page.
+    </p>
+
+    <div style="margin-bottom:10px; line-height: 1.5;">
+        Action values:
+      <span style="display:block;">
+        <b style="color:#16a34a;">ON</b> — turn the pin on when the threshold is reached
+      </span>
+      <span style="display:block;">
+        <b style="color:#dc2626;">OFF</b> — turn it off
+      </span>
+      <span style="display:block;">
+        <b style="color:#d97706;">TG</b> — toggle
+      </span>
     </div>
-  `,
+  </div>
+`
 };
 // ---------------------------------------------------------------------------
 
