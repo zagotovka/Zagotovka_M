@@ -711,6 +711,8 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
 
 
+static bool mqtt_connected_reported = false;  // Флаг для однократного вывода состояния MQTT
+
 static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
   if (ev == MG_EV_OPEN) {
     MG_INFO(("%lu CREATED", c->id));
@@ -725,6 +727,10 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
       //mg_tls_init(c, &opts);
     }
   } else if (ev == MG_EV_MQTT_OPEN) {// MQTT connect is successful
+	if (!mqtt_connected_reported) {
+		printf("MQTT is connected\r\n");
+		mqtt_connected_reported = true;
+	}
 	printf("[MQTT_OPEN] s_sub_topic='%s' rxmqttop='%s'\r\n",s_sub_topic, SetSettings.rxmqttop);
     struct mg_str subt = mg_str(s_sub_topic);
     struct mg_str pubt = mg_str(get_mqtt_topic()), data = mg_str("Hello from stm32!");
@@ -770,6 +776,10 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     }
   } else if (ev == MG_EV_CLOSE) {
     MG_INFO(("%lu CLOSED", c->id));
+    if (mqtt_connected_reported) {
+      printf("Error: MQTT disconnected\r\n");
+      mqtt_connected_reported = false;
+    }
     s_conn = NULL;  // Mark that we're closed
   }
   (void) fn_data;
@@ -815,12 +825,16 @@ void web_init(struct mg_mgr *mgr) {
         MG_ERROR(("Failed to start HTTP server on %s", http_url));
     }
 
-    // Запуск HTTPS-сервера с маркером HTTPS_MARKER
-    struct mg_connection *https_conn = mg_http_listen(mgr, https_url, (mg_event_handler_t)fn, HTTPS_MARKER);
-    if (https_conn) {
-        MG_INFO(("HTTPS server started on %s, conn=%p", https_url, (void *)https_conn));
+    // Запуск HTTPS-сервера с маркером HTTPS_MARKER (только если HTTPS включен)
+    if (SetSettings.usehttps == 1) {
+        struct mg_connection *https_conn = mg_http_listen(mgr, https_url, (mg_event_handler_t)fn, HTTPS_MARKER);
+        if (https_conn) {
+            MG_INFO(("HTTPS server started on %s, conn=%p", https_url, (void *)https_conn));
+        } else {
+            MG_ERROR(("Failed to start HTTPS server on %s", https_url));
+        }
     } else {
-        MG_ERROR(("Failed to start HTTPS server on %s", https_url));
+        MG_INFO(("HTTPS disabled in settings, skipping listener on %s", https_url));
     }
 
     // Запуск MQTT-сервера (если требуется)

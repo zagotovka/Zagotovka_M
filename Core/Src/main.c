@@ -1514,7 +1514,7 @@ void StartWebServerTask(void *argument)
             snprintf(mqtt_payload, sizeof(mqtt_payload), "DEVICE(s)/ACTION=%s", PinsConf[1].sclick);
             send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
           } else {
-            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
           }
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
@@ -1529,7 +1529,7 @@ void StartWebServerTask(void *argument)
             snprintf(mqtt_payload, sizeof(mqtt_payload), "ID:%d=%s", rxMsg.deviceId, rxMsg.state ? "ON" : "OFF");
             send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
           } else {
-            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
           }
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
@@ -1550,7 +1550,7 @@ void StartWebServerTask(void *argument)
             }
             send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
           } else {
-            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
           }
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
@@ -1565,7 +1565,7 @@ void StartWebServerTask(void *argument)
             snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick, PinsConf[rxMsg.deviceId].info);
             send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
           } else {
-            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
           }
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
@@ -1587,7 +1587,7 @@ void StartWebServerTask(void *argument)
             strcat(mqtt_payload, dbCrontxt[rxMsg.deviceId].info);
             send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
           } else {
-            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
           }
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
@@ -1611,7 +1611,7 @@ void StartWebServerTask(void *argument)
                      dbCrontxt[rxMsg.deviceId].info);
             send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
           } else {
-            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
           }
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
@@ -1633,7 +1633,7 @@ void StartWebServerTask(void *argument)
             strcat(mqtt_payload, PinsConf[rxMsg.deviceId].info);
             send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
           } else {
-            if (onlineFlg != 0) printf("Error: MQTT not connected\r\n");
+            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
           }
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
