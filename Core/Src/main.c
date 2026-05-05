@@ -1648,9 +1648,11 @@ void StartWebServerTask(void *argument)
 
     if (HAL_GetTick() - last_pub_tick >= 100) {
       last_pub_tick = HAL_GetTick();
-      publish_ds18b20_changes(s_conn);
-      publish_dht22_changes(s_conn);
-      publish_pwm_changes(s_conn);
+      if (s_conn != NULL && !s_conn->is_closing) {
+        publish_ds18b20_changes(s_conn);
+        publish_dht22_changes(s_conn);
+        publish_pwm_changes(s_conn);
+      }
     }
 
     /* Диагностический heartbeat — только при изменении heap */

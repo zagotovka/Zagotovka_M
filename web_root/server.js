@@ -118,21 +118,12 @@ const urlMappings = {
     file: 'json/settings2.json',
     contentType: 'application/json'
   },
-  '/api/sim800l/get': {
-    file: 'json/sim800l.json',
+  '/api/security/get': {
+    file: 'json/security.json',
     contentType: 'application/json'
   },
-  '/api/sim800l/set': {
-    file: 'json/sim800l2.json',
-    contentType: 'application/json'
-  },
-
-  '/api/monitoring/get': {
-    file: 'json/Monitoring.json',
-    contentType: 'application/json'
-  },
-  '/api/monitoring/set': {
-    file: 'json/Monitoring2.json',
+  '/api/security/set': {
+    file: 'json/security2.json',
     contentType: 'application/json'
   },
 

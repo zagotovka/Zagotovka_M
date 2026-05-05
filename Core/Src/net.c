@@ -606,18 +606,12 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/temp/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/temp/get", c->id));
 				handle_temp_get(c);
-			} else if (mg_match(hm->uri, mg_str("/api/sim800l/get"), NULL)) {
-				MG_INFO(("%lu Processing /api/sim800l/get", c->id));
-				handle_sim800l_get(c);
-			} else if (mg_match(hm->uri, mg_str("/api/sim800l/set"), NULL)) {
-				MG_INFO(("%lu Processing /api/sim800l/set", c->id));
-				handle_sim800l_set(c, hm);
-			} else if (mg_match(hm->uri, mg_str("/api/monitoring/get"), NULL)) {
-				MG_INFO(("%lu Processing /api/monitoring/get", c->id));
-				handle_monitoring_get(c);
-			} else if (mg_match(hm->uri, mg_str("/api/monitoring/set"), NULL)) {
-				MG_INFO(("%lu Processing /api/monitoring/set", c->id));
-				handle_monitoring_set(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/security/get"), NULL)) {
+				MG_INFO(("%lu Processing /api/security/get", c->id));
+				handle_security_get(c);
+			} else if (mg_match(hm->uri, mg_str("/api/security/set"), NULL)) {
+				MG_INFO(("%lu Processing /api/security/set", c->id));
+				handle_security_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/onewire/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/onewire/get", c->id));
 				handle_onewire_get(c);

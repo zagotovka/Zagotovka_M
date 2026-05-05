@@ -3159,8 +3159,7 @@ void handle_sensor_set(struct mg_connection *c, struct mg_http_message *hm) {
                   "{\"status\":false,\"message\":\"Empty request body\"}");
   }
 }
-/*********************************** End ONEWIRE
- * ****************************************/
+/*********************************** End ONEWIRE ****************************************/
 
 void parse_stm32time(char *response, size_t response_size,
                      const struct dbSettings *settings) {
@@ -3197,32 +3196,59 @@ void handle_temp_get(struct mg_connection *c) {
   log_headers(extra_headers);
   mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
-int gen_sim800l_json(char *buffer, int buffer_size) {
+int gen_security_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pins_conf, uint8_t num_pins, char *buffer, int buffer_size) {
   if (buffer == NULL || buffer_size <= 0) {
     return -1;
   }
+  
   uint8_t gps_state = SetSettings.sim800l;
   char *phone = SetSettings.tel;
   char *info = PinsConf[1].info;           // PA3
   uint8_t onoff_state = PinsConf[1].onoff; // PA3
-  // Форматируем JSON строку
-  int written = snprintf(buffer, buffer_size,
-                         "{\n"
-                         "  \"lang\": \"%s\",\n"
-                         "  \"sim800l\": %d,\n"
-                         "  \"tel\": \"%s\",\n"
-                         "  \"info\": \"%s\",\n"
-                         "  \"onoff\": %d\n"
-                         "}",
-                         SetSettings.lang, gps_state, phone, info, onoff_state);
-  // Проверяем, хватило ли места в буфере
-  if (written >= buffer_size) {
-    return -1;
+
+  int offset = 0;
+  offset += snprintf(buffer + offset, buffer_size - offset,
+                     "{\n"
+                     "  \"lang\": \"%s\",\n"
+                     "  \"sim800l\": %d,\n"
+                     "  \"tel\": \"%s\",\n"
+                     "  \"info\": \"%s\",\n"
+                     "  \"onoff\": %d,\n"
+                     "  \"pins\": [",
+                     SetSettings.lang, gps_state, phone, info, onoff_state);
+
+  int first_pin = 1;
+  for (int i = 0; i < num_pins && offset < buffer_size; i++) {
+    if (pins_conf[i].topin == 10) { // Проверка на SECURITY
+      if (!first_pin) {
+        offset += snprintf(buffer + offset, buffer_size - offset, ",");
+      } else {
+        first_pin = 0;
+      }
+      const char *action = (pins_conf[i].sclick[0] == '\0')
+                               ? "None"
+                               : pins_conf[i].sclick;
+      const char *send_sms = (pins_conf[i].send_sms[0] == '\0')
+                                 ? "NO"
+                                 : pins_conf[i].send_sms;
+      offset += snprintf(buffer + offset, buffer_size - offset,
+                         "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
+                         "\"action\":\"%s\",\"send_sms\":\"%s\","
+                         "\"info\":\"%s\",\"onoff\":%d}",
+                         pins_conf[i].topin, i, pins_info[i].pins, pins_conf[i].ptype,
+                         action, send_sms, pins_conf[i].info, pins_conf[i].onoff);
+    }
   }
-  return written;
+
+  if (offset < buffer_size) {
+    offset += snprintf(buffer + offset, buffer_size - offset, "\n  ]\n}");
+  }
+  
+  return offset;
 }
-void handle_sim800l_get(struct mg_connection *c) {
-  gen_sim800l_json(jsonbuf, BUFFER_SIZE);
+
+void handle_security_get(struct mg_connection *c) {
+  gen_security_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
   const char *extra_headers =
       "Connection: keep-alive\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
@@ -3288,33 +3314,6 @@ void parse_sim800l_json(const char *buffer) {
   //    printf("SetSettings.tel = '%s'\n", SetSettings.tel);
   //    printf("PinsConf[1].info = '%s'\n", PinsConf[1].info);
   //    printf("PinsConf[1].onoff = %d\n", PinsConf[1].onoff);
-}
-
-void handle_sim800l_set(struct mg_connection *c, struct mg_http_message *hm) {
-  const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
-
-  if (hm->body.len > 0 && hm->body.len < 512) {
-    /* A5 fix: копируем body в локальный null-terminated буфер */
-    char body_buf[512];
-    memcpy(body_buf, hm->body.buf, hm->body.len);
-    body_buf[hm->body.len] = '\0';
-    parse_sim800l_json(body_buf);
-    char response[256];
-    snprintf(
-        response, sizeof(response),
-        "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
-        (unsigned long)hm->body.len);
-
-    MG_INFO(("Response headers for connection %ld:", c->id));
-    log_headers(extra_headers);
-    mg_http_reply(c, 200, extra_headers, "%s", response);
-  } else {
-    MG_INFO(("Response headers for connection %ld:", c->id));
-    log_headers(extra_headers);
-    mg_http_reply(c, 400, extra_headers,
-                  "{\"status\":false,\"message\":\"Empty request body\"}");
-  }
 }
 void mqtt_message_handler(const char *topic, const char *payload) {
   char command[20];
@@ -3718,82 +3717,6 @@ void processPins(
   }
 }
 
-void gen_monitoring_json(const struct dbPinsInfo *pins_info,
-                         struct dbPinsConf *pins_conf, uint8_t num_pins,
-                         char *buffer, int buffer_size) {
-  //	printf("\nDebug at start of JSON generation:\n");
-  //	    for(int i = 0; i < num_pins; i++) {
-  //	        if(pins_conf[i].topin == 10) {
-  //	            printf("Pin %d send_sms content:\n", i);
-  //	            printf("  Value: '%s'\n", pins_conf[i].send_sms);
-  //	            printf("  Bytes: ");
-  //	            for(int j = 0; j < sizeof(pins_conf[i].send_sms); j++) {
-  //	                printf("%d ", (int)pins_conf[i].send_sms[j]);
-  //	            }
-  //	            printf("\n");
-  //	        }
-  //	    }
-
-  int offset = 0;
-  int first_pin = 1; // Флаг для определения первого элемента
-
-  // Начало JSON
-  offset += snprintf(buffer + offset, buffer_size - offset,
-                     "{\"lang\":\"%s\",\"pins\":[", SetSettings.lang);
-
-  // Перебор всех пинов
-  for (int i = 0; i < num_pins && offset < buffer_size; i++) {
-    if (pins_conf[i].topin == 10) { // Проверка на SECURITY
-      // Добавляем запятую между элементами
-      if (!first_pin) {
-        offset += snprintf(buffer + offset, buffer_size - offset, ",");
-      } else {
-        first_pin = 0;
-      }
-      // Если action и send_sms пусты то в json пропишем 'None'/'NO'
-      const char *action = (pins_conf[i].sclick[0] == '\0')
-                               ? "None"
-                               : pins_conf[i].sclick; // Проверка на пустоту
-
-      //            printf("Debug before check (i=%d):\n", i);
-      //            printf("  send_sms value: '%s'\n", pins_conf[i].send_sms);
-      //            printf("  send_sms length: %u\n",
-      //            strlen(pins_conf[i].send_sms)); printf("  First 5 chars
-      //            codes: %d %d %d %d %d\n",
-      //                (int)pins_conf[i].send_sms[0],
-      //                (int)pins_conf[i].send_sms[1],
-      //                (int)pins_conf[i].send_sms[2],
-      //                (int)pins_conf[i].send_sms[3],
-      //                (int)pins_conf[i].send_sms[4]);
-      const char *send_sms = (pins_conf[i].send_sms[0] == '\0')
-                                 ? "NO"
-                                 : pins_conf[i].send_sms; // Проверка на пустоту
-      // Формируем JSON для каждого пина типа MONITORING
-      offset +=
-          snprintf(buffer + offset, buffer_size - offset,
-                   "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
-                   "\"action\":\"%s\",\"send_sms\":\"%s\","
-                   "\"info\":\"%s\",\"onoff\":%d}",
-                   pins_conf[i].topin, i, pins_info[i].pins, pins_conf[i].ptype,
-                   action, send_sms, pins_conf[i].info, pins_conf[i].onoff);
-    }
-  }
-  // Закрываем JSON структуру
-  if (offset < buffer_size) {
-    offset += snprintf(buffer + offset, buffer_size - offset, "]}");
-  }
-  //    printf("Generated SECURITY JSON: %s\n", buffer);
-}
-
-void handle_monitoring_get(struct mg_connection *c) {
-  const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
-  MG_INFO(("Response headers for connection %ld:", c->id));
-  log_headers(extra_headers);
-  gen_monitoring_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
-  mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
-}
-
 void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
                            const struct dbPinsInfo *PinsInfo, uint8_t count) {
   cJSON *root = cJSON_Parse(json);
@@ -3850,17 +3773,42 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
     xTaskNotifyGive(my_DgnTaskHandle);
 }
 
-void handle_monitoring_set(struct mg_connection *c,
-                           struct mg_http_message *hm) {
+void handle_security_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
       "Connection: keep-alive\r\nContent-Type: application/json\r\n";
-  if (hm->body.len > 0) {
-    parse_monitoring_json(hm->body.buf, PinsConf, PinsInfo, NUMPIN);
+
+  if (hm->body.len > 0 && hm->body.len < BUFFER_SIZE) {
+    char body_buf[hm->body.len + 1];
+    memcpy(body_buf, hm->body.buf, hm->body.len);
+    body_buf[hm->body.len] = '\0';
+    
+    // Определяем тип запроса
+    cJSON *root = cJSON_Parse(body_buf);
+    if (root) {
+      cJSON *type = cJSON_GetObjectItem(root, "type");
+      if (cJSON_IsString(type)) {
+        if (strcmp(type->valuestring, "sim800l") == 0) {
+          parse_sim800l_json(body_buf);
+        } else if (strcmp(type->valuestring, "monitoring") == 0) {
+          parse_monitoring_json(body_buf, PinsConf, PinsInfo, NUMPIN);
+        }
+      }
+      cJSON_Delete(root);
+    } else {
+      // Фолбэк, если JSON кривой или без типа, пробуем просто strstr
+      if (strstr(body_buf, "\"type\":\"sim800l\"") || strstr(body_buf, "\"type\": \"sim800l\"")) {
+        parse_sim800l_json(body_buf);
+      } else if (strstr(body_buf, "\"type\":\"monitoring\"") || strstr(body_buf, "\"type\": \"monitoring\"")) {
+        parse_monitoring_json(body_buf, PinsConf, PinsInfo, NUMPIN);
+      }
+    }
+
     char response[256];
     snprintf(
         response, sizeof(response),
         "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
         (unsigned long)hm->body.len);
+
     MG_INFO(("Response headers for connection %ld:", c->id));
     log_headers(extra_headers);
     mg_http_reply(c, 200, extra_headers, "%s", response);
@@ -4860,7 +4808,9 @@ void check_ds18b20_changes(uint8_t pin_id, uint8_t sensor_id) {
 }
 // Функция публикации изменений DHT22
 void publish_dht22_changes(struct mg_connection *conn) {
-  if (!conn)
+  if (!conn || conn->is_closing)
+    return;
+  if (SetSettings.check_mqtt != 1 || SetSettings.txmqttop[0] == '\0')
     return;
   char payload[150];
 
@@ -4891,6 +4841,10 @@ void publish_dht22_changes(struct mg_connection *conn) {
 
 // Функция публикации изменений DS18B20
 void publish_ds18b20_changes(struct mg_connection *conn) {
+  if (!conn || conn->is_closing)
+    return;
+  if (SetSettings.check_mqtt != 1 || SetSettings.txmqttop[0] == '\0')
+    return;
   char payload[150];
   char addr_str[17]; // Для 8 байт нужно 16 символов HEX + завершающий нуль
 
@@ -4927,7 +4881,8 @@ void publish_ds18b20_changes(struct mg_connection *conn) {
 static int prev_pwm_dvalue[NUMPIN]; /* последнее опубликованное значение PWM */
 
 void publish_pwm_changes(struct mg_connection *conn) {
-  if (!conn) return;
+  if (!conn || conn->is_closing) return;
+  if (SetSettings.check_mqtt != 1 || SetSettings.txmqttop[0] == '\0') return;
   char payload[64];
 
   for (uint8_t i = 0; i < NUMPIN; i++) {

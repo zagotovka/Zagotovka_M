@@ -1,0 +1,11 @@
+{
+  "type": "monitoring",
+  "topin": 10,
+  "id": 2,
+  "pins": "PA4",
+  "ptype": 1,
+  "action": "18:2,12:2,6:2",
+  "send_sms": "YES",
+  "info": "Test-7",
+  "onoff": 1
+}

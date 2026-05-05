@@ -26,6 +26,7 @@ function ModalSIM800L({ hideModal, title, selectedGps, onSave }) {
     if (!isValidPhone) return;
 
     const jsonData = {
+      type: 'sim800l',
       tel: tel,
       info: info,
       onoff: onoff ? 1 : 0
@@ -33,7 +34,7 @@ function ModalSIM800L({ hideModal, title, selectedGps, onSave }) {
 
     console.log('Сохраняемые данные:', jsonData);
 
-    fetch('/api/sim800l/set', {
+    fetch('/api/security/set', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

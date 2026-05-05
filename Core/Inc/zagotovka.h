@@ -224,18 +224,15 @@ void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm);
 
 void handle_temp_get(struct mg_connection *c);
 
-void handle_sim800l_get(struct mg_connection *c);
-int gen_sim800l_json(char *buffer, int buffer_size);
-void handle_sim800l_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_security_get(struct mg_connection *c);
+int gen_security_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pins_conf, uint8_t num_pins, char *buffer, int buffer_size);
+void handle_security_set(struct mg_connection *c, struct mg_http_message *hm);
 void parse_sim800l_json(const char *buffer);
 
 void mqtt_message_handler(const char* topic, const char* payload);
 
 void action_handler(uint8_t button_id, const char* action_str, const char* press_type);
 
-void handle_monitoring_get(struct mg_connection *c);
-void handle_monitoring_set(struct mg_connection *c, struct mg_http_message *hm);
-void gen_monitoring_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pins_conf, uint8_t num_pins, char *buffer, int buffer_size);
 void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf, const struct dbPinsInfo *PinsInfo, uint8_t count);
 
 double calculateSunriseOrSunset(int isSunrise);
@@ -315,10 +312,8 @@ void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm, struct dbPinToPin PinsLinks[NUMPINLINKS]);
 void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_temp_get(struct mg_connection *c);
-void handle_sim800l_get(struct mg_connection *c);
-void handle_sim800l_set(struct mg_connection *c, struct mg_http_message *hm);
-void handle_monitoring_get(struct mg_connection *c);
-void handle_monitoring_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_security_get(struct mg_connection *c);
+void handle_security_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_onewire_get(struct mg_connection *c);
 void handle_sensor_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_onewire_set(struct mg_connection *c, struct mg_http_message *hm);

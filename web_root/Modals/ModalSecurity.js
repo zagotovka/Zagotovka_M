@@ -61,11 +61,12 @@ const ModalSecurity = ({
   };
 
   useEffect(() => {
-    fetch('/api/monitoring/get')
+    fetch('/api/security/get')
       .then((response) => response.json())
       .then((data) => {
-        if (Array.isArray(data)) {
-          setPinOptions(data.filter((pin) => pin.topin === 2));
+        const pins = data.pins || data;
+        if (Array.isArray(pins)) {
+          setPinOptions(pins.filter((pin) => pin.topin === 2));
         } else {
           // console.error('Expected array from API, received:', typeof data);
           setPinOptions([]);
@@ -86,6 +87,7 @@ const ModalSecurity = ({
     }
 
     const updatedSecurity = {
+      type: 'monitoring',
       ...selectedSecurity,
       info: mecurityInfo,
       send_sms: send_sms || 'NO',
@@ -94,7 +96,7 @@ const ModalSecurity = ({
       ptype
     };
 
-    fetch('/api/monitoring/set', {
+    fetch('/api/security/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updatedSecurity)
