@@ -1295,9 +1295,10 @@ void SetPinConfig() {
   f_close(&USBHFile);
   // MQTT уведомление
   if ((s_conn != NULL && !s_conn->is_closing) && SetSettings.check_mqtt) {
-    uint8_t mqttnum = 1;
-    if (xQueueSend(mqttQueueHandle, &mqttnum, portMAX_DELAY) != pdPASS) {
-      printf("Error send mqtt xQueueSend!\r\n");
+    MqttMessage_t mqttMsg = {0};
+    mqttMsg.command = 1;  // DEVICE
+    if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
+      printf("MQTT queue full, device notification dropped\r\n");
     }
   }
 }

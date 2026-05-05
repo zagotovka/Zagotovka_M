@@ -100,7 +100,7 @@ extern uint64_t s_boot_timestamp;
 char jsonbuf[BUFFER_SIZE];
 extern osMessageQueueId_t outputQueueHandle;
 /* A3: global data_pin removed — each function uses a local copy */
-extern MqttMessage_t mqttMsg;
+/* A4: global mqttMsg removed — each send site uses a local copy */
 extern osMessageQueueId_t outputQueueHandle;
 extern char mqtt_payload[300];
 extern TIM_HandleTypeDef htim[NUMPIN];
@@ -346,7 +346,6 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
                       int num_pins) {
   cJSON *json = cJSON_Parse(json_string);
   if (json == NULL) {
-    // Обработка ошибки парсинга JSON
     const char *error_ptr = cJSON_GetErrorPtr();
     if (error_ptr != NULL) {
       printf("Error before: %s\n", error_ptr);
@@ -354,61 +353,62 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
     return;
   }
 
-  cJSON *id_item = cJSON_GetObjectItemCaseSensitive(json, "id");
+  cJSON *id_item   = cJSON_GetObjectItemCaseSensitive(json, "id");
   cJSON *onoff_item = cJSON_GetObjectItemCaseSensitive(json, "onoff");
 
   if (cJSON_IsNumber(id_item) && cJSON_IsNumber(onoff_item)) {
     onoffid = id_item->valueint;
     uint8_t onoff = onoff_item->valueint;
-    // Проверяем, что id находится в допустимом диапазоне
+
     if (onoffid >= 0 && onoffid < num_pins) {
       PinsConf[onoffid].onoff = (uint8_t)onoff;
       printf("Updated pin %ld: onoff = %d\n", onoffid, onoff);
-      // Немедленно обновляем PWM если к этому пину привязан PWM-выход
+
       for (uint8_t a = 0; a < NUMPINLINKS; a++) {
         if (PinsLinks[a].idin == (int)onoffid) {
           uint8_t idpwm = PinsLinks[a].idout;
-          if (PinsConf[idpwm].topin == 5) { // topin==5 — это PWM
-            if (is_pin_in_autotune(idpwm)) continue; /* AutoTune lock */
+          if (PinsConf[idpwm].topin == 5) {
+            if (is_pin_in_autotune(idpwm)) continue;
             uint32_t pulse = 0;
             if (onoff != 0) {
-              // Восстанавливаем сохранённое значение dvalue
               pulse = (uint32_t)((uint64_t)PinsConf[idpwm].dvalue *
                                  PinsConf[idpwm].pwmmax / 100ULL);
             }
-            __HAL_TIM_SET_COMPARE(&htim[idpwm], PinsInfo[idpwm].tim_channel,
-                                  pulse);
-            printf("onoff->PWM pin %d: pulse=%lu\n", idpwm,
-                   (unsigned long)pulse);
+            __HAL_TIM_SET_COMPARE(&htim[idpwm], PinsInfo[idpwm].tim_channel, pulse);
+            printf("onoff->PWM pin %d: pulse=%lu\n", idpwm, (unsigned long)pulse);
           }
         }
       }
+
       /*********************************************************/
-      // Формируем payload
-      memset(mqtt_payload, 0, sizeof(mqtt_payload));
-      snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%ld/OnOff/%s", onoffid,
-               PinsConf[onoffid].info); // Подготовка MQTT сообщения
-      mqttMsg.command = 8;              // Команда для OnOFF
-      mqttMsg.deviceId = (uint8_t)onoffid;
-      mqttMsg.state = 0;
-      mqttMsg.reserved = 0;
-      // Отправка в очередь
-      if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-        printf("Error sending LONG_PRESS to MQTT queue!\r\n");
-      }
+      {
+        MqttMessage_t msg = {0};
+        msg.command  = 8;
+        msg.deviceId = (uint8_t)onoffid;
+        msg.state    = 0;
+        msg.reserved = 0;
+        if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
+          printf("Error sending OnOff to MQTT queue!\r\n");
+        }                          // ← закрывает if (xQueueSend)
+      }                            // ← закрывает блок MqttMessage_t
       /*********************************************************/
+
       int usbnum = 1;
       xQueueSend(usbQueueHandle, &usbnum, 0);
-    } else {
+
+    } else {                       // ← закрывает if (onoffid >= 0 && onoffid < num_pins)
       printf("Invalid id: %ld\n", onoffid);
     }
-  } else {
+
+  } else {                         // ← закрывает if (cJSON_IsNumber)
     printf("Invalid JSON format\n");
   }
+
   cJSON_Delete(json);
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
 }
+
 void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
       "Connection: keep-alive\r\nContent-Type: application/json\r\n";

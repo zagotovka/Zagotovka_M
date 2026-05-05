@@ -184,7 +184,6 @@ const TabSecurity = () => {
             <h3 class="font-bold mb-2">Примечание:</h3>
             <ul class="space-y-2">
               <li>• Действия в столбце 'Action' зависят от ползунка 'OnOff' выбранного пина.</li>
-              <li>• Данная страница отправляет изменения по MQTT на топик: <span class="text-blue-500 font-bold">Swarm/security/</span></li>
             </ul>
           </div>
         </div>
@@ -260,7 +259,6 @@ const TabSecurity = () => {
             <tbody>
               <tr>
                 <td class="border px-4 py-2 whitespace-nowrap">Swarm/security/</td>
-                <td class="border px-4 py-2">This page tracks sensor changes and automatically sends each update via MQTT to the topic: Swarm/security/. Where "Swarm" is your 'TX topic'.</td>
               </tr>
             </tbody>
           </table>

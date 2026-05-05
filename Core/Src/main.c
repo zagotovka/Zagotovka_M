@@ -72,7 +72,7 @@ uint8_t owflag = 0;
 ds18b20_pin_t ds18b20[MAX_DS18B20_P];
 dht22_pin_t dht22[MAX_DHT22_P];
 
-MqttMessage_t mqttMsg;
+/* A4: global mqttMsg removed — each send site uses a local copy */
 char mqtt_topic[100];
 char mqtt_payload[300];
 /* USER CODE END Includes */
@@ -150,7 +150,7 @@ const osThreadAttr_t ConfigTask_attributes = {
 osThreadId_t WebServerTaskHandle;
 const osThreadAttr_t WebServerTask_attributes = {
   .name = "WebServerTask",
-  .stack_size = 3072 * 4,
+  .stack_size = 4096 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for OutputTask */
@@ -1495,6 +1495,14 @@ void StartWebServerTask(void *argument)
   /* Infinite loop */
   for (;;) {
     mg_mgr_poll(mgr, 10);
+
+    /* Explicit drain: rapidly clear the queue if disconnected to avoid buildup */
+    if (s_conn == NULL || s_conn->is_closing) {
+      MqttMessage_t drain;
+      while (xQueueReceive(mqttQueueHandle, &drain, 0) == pdPASS) {
+        /* Drop silently */
+      }
+    }
 
     // Получаем данные из очереди (не блокируем поток Mongoose)
     memset(&rxMsg, 0, sizeof(MqttMessage_t));
