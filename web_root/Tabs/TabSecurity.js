@@ -1,6 +1,8 @@
 import { ModalSIM800L } from '../Modals/ModalSIM800L.js';
 import { ModalSecurity } from '../Modals/ModalSecurity.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { safeFetch } from '../safeFetch.js';
+import { wsSubscribe, wsUnsubscribe } from '../ws-client.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, ruLangsecurity, ruLangsecuritypins } from '../rulang.js';
@@ -267,18 +269,21 @@ const TabSecurity = () => {
   };
 
   useEffect(() => { initGlobalTooltip(); }, []);
-  const fetchSecurityAll = async () => {
+  const updateSecurityData = (data) => {
     if (isSaving || Date.now() - lastSaveTime < 500) return;
-    try {
-      const r = await fetch('/api/security/get'); const data = await r.json();
-      setSim800lData({ lang: data.lang, sim800l: data.sim800l, onoff: data.onoff, tel: data.tel, info: data.info });
-      setMonitoring(data.pins || []); setConnectionStatus('connected');
-    } catch (e) { setConnectionStatus('error'); }
+    if (!data) { setConnectionStatus('error'); return; }
+    setSim800lData({ lang: data.lang, sim800l: data.sim800l, onoff: data.onoff, tel: data.tel, info: data.info });
+    setMonitoring(data.pins || []); setConnectionStatus('connected');
   };
+
   useEffect(() => {
     fetch('/api/security/get').then(r => r.json()).then(data => setLanguage(data.lang || 'ru'));
-    const interval = setInterval(fetchSecurityAll, 1000); return () => clearInterval(interval);
-  }, []);
+    
+    safeFetch('/api/security/get', 'security').then(updateSecurityData); // initial fallback
+
+    const wsSecId = wsSubscribe('security', updateSecurityData);
+    return () => wsUnsubscribe(wsSecId);
+  }, [isSaving, lastSaveTime]);
 
   const handleSim800lSave = async (updated) => {
     setIsSaving(true);

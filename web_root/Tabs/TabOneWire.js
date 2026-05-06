@@ -1,6 +1,8 @@
 import { ModalEditSensor } from '../Modals/ModalEditSensor.js';
 import { ModalOneWire } from '../Modals/ModalOneWire.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { safeFetch } from '../safeFetch.js';
+import { wsSubscribe, wsUnsubscribe } from '../ws-client.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
@@ -249,32 +251,31 @@ const TabOneWire = () => {
       });
   };
 
-  const updateSensorData = async () => {
-    try {
-      const response = await fetch('/api/temp/get');
-      const data = await response.json();
-      setOneWire((prevState) => prevState.map((device) => {
-        const type = device.typsensor || device.typsensr;
-        if (!device.sensors || ![1, 2].includes(type)) return device;
-        const updatedSensors = device.sensors.map((sensor) => {
-          if (type === 1) {
-            const matched = data.ds18b20?.find((d) => d.addr === sensor.s_number);
-            return matched ? { ...sensor, t: matched.temp } : sensor;
-          } else if (type === 2) {
-            const matched = data.dht22?.find((d) => d.id === device.id);
-            return matched ? { ...sensor, t: matched.temp, humidity: matched.humidity } : sensor;
-          }
-          return sensor;
-        });
-        return { ...device, sensors: updatedSensors };
-      }));
-    } catch (e) { console.error(e); }
+  const updateSensorData = (data) => {
+    if (!data) return;
+    setOneWire((prevState) => prevState.map((device) => {
+      const type = device.typsensor || device.typsensr;
+      if (!device.sensors || ![1, 2].includes(type)) return device;
+      const updatedSensors = device.sensors.map((sensor) => {
+        if (type === 1) {
+          const matched = data.ds18b20?.find((d) => d.addr === sensor.s_number);
+          return matched ? { ...sensor, t: matched.temp } : sensor;
+        } else if (type === 2) {
+          const matched = data.dht22?.find((d) => d.id === device.id);
+          return matched ? { ...sensor, t: matched.temp, humidity: matched.humidity } : sensor;
+        }
+        return sensor;
+      });
+      return { ...device, sensors: updatedSensors };
+    }));
   };
 
   useEffect(() => {
     refresh();
-    const updateInterval = setInterval(updateSensorData, 1000);
-    return () => clearInterval(updateInterval);
+    safeFetch('/api/temp/get', 'temp').then(updateSensorData); // initial fallback
+
+    const wsTempId = wsSubscribe('temp', updateSensorData);
+    return () => wsUnsubscribe(wsTempId);
   }, []);
 
   const closeModal = () => { setIsModalOpen(false); setSelectedSensor(null); setEditingOneWire(null); };

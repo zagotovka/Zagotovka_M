@@ -319,6 +319,10 @@ void handle_sensor_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_onewire_set(struct mg_connection *c, struct mg_http_message *hm);
 void api_handler(struct mg_connection *c, struct mg_http_message *hm);
 
+/* ─── WebSocket broadcast ─── */
+void ws_broadcast_all(void);
+void gen_pintopin_json(struct dbPinToPin *PinsLinks, char *buffer, int buffer_size);
+
 //void setup_mqtt(struct mg_mgr *mgr, struct mg_tcpip_if *mif);
 
 struct mg_event {

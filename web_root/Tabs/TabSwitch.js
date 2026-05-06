@@ -1,5 +1,7 @@
 import { ModalSwitch } from '../Modals/ModalSwitch.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { safeFetch } from '../safeFetch.js';
+import { wsSubscribe, wsUnsubscribe } from '../ws-client.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
@@ -128,40 +130,38 @@ function TabSwitch({ }) {
       });
 
   const fetchSwitchData = () => {
-    fetch('/api/switch/get')
-      .then((r) => r.json())
-      .then((data) => {
-        setSwitch(data.switches);
-        setLanguage(data.lang);
-        console.log('Updated switch data:', data.switches);
-      })
-      .catch((error) => {
-        console.error('Error fetching switch data:', error);
-      });
+    safeFetch('/api/switch/get', 'switch').then(data => {
+      if (!data) return;
+      setSwitch(data.switches);
+      setLanguage(data.lang);
+    });
   };
 
   const fetchPintopinData = () => {
-    fetch('/api/pintopin/get')
-      .then((r) => r.json())
-      .then((data) => {
-        setPintopin(data);
-        console.log('Updated pintopin data:', data);
-      })
-      .catch((error) => {
-        console.error('Error fetching pintopin data:', error);
-      });
+    safeFetch('/api/pintopin/get', 'pintopin-sw').then(data => {
+      if (!data) return;
+      setPintopin(data);
+    });
   };
 
   useEffect(() => {
-    fetchSwitchData();
+    fetchSwitchData();   // initial fallback
     fetchPintopinData();
 
-    const intervalId = setInterval(() => {
-      fetchSwitchData();
-      fetchPintopinData();
-    }, 1000);
+    const wsSwId = wsSubscribe('switch', data => {
+      if (data && data.switches) {
+        setSwitch(data.switches);
+        setLanguage(data.lang);
+      }
+    });
+    const wsPtpId = wsSubscribe('pintopin', data => {
+      if (data) setPintopin(data);
+    });
 
-    return () => clearInterval(intervalId);
+    return () => {
+      wsUnsubscribe(wsSwId);
+      wsUnsubscribe(wsPtpId);
+    };
   }, []);
 
   const getConnectedPins = (switchId) => {

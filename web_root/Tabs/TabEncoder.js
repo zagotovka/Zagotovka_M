@@ -1,5 +1,7 @@
 import { ModalEncoder } from '../Modals/ModalEncoder.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { safeFetch } from '../safeFetch.js';
+import { wsSubscribe, wsUnsubscribe } from '../ws-client.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
@@ -126,44 +128,42 @@ function TabEncoder({ }) {
         });
 
     const fetchEncoderData = () => {
-      fetch('/api/encoder/get')
-        .then((r) => r.json())
-        .then((data) => {
-          if (isPendingOnOff.current) {
-            console.log('Polling skip: onoff request in flight');
-            return;
-          }
-          setEncoder(data.encoders);
-          setLanguage(data.lang);
-          console.log('Updated encoder data:', data.encoders);
-        })
-        .catch((error) => {
-          console.error('Error fetching encoder data:', error);
-        });
+      safeFetch('/api/encoder/get', 'encoder').then(data => {
+        if (!data) return;
+        if (isPendingOnOff.current) {
+          return;
+        }
+        setEncoder(data.encoders);
+        setLanguage(data.lang);
+      });
     };
 
     const fetchPintopinData = () => {
-      fetch('/api/pintopin/get')
-        .then((r) => r.json())
-        .then((data) => {
-          setPintopin(data);
-          console.log('Updated pintopin data:', data);
-        })
-        .catch((error) => {
-          console.error('Error fetching pintopin data:', error);
-        });
+      safeFetch('/api/pintopin/get', 'pintopin-enc').then(data => {
+        if (!data) return;
+        setPintopin(data);
+      });
     };
 
     useEffect(() => {
-      fetchEncoderData();
+      fetchEncoderData();   // initial fallback
       fetchPintopinData();
 
-      const intervalId = setInterval(() => {
-        fetchEncoderData();
-        fetchPintopinData();
-      }, 500);
+      const wsEncId = wsSubscribe('encoder', data => {
+        if (isPendingOnOff.current) return;
+        if (data && data.encoders) {
+          setEncoder(data.encoders);
+          setLanguage(data.lang);
+        }
+      });
+      const wsPtpId = wsSubscribe('pintopin', data => {
+        if (data) setPintopin(data);
+      });
 
-      return () => clearInterval(intervalId);
+      return () => {
+        wsUnsubscribe(wsEncId);
+        wsUnsubscribe(wsPtpId);
+      };
     }, []);
 
     const handleEncoderChange = (updatedEncoder) => {

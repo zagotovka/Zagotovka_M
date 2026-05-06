@@ -30,6 +30,37 @@ const char *s_json_header =
     "Content-Type: application/json\r\n"
     "Cache-Control: no-cache\r\n";
 
+/* ─── WebSocket broadcast infrastructure ─── */
+#define MAX_WS_CLIENTS 4
+static struct mg_connection *s_ws_clients[MAX_WS_CLIENTS];
+static int s_ws_count = 0;
+
+static void ws_client_add(struct mg_connection *c) {
+  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+    if (s_ws_clients[i] == NULL) {
+      s_ws_clients[i] = c;
+      s_ws_count++;
+      printf("[WS] client added id=%lu (total=%d)\r\n",
+             c->id, s_ws_count);
+      return;
+    }
+  }
+  printf("[WS] MAX clients reached, rejecting id=%lu\r\n", c->id);
+  mg_close_conn(c);
+}
+
+static void ws_client_remove(struct mg_connection *c) {
+  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+    if (s_ws_clients[i] == c) {
+      s_ws_clients[i] = NULL;
+      s_ws_count--;
+      printf("[WS] client removed id=%lu (total=%d)\r\n",
+             c->id, s_ws_count);
+      return;
+    }
+  }
+}
+/* ─── End WS infrastructure ─── */
 
 
 int ui_event_next(int no, struct ui_event *e) {
@@ -411,6 +442,17 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		struct mg_str uri = hm->uri;
 		MG_INFO(("%lu Checking URI: %.*s (len: %d)", c->id, (int) uri.len, uri.buf, (int) uri.len));
 
+		/* ── WebSocket upgrade: /ws ── */
+		if (mg_match(hm->uri, mg_str("/ws"), NULL)) {
+			if (u == NULL) {
+				mg_http_reply(c, 403, "", "Unauthorized\n");
+			} else {
+				mg_ws_upgrade(c, hm, NULL);
+				ws_client_add(c);
+			}
+			break;
+		}
+
 		// Обработка корневого пути (/) и статических страниц
 		if (uri.len == 1 && strncmp(uri.buf, "/", uri.len) == 0) {
 			MG_INFO(("%lu Serving root path (/) for connection", c->id));
@@ -680,6 +722,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 	}
 
 	case MG_EV_CLOSE:
+		ws_client_remove(c);
 		MG_INFO(("%lu Connection closed (TLS: %d)", c->id, c->is_tls));
 		break;
 
@@ -699,6 +742,92 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		break;
 	}
 }
+
+/* ─── ws_broadcast_all: собирает JSON из существующих gen_*_json ─── */
+void ws_broadcast_all(void) {
+  if (s_ws_count == 0) return;
+
+  static char ws_buf[BUFFER_SIZE];
+  int off = 0;
+  size_t chunk_len;
+
+  off += snprintf(ws_buf + off, BUFFER_SIZE - off, "{\"switch\":");
+  gen_switch_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+  chunk_len = strlen(jsonbuf);
+  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
+    memcpy(ws_buf + off, jsonbuf, chunk_len);
+    off += (int)chunk_len;
+  }
+
+  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"button\":");
+  gen_button_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+  chunk_len = strlen(jsonbuf);
+  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
+    memcpy(ws_buf + off, jsonbuf, chunk_len);
+    off += (int)chunk_len;
+  }
+
+  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"encoder\":");
+  gen_encoder_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE,
+                   PinsLinks, NUMPINLINKS);
+  chunk_len = strlen(jsonbuf);
+  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
+    memcpy(ws_buf + off, jsonbuf, chunk_len);
+    off += (int)chunk_len;
+  }
+
+  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"pid\":");
+  gen_pid_json(jsonbuf, BUFFER_SIZE);
+  chunk_len = strlen(jsonbuf);
+  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
+    memcpy(ws_buf + off, jsonbuf, chunk_len);
+    off += (int)chunk_len;
+  }
+
+  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"temp\":");
+  pars_temp_sensors(jsonbuf, BUFFER_SIZE);
+  chunk_len = strlen(jsonbuf);
+  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
+    memcpy(ws_buf + off, jsonbuf, chunk_len);
+    off += (int)chunk_len;
+  }
+
+  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"security\":");
+  gen_security_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+  chunk_len = strlen(jsonbuf);
+  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
+    memcpy(ws_buf + off, jsonbuf, chunk_len);
+    off += (int)chunk_len;
+  }
+
+  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"pintopin\":");
+  gen_pintopin_json(PinsLinks, jsonbuf, BUFFER_SIZE);
+  chunk_len = strlen(jsonbuf);
+  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
+    memcpy(ws_buf + off, jsonbuf, chunk_len);
+    off += (int)chunk_len;
+  }
+
+  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"time\":");
+  { char tbuf[256];
+    parse_stm32time(tbuf, sizeof(tbuf), &SetSettings);
+    chunk_len = strlen(tbuf);
+    if (off + (int)chunk_len < BUFFER_SIZE - 10) {
+      memcpy(ws_buf + off, tbuf, chunk_len);
+      off += (int)chunk_len;
+    }
+  }
+
+  off += snprintf(ws_buf + off, BUFFER_SIZE - off, "}");
+
+  /* Отправляем всем WS-клиентам */
+  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+    if (s_ws_clients[i] != NULL) {
+      mg_ws_send(s_ws_clients[i], ws_buf, (size_t)off, WEBSOCKET_OP_TEXT);
+    }
+  }
+}
+
 /****************************************************************/
 
 // MQTT
@@ -706,6 +835,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
 
 static bool mqtt_connected_reported = false;  // Флаг для однократного вывода состояния MQTT
+static bool s_mqtt_reconnect_reported = false; // Флаг для однократного вывода reconnecting
 
 static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
   if (ev == MG_EV_OPEN) {
@@ -721,10 +851,9 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
       //mg_tls_init(c, &opts);
     }
   } else if (ev == MG_EV_MQTT_OPEN) {// MQTT connect is successful
-	if (!mqtt_connected_reported) {
-		printf("MQTT is connected\r\n");
-		mqtt_connected_reported = true;
-	}
+	printf("[MQTT] connected to %s\r\n", get_mqtt_url());
+	mqtt_connected_reported = true;
+	s_mqtt_reconnect_reported = false; // Сброс: при следующем дисконнекте снова напечатает 1 раз
 	printf("[MQTT_OPEN] s_sub_topic='%s' rxmqttop='%s'\r\n",s_sub_topic, SetSettings.rxmqttop);
     struct mg_str subt = mg_str(s_sub_topic);
     struct mg_str pubt = mg_str(get_mqtt_topic()), data = mg_str("Hello from stm32!");
@@ -783,12 +912,36 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
 //static void timer_fn_mqtt(void *arg) {
 void timer_fn_mqtt(void *arg) {
   struct mg_mgr *mgr = (struct mg_mgr *) arg;
+
+  /* Watchdog: если соединение зависло (connecting/closing > 15 сек) —
+   * принудительно закрываем, чтобы разрешить reconnect */
+  static uint32_t s_mqtt_conn_tick = 0;  /* метка создания соединения */
+  if (s_conn != NULL) {
+    bool is_stale = s_conn->is_connecting || s_conn->is_closing || s_conn->is_draining;
+    if (is_stale && (mg_millis() - s_mqtt_conn_tick > 15000)) {
+      printf("[MQTT] stale conn (%lus) — force close\r\n",
+             (unsigned long)(mg_millis() - s_mqtt_conn_tick) / 1000);
+      s_conn->is_draining = 1;  /* мягкое закрытие через Mongoose */
+      s_conn = NULL;
+      s_mqtt_conn_tick = 0;
+      s_mqtt_reconnect_reported = false; // Разрешить 1 сообщение reconnecting
+      return;  /* На следующем тике таймера создастся новое соединение */
+    }
+    return;  /* Соединение существует и не зависло — ничего не делаем */
+  }
+
+  /* s_conn == NULL — создаём новое MQTT соединение */
   struct mg_mqtt_opts opts = {.clean = true,
                               .qos = s_qos,
                               .topic = mg_str(get_mqtt_topic()),
                               .version = 4,
                               .message = mg_str("bye")};
-  if (s_conn == NULL) s_conn = mg_mqtt_connect(mgr, get_mqtt_url(), &opts, (mg_event_handler_t) fn_mqtt, NULL);
+  s_conn = mg_mqtt_connect(mgr, get_mqtt_url(), &opts, (mg_event_handler_t) fn_mqtt, NULL);
+  s_mqtt_conn_tick = mg_millis();  /* запоминаем время создания */
+  if (s_conn != NULL && !s_mqtt_reconnect_reported) {
+    printf("[MQTT] reconnecting to %s ...\r\n", get_mqtt_url());
+    s_mqtt_reconnect_reported = true; // Больше не печатать до успешного connect
+  }
 }
 
 //void web_init(struct mg_mgr *mgr) {

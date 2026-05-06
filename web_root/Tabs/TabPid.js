@@ -1,5 +1,7 @@
 import { ModalPid } from '../Modals/ModalPid.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { safeFetch } from '../safeFetch.js';
+import { wsSubscribe, wsUnsubscribe } from '../ws-client.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, rulangpid } from '../rulang.js';
@@ -183,28 +185,36 @@ function TabPid({ }) {
   }, []);
 
   const fetchPidData = () => {
-    fetch('/api/pid/get')
-      .then((r) => r.json())
-      .then((r) => {
-        if (isPendingOnOff.current) return;
-        if (r && Array.isArray(r.pid)) {
-          setPid(r.pid);
-          setLanguage(r.lang || 'ru');
-          if (typeof r.pidline === 'number') {
-            setPidline(r.pidline);
-            setVisiblePids(r.pidline);
-          }
+    safeFetch('/api/pid/get', 'pid').then(r => {
+      if (!r) return;
+      if (isPendingOnOff.current) return;
+      if (r && Array.isArray(r.pid)) {
+        setPid(r.pid);
+        setLanguage(r.lang || 'ru');
+        if (typeof r.pidline === 'number') {
+          setPidline(r.pidline);
+          setVisiblePids(r.pidline);
         }
-      })
-      .catch((error) => console.error('Error fetching PID data:', error));
+      }
+    });
   };
 
   useEffect(() => {
-    fetchPidData();
-    const intervalId = setInterval(() => {
-      fetchPidData();
-    }, 500);
-    return () => clearInterval(intervalId);
+    fetchPidData();   // initial fallback
+
+    const wsPidId = wsSubscribe('pid', data => {
+      if (isPendingOnOff.current) return;
+      if (data && Array.isArray(data.pid)) {
+        setPid(data.pid);
+        setLanguage(data.lang || 'ru');
+        if (typeof data.pidline === 'number') {
+          setPidline(data.pidline);
+          setVisiblePids(data.pidline);
+        }
+      }
+    });
+
+    return () => wsUnsubscribe(wsPidId);
   }, []);
 
   const isFirstPidlineMount = useRef(true);

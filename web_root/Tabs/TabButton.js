@@ -1,5 +1,7 @@
 import { ModalButton } from '../Modals/ModalButton.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { safeFetch } from '../safeFetch.js';
+import { wsSubscribe, wsUnsubscribe } from '../ws-client.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
@@ -442,31 +444,25 @@ const TabButton = () => {
       });
 
   const fetchButtonData = () => {
-    fetch('/api/button/get')
-      .then((r) => r.json())
-      .then((data) => {
-        setButton(data.buttons);
-        setLanguage(data.lang);
-        console.log('Updated button data:', data.buttons);
-      })
-      .catch((error) => {
-        console.error('Error fetching button data:', error);
-      });
+    safeFetch('/api/button/get', 'button').then(data => {
+      if (!data) return;
+      setButton(data.buttons);
+      setLanguage(data.lang);
+    });
   };
 
   useEffect(() => {
-    fetchButtonData();
+    fetchButtonData();   // initial fallback
 
-    let intervalId;
-    if (isUpdating) {
-      intervalId = setInterval(() => {
-        fetchButtonData();
-      }, 1000);
-    }
+    const wsBtnId = wsSubscribe('button', data => {
+      if (!isUpdating) return;
+      if (data && data.buttons) {
+        setButton(data.buttons);
+        setLanguage(data.lang);
+      }
+    });
 
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
+    return () => wsUnsubscribe(wsBtnId);
   }, [isUpdating]);
 
   const getConnectedPins = (buttonId) => {

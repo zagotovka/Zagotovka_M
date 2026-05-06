@@ -1,4 +1,6 @@
 // NOTE: API calls must start with 'api/' in order to serve the app at any URI
+import { safeFetch } from './safeFetch.js';
+import { wsSubscribe, wsUnsubscribe } from './ws-client.js';
 
 ('use strict');
 import {
@@ -119,41 +121,24 @@ function Header({ logout, user, setShowSidebar, showSidebar }) {
   };
 
   // Функция для обновления времени STM32
-  const updateStm32Time = async () => {
-    try {
-      const response = await fetch('/api/stm32-time');
-      //console.log('Raw response:', response);
-      const textData = await response.text();
-      //console.log('Response text:', textData);
-
-      let data;
-      try {
-        data = JSON.parse(textData);
-      } catch (parseError) {
-        //console.error('Error parsing JSON:', parseError);
-        //console.log('Invalid JSON data:', textData);
-        return;
-      }
-      //console.log('Parsed data:', data);
-      if (data.status && data.time) {
-        setStm32Time(stm32ToDate(data.time, data.timezone));
-      } else {
-        //console.error('Failed to get STM32 time:', data.message);
-        setStm32Time(null);
-      }
-    } catch (error) {
-      //console.error('Error fetching STM32 time:', error);
+  const handleStm32TimeData = (data) => {
+    if (data && data.status && data.time) {
+      setStm32Time(stm32ToDate(data.time, data.timezone));
+    } else if (data) {
       setStm32Time(null);
     }
   };
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
-    const stm32Interval = setInterval(updateStm32Time, 1000);
-    updateStm32Time(); // Первоначальное получение времени STM32
+    
+    safeFetch('/api/stm32-time', 'stm32-time').then(handleStm32TimeData); // Первоначальное получение времени STM32
+
+    const wsTimeId = wsSubscribe('time', handleStm32TimeData);
+
     return () => {
       clearInterval(interval);
-      clearInterval(stm32Interval);
+      wsUnsubscribe(wsTimeId);
     };
   }, []);
 

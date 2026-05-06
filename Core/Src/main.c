@@ -346,6 +346,16 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic,
     return;
   }
 
+  /* Защита от переполнения send-буфера при зависшем TCP соединении.
+   * Если брокер перестал ACK-ить пакеты, conn->send растёт бесконечно
+   * и через ~2 часа исчерпывает FreeRTOS heap → deadlock.
+   * Порог 4096 = ~20-40 сообщений в буфере. */
+  if (conn->send.len > 4096) {
+    MG_ERROR(("MQTT send buf overflow (%lu), draining", (unsigned long)conn->send.len));
+    conn->is_draining = 1;
+    return;
+  }
+
   struct mg_mqtt_opts pub_opts;
   memset(&pub_opts, 0, sizeof(pub_opts));
   char full_topic[128]; // Буфер для полного топика
@@ -375,7 +385,8 @@ unsigned long Ti;
 unsigned long Te;
 
 static bool check_mqtt_connection(void *conn) {
-  if (conn == NULL) {
+  struct mg_connection *c = (struct mg_connection *)conn;
+  if (c == NULL || c->is_closing) {
     return false;
   }
   return true;
@@ -674,7 +685,7 @@ int main(void)
   usbQueueHandle = osMessageQueueNew (16, sizeof(uint8_t), &usbQueue_attributes);
 
   /* creation of mqttQueue */
-  mqttQueueHandle = osMessageQueueNew (16, sizeof(MqttMessage_t), &mqttQueue_attributes);
+  mqttQueueHandle = osMessageQueueNew (32, sizeof(MqttMessage_t), &mqttQueue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -1495,6 +1506,15 @@ void StartWebServerTask(void *argument)
   /* Infinite loop */
   for (;;) {
     mg_mgr_poll(mgr, 10);
+
+    /* ── WebSocket broadcast каждые 300ms ── */
+    {
+      static uint32_t last_ws_bc = 0;
+      if (HAL_GetTick() - last_ws_bc >= 300) {
+        last_ws_bc = HAL_GetTick();
+        ws_broadcast_all();
+      }
+    }
 
     /* Explicit drain: rapidly clear the queue if disconnected to avoid buildup */
     if (s_conn == NULL || s_conn->is_closing) {
