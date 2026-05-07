@@ -32,13 +32,21 @@ const char *s_json_header =
 
 /* ─── WebSocket broadcast infrastructure ─── */
 #define MAX_WS_CLIENTS 4
-static struct mg_connection *s_ws_clients[MAX_WS_CLIENTS];
+#define TAB_NAME_MAX   16
+
+typedef struct {
+  struct mg_connection *c;
+  char activeTab[TAB_NAME_MAX];  /* "" = только time */
+} ws_client_t;
+
+static ws_client_t s_ws_clients[MAX_WS_CLIENTS];
 static int s_ws_count = 0;
 
 static void ws_client_add(struct mg_connection *c) {
   for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-    if (s_ws_clients[i] == NULL) {
-      s_ws_clients[i] = c;
+    if (s_ws_clients[i].c == NULL) {
+      s_ws_clients[i].c = c;
+      s_ws_clients[i].activeTab[0] = '\0';
       s_ws_count++;
       printf("[WS] client added id=%lu (total=%d)\r\n",
              c->id, s_ws_count);
@@ -51,8 +59,9 @@ static void ws_client_add(struct mg_connection *c) {
 
 static void ws_client_remove(struct mg_connection *c) {
   for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-    if (s_ws_clients[i] == c) {
-      s_ws_clients[i] = NULL;
+    if (s_ws_clients[i].c == c) {
+      s_ws_clients[i].c = NULL;
+      s_ws_clients[i].activeTab[0] = '\0';
       s_ws_count--;
       printf("[WS] client removed id=%lu (total=%d)\r\n",
              c->id, s_ws_count);
@@ -721,6 +730,23 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		break;
 	}
 
+	case MG_EV_WS_MSG: {
+		struct mg_ws_message *wm = (struct mg_ws_message *) ev_data;
+		/* Парсим {"activeTab":"encoder"} без malloc */
+		char tab[TAB_NAME_MAX] = {0};
+		if (mg_json_unescape(wm->data, "$.activeTab", tab, sizeof(tab)) > 0) {
+			for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+				if (s_ws_clients[i].c == c) {
+					strncpy(s_ws_clients[i].activeTab, tab, TAB_NAME_MAX - 1);
+					s_ws_clients[i].activeTab[TAB_NAME_MAX - 1] = '\0';
+					printf("[WS] id=%lu activeTab=%s\r\n", c->id, tab);
+					break;
+				}
+			}
+		}
+		break;
+	}
+
 	case MG_EV_CLOSE:
 		ws_client_remove(c);
 		MG_INFO(("%lu Connection closed (TLS: %d)", c->id, c->is_tls));
@@ -743,88 +769,78 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 	}
 }
 
-/* ─── ws_broadcast_all: собирает JSON из существующих gen_*_json ─── */
+/* ─── ws_broadcast_all: per-client JSON по activeTab ─── */
+
+/* Хелпер: добавляет блок "key":VALUE в ws_buf. Возвращает новый off.
+   need_comma — нужна ли запятая перед блоком. */
+static int ws_append_block(char *buf, int off, int bufsize,
+                           const char *key, const char *json_val, int need_comma) {
+  size_t vlen = strlen(json_val);
+  int hdr = snprintf(buf + off, bufsize - off, "%s\"%s\":",
+                     need_comma ? "," : "", key);
+  if (off + hdr + (int)vlen < bufsize - 10) {
+    off += hdr;
+    memcpy(buf + off, json_val, vlen);
+    off += (int)vlen;
+  }
+  return off;
+}
+
 void ws_broadcast_all(void) {
   if (s_ws_count == 0) return;
 
   static char ws_buf[BUFFER_SIZE];
-  int off = 0;
-  size_t chunk_len;
 
-  off += snprintf(ws_buf + off, BUFFER_SIZE - off, "{\"switch\":");
-  gen_switch_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
-  chunk_len = strlen(jsonbuf);
-  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
-    memcpy(ws_buf + off, jsonbuf, chunk_len);
-    off += (int)chunk_len;
-  }
-
-  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"button\":");
-  gen_button_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
-  chunk_len = strlen(jsonbuf);
-  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
-    memcpy(ws_buf + off, jsonbuf, chunk_len);
-    off += (int)chunk_len;
-  }
-
-  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"encoder\":");
-  gen_encoder_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE,
-                   PinsLinks, NUMPINLINKS);
-  chunk_len = strlen(jsonbuf);
-  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
-    memcpy(ws_buf + off, jsonbuf, chunk_len);
-    off += (int)chunk_len;
-  }
-
-  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"pid\":");
-  gen_pid_json(jsonbuf, BUFFER_SIZE);
-  chunk_len = strlen(jsonbuf);
-  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
-    memcpy(ws_buf + off, jsonbuf, chunk_len);
-    off += (int)chunk_len;
-  }
-
-  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"temp\":");
-  pars_temp_sensors(jsonbuf, BUFFER_SIZE);
-  chunk_len = strlen(jsonbuf);
-  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
-    memcpy(ws_buf + off, jsonbuf, chunk_len);
-    off += (int)chunk_len;
-  }
-
-  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"security\":");
-  gen_security_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
-  chunk_len = strlen(jsonbuf);
-  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
-    memcpy(ws_buf + off, jsonbuf, chunk_len);
-    off += (int)chunk_len;
-  }
-
-  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"pintopin\":");
-  gen_pintopin_json(PinsLinks, jsonbuf, BUFFER_SIZE);
-  chunk_len = strlen(jsonbuf);
-  if (off + (int)chunk_len < BUFFER_SIZE - 200) {
-    memcpy(ws_buf + off, jsonbuf, chunk_len);
-    off += (int)chunk_len;
-  }
-
-  off += snprintf(ws_buf + off, BUFFER_SIZE - off, ",\"time\":");
-  { char tbuf[256];
-    parse_stm32time(tbuf, sizeof(tbuf), &SetSettings);
-    chunk_len = strlen(tbuf);
-    if (off + (int)chunk_len < BUFFER_SIZE - 10) {
-      memcpy(ws_buf + off, tbuf, chunk_len);
-      off += (int)chunk_len;
-    }
-  }
-
-  off += snprintf(ws_buf + off, BUFFER_SIZE - off, "}");
-
-  /* Отправляем всем WS-клиентам */
   for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-    if (s_ws_clients[i] != NULL) {
-      mg_ws_send(s_ws_clients[i], ws_buf, (size_t)off, WEBSOCKET_OP_TEXT);
+    if (s_ws_clients[i].c == NULL) continue;
+
+    int off = 0;
+    int has_data = 0;  /* были ли блоки до time */
+    const char *tab = s_ws_clients[i].activeTab;
+
+    off += snprintf(ws_buf + off, BUFFER_SIZE - off, "{");
+
+    if (strcmp(tab, "switch") == 0) {
+      gen_switch_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "switch", jsonbuf, 0);
+      gen_pintopin_json(PinsLinks, jsonbuf, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "pintopin", jsonbuf, 1);
+      has_data = 1;
+    } else if (strcmp(tab, "encoder") == 0) {
+      gen_encoder_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE,
+                       PinsLinks, NUMPINLINKS);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "encoder", jsonbuf, 0);
+      gen_pintopin_json(PinsLinks, jsonbuf, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "pintopin", jsonbuf, 1);
+      has_data = 1;
+    } else if (strcmp(tab, "pid") == 0) {
+      gen_pid_json(jsonbuf, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "pid", jsonbuf, 0);
+      has_data = 1;
+    } else if (strcmp(tab, "button") == 0) {
+      gen_button_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "button", jsonbuf, 0);
+      has_data = 1;
+    } else if (strcmp(tab, "temp") == 0) {
+      pars_temp_sensors(jsonbuf, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "temp", jsonbuf, 0);
+      has_data = 1;
+    } else if (strcmp(tab, "security") == 0) {
+      gen_security_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "security", jsonbuf, 0);
+      has_data = 1;
     }
+    /* activeTab пустой или неизвестный — только time */
+
+    /* Всегда добавляем time */
+    { char tbuf[256];
+      parse_stm32time(tbuf, sizeof(tbuf), &SetSettings);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "time", tbuf, has_data);
+    }
+
+    off += snprintf(ws_buf + off, BUFFER_SIZE - off, "}");
+
+    mg_ws_send(s_ws_clients[i].c, ws_buf, (size_t)off, WEBSOCKET_OP_TEXT);
   }
 }
 

@@ -17,6 +17,7 @@ let _reconnTimer = null;
 let _subId = 0;
 const _subs = {};    // { id: { topic, callback } }
 let _lastData = {};  // кэш последних данных по topic
+let _currentTab = '';  // активная вкладка для фильтрации на STM32
 
 function _getWsUrl() {
   const loc = window.location;
@@ -38,6 +39,10 @@ function _connect() {
     if (_reconnTimer) {
       clearTimeout(_reconnTimer);
       _reconnTimer = null;
+    }
+    /* При реконнекте — переотправляем activeTab */
+    if (_currentTab) {
+      _ws.send(JSON.stringify({ activeTab: _currentTab }));
     }
   };
 
@@ -134,4 +139,15 @@ export function wsReconnect() {
  */
 export function wsGetLast(topic) {
   return _lastData[topic];
+}
+
+/**
+ * Отправляет STM32 имя активной вкладки для фильтрации данных.
+ * @param {string} tabName — 'switch'|'encoder'|'pid'|'button'|'temp'|'security'|''
+ */
+export function wsSendActiveTab(tabName) {
+  _currentTab = tabName || '';
+  if (_ws && _ws.readyState === WebSocket.OPEN) {
+    _ws.send(JSON.stringify({ activeTab: _currentTab }));
+  }
 }

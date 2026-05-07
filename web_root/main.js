@@ -1,6 +1,6 @@
 // NOTE: API calls must start with 'api/' in order to serve the app at any URI
 import { safeFetch } from './safeFetch.js';
-import { wsSubscribe, wsUnsubscribe } from './ws-client.js';
+import { wsSubscribe, wsUnsubscribe, wsSendActiveTab } from './ws-client.js';
 
 ('use strict');
 import {
@@ -937,7 +937,12 @@ const App = function ({ }) {
       class="${showSidebar && 'pl-72'} transition-all duration-300 transform"
     >
       <${Router}
-        onChange=${(ev) => setUrl(ev.url)}
+        onChange=${(ev) => {
+          setUrl(ev.url);
+          const _tab = {'/switch':'switch','/button':'button','/encoder':'encoder',
+            '/pid':'pid','/1wire':'temp','/Security':'security'};
+          wsSendActiveTab(_tab[ev.url] || '');
+        }}
         history=${History.createHashHistory()}
       >
         <${Main} default=${true} />
