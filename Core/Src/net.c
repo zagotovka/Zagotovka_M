@@ -526,7 +526,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		        // Если клиент не запросил Connection: close, используем mg_http_serve_dir
 		        char extra_headers[256];
 		        snprintf(extra_headers, sizeof(extra_headers),
-		                 "Cache-Control: max-age=3600\r\nConnection: keep-alive\r\n");
+		                 "Cache-Control: no-cache, no-store, must-revalidate\r\nConnection: keep-alive\r\n");
 
 		        struct mg_http_serve_opts opts;
 		        memset(&opts, 0, sizeof(opts));
@@ -714,6 +714,11 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				MG_INFO(("%lu Did not match any API pattern, serving static content", c->id));
 				struct mg_http_serve_opts opts;
 				memset(&opts, 0, sizeof(opts));
+				
+				char extra_headers[256];
+				snprintf(extra_headers, sizeof(extra_headers), "Cache-Control: no-cache, no-store, must-revalidate\r\n");
+				opts.extra_headers = extra_headers;
+				
 #if MG_ARCH == MG_ARCH_UNIX || MG_ARCH == MG_ARCH_WIN32
                             opts.root_dir = "web_root";
                             MG_INFO(("%lu Using filesystem root_dir: %s for static content", c->id, opts.root_dir));
@@ -729,22 +734,48 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		MG_INFO(("%lu HTTP/HTTPS request processing completed", c->id));
 		break;
 	}
-
+	case MG_EV_WS_CTL: {
+	    struct mg_ws_message *wm = (struct mg_ws_message *) ev_data;
+	    if ((wm->flags & 0x0F) == WEBSOCKET_OP_PING) {
+	        mg_ws_send(c, "", 0, WEBSOCKET_OP_PONG);
+	    }
+	    break;
+	}
 	case MG_EV_WS_MSG: {
 		struct mg_ws_message *wm = (struct mg_ws_message *) ev_data;
+		// Правильно для Mongoose 7.13:
 		/* Парсим {"activeTab":"encoder"} без malloc */
-		char tab[TAB_NAME_MAX] = {0};
-		if (mg_json_unescape(wm->data, "$.activeTab", tab, sizeof(tab)) > 0) {
-			for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-				if (s_ws_clients[i].c == c) {
-					strncpy(s_ws_clients[i].activeTab, tab, TAB_NAME_MAX - 1);
-					s_ws_clients[i].activeTab[TAB_NAME_MAX - 1] = '\0';
-					printf("[WS] id=%lu activeTab=%s\r\n", c->id, tab);
-					break;
-				}
-			}
-		}
-		break;
+//		char tab[TAB_NAME_MAX] = {0};
+//		if (mg_json_unescape(wm->data, "$.activeTab", tab, sizeof(tab)) > 0) {
+//			for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+//				if (s_ws_clients[i].c == c) {
+//					strncpy(s_ws_clients[i].activeTab, tab, TAB_NAME_MAX - 1);
+//					s_ws_clients[i].activeTab[TAB_NAME_MAX - 1] = '\0';
+//					printf("[WS] id=%lu activeTab=%s\r\n", c->id, tab);
+//					break;
+//				}
+//			}
+//		}
+	    // Ping {} от браузера — отвечаем {}, сбрасываем idle таймер Mongoose
+	    if (wm->data.len <= 2) {
+	        mg_ws_send(c, "{}", 2, WEBSOCKET_OP_TEXT);
+	        break;
+	    }
+	    // Правильно для Mongoose 7.21:
+	        // mg_json_get_str выделяет память — обязательно free!
+	        char *tab_str = mg_json_get_str(wm->data, "$.activeTab");
+	        if (tab_str != NULL) {
+	            for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+	                if (s_ws_clients[i].c == c) {
+	                    strncpy(s_ws_clients[i].activeTab, tab_str, TAB_NAME_MAX - 1);
+	                    s_ws_clients[i].activeTab[TAB_NAME_MAX - 1] = '\0';
+	                    printf("[WS] id=%lu activeTab=%s\r\n", c->id, s_ws_clients[i].activeTab);
+	                    break;
+	                }
+	            }
+	            free(tab_str); // ← обязательно! иначе утечка heap каждый reconnect
+	        }
+	        break;
 	}
 
 	case MG_EV_CLOSE:
@@ -776,13 +807,21 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 static int ws_append_block(char *buf, int off, int bufsize,
                            const char *key, const char *json_val, int need_comma) {
   size_t vlen = strlen(json_val);
-  int hdr = snprintf(buf + off, bufsize - off, "%s\"%s\":",
-                     need_comma ? "," : "", key);
-  if (off + hdr + (int)vlen < bufsize - 10) {
-    off += hdr;
-    memcpy(buf + off, json_val, vlen);
-    off += (int)vlen;
+
+  // Считаем размер заголовка БЕЗ записи в буфер
+  int hdr = snprintf(NULL, 0, "%s\"%s\":", need_comma ? "," : "", key);
+
+  // Проверяем ПЕРЕД любой записью
+  if (off + hdr + (int)vlen >= bufsize - 10) {
+    return off; // не влезло — буфер не трогаем, возвращаем как есть
   }
+
+  // Только теперь пишем ключ и данные
+  off += snprintf(buf + off, bufsize - off, "%s\"%s\":",
+                  need_comma ? "," : "", key);
+  memcpy(buf + off, json_val, vlen);
+  off += (int)vlen;
+
   return off;
 }
 
@@ -790,12 +829,33 @@ void ws_broadcast_all(void) {
   if (s_ws_count == 0) return;
 
   static char ws_buf[BUFFER_SIZE];
+  static uint32_t last_ping = 0;
+  uint32_t now = HAL_GetTick();
+  bool do_ping = (now - last_ping) >= 5000;
+  if (do_ping) last_ping = now;
 
   for (int i = 0; i < MAX_WS_CLIENTS; i++) {
     if (s_ws_clients[i].c == NULL) continue;
 
+    struct mg_connection *c = s_ws_clients[i].c;
+
+    if (c->send.len > 4096) {
+      printf("[WS] id=%lu ZOMBIE killed (buf=%lu)\r\n",
+             c->id, (unsigned long)c->send.len);
+      c->is_draining = 1;
+      continue;
+    }
+    if (c->send.len > 2048) {
+      continue;
+    }
+
+    // WebSocket PING — браузер ответит PONG, сбросит TCP idle таймер Mongoose
+    if (do_ping) {
+      mg_ws_send(c, "", 0, WEBSOCKET_OP_PING);
+    }
+
     int off = 0;
-    int has_data = 0;  /* были ли блоки до time */
+    int has_data = 0;
     const char *tab = s_ws_clients[i].activeTab;
 
     off += snprintf(ws_buf + off, BUFFER_SIZE - off, "{");
@@ -830,9 +890,7 @@ void ws_broadcast_all(void) {
       off = ws_append_block(ws_buf, off, BUFFER_SIZE, "security", jsonbuf, 0);
       has_data = 1;
     }
-    /* activeTab пустой или неизвестный — только time */
 
-    /* Всегда добавляем time */
     { char tbuf[256];
       parse_stm32time(tbuf, sizeof(tbuf), &SetSettings);
       off = ws_append_block(ws_buf, off, BUFFER_SIZE, "time", tbuf, has_data);
@@ -840,16 +898,13 @@ void ws_broadcast_all(void) {
 
     off += snprintf(ws_buf + off, BUFFER_SIZE - off, "}");
 
-    mg_ws_send(s_ws_clients[i].c, ws_buf, (size_t)off, WEBSOCKET_OP_TEXT);
+    mg_ws_send(c, ws_buf, (size_t)off, WEBSOCKET_OP_TEXT);
   }
 }
 
 /****************************************************************/
 
 // MQTT
-
-
-
 static bool mqtt_connected_reported = false;  // Флаг для однократного вывода состояния MQTT
 static bool s_mqtt_reconnect_reported = false; // Флаг для однократного вывода reconnecting
 
@@ -951,6 +1006,7 @@ void timer_fn_mqtt(void *arg) {
                               .qos = s_qos,
                               .topic = mg_str(get_mqtt_topic()),
                               .version = 4,
+                              .keepalive = 60,
                               .message = mg_str("bye")};
   s_conn = mg_mqtt_connect(mgr, get_mqtt_url(), &opts, (mg_event_handler_t) fn_mqtt, NULL);
   s_mqtt_conn_tick = mg_millis();  /* запоминаем время создания */

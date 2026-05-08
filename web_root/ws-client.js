@@ -18,11 +18,77 @@ let _subId = 0;
 const _subs = {};    // { id: { topic, callback } }
 let _lastData = {};  // кэш последних данных по topic
 let _currentTab = '';  // активная вкладка для фильтрации на STM32
+let _lastDataTs = 0;   // timestamp последнего полученного сообщения
+let _watchdogTimer = null; // watchdog для обнаружения мёртвого соединения
+let _pingTimer = null;     // периодический ping для keepalive
+
+const WS_DATA_TIMEOUT = 15000; // 15с без данных = мёртвое соединение
+const WS_PING_INTERVAL = 5000;  // ping каждые 5с (чтобы Mongoose не закрыл idle-соединение)
 
 function _getWsUrl() {
   const loc = window.location;
   const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${proto}//${loc.host}/ws`;
+}
+
+/* Watchdog: если данные не приходили > WS_DATA_TIMEOUT — reconnect */
+function _startWatchdog() {
+  _stopWatchdog();
+  _watchdogTimer = setInterval(() => {
+    if (_ws && _ws.readyState === WebSocket.OPEN && _lastDataTs > 0) {
+      const diff = Date.now() - _lastDataTs;
+      if (diff > WS_DATA_TIMEOUT) {
+        console.warn(`[WS] watchdog triggered: no data for ${diff}ms (timeout=${WS_DATA_TIMEOUT}), forcing reconnect`);
+        _forceReconnect();
+      }
+    }
+  }, 2000);
+}
+
+function _stopWatchdog() {
+  if (_watchdogTimer) { clearInterval(_watchdogTimer); _watchdogTimer = null; }
+}
+
+/* Периодический ping чтобы соединение не умирало через NAT/proxy/Mongoose idle_timeout */
+function _startPing() {
+  _stopPing();
+  _pingTimer = setInterval(() => {
+    if (_ws && _ws.readyState === WebSocket.OPEN) {
+      try { _ws.send('{}'); } catch(e) { /* ignore */ }
+    }
+  }, WS_PING_INTERVAL);
+}
+
+function _stopPing() {
+  if (_pingTimer) { clearInterval(_pingTimer); _pingTimer = null; }
+}
+
+/* Принудительный reconnect — закрывает старый WS и создаёт новый */
+function _forceReconnect() {
+  _stopPing();
+  if (_ws) {
+    try { _ws.onclose = null; _ws.onerror = null; _ws.close(); } catch(e) {}
+    _ws = null;
+  }
+  _lastDataTs = 0;
+  if (_reconnTimer) { clearTimeout(_reconnTimer); _reconnTimer = null; }
+  _connect();
+}
+
+/* Page Visibility API — при возврате на вкладку сразу reconnect */
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && Object.keys(_subs).length > 0) {
+      /* Вкладка стала видимой — проверяем/переподключаем WS */
+      if (!_ws || _ws.readyState !== WebSocket.OPEN) {
+        console.log('[WS] tab visible, reconnecting...');
+        _forceReconnect();
+      } else if (_lastDataTs > 0 && Date.now() - _lastDataTs > WS_DATA_TIMEOUT) {
+        console.log('[WS] tab visible, stale connection, reconnecting...');
+        _forceReconnect();
+      }
+    }
+  });
 }
 
 function _connect() {
@@ -36,10 +102,13 @@ function _connect() {
 
   _ws.onopen = () => {
     console.log('[WS] connected');
+    _lastDataTs = Date.now();
     if (_reconnTimer) {
       clearTimeout(_reconnTimer);
       _reconnTimer = null;
     }
+    _startPing();
+    _startWatchdog();
     /* При реконнекте — переотправляем activeTab */
     if (_currentTab) {
       _ws.send(JSON.stringify({ activeTab: _currentTab }));
@@ -47,9 +116,13 @@ function _connect() {
   };
 
   _ws.onmessage = (event) => {
+    // Безусловное обновление таймера при ЛЮБОМ входящем пакете
+    _lastDataTs = Date.now();
+    
     try {
       const data = JSON.parse(event.data);
       _lastData = data;
+      
       // Рассылаем каждому подписчику только его ключ
       for (const id in _subs) {
         const { topic, callback } = _subs[id];
@@ -65,8 +138,9 @@ function _connect() {
   };
 
   _ws.onclose = () => {
-    console.warn('[WS] closed, reconnecting in 2s...');
+    console.warn('[WS] closed by server, reconnecting in 2s...');
     _ws = null;
+    _stopPing();
     _scheduleReconnect();
   };
 
