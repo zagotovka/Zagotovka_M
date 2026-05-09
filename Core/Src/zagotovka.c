@@ -4808,10 +4808,8 @@ void check_ds18b20_changes(uint8_t pin_id, uint8_t sensor_id) {
 }
 // Функция публикации изменений DHT22
 void publish_dht22_changes(struct mg_connection *conn) {
-  if (!conn || conn->is_closing)
-    return;
-  if (SetSettings.check_mqtt != 1 || SetSettings.txmqttop[0] == '\0')
-    return;
+  if (!conn || conn->is_closing) return;
+  if (SetSettings.check_mqtt != 1 || SetSettings.txmqttop[0] == '\0') return;
   char payload[150];
 
   for (uint8_t i = 0; i < NUMPIN; i++) {
@@ -4823,12 +4821,25 @@ void publish_dht22_changes(struct mg_connection *conn) {
 
           if (dht22_changes.changes[byte_index] & (1 << bit_index)) {
             if (dht22[j].onoff && dht22[j].valid) {
+
+              // Гистерезис: температура 0.2°C, влажность 1.0%
+              float diff_temp = dht22[j].temp - dht22[j].prevtemp;
+              float diff_hum  = dht22[j].humid - dht22[j].prvhumid;
+              if (diff_temp < 0) diff_temp = -diff_temp;
+              if (diff_hum  < 0) diff_hum  = -diff_hum;
+
+              if (diff_temp < 0.2f && diff_hum < 1.0f) {
+                // Мелкие флуктуации — сбрасываем флаг, не отправляем
+                dht22_changes.changes[byte_index] &= ~(1 << bit_index);
+                break;
+              }
+
               snprintf(payload, sizeof(payload),
-                       "dht22/ID=%d/temp=%.3f,hum=%.1f", i, dht22[j].temp,
-                       dht22[j].humid);
+                       "dht22/ID=%d/temp=%.3f,hum=%.1f",
+                       i, dht22[j].temp, dht22[j].humid);
               send_mqtt_message(conn, "/dht22/", payload);
-              dht22[j].prevtemp = dht22[j].temp;
-              dht22[j].prvhumid = dht22[j].humid;
+              dht22[j].prevtemp  = dht22[j].temp;
+              dht22[j].prvhumid  = dht22[j].humid;
             }
             dht22_changes.changes[byte_index] &= ~(1 << bit_index);
           }
@@ -4841,18 +4852,28 @@ void publish_dht22_changes(struct mg_connection *conn) {
 
 // Функция публикации изменений DS18B20
 void publish_ds18b20_changes(struct mg_connection *conn) {
-  if (!conn || conn->is_closing)
-    return;
-  if (SetSettings.check_mqtt != 1 || SetSettings.txmqttop[0] == '\0')
-    return;
+  if (!conn || conn->is_closing) return;
+  if (SetSettings.check_mqtt != 1 || SetSettings.txmqttop[0] == '\0') return;
   char payload[150];
-  char addr_str[17]; // Для 8 байт нужно 16 символов HEX + завершающий нуль
+  char addr_str[17];
 
   for (uint8_t pin = 0; pin < MAX_DS18B20_P; pin++) {
     if (ds18b20[pin].onoff) {
       for (uint8_t sensor = 0; sensor < ds18b20[pin].numsens; sensor++) {
         if (ds18b20_changes.changes[pin][sensor / 8] & (1 << (sensor % 8))) {
           if (ds18b20[pin].sensors[sensor].valid) {
+
+            // ← Гистерезис 0.2°C — не отправляем мелкие флуктуации
+            float diff = ds18b20[pin].sensors[sensor].temp -
+                         ds18b20[pin].sensors[sensor].prevtemp;
+            if (diff < 0) diff = -diff; // fabsf
+            if (diff < 0.2f) {
+              // Сбрасываем флаг но не отправляем
+              ds18b20_changes.changes[pin][sensor / 8] &=
+                  ~(1 << (sensor % 8));
+              continue;
+            }
+
             snprintf(addr_str, sizeof(addr_str),
                      "%02x%02x%02x%02x%02x%02x%02x%02x",
                      ds18b20[pin].sensors[sensor].addr[0],
@@ -4864,7 +4885,8 @@ void publish_ds18b20_changes(struct mg_connection *conn) {
                      ds18b20[pin].sensors[sensor].addr[6],
                      ds18b20[pin].sensors[sensor].addr[7]);
 
-            snprintf(payload, sizeof(payload), "ds18b20/ID=%d/sn:%s/temp=%.2f",
+            snprintf(payload, sizeof(payload),
+                     "ds18b20/ID=%d/sn:%s/temp=%.2f",
                      pin, addr_str, ds18b20[pin].sensors[sensor].temp);
             send_mqtt_message(conn, "/ds18b20/", payload);
             ds18b20[pin].sensors[sensor].prevtemp =
@@ -4887,7 +4909,7 @@ void publish_pwm_changes(struct mg_connection *conn) {
 
   for (uint8_t i = 0; i < NUMPIN; i++) {
     if (PinsConf[i].topin != 5) continue;  /* только PWM-пины */
-    if (PinsConf[i].dvalue == prev_pwm_dvalue[i]) continue;  /* не изменился */
+    if (abs((int)PinsConf[i].dvalue - (int)prev_pwm_dvalue[i]) < 2) continue; /* Гистерезис: отправляем только если изменение >= 2 единицы */
 
     snprintf(payload, sizeof(payload), "ID=%d/dvalue=%d", i, PinsConf[i].dvalue);
     send_mqtt_message(conn, "/pwm/", payload);

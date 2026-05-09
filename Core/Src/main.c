@@ -1497,9 +1497,10 @@ void StartWebServerTask(void *argument)
 
   MqttMessage_t rxMsg = {0};
   BaseType_t status;
-  uint32_t last_pub_tick = HAL_GetTick();
 
-  MG_INFO(("Starting event loop"));
+//  MG_INFO(("Starting event loop"));
+  static uint32_t lsens_tk = 0;  // Сенсоры: 500мс, lsens_tk - last sensor tick.
+  static uint32_t lpwm_tk = 0;     // PWM: 100мс, lpwm_tk - last pwm tick.
   /* Infinite loop */
   for (;;) {
     mg_mgr_poll(mgr, 10);
@@ -1670,15 +1671,31 @@ void StartWebServerTask(void *argument)
       }
       } /* end of deviceId bounds guard */
     }
+    // Оставляем 100мс — это даёт быструю реакцию на реальные изменения. Гистерезис уже фильтрует мусорные флуктуации.
+    // zagotovka.c	PWM гистерезис ≥ 2 единицы
+    // zagotovka.c	DS18B20 гистерезис ≥ 0.2°C
+    // zagotovka.c	DHT22 гистерезис ≥ 0.2°C / 1.0%
+    {
+          uint32_t now = HAL_GetTick();  // Читаем один раз для точности
 
-    if (HAL_GetTick() - last_pub_tick >= 100) {
-      last_pub_tick = HAL_GetTick();
-      if (s_conn != NULL && !s_conn->is_closing) {
-        publish_ds18b20_changes(s_conn);
-        publish_dht22_changes(s_conn);
-        publish_pwm_changes(s_conn);
-      }
-    }
+          // Сенсоры: раз в 500мс (DS18B20 + DHT22 они медленные.)
+          if (now - lsens_tk >= 500) {
+        	  lsens_tk = now;
+            if (s_conn != NULL && !s_conn->is_closing) {
+              publish_ds18b20_changes(s_conn);
+              publish_dht22_changes(s_conn);
+            }
+          }
+
+          // PWM: каждые 100мс
+          if (now - lpwm_tk >= 100) {
+        	  lpwm_tk = now;
+            if (s_conn != NULL && !s_conn->is_closing) {
+              publish_pwm_changes(s_conn);
+            }
+          }
+        }
+
 
     /* Диагностический heartbeat — только при изменении heap */
     {

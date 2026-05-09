@@ -974,7 +974,9 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
       printf("Error: MQTT disconnected\r\n");
       mqtt_connected_reported = false;
     }
-    s_conn = NULL;  // Mark that we're closed
+    if (s_conn == c) {
+      s_conn = NULL;  // Mark that we're closed
+    }
   }
   (void) fn_data;
 }
@@ -988,12 +990,11 @@ void timer_fn_mqtt(void *arg) {
    * принудительно закрываем, чтобы разрешить reconnect */
   static uint32_t s_mqtt_conn_tick = 0;  /* метка создания соединения */
   if (s_conn != NULL) {
-    bool is_stale = s_conn->is_connecting || s_conn->is_closing || s_conn->is_draining;
+    bool is_stale = s_conn->is_connecting || s_conn->is_closing || s_conn->is_draining || !mqtt_connected_reported;
     if (is_stale && (mg_millis() - s_mqtt_conn_tick > 15000)) {
       printf("[MQTT] stale conn (%lus) — force close\r\n",
              (unsigned long)(mg_millis() - s_mqtt_conn_tick) / 1000);
-      s_conn->is_draining = 1;  /* мягкое закрытие через Mongoose */
-      s_conn = NULL;
+      s_conn->is_closing = 1;  /* жесткое закрытие через Mongoose */
       s_mqtt_conn_tick = 0;
       s_mqtt_reconnect_reported = false; // Разрешить 1 сообщение reconnecting
       return;  /* На следующем тике таймера создастся новое соединение */
@@ -1066,7 +1067,7 @@ void web_init(struct mg_mgr *mgr) {
 
     // Добавление таймеров
     mg_timer_add(mgr, 10 * 1000, MG_TIMER_RUN_NOW | MG_TIMER_REPEAT, timer_sntp_fn, mgr);
-    mg_timer_add(mgr, 1000, MG_TIMER_REPEAT | MG_TIMER_RUN_NOW, timer_fn_mqtt, mgr);
+    mg_timer_add(mgr, 1000, MG_TIMER_REPEAT | MG_TIMER_RUN_NOW, timer_fn_mqtt, mgr); // Не дублирует в web_init() т.к. setup_mqtt() не вызывается нигде в коде проекта!
 }
 /*********************************** From Zagotovka ****************************************************/
 extern bool *flagmqtt;
