@@ -337,6 +337,8 @@ uint64_t mg_millis(void) { return HAL_GetTick(); }
     После этого может начаться TLS рукопожатие (событие MG_EV_TLS_HS)
  * */
 
+volatile uint32_t mqtt_sent_count = 0;
+
 void send_mqtt_message(struct mg_connection *conn, const char *topic,
                        const char *msg) {
   if (conn == NULL || conn->is_closing) { // Проверка соединения
@@ -351,7 +353,11 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic,
    * и через ~2 часа исчерпывает FreeRTOS heap → deadlock.
    * Порог 4096 = ~20-40 сообщений в буфере. */
   if (conn->send.len > 4096) {
-    MG_ERROR(("MQTT send buf overflow (%lu), draining", (unsigned long)conn->send.len));
+    static uint32_t last_err_tick = 0;
+    if (mg_millis() - last_err_tick > 5000) {
+      MG_ERROR(("MQTT send buf overflow (%lu), draining", (unsigned long)conn->send.len));
+      last_err_tick = mg_millis();
+    }
     conn->is_draining = 1;
     return;
   }
@@ -365,6 +371,7 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic,
   pub_opts.qos = s_qos;
   pub_opts.retain = false;
   mg_mqtt_pub(conn, &pub_opts);
+  mqtt_sent_count++;
   MG_INFO(("%lu PUBLISHED %s -> %.*s", conn->id, msg, (int)pub_opts.topic.len,
            pub_opts.topic.buf));
 }
@@ -383,7 +390,7 @@ unsigned long Te;
 
 static bool check_mqtt_connection(void *conn) {
   struct mg_connection *c = (struct mg_connection *)conn;
-  if (c == NULL || c->is_closing) {
+  if (c == NULL || c->is_closing || c->is_draining) {
     return false;
   }
   return true;
@@ -414,16 +421,7 @@ void button_event_handler(
       action_handler(handle->button_id, PinsConf[handle->button_id].lpress,
                      "long press");
       // Подготовка MQTT сообщения (локальная копия — без гонки данных)
-      {
-        MqttMessage_t msg = {0};
-        msg.command = 3; // Команда для LONG_PRESS
-        msg.deviceId = handle->button_id;
-        msg.state = 1; // Для long press
-        msg.reserved = 0;
-        if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
-          printf("Error sending LONG_PRESS to MQTT queue!\r\n");
-        }
-      }
+      mqtt_queue_send_safe(3, handle->button_id, 1, 0);
     } else {
       printf("Invalid button ID: %d\n", handle->button_id);
     }
@@ -438,16 +436,7 @@ void button_event_handler(
       action_handler(handle->button_id, PinsConf[handle->button_id].sclick,
                      "sclick press");
       // Подготовка MQTT сообщения (локальная копия — без гонки данных)
-      {
-        MqttMessage_t msg = {0};
-        msg.command = 4; // Команда для SINGLE_CLICK
-        msg.deviceId = handle->button_id;
-        msg.state = 2; // Для single click
-        msg.reserved = 0;
-        if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
-          printf("Error sending SINGLE_CLICK to MQTT queue!\r\n");
-        }
-      }
+      mqtt_queue_send_safe(4, handle->button_id, 2, 0);
     } else {
       printf("Invalid button ID: %d\n", handle->button_id);
     }
@@ -461,16 +450,7 @@ void button_event_handler(
       action_handler(handle->button_id, PinsConf[handle->button_id].dclick,
                      "double press");
       // Подготовка MQTT сообщения (локальная копия — без гонки данных)
-      {
-        MqttMessage_t msg = {0};
-        msg.command = 5; // Команда для DOUBLE_CLICK
-        msg.deviceId = handle->button_id;
-        msg.state = 3; // Для double click
-        msg.reserved = 0;
-        if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
-          printf("Error sending DOUBLE_CLICK to MQTT queue!\r\n");
-        }
-      }
+      mqtt_queue_send_safe(5, handle->button_id, 3, 0);
     } else {
       printf("Invalid button ID: %d\n", handle->button_id);
     }
@@ -1203,15 +1183,7 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
         start_pwm_fade((uint8_t)pwm_id, (uint32_t)dur, sduty, eduty, cronindex);
         /* Отправляем MQTT сообщение о срабатывании PWM-таймера */
         if (!mqtt_sent) {
-            MqttMessage_t msg = {0};
-            msg.command = 9;  // PWM_TIMER
-            msg.deviceId = cronindex;
-            msg.state = (uint8_t)sduty;
-            msg.reserved = (uint8_t)pwm_id; // Передаем ID пина ШИМ
-
-            if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
-              printf("Error sending PWM_TIMER event to MQTT queue!\r\n");
-            }
+            mqtt_queue_send_safe(9, cronindex, (uint8_t)sduty, (uint8_t)pwm_id);
             mqtt_sent = 1;
         }
       } else {
@@ -1245,15 +1217,7 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
       if (k == 2) {
         xQueueSend(outputQueueHandle, (void *)&data_pin, 0);
         if (!mqtt_sent) {
-            // Локальная копия — без гонки данных на глобальной mqttMsg
-            MqttMessage_t msg = {0};
-            msg.command = 7;
-            msg.deviceId = cronindex;
-            msg.state = data_pin.action;
-            msg.reserved = 0;
-            if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
-              printf("Error sending TIMER event to MQTT queue!\r\n");
-            }
+            mqtt_queue_send_safe(7, cronindex, data_pin.action, 0);
             mqtt_sent = 1; // Устанавливаем флаг отправки
         }
       }
@@ -1499,8 +1463,7 @@ void StartWebServerTask(void *argument)
   BaseType_t status;
 
 //  MG_INFO(("Starting event loop"));
-  static uint32_t lsens_tk = 0;  // Сенсоры: 500мс, lsens_tk - last sensor tick.
-  static uint32_t lpwm_tk = 0;     // PWM: 100мс, lpwm_tk - last pwm tick.
+  static uint32_t lsens_tk = 0;  // Батч-публикация сенсоров: 5000мс
   /* Infinite loop */
   for (;;) {
     mg_mgr_poll(mgr, 10);
@@ -1508,14 +1471,14 @@ void StartWebServerTask(void *argument)
     /* ── WebSocket broadcast каждые 300ms ── */
     {
       static uint32_t last_ws_bc = 0;
-      if (HAL_GetTick() - last_ws_bc >= 300) {
+      if (HAL_GetTick() - last_ws_bc >= 1000) {
         last_ws_bc = HAL_GetTick();
         ws_broadcast_all();
       }
     }
 
     /* Explicit drain: rapidly clear the queue if disconnected to avoid buildup */
-    if (s_conn == NULL || s_conn->is_closing) {
+    if (s_conn == NULL || s_conn->is_closing || !mqtt_connected_reported) {
       MqttMessage_t drain;
       while (xQueueReceive(mqttQueueHandle, &drain, 0) == pdPASS) {
         /* Drop silently */
@@ -1671,27 +1634,16 @@ void StartWebServerTask(void *argument)
       }
       } /* end of deviceId bounds guard */
     }
-    // Оставляем 100мс — это даёт быструю реакцию на реальные изменения. Гистерезис уже фильтрует мусорные флуктуации.
-    // zagotovka.c	PWM гистерезис ≥ 2 единицы
-    // zagotovka.c	DS18B20 гистерезис ≥ 0.2°C
-    // zagotovka.c	DHT22 гистерезис ≥ 0.2°C / 1.0%
+    // Батч-публикация всех сенсоров (DS18B20 + DHT22 + PWM) одним JSON-пакетом
+    // раз в 5 секунд. Гистерезис применяется внутри publish_sensor_batch().
+    // Для Home Assistant / Node-RED обновление раз в 5с более чем достаточно.
     {
-          uint32_t now = HAL_GetTick();  // Читаем один раз для точности
+          uint32_t now = HAL_GetTick();
 
-          // Сенсоры: раз в 500мс (DS18B20 + DHT22 они медленные.)
-          if (now - lsens_tk >= 500) {
+          if (now - lsens_tk >= 5000) {
         	  lsens_tk = now;
-            if (s_conn != NULL && !s_conn->is_closing) {
-              publish_ds18b20_changes(s_conn);
-              publish_dht22_changes(s_conn);
-            }
-          }
-
-          // PWM: каждые 100мс
-          if (now - lpwm_tk >= 100) {
-        	  lpwm_tk = now;
-            if (s_conn != NULL && !s_conn->is_closing) {
-              publish_pwm_changes(s_conn);
+            if (s_conn != NULL && mqtt_connected_reported && !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining) {
+              publish_sensor_batch(s_conn);
             }
           }
         }
@@ -1852,6 +1804,15 @@ void StartCronTask(void *argument)
           day = timez->tm_mday;
         }
 
+        static int last_min = -1;
+        if (timez->tm_min != last_min) {
+            if (last_min != -1) {
+                printf("[MQTT] sent=%lu per minute\r\n", (unsigned long)mqtt_sent_count);
+                mqtt_sent_count = 0;
+            }
+            last_min = timez->tm_min;
+        }
+
         //				printf("CronTask: today's date:
         //%02d.%02d.%d\n", day, month, year);
         // Обработка задач с фиксированным временем
@@ -1973,16 +1934,7 @@ void StartInputTask(void *argument)
           pinLevel[i] = pinStates[i];
           pinTimes[i] = millis;
           processPins(i, 1); // Отправляем 1, т.к. выключатель включен
-          // Локальная копия — без гонки данных на глобальной mqttMsg
-          {
-            MqttMessage_t msg = {0};
-            msg.command = 2;
-            msg.deviceId = i;
-            msg.state = 1; // ON
-            if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
-              printf("Error sending to MQTT queue!\r\n");
-            }
-          }
+          mqtt_queue_send_safe(2, i, 1, 0);
         }
         // Когда выключатель разомкнут (отжат) - на входе 1
         if (pinStates[i] == 1 && (millis - pinTimes[i]) >= 200 &&
@@ -1990,16 +1942,7 @@ void StartInputTask(void *argument)
           pinLevel[i] = pinStates[i];
           pinTimes[i] = millis;
           processPins(i, 0); // Отправляем 0, т.к. выключатель выключен
-          // Локальная копия — без гонки данных на глобальной mqttMsg
-          {
-            MqttMessage_t msg = {0};
-            msg.command = 2;
-            msg.deviceId = i;
-            msg.state = 0; // OFF
-            if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
-              printf("Error sending to MQTT queue!\r\n");
-            }
-          }
+          mqtt_queue_send_safe(2, i, 0, 0);
         }
       }
     }
@@ -2440,15 +2383,11 @@ void StartServiceTask(void *argument)
 	                          * PinsConf[i].pwmmax / 100ULL);
 	        __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, pulse);
             
-            if (changed) {
-                MqttMessage_t msg = {0};
-                msg.command = 9;  // PWM_TIMER
-                msg.deviceId = fade_state[i].cronindex;
-                msg.state = (uint8_t)d;
-                msg.reserved = (uint8_t)i;
-                if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
-                    // Queue is full, ignore intermediate updates
-                }
+            /* MQTT: отправляем уведомление только на ПОСЛЕДНЕМ шаге fade,
+             * а не на каждом промежуточном. Промежуточные значения PWM
+             * публикуются через publish_sensor_batch() раз в 5 секунд. */
+            if (changed && !fade_state[i].active) {
+                mqtt_queue_send_safe(9, fade_state[i].cronindex, (uint8_t)d, (uint8_t)i);
             }
 	      }
 	    }
@@ -2639,17 +2578,7 @@ void StartSecurityTask(void *argument)
                   strcmp(PinsConf[i].sclick, "None") != 0) {
                 action_handler(i, PinsConf[i].sclick, "Security action");
 
-                // Локальная копия — без гонки данных на глобальной mqttMsg/mqtt_payload
-                {
-                  MqttMessage_t msg = {0};
-                  msg.command = 6;
-                  msg.deviceId = i;
-                  msg.state = current_state;
-                  msg.reserved = 0;
-                  if (xQueueSend(mqttQueueHandle, &msg, 0) != pdPASS) {
-                    printf("Error sending SECURITY event to MQTT queue!\r\n");
-                  }
-                }
+                mqtt_queue_send_safe(6, i, current_state, 0);
               }
 
               if (PinsConf[i].onoff && PinsConf[i].send_sms[0] != '\0' &&

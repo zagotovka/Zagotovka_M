@@ -272,8 +272,13 @@ void send_sms(int index);
 void publish_ds18b20_changes(struct mg_connection *conn);
 void publish_dht22_changes(struct mg_connection *conn);
 void publish_pwm_changes(struct mg_connection *conn);
+void publish_sensor_batch(struct mg_connection *conn);
 void check_ds18b20_changes(uint8_t pin_id, uint8_t sensor_id);
 void check_dht22_changes(uint8_t sensor_id);
+
+/* Rate-limited MQTT queue wrapper — max 20 events/sec, критичные события bypass */
+void mqtt_queue_send_safe(uint8_t command, uint8_t deviceId,
+                          uint8_t state, uint8_t reserved);
 
 time_t initializeTime(void);
 void init_offline_time(void);

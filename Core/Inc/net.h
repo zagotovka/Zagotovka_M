@@ -32,6 +32,7 @@ struct ui_event {
   char text[10];
 };
 
+extern volatile bool mqtt_connected_reported;  // true после MG_EV_MQTT_OPEN, false после MG_EV_CLOSE
 void web_init(struct mg_mgr *mgr);
 
 /*********************************** From Zagotovka ****************************************************/

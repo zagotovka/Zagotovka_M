@@ -125,26 +125,22 @@ const HELP_CONTENT = {
         <span style="display:block;"><b style="color:#dc2626;">OFF</b> — выключить</span>
         <span style="display:block;"><b style="color:#d97706;">TG</b> — переключить состояние пина (toggle)</span>
       </div>
-      <div>
-        <h2 class="text-xl font-bold mb-2 mt-6">Отслеживание изменений</h2>
-        <table class="w-full">
-          <thead>
-            <tr>
-              <th class="border px-4 py-2">Топик</th>
-              <th class="border px-4 py-2">Описание</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="border px-4 py-2 whitespace-nowrap">Swarm/tsensors/</td>
-              <td class="border px-4 py-2">
-                Данная страница отслеживает изменения температурных сенсоров DS18B20/DHT22 и автоматически отправляет каждое изменение по MQTT на топик: Swarm/tsensors/.
-                Где "Swarm" это Ваш 'TX topic'.
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+          <div>
+            <h2 class="text-xl font-bold mb-2">Отслеживание изменений</h2>
+            <div class="bg-teal-50 p-4 rounded-lg border border-teal-100 text-sm">
+              <p class="mb-3">Контроллер автоматически публикует состояние сенсоров и PWM-выходов в MQTT-топик <strong>Swarm/sensors/</strong>, где <strong>"Swarm"</strong> — ваш TX topic.</p>
+              <p class="mb-2 font-semibold text-teal-800">Формат пакета:</p>
+              <div class="font-mono bg-white/70 border border-teal-200 px-3 py-2 mb-3 text-xs rounded">
+                {"sn":value,"hid":[Tvalue, Hvalue],"pid":Duty}
+              </div>
+              <li><b>Пример: {"28B63A75D0013C7B":26.44,"h46":[20.6,46.0],"p24":18}</b></li>
+              <ul class="list-disc pl-5 space-y-1 text-slate-700">
+                <li><b>sn</b> — серийный номер DS18B20 : (Tvalue - температура, °C)</li>
+                <li><b>hid</b> — датчик DHT22 : (массив [Tvalue - значение температуры, Hvalue - значение влажности])</li>
+                <li><b>pid</b> — PWM-выход : (значение Duty 0–100%)</li>
+              </ul>
+            </div>
+          </div>
     </div>
   `,
   en: html`
@@ -158,26 +154,22 @@ const HELP_CONTENT = {
         <span style="display:block;"><b style="color:#dc2626;">OFF</b> — turn it off</span>
         <span style="display:block;"><b style="color:#d97706;">TG</b> — toggle the pin state</span>
       </div>
-      <div>
-        <h2 class="text-xl font-bold mb-2 mt-6">Tracking Changes</h2>
-        <table class="w-full">
-          <thead>
-            <tr>
-              <th class="border px-4 py-2">Topic</th>
-              <th class="border px-4 py-2">Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="border px-4 py-2 whitespace-nowrap">Swarm/tsensors/</td>
-              <td class="border px-4 py-2">
-                This page tracks changes in temperature sensors DS18B20/DHT22 and automatically sends each change via MQTT to the topic: Swarm/tsensors/.
-                Where "Swarm" is your 'TX topic'.
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+          <div>
+            <h2 class="text-xl font-bold mb-2">Change Tracking</h2>
+            <div class="bg-teal-50 p-4 rounded-lg border border-teal-100 text-sm">
+              <p class="mb-3">The controller automatically publishes sensor states and PWM output values to the MQTT topic <strong>Swarm/sensors/</strong>, where <strong>"Swarm"</strong> is your TX topic.</p>
+              <p class="mb-2 font-semibold text-teal-800">Packet format:</p>
+              <div class="font-mono bg-white/70 border border-teal-200 px-3 py-2 mb-3 text-xs rounded">
+                {"sn":value,"hid":[Tvalue, Hvalue],"pid":Duty}
+              </div>
+              <li><b>Example: {"28B63A75D0013C7B":26.44,"h46":[20.6,46.0],"p24":18}</b></li>
+              <ul class="list-disc pl-5 space-y-1 text-slate-700">
+                <li><b>sn</b> — DS18B20 serial number : (Tvalue — temperature, °C)</li>
+                <li><b>hid</b> — DHT22 sensor : (array [Tvalue — temperature, Hvalue — humidity])</li>
+                <li><b>pid</b> — PWM output : (Duty value 0–100%)</li>
+              </ul>
+            </div>
+          </div>
     </div>
   `
 };

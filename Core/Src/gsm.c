@@ -625,14 +625,7 @@ void send_command_result_sms(void) {
         HAL_UART_Transmit(GSM, &ctrlZ, 1, 1000);
         
         if (validcnt > 0) {
-            MqttMessage_t mqttMsg;
-            mqttMsg.command = 1;
-            mqttMsg.deviceId = 1;
-            mqttMsg.state = 0;
-            mqttMsg.reserved = 0;
-            if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-              printf("Error sending DEVICE event to MQTT queue!\r\n");
-            }
+            mqtt_queue_send_safe(1, 1, 0, 0);
         }
     }
   }
@@ -759,14 +752,7 @@ void process_sim800l_data(void) {
           uint8_t usbnum = 1;
           xQueueSend(usbQueueHandle, &usbnum, 0);
 
-          MqttMessage_t mqttMsg;
-          mqttMsg.command = 6;
-          mqttMsg.deviceId = 1;
-          mqttMsg.state = 0;
-          mqttMsg.reserved = 0;
-          if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-            printf("Error sending SMS 777 to MQTT queue!\r\n");
-          }
+          mqtt_queue_send_safe(6, 1, 0, 0);
 
         } else if (strstr(sms_text, "222") != NULL) {
           PinsConf[1].onoff = 0;
@@ -776,14 +762,7 @@ void process_sim800l_data(void) {
           uint8_t usbnum = 1;
           xQueueSend(usbQueueHandle, &usbnum, 0);
 
-          MqttMessage_t mqttMsg;
-          mqttMsg.command = 6;
-          mqttMsg.deviceId = 1;
-          mqttMsg.state = 0;
-          mqttMsg.reserved = 0;
-          if (xQueueSend(mqttQueueHandle, &mqttMsg, 0) != pdPASS) {
-            printf("Error sending SMS 222 to MQTT queue!\r\n");
-          }
+          mqtt_queue_send_safe(6, 1, 0, 0);
 
         } else {
           /* ── Команды формата ID#Action*[...] ── */
@@ -873,12 +852,7 @@ void process_sim800l_data(void) {
           dtmf_idx = 0;
           uint8_t usbnum = 1;
           xQueueSend(usbQueueHandle, &usbnum, 0);
-          MqttMessage_t mqttMsg;
-          mqttMsg.command = 6;
-          mqttMsg.deviceId = 1;
-          mqttMsg.state = 0;
-          mqttMsg.reserved = 0;
-          xQueueSend(mqttQueueHandle, &mqttMsg, 0);
+          mqtt_queue_send_safe(6, 1, 0, 0);
           return;
         } else if (strcmp(dtmf_buf, "222") == 0) {
           send_sms(SMS_DISABLE_CODE);
@@ -888,12 +862,7 @@ void process_sim800l_data(void) {
           dtmf_idx = 0;
           uint8_t usbnum = 1;
           xQueueSend(usbQueueHandle, &usbnum, 0);
-          MqttMessage_t mqttMsg;
-          mqttMsg.command = 6;
-          mqttMsg.deviceId = 1;
-          mqttMsg.state = 0;
-          mqttMsg.reserved = 0;
-          xQueueSend(mqttQueueHandle, &mqttMsg, 0);
+          mqtt_queue_send_safe(6, 1, 0, 0);
           return;
         }
       }

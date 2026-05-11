@@ -43,6 +43,7 @@ static ws_client_t s_ws_clients[MAX_WS_CLIENTS];
 static int s_ws_count = 0;
 
 static void ws_client_add(struct mg_connection *c) {
+  /* Фаза 1: ищем свободный слот */
   for (int i = 0; i < MAX_WS_CLIENTS; i++) {
     if (s_ws_clients[i].c == NULL) {
       s_ws_clients[i].c = c;
@@ -53,6 +54,20 @@ static void ws_client_add(struct mg_connection *c) {
       return;
     }
   }
+  /* Фаза 2: все слоты заняты — чистим зомби (closing/draining/overflow) */
+  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+    struct mg_connection *old = s_ws_clients[i].c;
+    if (old != NULL && (old->is_closing || old->is_draining || old->send.len > 4096)) {
+      printf("[WS] evicting zombie id=%lu for new id=%lu\r\n", old->id, c->id);
+      old->is_draining = 1;
+      s_ws_clients[i].c = c;
+      s_ws_clients[i].activeTab[0] = '\0';
+      /* s_ws_count не меняется — замена 1:1 */
+      printf("[WS] client replaced id=%lu (total=%d)\r\n", c->id, s_ws_count);
+      return;
+    }
+  }
+  /* Фаза 3: все соединения живые — реально нет места */
   printf("[WS] MAX clients reached, rejecting id=%lu\r\n", c->id);
   mg_close_conn(c);
 }
@@ -348,6 +363,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
     case MG_EV_ACCEPT: {
         unsigned int local_port = mg_ntohs(c->loc.port);
+        char buf_rem[32];
+        mg_snprintf(buf_rem, sizeof(buf_rem), "%M", mg_print_ip_port, &c->rem);
+        printf("[NET] new conn from %s\r\n", buf_rem);
         MG_INFO(("Accept: local %M remote %M", mg_print_ip_port, &c->loc, mg_print_ip_port, &c->rem));
 
         if (local_port == atoi(HTTP_PORT)) {
@@ -905,7 +923,8 @@ void ws_broadcast_all(void) {
 /****************************************************************/
 
 // MQTT
-static bool mqtt_connected_reported = false;  // Флаг для однократного вывода состояния MQTT
+// Без volatile это тихая бомба — симптомы могут проявляться непредсказуемо в зависимости от уровня оптимизации компилятора (-O2/-O3 особенно агрессивны).
+volatile bool mqtt_connected_reported = false;  // Глобальный: main.c проверяет перед publish_sensor_batch()
 static bool s_mqtt_reconnect_reported = false; // Флаг для однократного вывода reconnecting
 
 static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
@@ -988,14 +1007,14 @@ void timer_fn_mqtt(void *arg) {
 
   /* Watchdog: если соединение зависло (connecting/closing > 15 сек) —
    * принудительно закрываем, чтобы разрешить reconnect */
-  static uint32_t s_mqtt_conn_tick = 0;  /* метка создания соединения */
+  static uint64_t s_mqtt_conn_tick = 0;  /* метка создания соединения */
   if (s_conn != NULL) {
     bool is_stale = s_conn->is_connecting || s_conn->is_closing || s_conn->is_draining || !mqtt_connected_reported;
     if (is_stale && (mg_millis() - s_mqtt_conn_tick > 15000)) {
       printf("[MQTT] stale conn (%lus) — force close\r\n",
              (unsigned long)(mg_millis() - s_mqtt_conn_tick) / 1000);
       s_conn->is_closing = 1;  /* жесткое закрытие через Mongoose */
-      s_mqtt_conn_tick = 0;
+      s_mqtt_conn_tick = mg_millis(); // Сброс таймера в текущее время, чтобы не спамить
       s_mqtt_reconnect_reported = false; // Разрешить 1 сообщение reconnecting
       return;  /* На следующем тике таймера создастся новое соединение */
     }
