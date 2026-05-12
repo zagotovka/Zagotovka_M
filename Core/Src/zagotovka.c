@@ -5067,6 +5067,137 @@ void publish_sensor_batch(struct mg_connection *conn) {
 }
 
 /*********************** OFFLINE TIME *******************************/
+
+/*** Timer Batch MQTT — состояние пинов всех активных таймеров раз в 1 сек ***/
+/* Размер буфера привязан к MAXSIZE (db.h): каждый таймер ≈80 байт JSON */
+#define TIMER_BATCH_BUF_SIZE  (MAXSIZE * 80 + 256)
+
+void send_mqtt_timer_batch(struct mg_connection *conn) {
+  if (!conn || conn->is_closing || conn->is_draining) return;
+  if (SetSettings.check_mqtt != 1 || SetSettings.txmqttop[0] == '\0') return;
+
+  static char tbuf[TIMER_BATCH_BUF_SIZE];
+
+  /* Отслеживание изменений */
+  static uint8_t  prev_gpio[NUMPIN];
+  static int16_t  prev_duty[NUMPIN];
+  static bool     prev_init = false;
+
+  if (!prev_init) {
+    memset(prev_gpio, 0xFF, sizeof(prev_gpio));
+    for (int i = 0; i < NUMPIN; i++) prev_duty[i] = -1;
+    prev_init = true;
+  }
+
+  /* 1. Проверяем есть ли хоть один включённый таймер */
+  bool any_active = false;
+  for (int i = 0; i < MAXSIZE; i++) {
+    if (dbCrontxt[i].onoff == 1) { any_active = true; break; }
+  }
+  if (!any_active) return;
+
+  /* 2. Сканируем все таймеры и формируем JSON */
+  bool has_changes = false;
+  int off = 0;
+
+  /* Timestamp из cronetime (глобальный, обновляется в CronTask) */
+  {
+    extern time_t cronetime;
+    struct tm ts_local;
+    struct tm *tp = localtime(&cronetime);
+    if (tp) {
+      memcpy(&ts_local, tp, sizeof(ts_local));
+      off += snprintf(tbuf + off, sizeof(tbuf) - off,
+                      "{\"ts\":\"%04d-%02d-%02dT%02d:%02d:%02d\"",
+                      ts_local.tm_year + 1900, ts_local.tm_mon + 1, ts_local.tm_mday,
+                      ts_local.tm_hour, ts_local.tm_min, ts_local.tm_sec);
+    } else {
+      off += snprintf(tbuf + off, sizeof(tbuf) - off, "{\"ts\":\"\"");
+    }
+  }
+
+  for (int i = 0; i < MAXSIZE; i++) {
+    int avail = (int)sizeof(tbuf) - off;
+    if (avail < 80) break;
+
+    /* Определяем тип: pwm или обычный */
+    bool is_pwm = (strstr(dbCrontxt[i].activ, "pwm:") != NULL);
+    const char *pfx = is_pwm ? "pwmtim" : "tim";
+
+    if (dbCrontxt[i].onoff == 0 || dbCrontxt[i].activ[0] == '\0') {
+      off += snprintf(tbuf + off, avail, ",\"%s_%d\":[]", pfx, i);
+      continue;
+    }
+
+    /* Парсим activ — локальная копия (strtok модифицирует) */
+    char acopy[256];
+    strncpy(acopy, dbCrontxt[i].activ, sizeof(acopy) - 1);
+    acopy[sizeof(acopy) - 1] = '\0';
+
+    off += snprintf(tbuf + off, (int)sizeof(tbuf) - off,
+                    ",\"%s_%d\":[", pfx, i);
+
+    char *sptr = NULL;
+    char *tok = strtok_r(acopy, ",", &sptr);
+    int pcnt = 0;
+
+    while (tok != NULL) {
+      avail = (int)sizeof(tbuf) - off;
+      if (avail < 64) break;
+
+      if (strncmp(tok, "pwm:", 4) == 0) {
+        /* PWM: "pwm:<id>" + 3 аргумента (dur, start, end) */
+        int pid = atoi(tok + 4);
+        if (pid >= 0 && pid < NUMPIN && PinsConf[pid].topin == 5) {
+          int duty = PinsConf[pid].dvalue;
+          if (prev_duty[pid] != (int16_t)duty) {
+            prev_duty[pid] = (int16_t)duty;
+            has_changes = true;
+          }
+          off += snprintf(tbuf + off, avail,
+                          "%s{\"pwmid\":\"%d\",\"duty\":\"%d\",\"info\":\"%.29s\"}",
+                          pcnt > 0 ? "," : "", pid, duty, PinsConf[pid].info);
+          pcnt++;
+        }
+        /* Пропускаем 3 аргумента (dur, start, end) */
+        for (int s = 0; s < 3 && tok != NULL; s++)
+          tok = strtok_r(NULL, ",", &sptr);
+      } else if (tok[0] == 'p' && tok[1] >= '0' && tok[1] <= '9') {
+        /* Pause token — пропускаем */
+      } else {
+        /* Обычный: "id:action" */
+        int pid = atoi(tok);
+        if (pid > 0 && pid < NUMPIN) {
+          uint8_t st = PinsConf[pid].on;
+          if (prev_gpio[pid] != st) {
+            prev_gpio[pid] = st;
+            has_changes = true;
+          }
+          off += snprintf(tbuf + off, avail,
+                          "%s{\"id\":\"%d\",\"state\":\"%s\",\"info\":\"%.29s\"}",
+                          pcnt > 0 ? "," : "", pid,
+                          st ? "ON" : "OFF", PinsConf[pid].info);
+          pcnt++;
+        }
+      }
+      tok = strtok_r(NULL, ",", &sptr);
+    }
+
+    avail = (int)sizeof(tbuf) - off;
+    if (avail > 1) off += snprintf(tbuf + off, avail, "]");
+  }
+
+  /* Закрываем JSON */
+  {
+    int avail = (int)sizeof(tbuf) - off;
+    if (avail > 1) off += snprintf(tbuf + off, avail, "}");
+  }
+
+  /* Отправляем ТОЛЬКО при изменениях */
+  if (has_changes) {
+    send_mqtt_message(conn, "/timers/", tbuf);
+  }
+}
 uint8_t onlineFlg = 0; // Флаг онлайн статуса
 lwdtc_cron_ctx_t offlineTime;
 

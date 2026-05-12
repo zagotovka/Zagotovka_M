@@ -1005,17 +1005,20 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
 void timer_fn_mqtt(void *arg) {
   struct mg_mgr *mgr = (struct mg_mgr *) arg;
 
-  /* Watchdog: если соединение зависло (connecting/closing > 15 сек) —
+  /* Watchdog: если соединение зависло (connecting/closing > 5 сек) —
    * принудительно закрываем, чтобы разрешить reconnect */
   static uint64_t s_mqtt_conn_tick = 0;  /* метка создания соединения */
+  static uint16_t s_mqtt_retry_cnt = 0;  /* счётчик попыток для диагностики */
   if (s_conn != NULL) {
     bool is_stale = s_conn->is_connecting || s_conn->is_closing || s_conn->is_draining || !mqtt_connected_reported;
-    if (is_stale && (mg_millis() - s_mqtt_conn_tick > 15000)) {
-      printf("[MQTT] stale conn (%lus) — force close\r\n",
-             (unsigned long)(mg_millis() - s_mqtt_conn_tick) / 1000);
+    if (is_stale && (mg_millis() - s_mqtt_conn_tick > 5000)) {
+      s_mqtt_retry_cnt++;
+      printf("[MQTT] stale conn (%lus), retry #%u — force close\r\n",
+             (unsigned long)(mg_millis() - s_mqtt_conn_tick) / 1000,
+             s_mqtt_retry_cnt);
       s_conn->is_closing = 1;  /* жесткое закрытие через Mongoose */
-      s_mqtt_conn_tick = mg_millis(); // Сброс таймера в текущее время, чтобы не спамить
-      s_mqtt_reconnect_reported = false; // Разрешить 1 сообщение reconnecting
+      s_mqtt_conn_tick = mg_millis();
+      s_mqtt_reconnect_reported = false;
       return;  /* На следующем тике таймера создастся новое соединение */
     }
     return;  /* Соединение существует и не зависло — ничего не делаем */

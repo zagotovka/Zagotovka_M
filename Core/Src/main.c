@@ -1160,7 +1160,7 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
   int k = 0;
   int pin = 0;
   char delim[] = ",";
-  int mqtt_sent = 0; // Флаг отправки MQTT сообщения
+  /* mqtt_sent удалён — таймеры публикуются через send_mqtt_timer_batch() */
   data_pin_t data_pin = {0}; /* A3: локальная копия */
   //    printf("Debug: Parsing string for cronindex=%d, pause=%d\n", cronindex,
   //    pause); printf("Debug: Input string: %s\n", str);
@@ -1181,11 +1181,7 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
         sduty = atoi(t3);
         eduty = atoi(t4);
         start_pwm_fade((uint8_t)pwm_id, (uint32_t)dur, sduty, eduty, cronindex);
-        /* Отправляем MQTT сообщение о срабатывании PWM-таймера */
-        if (!mqtt_sent) {
-            mqtt_queue_send_safe(9, cronindex, (uint8_t)sduty, (uint8_t)pwm_id);
-            mqtt_sent = 1;
-        }
+        /* MQTT: батч send_mqtt_timer_batch() отправляет состояние раз в 1с */
       } else {
         printf("parse_string: bad pwm token: %s\r\n", token);
       }
@@ -1216,10 +1212,7 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
       }
       if (k == 2) {
         xQueueSend(outputQueueHandle, (void *)&data_pin, 0);
-        if (!mqtt_sent) {
-            mqtt_queue_send_safe(7, cronindex, data_pin.action, 0);
-            mqtt_sent = 1; // Устанавливаем флаг отправки
-        }
+        /* MQTT: батч send_mqtt_timer_batch() отправляет состояние раз в 1с */
       }
     }
     token = strtok_r(NULL, delim, &saveptr);
@@ -1489,6 +1482,7 @@ void StartWebServerTask(void *argument)
     memset(&rxMsg, 0, sizeof(MqttMessage_t));
     status = xQueueReceive(mqttQueueHandle, &rxMsg, 0);
     if (status == pdPASS) {
+//			printf("[MQTT_Q] cmd=%d dev=%d state=%d\r\n", rxMsg.command,rxMsg.deviceId, rxMsg.state); // Подсветит кто спамит в MQTT.
       /* Защита от повреждённых сообщений в очереди */
       if (rxMsg.deviceId >= NUMPIN && rxMsg.command != 1) {
         printf("MQTT queue: invalid deviceId=%d, cmd=%d — skipped\r\n", rxMsg.deviceId, rxMsg.command);
@@ -1560,52 +1554,9 @@ void StartWebServerTask(void *argument)
           printf("Error: MQTT settings not configured\r\n");
         }
         break;
-      case 7: // TIMER'S
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            strcpy(mqtt_topic, "/timer/");
-            strcpy(mqtt_payload, "TIMER/No=");
-            char temp[16];
-            sprintf(temp, "%d", rxMsg.deviceId);
-            strcat(mqtt_payload, temp);
-            strcat(mqtt_payload, "/ACTION=");
-            strcat(mqtt_payload, dbCrontxt[rxMsg.deviceId].activ);
-            strcat(mqtt_payload, "/");
-            strcat(mqtt_payload, dbCrontxt[rxMsg.deviceId].info);
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
-          }
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
-      case 9: // PWM_TIMER
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            strcpy(mqtt_topic, "/timer/");
-            
-            uint8_t pwm_pin_id = rxMsg.reserved;
-            uint8_t eduty = rxMsg.state;
-            
-            snprintf(mqtt_payload, sizeof(mqtt_payload),
-                     "PWM_TIMER/No=%d/ACTION=ID:%d,DUTY=%d/%.29s",
-                     rxMsg.deviceId,
-                     pwm_pin_id,
-                     eduty,
-                     dbCrontxt[rxMsg.deviceId].info);
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
-          }
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
+      case 7: // TIMER — заменён на send_mqtt_timer_batch()
+      case 9: // PWM_TIMER — заменён на send_mqtt_timer_batch()
+        break; // no-op: батч обрабатывает всё
       case 8: // OnOff
         if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
           if (check_mqtt_connection(s_conn)) {
@@ -1647,6 +1598,19 @@ void StartWebServerTask(void *argument)
             }
           }
         }
+
+    /* Батч-публикация таймеров раз в 1 секунду (только при изменениях) */
+    {
+          static uint32_t ltim_tk = 0;
+          uint32_t now = HAL_GetTick();
+          if (now - ltim_tk >= 1000) {
+              ltim_tk = now;
+              if (s_conn != NULL && mqtt_connected_reported &&
+                  !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining) {
+                  send_mqtt_timer_batch(s_conn);
+              }
+          }
+    }
 
 
     /* Диагностический heartbeat — только при изменении heap */
@@ -2375,20 +2339,12 @@ void StartServiceTask(void *argument)
 	          fade_state[i].active = false;
 //	          printf("PWM fade done: id=%d final=%d%%\r\n", i, d);
 	        }
-            
-            bool changed = (d != PinsConf[i].dvalue);
 
 	        PinsConf[i].dvalue = d;
 	        uint32_t pulse = (uint32_t)((uint64_t)d
 	                          * PinsConf[i].pwmmax / 100ULL);
 	        __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, pulse);
-            
-            /* MQTT: отправляем уведомление только на ПОСЛЕДНЕМ шаге fade,
-             * а не на каждом промежуточном. Промежуточные значения PWM
-             * публикуются через publish_sensor_batch() раз в 5 секунд. */
-            if (changed && !fade_state[i].active) {
-                mqtt_queue_send_safe(9, fade_state[i].cronindex, (uint8_t)d, (uint8_t)i);
-            }
+            /* MQTT: send_mqtt_timer_batch() отслеживает PWM duty раз в 1с */
 	      }
 	    }
 /* ═══════════════════════════════════════════════

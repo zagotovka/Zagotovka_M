@@ -273,6 +273,7 @@ void publish_ds18b20_changes(struct mg_connection *conn);
 void publish_dht22_changes(struct mg_connection *conn);
 void publish_pwm_changes(struct mg_connection *conn);
 void publish_sensor_batch(struct mg_connection *conn);
+void send_mqtt_timer_batch(struct mg_connection *conn);
 void check_ds18b20_changes(uint8_t pin_id, uint8_t sensor_id);
 void check_dht22_changes(uint8_t sensor_id);
 
