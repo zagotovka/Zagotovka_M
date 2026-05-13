@@ -113,8 +113,8 @@ typedef struct {
     uint8_t second;
 } DateTime;
 /******************** global_vars ****************************/
-extern char s_url[50];
-extern char s_pub_topic[30];
+extern char s_url[70];
+extern char s_pub_topic[64];
 extern int s_qos;
 extern struct mg_connection *s_conn;
 

@@ -73,8 +73,7 @@ ds18b20_pin_t ds18b20[MAX_DS18B20_P];
 dht22_pin_t dht22[MAX_DHT22_P];
 
 /* A4: global mqttMsg removed — each send site uses a local copy */
-char mqtt_topic[100];
-char mqtt_payload[300];
+/* mqtt_topic[100] / mqtt_payload[300] теперь локальны в WebServerTask */
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -371,7 +370,9 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic,
   pub_opts.qos = s_qos;
   pub_opts.retain = false;
   mg_mqtt_pub(conn, &pub_opts);
+  taskENTER_CRITICAL();
   mqtt_sent_count++;
+  taskEXIT_CRITICAL();
   MG_INFO(("%lu PUBLISHED %s -> %.*s", conn->id, msg, (int)pub_opts.topic.len,
            pub_opts.topic.buf));
 }
@@ -1411,12 +1412,10 @@ void StartWebServerTask(void *argument)
   mg_mgr_init(mgr);                                   // Инициализируем менеджер
 
   // Настройка MQTT
-  char mqtt_url[35];
-  if (SetSettings.check_mqtt) {
-    int result = snprintf(mqtt_url, sizeof(mqtt_url), "http://%d.%d.%d.%d:%d",
-                          SetSettings.mqtt_hst0, SetSettings.mqtt_hst1,
-                          SetSettings.mqtt_hst2, SetSettings.mqtt_hst3,
-                          SetSettings.mqtt_prt);
+  char mqtt_url[70];
+  if (SetSettings.check_mqtt && SetSettings.mqtt_hst[0] != '\0') {
+    int result = snprintf(mqtt_url, sizeof(mqtt_url), "mqtt://%s:%d",
+                          SetSettings.mqtt_hst, SetSettings.mqtt_prt);
     if (result < 0 || result >= sizeof(mqtt_url)) {
       printf("Error: MQTT URL truncated or formatting error\n");
     } else {
@@ -1454,6 +1453,8 @@ void StartWebServerTask(void *argument)
 
   MqttMessage_t rxMsg = {0};
   BaseType_t status;
+  char mqtt_topic[100];
+  char mqtt_payload[300];
 
 //  MG_INFO(("Starting event loop"));
   static uint32_t lsens_tk = 0;  // Батч-публикация сенсоров: 5000мс
@@ -1771,8 +1772,10 @@ void StartCronTask(void *argument)
         static int last_min = -1;
         if (timez->tm_min != last_min) {
             if (last_min != -1) {
+                taskENTER_CRITICAL();
                 printf("[MQTT] sent=%lu per minute\r\n", (unsigned long)mqtt_sent_count);
                 mqtt_sent_count = 0;
+                taskEXIT_CRITICAL();
             }
             last_min = timez->tm_min;
         }

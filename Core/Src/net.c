@@ -1025,16 +1025,31 @@ void timer_fn_mqtt(void *arg) {
   }
 
   /* s_conn == NULL — создаём новое MQTT соединение */
-  struct mg_mqtt_opts opts = {.clean = true,
-                              .qos = s_qos,
-                              .topic = mg_str(get_mqtt_topic()),
-                              .version = 4,
-                              .keepalive = 60,
-                              .message = mg_str("bye")};
-  s_conn = mg_mqtt_connect(mgr, get_mqtt_url(), &opts, (mg_event_handler_t) fn_mqtt, NULL);
+  if (!SetSettings.check_mqtt || SetSettings.mqtt_hst[0] == '\0') return;
+
+  char url[70];
+  snprintf(url, sizeof(url), "mqtt://%s:%d", SetSettings.mqtt_hst, SetSettings.mqtt_prt);
+
+  struct mg_mqtt_opts opts;
+  memset(&opts, 0, sizeof(opts));
+  opts.clean = true;
+  opts.qos = s_qos;
+  opts.topic = mg_str(get_mqtt_topic());
+  opts.version = 4;
+  opts.keepalive = 60;
+  opts.message = mg_str("bye");
+
+  if (SetSettings.mqtt_clt[0] != '\0')
+    opts.client_id = mg_str(SetSettings.mqtt_clt);
+  if (SetSettings.mqtt_usr[0] != '\0')
+    opts.user = mg_str(SetSettings.mqtt_usr);
+  if (SetSettings.mqtt_pswd[0] != '\0')
+    opts.pass = mg_str(SetSettings.mqtt_pswd);
+
+  s_conn = mg_mqtt_connect(mgr, url, &opts, (mg_event_handler_t) fn_mqtt, NULL);
   s_mqtt_conn_tick = mg_millis();  /* запоминаем время создания */
   if (s_conn != NULL && !s_mqtt_reconnect_reported) {
-    printf("[MQTT] reconnecting to %s ...\r\n", get_mqtt_url());
+    printf("[MQTT] reconnecting to %s ...\r\n", url);
     s_mqtt_reconnect_reported = true; // Больше не печатать до успешного connect
   }
 }
@@ -1104,11 +1119,9 @@ void setup_mqtt(struct mg_mgr *mgr, struct mg_tcpip_if *mif){
         MG_INFO(("set_mqtt_topic: Topic set to: %s", SetSettings.txmqttop));
 
         // Формирование URL с корректной схемой mqtt://
-        char mqtt_url[50];  // Увеличен размер буфера для URL
-        int result = snprintf(mqtt_url, sizeof(mqtt_url), "http://%d.%d.%d.%d:%d",
-                              SetSettings.mqtt_hst0, SetSettings.mqtt_hst1,
-                              SetSettings.mqtt_hst2, SetSettings.mqtt_hst3,
-                              SetSettings.mqtt_prt);
+        char mqtt_url[70];  // Увеличен размер буфера для URL
+        int result = snprintf(mqtt_url, sizeof(mqtt_url), "mqtt://%s:%d",
+                              SetSettings.mqtt_hst, SetSettings.mqtt_prt);
         if (result < 0 || result >= sizeof(mqtt_url)) {
             MG_ERROR(("Error: MQTT URL truncated or formatting error"));
         } else {

@@ -102,13 +102,13 @@ extern osMessageQueueId_t outputQueueHandle;
 /* A3: global data_pin removed — each function uses a local copy */
 /* A4: global mqttMsg removed — each send site uses a local copy */
 extern osMessageQueueId_t outputQueueHandle;
-extern char mqtt_payload[300];
+/* mqtt_payload[300] removed — locale in WebServerTask */
 extern TIM_HandleTypeDef htim[NUMPIN];
 extern ds18b20_pin_t ds18b20[MAX_DS18B20_P];
 extern dht22_pin_t dht22[MAX_DHT22_P];
 
-char s_url[50] = {0};       // Статический буфер для URL
-char s_pub_topic[30] = {0}; // Public topic
+char s_url[70] = {0};       // Статический буфер для URL
+char s_pub_topic[64] = {0}; // Public topic (TX)
 int s_qos = 1;
 extern int32_t onoffid; // Для parse_onoff_json().
 struct mg_connection *s_conn = NULL;
@@ -1610,8 +1610,7 @@ void gen_mysett_json(const struct dbSettings *settings, char *buffer,
                      "\"rxmqttop\": \"%s\",\n", settings->rxmqttop);
   offset +=
       snprintf(buffer + offset, buffer_size - offset,
-               "\"mqtt_hst\": \"%d.%d.%d.%d\",\n", settings->mqtt_hst0,
-               settings->mqtt_hst1, settings->mqtt_hst2, settings->mqtt_hst3);
+               "\"mqtt_hst\": \"%s\",\n", settings->mqtt_hst);
 
   // IP настройки
   offset += snprintf(buffer + offset, buffer_size - offset,
@@ -2089,8 +2088,9 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
 
   cJSON *mqtt_hst = cJSON_GetObjectItemCaseSensitive(json, "mqtt_hst");
   if (cJSON_IsString(mqtt_hst) && (mqtt_hst->valuestring != NULL)) {
-    sscanf(mqtt_hst->valuestring, "%hu.%hu.%hu.%hu", &settings->mqtt_hst0,
-           &settings->mqtt_hst1, &settings->mqtt_hst2, &settings->mqtt_hst3);
+    strncpy(settings->mqtt_hst, mqtt_hst->valuestring,
+            sizeof(settings->mqtt_hst) - 1);
+    settings->mqtt_hst[sizeof(settings->mqtt_hst) - 1] = '\0';
   }
 
   cJSON *mqtt_prt = cJSON_GetObjectItemCaseSensitive(json, "mqtt_prt");
@@ -4786,15 +4786,19 @@ void check_dht22_changes(
   }
   if (dht22[sensor_id].temp != dht22[sensor_id].prevtemp ||
       dht22[sensor_id].humid != dht22[sensor_id].prvhumid) {
+    taskENTER_CRITICAL();
     dht22_changes.changes[sensor_id / 8] |= (1 << (sensor_id % 8));
+    taskEXIT_CRITICAL();
   }
 }
 // Функция проверки изменений для DS18B20
 void check_ds18b20_changes(uint8_t pin_id, uint8_t sensor_id) {
   if (ds18b20[pin_id].sensors[sensor_id].temp !=
       ds18b20[pin_id].sensors[sensor_id].prevtemp) {
+    taskENTER_CRITICAL();
     ds18b20_changes.changes[pin_id][sensor_id / 8] |=
         (1 << (sensor_id % 8)); // Устанавливаем бит изменения
+    taskEXIT_CRITICAL();
   }
 }
 // Функция публикации изменений DHT22 - НЕ ИСПОЛЬЗУЕТСЯ!
@@ -4931,7 +4935,7 @@ void mqtt_queue_send_safe(uint8_t command, uint8_t deviceId,
      * 1=Device, 2=Switch, 3=LongPress, 4=SingleClick,
      * 5=DoubleClick, 6=Security, 8=OnOff */
     bool is_critical = (command <= 6 || command == 8);
-    if (!is_critical) return;  /* 7=Timer, 9=PWM_TIMER — дропаем */
+    if (!is_critical) return;  /* 7=Timer, 9=PWM_TIMER — заменены на batch, сюда не попадают */
   }
 
   MqttMessage_t msg = {
@@ -4961,19 +4965,19 @@ void publish_sensor_batch(struct mg_connection *conn) {
   /* --- DS18B20 --- */
   for (uint8_t pin = 0; pin < MAX_DS18B20_P; pin++) {
     if (!ds18b20[pin].onoff) continue;
+    /* Snapshot битов изменений под критической секцией -- race-free */
+    uint8_t snap[BYTES_FOR_BITS(MAX_DS18B20_PER_PIN)];
+    taskENTER_CRITICAL();
+    memcpy(snap, ds18b20_changes.changes[pin], sizeof(snap));
+    memset(ds18b20_changes.changes[pin], 0, sizeof(snap));
+    taskEXIT_CRITICAL();
     for (uint8_t s = 0; s < ds18b20[pin].numsens; s++) {
-      if (!(ds18b20_changes.changes[pin][s / 8] & (1 << (s % 8)))) continue;
-      if (!ds18b20[pin].sensors[s].valid) {
-        ds18b20_changes.changes[pin][s / 8] &= ~(1 << (s % 8));
-        continue;
-      }
-      /* Гистерезис 0.2°C */
+      if (!(snap[s / 8] & (1 << (s % 8)))) continue;
+      if (!ds18b20[pin].sensors[s].valid) continue;
+      /* Гистерезис 0.2C */
       float diff = ds18b20[pin].sensors[s].temp - ds18b20[pin].sensors[s].prevtemp;
       if (diff < 0) diff = -diff;
-      if (diff < 0.2f) {
-        ds18b20_changes.changes[pin][s / 8] &= ~(1 << (s % 8));
-        continue;
-      }
+      if (diff < 0.2f) continue;
       /* Добавляем в пакет: ключ = серийный номер DS18B20 */
       avail = sizeof(batch_buf) - off;
       if (avail > 64) {
@@ -4995,37 +4999,36 @@ void publish_sensor_batch(struct mg_connection *conn) {
           count++;
         }
       }
-      ds18b20_changes.changes[pin][s / 8] &= ~(1 << (s % 8));
     }
   }
 
   /* --- DHT22 --- */
-  for (uint8_t i = 0; i < NUMPIN; i++) {
-    if (PinsConf[i].topin != 4) continue;
+  /* Snapshot всего массива изменений под критической секцией */
+  {
+    uint8_t snap[BYTES_FOR_BITS(MAX_DHT22_P)];
+    taskENTER_CRITICAL();
+    memcpy(snap, dht22_changes.changes, sizeof(snap));
+    memset(dht22_changes.changes, 0, sizeof(snap));
+    taskEXIT_CRITICAL();
     for (uint8_t j = 0; j < MAX_DHT22_P; j++) {
-      if (dht22[j].id != i || dht22[j].typsensr != 2) continue;
       uint8_t bi = j / 8, bm = j % 8;
-      if (!(dht22_changes.changes[bi] & (1 << bm))) continue;
-      if (!dht22[j].onoff || !dht22[j].valid) {
-        dht22_changes.changes[bi] &= ~(1 << bm);
-        continue;
-      }
-      /* Гистерезис: температура 0.2°C, влажность 1.0% */
+      if (!(snap[bi] & (1 << bm))) continue;
+      if (!dht22[j].onoff || !dht22[j].valid) continue;
+      if (dht22[j].typsensr != 2) continue;
+      /* Гистерезис: температура 0.2C, влажность 1.0% */
       float dt = dht22[j].temp - dht22[j].prevtemp;
       float dh = dht22[j].humid - dht22[j].prvhumid;
       if (dt < 0) dt = -dt;
       if (dh < 0) dh = -dh;
-      if (dt < 0.2f && dh < 1.0f) {
-        dht22_changes.changes[bi] &= ~(1 << bm);
-        continue;
-      }
+      if (dt < 0.2f && dh < 1.0f) continue;
       /* Добавляем в пакет: "h<pin>":[temp, humidity] */
       avail = sizeof(batch_buf) - off;
       if (avail > 64) {
         int added = snprintf(batch_buf + off, avail,
                         "%s\"h%d\":[%.1f,%.1f]",
                         count > 0 ? "," : "",
-                        i, dht22[j].temp, dht22[j].humid);
+                        /* Определяем номер пина по dht22[j].id */
+                        dht22[j].id, dht22[j].temp, dht22[j].humid);
         if (added > 0 && added < avail) {
           off += added;
           dht22[j].prevtemp = dht22[j].temp;
@@ -5033,7 +5036,6 @@ void publish_sensor_batch(struct mg_connection *conn) {
           count++;
         }
       }
-      dht22_changes.changes[bi] &= ~(1 << bm);
     }
   }
 

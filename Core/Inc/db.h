@@ -208,15 +208,12 @@ struct dbSettings { 	// Cтруктура для setting
 	// Настройки MQTT
 	short check_mqtt; 	// check MQTT on/off
 	int mqtt_prt;       // Your MQTT broker port (default port is set to 1883)
-	char mqtt_clt[10];  // Device's unique identifier.
-	char mqtt_usr[10];  // MQTT Имя пользователя для авторизации
-	char mqtt_pswd[15]; // MQTT Пароль для авторизации
-	char txmqttop[15];  // Transmit MQTT topic
-	char rxmqttop[15];  // Receive MQTT topic
-	short mqtt_hst0; 	// Your MQTT broker address or IP
-	short mqtt_hst1; 	// Your MQTT broker address or IP
-	short mqtt_hst2; 	// Your MQTT broker address or IP
-	short mqtt_hst3; 	// Your MQTT broker address or IP
+	char mqtt_clt[32];  // Device's unique identifier.
+	char mqtt_usr[32];  // MQTT Имя пользователя для авторизации
+	char mqtt_pswd[32]; // MQTT Пароль для авторизации
+	char txmqttop[32];  // Transmit MQTT topic
+	char rxmqttop[32];  // Receive MQTT topic
+	char mqtt_hst[50];  // Your MQTT broker address or domain name (e.g. "192.168.1.100" or "broker.hivemq.com")
 	// Настройки IP адреса
 	short check_ip; 	// check DHCP on/off
 	short ip_addr0; 	// IP адрес

@@ -157,10 +157,7 @@ void SetSettingsConfig() {
   writeField(&USBHFile, buffer, "txmqttop", "\"%s\"", SetSettings.txmqttop);
   writeField(&USBHFile, buffer, "rxmqttop", "\"%s\"", SetSettings.rxmqttop);
 
-  writeField(&USBHFile, buffer, "mqtt_hst0", "%d", SetSettings.mqtt_hst0);
-  writeField(&USBHFile, buffer, "mqtt_hst1", "%d", SetSettings.mqtt_hst1);
-  writeField(&USBHFile, buffer, "mqtt_hst2", "%d", SetSettings.mqtt_hst2);
-  writeField(&USBHFile, buffer, "mqtt_hst3", "%d", SetSettings.mqtt_hst3);
+  writeField(&USBHFile, buffer, "mqtt_hst", "\"%s\"", SetSettings.mqtt_hst);
 
   writeField(&USBHFile, buffer, "check_ip", "%d", SetSettings.check_ip);
   writeField(&USBHFile, buffer, "ip_addr0", "%d", SetSettings.ip_addr0);
@@ -251,10 +248,7 @@ void StartSettingsConfig() {
   writeField(&USBHFile, buffer, "txmqttop", "\"%s\"", MQTT_TPC);
   writeField(&USBHFile, buffer, "rxmqttop", "\"\"");
 
-  // Write MQTT host
-  for (int i = 0; i < 4; i++) {
-    writeField(&USBHFile, buffer, "mqtt_hst%d", "%d", i, 0);
-  }
+  writeField(&USBHFile, buffer, "mqtt_hst", "\"192.168.1.100\"");
 
   // Write IP settings
   writeField(&USBHFile, buffer, "check_ip", "%d", CHECK_IP);
@@ -326,6 +320,7 @@ void GetSettingsConfig() {
   bool isKey = true;
   char *trimmed_key;
   char *end;
+  short old_mqtt_hst0 = 0, old_mqtt_hst1 = 0, old_mqtt_hst2 = 0, old_mqtt_hst3 = 0; // for migration from old format
   //	bool startValue = false;
   //	printf("\r\n=== Starting GetSetingsConfig() ===\r\n");
   fresult = f_stat("settings.ini", &finfo);
@@ -463,6 +458,8 @@ void GetSettingsConfig() {
       strncpy(SetSettings.rxmqttop, value, sizeof(SetSettings.rxmqttop) - 1);
       //			printf("Found key: %s, value: %s\r\n", key,
       // value);
+    } else if (strcmp(key, "mqtt_hst") == 0) {
+      strncpy(SetSettings.mqtt_hst, value, sizeof(SetSettings.mqtt_hst) - 1);
     } else if (strcmp(key, "tel") == 0) {
       strncpy(SetSettings.tel, value, sizeof(SetSettings.tel) - 1);
       //			printf("Found key: %s, value: %s\r\n", key,
@@ -574,21 +571,13 @@ void GetSettingsConfig() {
       //			printf("Found key: %s, value: %s\r\n", key,
       // value);
     } else if (strcmp(key, "mqtt_hst0") == 0) {
-      SetSettings.mqtt_hst0 = atoi(value);
-      //			printf("Found key: %s, value: %s\r\n", key,
-      // value);
+      old_mqtt_hst0 = atoi(value);
     } else if (strcmp(key, "mqtt_hst1") == 0) {
-      SetSettings.mqtt_hst1 = atoi(value);
-      //			printf("Found key: %s, value: %s\r\n", key,
-      // value);
+      old_mqtt_hst1 = atoi(value);
     } else if (strcmp(key, "mqtt_hst2") == 0) {
-      SetSettings.mqtt_hst2 = atoi(value);
-      //			printf("Found key: %s, value: %s\r\n", key,
-      // value);
+      old_mqtt_hst2 = atoi(value);
     } else if (strcmp(key, "mqtt_hst3") == 0) {
-      SetSettings.mqtt_hst3 = atoi(value);
-      //			printf("Found key: %s, value: %s\r\n", key,
-      // value);
+      old_mqtt_hst3 = atoi(value);
     } else if (strcmp(key, "onsunrise") == 0) {
       SetSettings.onsunrise = atoi(value);
       //			printf("Found key: %s, value: %s\r\n", key,
@@ -658,6 +647,14 @@ void GetSettingsConfig() {
     valuePos = 0;
     isKey = true;
     //		startValue = false;
+  }
+
+  // Migration from old mqtt_hst0..3 octet format to new mqtt_hst string
+  if (SetSettings.mqtt_hst[0] == '\0' && old_mqtt_hst0 != 0) {
+    snprintf(SetSettings.mqtt_hst, sizeof(SetSettings.mqtt_hst),
+             "%d.%d.%d.%d", old_mqtt_hst0, old_mqtt_hst1,
+             old_mqtt_hst2, old_mqtt_hst3);
+    printf("MQTT host migrated from old format: %s\r\n", SetSettings.mqtt_hst);
   }
 
   if (fresult != FR_OK) {
@@ -1294,7 +1291,7 @@ void SetPinConfig() {
   }
   f_close(&USBHFile);
   // MQTT уведомление
-  if ((s_conn != NULL && !s_conn->is_closing) && SetSettings.check_mqtt) {
+  if (SetSettings.check_mqtt) {
     mqtt_queue_send_safe(1, 0, 0, 0);
   }
 }

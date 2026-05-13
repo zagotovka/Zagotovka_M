@@ -274,7 +274,7 @@ function Settings({ }) {
       case 'ip_addr':
       case 'gateway':
       case 'mqtt_hst':
-        if (!ipRegex.test(value)) error = 'Неверный IP-адрес';
+        if (value.length > 50) error = 'Слишком длинное имя хоста';
         break;
       case 'sb_mask':
         if (!subnetMaskRegex.test(value)) error = 'Неверная маска подсети';
@@ -613,19 +613,20 @@ function Settings({ }) {
                   </thead>
                   <tbody>
                 ${[
-                  { label: 'Host',     key: 'mqtt_hst',  type: 'text'     },
+                  { label: 'Host',     key: 'mqtt_hst',  type: 'text',     maxlength: 50 },
                   { label: 'Port',     key: 'mqtt_prt',  type: 'number'   },
-                  { label: 'Client',   key: 'mqtt_clt',  type: 'text'     },
-                  { label: 'User',     key: 'mqtt_usr',  type: 'text'     },
-                  { label: 'Password', key: 'mqtt_pswd', type: 'password', tipLabel: 'Password (MQTT)' },
-                  { label: 'TX topic', key: 'txmqttop',  type: 'text'     },
-                  { label: 'RX topic', key: 'rxmqttop',  type: 'text'     }
+                  { label: 'Client',   key: 'mqtt_clt',  type: 'text',     maxlength: 32 },
+                  { label: 'User',     key: 'mqtt_usr',  type: 'text',     maxlength: 32 },
+                  { label: 'Password', key: 'mqtt_pswd', type: 'password', maxlength: 32, tipLabel: 'Password (MQTT)' },
+                  { label: 'TX topic', key: 'txmqttop',  type: 'text',     maxlength: 32 },
+                  { label: 'RX topic', key: 'rxmqttop',  type: 'text',     maxlength: 32 }
                 ].map((item, index) => html`
                   <${FieldRow} label=${item.label} tip=${gt(item.tipLabel || item.label)} index=${index}>
                     <${pageSetting}
                       value=${settings[item.key]}
                       setfn=${(v) => handleChange(item.key, v)}
                       type=${item.type}
+                      maxlength=${item.maxlength}
                       class=${`w-full px-3 py-2 bg-white/50 border ${errors[item.key] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                       error=${errors[item.key]}
                     />
