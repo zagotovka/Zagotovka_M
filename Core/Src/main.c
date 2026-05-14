@@ -59,10 +59,10 @@ extern uint8_t temp_cnt;
 extern uint8_t Ds18b20StartConvert;
 extern uint16_t Ds18b20Timeout;
 extern uint64_t s_boot_timestamp;
-uint32_t onoffid;
+int32_t onoffid;  /* знаковый: JSON id может быть < 0 */
 extern onewire_config_t ow_conf[MAX_DS18B20_P + MAX_DHT22_P];
 struct Button button[NUMPIN];
-extern uint8_t onlineFlg;
+extern volatile uint8_t onlineFlg;
 extern uint8_t gsm_rx_buffer[GSM_RX_BUFFER_SIZE];
 extern volatile gsm_rx_buffer_index_t gsm_rx_buffer_head;
 uint8_t RxByte; // Буфер для приема одного байта по UART
@@ -96,8 +96,8 @@ dbPidConf PidConf[PID_MAX_SLOTS];
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-// Cron variable
-struct tm *timez;
+// Cron variable — копия struct tm, а не указатель на static buffer localtime()
+struct tm timez_copy;
 time_t cronetime;
 time_t cronetime_old;
 time_t moontime = (time_t)-1;
@@ -243,6 +243,11 @@ const osMessageQueueAttr_t usbQueue_attributes = {
 osMessageQueueId_t mqttQueueHandle;
 const osMessageQueueAttr_t mqttQueue_attributes = {
   .name = "mqttQueue"
+};
+/* Definitions for mqttRxQueue */
+osMessageQueueId_t mqttRxQueueHandle;
+const osMessageQueueAttr_t mqttRxQueue_attributes = {
+  .name = "mqttRxQueue"
 };
 /* USER CODE BEGIN PV */
 extern struct dbSettings SetSettings;
@@ -663,7 +668,10 @@ int main(void)
   usbQueueHandle = osMessageQueueNew (16, sizeof(uint8_t), &usbQueue_attributes);
 
   /* creation of mqttQueue */
-  mqttQueueHandle = osMessageQueueNew (32, sizeof(MqttMessage_t), &mqttQueue_attributes);
+  mqttQueueHandle = osMessageQueueNew (16, sizeof(MqttMessage_t), &mqttQueue_attributes);
+
+  /* creation of mqttRxQueue */
+  mqttRxQueueHandle = osMessageQueueNew (4, sizeof(MqttRxMsg_t), &mqttRxQueue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -851,7 +859,13 @@ static void MX_ETH_Init(void)
   heth.Init.RxBuffLen = 1524;
 
   /* USER CODE BEGIN MACADDRESS */
-
+  /* Генерируем уникальный MAC из 96-bit UUID чипа (locally administered) */
+  MACAddr[0] = 0x02;  /* locally administered, unicast */
+  MACAddr[1] = UUID[0] ^ UUID[1];
+  MACAddr[2] = UUID[2] ^ UUID[3];
+  MACAddr[3] = UUID[4] ^ UUID[5];
+  MACAddr[4] = UUID[6] ^ UUID[7] ^ UUID[8];
+  MACAddr[5] = UUID[9] ^ UUID[10] ^ UUID[11];
   /* USER CODE END MACADDRESS */
 
   if (HAL_ETH_Init(&heth) != HAL_OK)
@@ -1462,6 +1476,15 @@ void StartWebServerTask(void *argument)
   for (;;) {
     mg_mgr_poll(mgr, 10);
 
+    /* Обработка входящих MQTT-команд (вынесена из fn_mqtt callback,
+       чтобы не блокировать mg_mgr_poll) */
+    {
+        MqttRxMsg_t rx;
+        while (xQueueReceive(mqttRxQueueHandle, &rx, 0) == pdPASS) {
+            mqtt_message_handler(rx.topic, rx.payload);
+        }
+    }
+
     /* ── WebSocket broadcast каждые 300ms ── */
     {
       static uint32_t last_ws_bc = 0;
@@ -1640,7 +1663,7 @@ void StartWebServerTask(void *argument)
     osDelay(1); /* Yield CPU to RTOS, preventing 100% CPU loop starvation */
   }
   mg_mgr_free(mgr);
-  free(mgr);
+  vPortFree(mgr); // парный к pvPortMalloc() на строке инициализации
   /* USER CODE END StartWebServerTask */
 }
 
@@ -1739,18 +1762,18 @@ void StartCronTask(void *argument)
       }
 
       if (!t_printd && cronetime != 0) {
-        timez = localtime(&cronetime);
+        { struct tm *tmp = localtime(&cronetime); if (tmp) memcpy(&timez_copy, tmp, sizeof(timez_copy)); }
         taskENTER_CRITICAL();
         if (!onlineFlg) {
           printf("[OFFLINE MODE] Initial Date:%02d.%02d.%04d "
                  "Time:%02d:%02d:%02d\r\n",
-                 timez->tm_mday, timez->tm_mon + 1, timez->tm_year + 1900,
-                 timez->tm_hour, timez->tm_min, timez->tm_sec);
+                 timez_copy.tm_mday, timez_copy.tm_mon + 1, timez_copy.tm_year + 1900,
+                 timez_copy.tm_hour, timez_copy.tm_min, timez_copy.tm_sec);
         } else {
           printf("[ONLINE MODE] Initial Date:%02d.%02d.%04d "
                  "Time:%02d:%02d:%02d\r\n",
-                 timez->tm_mday, timez->tm_mon + 1, timez->tm_year + 1900,
-                 timez->tm_hour, timez->tm_min, timez->tm_sec);
+                 timez_copy.tm_mday, timez_copy.tm_mon + 1, timez_copy.tm_year + 1900,
+                 timez_copy.tm_hour, timez_copy.tm_min, timez_copy.tm_sec);
         }
         taskEXIT_CRITICAL();
         t_printd = 1;
@@ -1758,26 +1781,26 @@ void StartCronTask(void *argument)
 
       if (cronetime != cronetime_old) {
         cronetime_old = cronetime;
-        timez = localtime(&cronetime);
-        timez->tm_mon += 1;
+        { struct tm *tmp = localtime(&cronetime); if (tmp) memcpy(&timez_copy, tmp, sizeof(timez_copy)); }
+        timez_copy.tm_mon += 1;
 
         // Эти переменные нужны для задачи ServiceTask!
-        if (timez->tm_mday !=
+        if (timez_copy.tm_mday !=
             day) { // Если текущий день отличается от сохраненного
-          year = timez->tm_year + 1900;
-          month = timez->tm_mon; // Не добавляем 1, так как уже сделано выше
-          day = timez->tm_mday;
+          year = timez_copy.tm_year + 1900;
+          month = timez_copy.tm_mon; // Не добавляем 1, так как уже сделано выше
+          day = timez_copy.tm_mday;
         }
 
         static int last_min = -1;
-        if (timez->tm_min != last_min) {
+        if (timez_copy.tm_min != last_min) {
             if (last_min != -1) {
                 taskENTER_CRITICAL();
-                printf("[MQTT] sent=%lu per minute\r\n", (unsigned long)mqtt_sent_count);
+//                printf("[MQTT] sent=%lu per minute\r\n", (unsigned long)mqtt_sent_count);
                 mqtt_sent_count = 0;
                 taskEXIT_CRITICAL();
             }
-            last_min = timez->tm_min;
+            last_min = timez_copy.tm_min;
         }
 
         //				printf("CronTask: today's date:
@@ -1795,13 +1818,13 @@ void StartCronTask(void *argument)
         // Проверка CRON выражений
         i = 0;
         while (i < LWDTC_ARRAYSIZE(cron_ctxs)) {
-          if (lwdtc_cron_is_valid_for_time(timez, cron_ctxs, &i) == lwdtcOK) {
+          if (lwdtc_cron_is_valid_for_time(&timez_copy, cron_ctxs, &i) == lwdtcOK) {
             strcpy(str, dbCrontxt[i].activ);
             parse_string(str, cronetime_old, i, 0);
           }
           i++;
         }
-        timez->tm_mon -= 1;
+        timez_copy.tm_mon -= 1;
       }
     }
     osDelay(1);
@@ -2359,8 +2382,8 @@ void StartServiceTask(void *argument)
       // Calculate after system reboot
       svc_printResults();
       if (year != 0000) { // Ensure year is set
-        calculateMoonPhase((DateTime){year, month, day, timez->tm_hour,
-                                      timez->tm_min, timez->tm_sec},
+        calculateMoonPhase((DateTime){year, month, day, timez_copy.tm_hour,
+                                      timez_copy.tm_min, timez_copy.tm_sec},
                            &nextfullmnlcl);
         nextfullmnlcl.hour += SetSettings.timezone; // Adjust for timezone
         if (nextfullmnlcl.hour >= 24) {
@@ -2381,13 +2404,13 @@ void StartServiceTask(void *argument)
                                        // reboot
       }
     }
-    if (timez->tm_min != prevmin) { // Проверка раз в минуту
-      prevmin = timez->tm_min;
-      if (timez->tm_hour == 0 && timez->tm_min == 1 && year != 0000) {
+    if (timez_copy.tm_min != prevmin) { // Проверка раз в минуту
+      prevmin = timez_copy.tm_min;
+      if (timez_copy.tm_hour == 0 && timez_copy.tm_min == 1 && year != 0000) {
         //          if (moonflag < 3) { // Для уверенности 3 раза!
         if (year != 0000) { // Ensure year is set
-          calculateMoonPhase((DateTime){year, month, day, timez->tm_hour,
-                                        timez->tm_min, timez->tm_sec},
+          calculateMoonPhase((DateTime){year, month, day, timez_copy.tm_hour,
+                                        timez_copy.tm_min, timez_copy.tm_sec},
                              &nextfullmnlcl);
           nextfullmnlcl.hour += SetSettings.timezone; // Adjust for timezone
           if (nextfullmnlcl.hour >= 24) {
@@ -2728,6 +2751,24 @@ void StartDgnTask(void *argument)
   /* USER CODE BEGIN StartDgnTask */
   /* Немного ждём после загрузки, чтобы сеть успела подняться */
   osDelay(5000);
+
+  /* ── Одноразовый дамп Stack High Water Mark всех задач ── */
+  printf("\r\n=== STACK HWM (words free) ===\r\n");
+  printf("ConfigTask    HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)ConfigTaskHandle));
+  printf("WebServerTask HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)WebServerTaskHandle));
+  printf("OutputTask    HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)OutputTaskHandle));
+  printf("CronTask      HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)CronTaskHandle));
+  printf("InputTask     HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)InputTaskHandle));
+  printf("EncoderTask   HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)EncoderTaskHandle));
+  printf("ds18b20Task   HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)ds18b20TaskHandle));
+  printf("dht22Task     HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)dht22TaskHandle));
+  printf("ServiceTask   HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)ServiceTaskHandle));
+  printf("SIM800LTask   HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)SIM800LTaskHandle));
+  printf("SecurityTask  HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)SecurityTaskHandle));
+  printf("PIDTask       HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)PIDTaskHandle));
+  printf("DgnTask       HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)my_DgnTaskHandle));
+  printf("=============================\r\n");
+
   heap_diagnostic();
 
   /* Infinite loop */

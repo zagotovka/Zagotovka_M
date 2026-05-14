@@ -36,7 +36,7 @@ extern "C" {
 
 extern const char *s_sub_topic;
 extern int s_qos;
-extern struct mg_connection *s_conn;
+extern struct mg_connection * volatile s_conn;
 #define SMS_ENABLE_CODE  777  // Включить
 #define SMS_DISABLE_CODE 222  // Отключить
 #define BUTTON_PRESSED 1
@@ -143,6 +143,13 @@ typedef struct {
     uint8_t state;       // Состояние
     uint8_t reserved;    // Для выравнивания по 4 байта
 } __attribute__((packed)) MqttMessage_t;
+
+/* Входящее MQTT-сообщение для отложенной обработки
+   (вынесено из контекста mg_mgr_poll → основной цикл WebServerTask) */
+typedef struct {
+    char topic[64];
+    char payload[256];
+} MqttRxMsg_t;
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

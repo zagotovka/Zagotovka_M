@@ -477,46 +477,50 @@ void DebugMon_Handler(void)
 void USART2_IRQHandler(void)
 {
   /* USER CODE BEGIN USART2_IRQn 0 */
-// ВАРИАНТ - 1
-//	if(((huart2.Instance->ISR & USART_ISR_RXNE) != RESET) && ((huart2.Instance->CR1 & USART_CR1_RXNEIE) != RESET))
-//	{
-//	   uint8_t rbyte = (uint8_t)(huart2.Instance->RDR & (uint8_t)0x00FF); // читает байт из регистра
-//	   gsm_rx_buffer_index_t i = (uint16_t)(gsm_rx_buffer_head + 1) % GSM_RX_BUFFER_SIZE;
-//
-//	   if(i != gsm_rx_buffer_tail)
-//	   {
-//	    gsm_rx_buffer[gsm_rx_buffer_head] = rbyte;
-//	    gsm_rx_buffer_head = i;
-//	   }
-//	}
-//	return;
-// ВАРИАНТ - 2
-    // Проверка на ошибки
-    if(huart2.Instance->ISR & (USART_ISR_ORE | USART_ISR_NE | USART_ISR_FE | USART_ISR_PE))
+    /*
+     * FIX: Полностью ручная обработка USART2 RX без HAL_UART_IRQHandler.
+     *
+     * Причина: HAL_UART_IRQHandler() повторно читает RDR, что приводит к:
+     *   1. Потере каждого второго байта (HAL вычитывает RDR "в никуда")
+     *   2. Гонке данных с кольцевым буфером gsm_rx_buffer
+     *
+     * HAL-калбеки (RxCplt, TxCplt, Error) для USART2 не переопределены,
+     * TX идёт через блокирующий HAL_UART_Transmit() — HAL IRQ handler не нужен.
+     */
+
+    /* Сброс флагов ошибок (ORE/NE/FE/PE) — предотвращает interrupt storm */
+    uint32_t isr = huart2.Instance->ISR;
+    if (isr & (USART_ISR_ORE | USART_ISR_NE | USART_ISR_FE | USART_ISR_PE))
     {
-        // Сброс флагов ошибок
         huart2.Instance->ICR = USART_ICR_ORECF | USART_ICR_NCF |
-                              USART_ICR_FECF | USART_ICR_PECF;
+                               USART_ICR_FECF  | USART_ICR_PECF;
     }
 
-    if(((huart2.Instance->ISR & USART_ISR_RXNE) != RESET) &&
-       ((huart2.Instance->CR1 & USART_CR1_RXNEIE) != RESET))
+    /* Приём байта в кольцевой буфер (SPSC lock-free ring buffer)
+     *
+     * Гарантии атомарности:
+     * - head пишет ТОЛЬКО ISR, tail пишет ТОЛЬКО task → SPSC, lock не нужен
+     * - uint16_t read/write атомарны на Cortex-M7 (aligned, single bus txn)
+     * - __DMB() между записью данных и обновлением head предотвращает
+     *   reordering: consumer гарантированно увидит данные ДО нового head
+     * - tail читается в локальную переменную (один volatile read)
+     */
+    if ((isr & USART_ISR_RXNE) && (huart2.Instance->CR1 & USART_CR1_RXNEIE))
     {
-        uint8_t rbyte = (uint8_t)(huart2.Instance->RDR & (uint8_t)0x00FF);
-        gsm_rx_buffer_index_t i = (uint16_t)(gsm_rx_buffer_head + 1) % GSM_RX_BUFFER_SIZE;
+        uint8_t rbyte = (uint8_t)(huart2.Instance->RDR & 0x00FFu);
+        gsm_rx_buffer_index_t next = (gsm_rx_buffer_head + 1) % GSM_RX_BUFFER_SIZE;
+        gsm_rx_buffer_index_t tail_snapshot = gsm_rx_buffer_tail;  /* single volatile read */
 
-        if(i != gsm_rx_buffer_tail)
+        if (next != tail_snapshot)
         {
             gsm_rx_buffer[gsm_rx_buffer_head] = rbyte;
-            gsm_rx_buffer_head = i;
+            __DMB();  /* data barrier: данные в буфере видны ДО обновления head */
+            gsm_rx_buffer_head = next;
         }
-        else
-        {
-            // Буфер переполнен
-            // Можно добавить обработку этой ситуации
-        }
+        /* else: буфер переполнен — байт отброшен, RDR прочитан (флаг RXNE сброшен) */
     }
 
+    return;  /* НЕ вызываем HAL_UART_IRQHandler — всю работу сделали выше */
   /* USER CODE END USART2_IRQn 0 */
   HAL_UART_IRQHandler(&huart2);
   /* USER CODE BEGIN USART2_IRQn 1 */

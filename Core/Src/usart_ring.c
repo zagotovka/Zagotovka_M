@@ -6,6 +6,7 @@
  */
 
 #include "usart_ring.h"
+#include "stm32f7xx.h"  /* __DMB() */
 
 /////////////////// GSM USART /////////////////////
 volatile gsm_rx_buffer_index_t gsm_rx_buffer_head = 0;
@@ -14,24 +15,27 @@ uint8_t gsm_rx_buffer[GSM_RX_BUFFER_SIZE] = {0,};
 
 int16_t gsm_available(void)
 {
-//	printf("gsm_available: head=%d, tail=%d\r\n", gsm_rx_buffer_head, gsm_rx_buffer_tail);
-	return ((uint16_t)(GSM_RX_BUFFER_SIZE + gsm_rx_buffer_head - gsm_rx_buffer_tail)) % GSM_RX_BUFFER_SIZE;
+	gsm_rx_buffer_index_t h = gsm_rx_buffer_head;  /* single volatile read */
+	gsm_rx_buffer_index_t t = gsm_rx_buffer_tail;
+	return ((uint16_t)(GSM_RX_BUFFER_SIZE + h - t)) % GSM_RX_BUFFER_SIZE;
 }
 
 int16_t gsm_read(void)
 {
-	if(gsm_rx_buffer_head == gsm_rx_buffer_tail)
+	gsm_rx_buffer_index_t h = gsm_rx_buffer_head;  /* single volatile read */
+	gsm_rx_buffer_index_t t = gsm_rx_buffer_tail;
+
+	if (h == t)
 	{
 		printf("Buffer empty!\r\n");
 		return -1;
 	}
-	else
-	{
-		unsigned char c = gsm_rx_buffer[gsm_rx_buffer_tail];
-		gsm_rx_buffer_tail = (gsm_rx_buffer_index_t)(gsm_rx_buffer_tail + 1) % GSM_RX_BUFFER_SIZE;
-//		printf("gsm_read: byte=0x%02X, new tail=%d\r\n", c, gsm_rx_buffer_tail);
-		return c;
-	}
+
+	__DMB();  /* barrier: гарантирует видимость данных после чтения head */
+	unsigned char c = gsm_rx_buffer[t];
+	__DMB();  /* barrier: данные прочитаны ДО обновления tail */
+	gsm_rx_buffer_tail = (gsm_rx_buffer_index_t)(t + 1) % GSM_RX_BUFFER_SIZE;
+	return c;
 }
 
 /////////////////// DEBUG USART //////////////////// можно удалить после отладки всего

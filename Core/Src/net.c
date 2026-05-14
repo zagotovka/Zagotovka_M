@@ -90,7 +90,18 @@ static void ws_client_remove(struct mg_connection *c) {
 int ui_event_next(int no, struct ui_event *e) {
   if (no < 0 || no >= MAX_EVENTS_NO) return 0;
 
-  srand((unsigned) no);
+  /* Инициализируем srand() один раз аппаратным RNG */
+  static bool srand_done = false;
+  if (!srand_done) {
+    extern RNG_HandleTypeDef hrng;
+    uint32_t rnd;
+    if (HAL_RNG_GenerateRandomNumber(&hrng, &rnd) == HAL_OK) {
+      srand((unsigned) rnd);
+    } else {
+      srand((unsigned) mg_millis());  /* fallback */
+    }
+    srand_done = true;
+  }
   e->type = (uint8_t) rand() % 4;
   e->prio = (uint8_t) rand() % 3;
   e->timestamp =
@@ -226,12 +237,13 @@ void handle_settings_set(struct mg_connection *c, struct mg_str body) {
   if (s && strlen(s) < MAX_DEVICE_NAME) {
     settings.device_name = s;
   } else {
-    free(s);
+    mg_free(s);
     settings.device_name = (char *)default_name;  // fallback на sentinel
   }
-  /* A1 fix: освобождаем старый device_name если он был выделен через malloc */
+  /* Освобождаем старый device_name через mg_free() — парный к mg_calloc()
+     внутри mg_json_get_str(). Корректно при любом MG_ARCH. */
   if (s_settings.device_name != NULL && s_settings.device_name != default_name) {
-    free(s_settings.device_name);
+    mg_free(s_settings.device_name);
   }
   s_settings = settings; // Save to the device flash
   mg_http_reply(c, 200, s_json_header,
@@ -533,7 +545,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 								"%s"
 								"\r\n", size, extra_headers);
 						mg_send(c, data, size);
-						free(data); // Освобождаем память, если mg_file_read выделил ее
+						mg_free(data); // mg_file_read выделяет через mg_calloc
 					}
 					mg_fs_close(fd);
 				}
@@ -780,7 +792,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 	        break;
 	    }
 	    // Правильно для Mongoose 7.21:
-	        // mg_json_get_str выделяет память — обязательно free!
+	        // mg_json_get_str выделяет через mg_calloc — обязательно mg_free!
 	        char *tab_str = mg_json_get_str(wm->data, "$.activeTab");
 	        if (tab_str != NULL) {
 	            for (int i = 0; i < MAX_WS_CLIENTS; i++) {
@@ -791,7 +803,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 	                    break;
 	                }
 	            }
-	            free(tab_str); // ← обязательно! иначе утечка heap каждый reconnect
+	            mg_free(tab_str); // mg_json_get_str → mg_calloc, парный mg_free
 	        }
 	        break;
 	}
@@ -847,6 +859,7 @@ void ws_broadcast_all(void) {
   if (s_ws_count == 0) return;
 
   static char ws_buf[BUFFER_SIZE];
+  static char ws_json[BUFFER_SIZE]; /* собственный буфер вместо глобального jsonbuf */
   static uint32_t last_ping = 0;
   uint32_t now = HAL_GetTick();
   bool do_ping = (now - last_ping) >= 5000;
@@ -879,33 +892,33 @@ void ws_broadcast_all(void) {
     off += snprintf(ws_buf + off, BUFFER_SIZE - off, "{");
 
     if (strcmp(tab, "switch") == 0) {
-      gen_switch_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "switch", jsonbuf, 0);
-      gen_pintopin_json(PinsLinks, jsonbuf, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "pintopin", jsonbuf, 1);
+      gen_switch_json(PinsInfo, PinsConf, NUMPIN, ws_json, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "switch", ws_json, 0);
+      gen_pintopin_json(PinsLinks, ws_json, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "pintopin", ws_json, 1);
       has_data = 1;
     } else if (strcmp(tab, "encoder") == 0) {
-      gen_encoder_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE,
+      gen_encoder_json(PinsInfo, PinsConf, NUMPIN, ws_json, BUFFER_SIZE,
                        PinsLinks, NUMPINLINKS);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "encoder", jsonbuf, 0);
-      gen_pintopin_json(PinsLinks, jsonbuf, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "pintopin", jsonbuf, 1);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "encoder", ws_json, 0);
+      gen_pintopin_json(PinsLinks, ws_json, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "pintopin", ws_json, 1);
       has_data = 1;
     } else if (strcmp(tab, "pid") == 0) {
-      gen_pid_json(jsonbuf, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "pid", jsonbuf, 0);
+      gen_pid_json(ws_json, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "pid", ws_json, 0);
       has_data = 1;
     } else if (strcmp(tab, "button") == 0) {
-      gen_button_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "button", jsonbuf, 0);
+      gen_button_json(PinsInfo, PinsConf, NUMPIN, ws_json, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "button", ws_json, 0);
       has_data = 1;
     } else if (strcmp(tab, "temp") == 0) {
-      pars_temp_sensors(jsonbuf, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "temp", jsonbuf, 0);
+      pars_temp_sensors(ws_json, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "temp", ws_json, 0);
       has_data = 1;
     } else if (strcmp(tab, "security") == 0) {
-      gen_security_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "security", jsonbuf, 0);
+      gen_security_json(PinsInfo, PinsConf, NUMPIN, ws_json, BUFFER_SIZE);
+      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "security", ws_json, 0);
       has_data = 1;
     }
 
@@ -975,17 +988,18 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
 //               (int)mm->topic.len, mm->topic.buf,
 //               (int)mm->data.len, mm->data.buf);
    MG_INFO(("%lu RECEIVED %.*s <- %.*s", c->id, (int) mm->data.len, mm->data.buf, (int) mm->topic.len, mm->topic.buf));
-    /* Dispatch received payload to command handler */
+    /* Dispatch received payload to command handler (через очередь,
+       чтобы не блокировать mg_mgr_poll) */
     {
-      char topic_buf[64];
-      char data_buf[256];
-      size_t tlen = mm->topic.len < sizeof(topic_buf) - 1 ? mm->topic.len : sizeof(topic_buf) - 1;
-      size_t dlen = mm->data.len  < sizeof(data_buf)  - 1 ? mm->data.len  : sizeof(data_buf)  - 1;
-      memcpy(topic_buf, mm->topic.buf, tlen);
-      topic_buf[tlen] = '\0';
-      memcpy(data_buf,  mm->data.buf,  dlen);
-      data_buf[dlen] = '\0';
-      mqtt_message_handler(topic_buf, data_buf);
+      extern osMessageQueueId_t mqttRxQueueHandle;
+      MqttRxMsg_t rx = {0};
+      size_t tlen = mm->topic.len < sizeof(rx.topic) - 1 ? mm->topic.len : sizeof(rx.topic) - 1;
+      size_t dlen = mm->data.len  < sizeof(rx.payload) - 1 ? mm->data.len : sizeof(rx.payload) - 1;
+      memcpy(rx.topic,   mm->topic.buf, tlen);
+      memcpy(rx.payload, mm->data.buf,  dlen);
+      if (xQueueSend(mqttRxQueueHandle, &rx, 0) != pdPASS) {
+        printf("[MQTT] RX queue full, message dropped!\r\n");
+      }
     }
   } else if (ev == MG_EV_CLOSE) {
     MG_INFO(("%lu CLOSED", c->id));

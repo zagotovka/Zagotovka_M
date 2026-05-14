@@ -24,7 +24,7 @@
 #include "queue.h"
 
 #define BUFFER_SIZE 10000 //(max Button = 9835 символов, это не точно!)
-extern char jsonbuf[BUFFER_SIZE]; /* Глобальный буфер — определён в zagotovka.c */
+/* jsonbuf теперь static в zagotovka.c — для ws_broadcast_all() свой буфер в net.c */
 #define ENTER_CRITICAL() taskENTER_CRITICAL()
 #define EXIT_CRITICAL()  taskEXIT_CRITICAL()
 
@@ -33,7 +33,7 @@ extern osMessageQueueId_t usbQueueHandle;
 extern uint8_t usbnum;
 extern struct dbSettings SetSettings;
 
-extern struct tm *timez;
+extern struct tm timez_copy;
 extern struct dbPinsInfo PinsInfo[NUMPIN];
 extern struct dbPinsConf PinsConf[NUMPIN];
 extern struct dbCron dbCrontxt[MAXSIZE];
@@ -116,7 +116,7 @@ typedef struct {
 extern char s_url[70];
 extern char s_pub_topic[64];
 extern int s_qos;
-extern struct mg_connection *s_conn;
+extern struct mg_connection * volatile s_conn;
 
 char* get_mqtt_url(void);
 char* get_mqtt_topic(void);

@@ -27,6 +27,7 @@ char currentChar; // Альтерантива fsbuffer! Считываем фа�
                   // "cron.ini"  посимвольно и каждый символ сохраняем в
                   // currentChar.
 #define JSON_BUF_SIZE 256 // Для новой версии SetSetingsConfig()
+static char setings_buf[BUFFER_SIZE]; /* file-local: заменяет глобальный jsonbuf */
 
 extern osMessageQueueId_t mqttQueueHandle;
 extern struct dbSettings SetSettings;
@@ -1320,19 +1321,19 @@ void GetPinToPin() {
     return;
   }
 
-  /* Используем глобальный jsonbuf вместо malloc */
-  fresult = f_read(&USBHFile, jsonbuf, finfo.fsize, &bytesRead);
+  /* Используем глобальный setings_buf вместо malloc */
+  fresult = f_read(&USBHFile, setings_buf, finfo.fsize, &bytesRead);
   f_close(&USBHFile);
 
   if (fresult != FR_OK || bytesRead == 0) {
     printf("ERROR: Failed to read pintopin.ini\r\n");
     return;
   }
-  jsonbuf[bytesRead] = '\0';
+  setings_buf[bytesRead] = '\0';
 
   memset(PinsLinks, 0, sizeof(PinsLinks)); // Очищаем массив связей
 
-  cJSON *root = cJSON_Parse(jsonbuf);
+  cJSON *root = cJSON_Parse(setings_buf);
   if (!root) {
     printf("ERROR: JSON parse failed for pintopin.ini: %s\r\n", cJSON_GetErrorPtr());
     return;
@@ -2040,7 +2041,7 @@ void SetOneWireConfig() {
   UINT byteswritten;
   const uint8_t CHUNK_SIZE =
       1; // Обработка по одному сенсору за раз для экономии памяти
-  char *out_str = NULL; /* указатель на jsonbuf для совместимости с существующим кодом */
+  char *out_str = NULL; /* указатель на setings_buf для совместимости с существующим кодом */
   bool first_pin = true;
 
   //    printf("Starting chunked SetOneWireConfig\n");
@@ -2092,12 +2093,12 @@ void SetOneWireConfig() {
       cJSON_Delete(pin_obj);
       continue;
     }
-    if (!cJSON_PrintPreallocated(pin_obj, jsonbuf, BUFFER_SIZE, 0)) {
+    if (!cJSON_PrintPreallocated(pin_obj, setings_buf, BUFFER_SIZE, 0)) {
       cJSON_Delete(pin_obj);
       continue;
     }
     cJSON_Delete(pin_obj);
-    out_str = jsonbuf;
+    out_str = setings_buf;
     // Remove closing brace to add sensors array
     out_str[strlen(out_str) - 1] = '\0';
     fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
@@ -2149,12 +2150,12 @@ void SetOneWireConfig() {
           cJSON_Delete(sensor_obj);
           continue;
         }
-        if (!cJSON_PrintPreallocated(sensor_obj, jsonbuf, BUFFER_SIZE, 0)) {
+        if (!cJSON_PrintPreallocated(sensor_obj, setings_buf, BUFFER_SIZE, 0)) {
           cJSON_Delete(sensor_obj);
           continue;
         }
         cJSON_Delete(sensor_obj);
-        out_str = jsonbuf;
+        out_str = setings_buf;
         fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
         if (fresult != FR_OK)
           goto cleanup;
@@ -2196,12 +2197,12 @@ void SetOneWireConfig() {
         cJSON_Delete(pin_obj);
         continue;
       }
-      if (!cJSON_PrintPreallocated(pin_obj, jsonbuf, BUFFER_SIZE, 0)) {
+      if (!cJSON_PrintPreallocated(pin_obj, setings_buf, BUFFER_SIZE, 0)) {
         cJSON_Delete(pin_obj);
         continue;
       }
       cJSON_Delete(pin_obj);
-      out_str = jsonbuf;
+      out_str = setings_buf;
       // Remove closing brace to add sensors array
       out_str[strlen(out_str) - 1] = '\0';
       fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
@@ -2232,12 +2233,12 @@ void SetOneWireConfig() {
         cJSON_Delete(sensor_obj);
         goto cleanup;
       }
-      if (!cJSON_PrintPreallocated(sensor_obj, jsonbuf, BUFFER_SIZE, 0)) {
+      if (!cJSON_PrintPreallocated(sensor_obj, setings_buf, BUFFER_SIZE, 0)) {
         cJSON_Delete(sensor_obj);
         goto cleanup;
       }
       cJSON_Delete(sensor_obj);
-      out_str = jsonbuf;
+      out_str = setings_buf;
       fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
       if (fresult != FR_OK)
         goto cleanup;
@@ -2279,17 +2280,17 @@ void GetPidConfig() {
     return;
   }
 
-  /* Читаем весь файл в глобальный jsonbuf вместо malloc */
+  /* Читаем весь файл в глобальный setings_buf вместо malloc */
   UINT bytesRead;
-  fresult = f_read(&USBHFile, jsonbuf, finfo.fsize, &bytesRead);
+  fresult = f_read(&USBHFile, setings_buf, finfo.fsize, &bytesRead);
   f_close(&USBHFile);
   if (fresult != FR_OK || bytesRead == 0) {
     return;
   }
-  jsonbuf[bytesRead] = '\0';
+  setings_buf[bytesRead] = '\0';
 
   /* Парсим JSON */
-  cJSON *root = cJSON_Parse(jsonbuf);
+  cJSON *root = cJSON_Parse(setings_buf);
   if (!root) {
     printf("ERROR: pid.ini JSON parse failed\r\n");
     return;
@@ -2389,7 +2390,7 @@ void GetPidConfig() {
 void SetPidConfig() {
   FRESULT fresult;
   UINT byteswritten;
-  char *out_str = NULL; /* указатель на jsonbuf */
+  char *out_str = NULL; /* указатель на setings_buf */
 
   fresult = f_open(&USBHFile, (const TCHAR *)"pid.ini",
                    FA_CREATE_ALWAYS | FA_WRITE);
@@ -2441,12 +2442,12 @@ void SetPidConfig() {
     cJSON_AddStringToObject(obj, "info", PidConf[i].info);
     cJSON_AddNumberToObject(obj, "onoff", PidConf[i].onoff);
 
-    if (!cJSON_PrintPreallocated(obj, jsonbuf, BUFFER_SIZE, 0)) {
+    if (!cJSON_PrintPreallocated(obj, setings_buf, BUFFER_SIZE, 0)) {
       cJSON_Delete(obj);
       continue;
     }
     cJSON_Delete(obj);
-    out_str = jsonbuf;
+    out_str = setings_buf;
     if (out_str) {
       fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
       if (fresult != FR_OK) goto cleanup;

@@ -14,6 +14,7 @@
 #include <db.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <inttypes.h>  /* PRId32 для printf */
 #include <stdio.h>  /* для printf */
 #include <stdlib.h> // Для функции free()
 #include <string.h>
@@ -97,7 +98,7 @@ void log_headers(const char *headers) {
 
 /*********************** End delay_us() **************************/
 extern uint64_t s_boot_timestamp;
-char jsonbuf[BUFFER_SIZE];
+static char jsonbuf[BUFFER_SIZE]; /* file-local: НЕ extern, ws_broadcast_all() имеет свой буфер */
 extern osMessageQueueId_t outputQueueHandle;
 /* A3: global data_pin removed — each function uses a local copy */
 /* A4: global mqttMsg removed — each send site uses a local copy */
@@ -111,7 +112,7 @@ char s_url[70] = {0};       // Статический буфер для URL
 char s_pub_topic[64] = {0}; // Public topic (TX)
 int s_qos = 1;
 extern int32_t onoffid; // Для parse_onoff_json().
-struct mg_connection *s_conn = NULL;
+struct mg_connection * volatile s_conn = NULL;
 
 /*
 json_decode_string()
@@ -362,7 +363,7 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
 
     if (onoffid >= 0 && onoffid < num_pins) {
       PinsConf[onoffid].onoff = (uint8_t)onoff;
-      printf("Updated pin %ld: onoff = %d\n", onoffid, onoff);
+      printf("Updated pin %" PRId32 ": onoff = %d\n", onoffid, onoff);
 
       for (uint8_t a = 0; a < NUMPINLINKS; a++) {
         if (PinsLinks[a].idin == (int)onoffid) {
@@ -388,7 +389,7 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
       xQueueSend(usbQueueHandle, &usbnum, 0);
 
     } else {                       // ← закрывает if (onoffid >= 0 && onoffid < num_pins)
-      printf("Invalid id: %ld\n", onoffid);
+      printf("Invalid id: %" PRId32 "\n", onoffid);
     }
 
   } else {                         // ← закрывает if (cJSON_IsNumber)
@@ -585,22 +586,6 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
     }
     int usbnum = 1;
     xQueueSend(usbQueueHandle, &usbnum, 0);
-
-    snprintf(jsonbuf, BUFFER_SIZE,
-             "{"
-             "\"ID\":%d,"
-             "\"ptype\":%d,\"info\":\"%s\",\"onoff\":%d"
-             "}",
-             id, PinsConf[id].ptype, PinsConf[id].info, PinsConf[id].onoff);
-
-    if ((s_conn != NULL && !s_conn->is_closing) && SetSettings.check_mqtt) {
-      size_t json_len = strlen(json);
-      strncpy(jsonbuf, json, json_len);
-      jsonbuf[json_len] = '\0';
-      //			send_mqtt_message(conn,"/dht22/", payload);
-    } else if (s_conn == NULL || s_conn->is_closing) {
-      printf("MQTT connection lost! \r\n");
-    }
   } else if (strstr(json, "\"setrpins\"") != NULL) {
     //		printf("We got json from 'Edit Connection' - %s\n", json);
     cJSON *pins_item = cJSON_GetObjectItem(root, "pins"); // Парсинг pins
@@ -665,15 +650,6 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
     }
     int usbnum = 4;
     xQueueSend(usbQueueHandle, &usbnum, 0);
-
-    if ((s_conn != NULL && !s_conn->is_closing) && SetSettings.check_mqtt) {
-      size_t json_len = strlen(json);
-      strncpy(jsonbuf, json, json_len);
-      jsonbuf[json_len] = '\0';
-      //			send_mqtt_message(s_conn, jsonbuf);
-    } else if (s_conn == NULL || s_conn->is_closing) {
-      printf("MQTT connection lost! \r\n");
-    }
   } else {
     // Неизвестный тип JSON
     printf("Unknown JSON type received: %s\n", json);
@@ -857,15 +833,6 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
       }
       int usbnum = 4;
       xQueueSend(usbQueueHandle, &usbnum, 0);
-
-      if ((s_conn != NULL && !s_conn->is_closing) && SetSettings.check_mqtt) {
-        size_t json_len = strlen(json);
-        strncpy(jsonbuf, json, json_len);
-        jsonbuf[json_len] = '\0';
-        //				send_mqtt_message(s_conn, jsonbuf);
-      } else if (s_conn == NULL || s_conn->is_closing) {
-        printf("MQTT connection lost! \r\n");
-      }
     }
   } else {
     cJSON *ptype_item = cJSON_GetObjectItem(root, "ptype");
@@ -3154,7 +3121,7 @@ void handle_sensor_set(struct mg_connection *c, struct mg_http_message *hm) {
 
 void parse_stm32time(char *response, size_t response_size,
                      const struct dbSettings *settings) {
-  if (timez == NULL) {
+  if (timez_copy.tm_year == 0 && timez_copy.tm_mon == 0 && timez_copy.tm_mday == 0) {
     snprintf(response, response_size,
              "{\"status\":false,\"message\":\"STM32 time not available\"}");
     return;
@@ -3165,9 +3132,9 @@ void parse_stm32time(char *response, size_t response_size,
            "\"mday\":%d,\"mon\":%d,\"year\":%d,\"wday\":%d,\"yday\":%d,"
            "\"isdst\":%d},"
            "\"timezone\":%.1f}",
-           timez->tm_sec, timez->tm_min, timez->tm_hour, timez->tm_mday,
-           timez->tm_mon, timez->tm_year, timez->tm_wday, timez->tm_yday,
-           timez->tm_isdst, settings->timezone);
+           timez_copy.tm_sec, timez_copy.tm_min, timez_copy.tm_hour, timez_copy.tm_mday,
+           timez_copy.tm_mon, timez_copy.tm_year, timez_copy.tm_wday, timez_copy.tm_yday,
+           timez_copy.tm_isdst, settings->timezone);
 }
 
 void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm) {
@@ -3604,7 +3571,7 @@ void safe_split(const char *input, char *first_part, size_t first_max,
 }
 
 time_t parse_time(const char *time_str) {
-  struct tm time_components = *timez;
+  struct tm time_components = timez_copy;
   sscanf(time_str, "%d:%d", &time_components.tm_hour, &time_components.tm_min);
   time_components.tm_sec = 0;
   return mktime(&time_components);
@@ -3620,11 +3587,11 @@ void execute_actions(const char *actions, const char *event_type,
 void Check_SunriseSunset_Actions() {
   //    printf("DEBUG: Input timez: %02d:%02d:%02d\n", timez->tm_hour,
   //    timez->tm_min, timez->tm_sec);
-  time_t curtime = mktime(timez);
+  time_t curtime = mktime(&timez_copy);
   time_t srisetime = parse_time(SetSettings.sunrise);
   time_t ssettime = parse_time(SetSettings.sunset);
   char timestr[9];
-  strftime(timestr, sizeof(timestr), "%H:%M:%S", timez);
+  strftime(timestr, sizeof(timestr), "%H:%M:%S", &timez_copy);
   //    printf("Current time: %s\n", timestr);
   // Сброс флагов в начале нового дня
   if (curtime - lastchk >= 86400) { // 86400 seconds in a day
@@ -3749,15 +3716,6 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
   // PinsConf[id].onoff = %d \r\n ", PinsConf[id].send_sms, PinsConf[id].info,
   // PinsConf[id].onoff);
 
-  // Send MQTT message if connected
-  if ((s_conn != NULL && !s_conn->is_closing) && SetSettings.check_mqtt) {
-    size_t json_len = strlen(json);
-    strncpy(jsonbuf, json, json_len);
-    jsonbuf[json_len] = '\0';
-    //        send_mqtt_message(s_conn, jsonbuf);
-  } else if (s_conn == NULL || s_conn->is_closing) {
-    printf("MQTT connection lost! \r\n");
-  }
 
   cJSON_Delete(root);
   if (my_DgnTaskHandle)
@@ -4494,19 +4452,19 @@ void process_dht22(uint8_t indx) {
 char *pars_temp_sensors(char *buffer, int buffer_size) {
   int offset = 0;
   // Начало JSON
-  offset += snprintf(jsonbuf + offset, BUFFER_SIZE - offset, "{");
+  offset += snprintf(buffer + offset, buffer_size - offset, "{");
   // Обработка DS18B20
-  offset += snprintf(jsonbuf + offset, BUFFER_SIZE - offset, "\"ds18b20\":[");
+  offset += snprintf(buffer + offset, buffer_size - offset, "\"ds18b20\":[");
   int first_ds = 1;
   for (uint8_t i = 0; i < MAX_DS18B20_P; i++) {
     if (ds18b20[i].typsensr == 1) {
       for (uint8_t j = 0; j < ds18b20[i].numsens; j++) {
         if (ds18b20[i].sensors[j].valid == true) {
           if (!first_ds) {
-            offset += snprintf(jsonbuf + offset, BUFFER_SIZE - offset, ",");
+            offset += snprintf(buffer + offset, buffer_size - offset, ",");
           }
           offset += snprintf(
-              jsonbuf + offset, BUFFER_SIZE - offset,
+              buffer + offset, buffer_size - offset,
               "{\"addr\":\"%02X%02X%02X%02X%02X%02X%02X%02X\",\"temp\":%.2f}",
               ds18b20[i].sensors[j].addr[0], ds18b20[i].sensors[j].addr[1],
               ds18b20[i].sensors[j].addr[2], ds18b20[i].sensors[j].addr[3],
@@ -4518,24 +4476,23 @@ char *pars_temp_sensors(char *buffer, int buffer_size) {
       }
     }
   }
-  offset += snprintf(jsonbuf + offset, BUFFER_SIZE - offset, "],");
+  offset += snprintf(buffer + offset, buffer_size - offset, "],");
   // Обработка DHT22
-  offset += snprintf(jsonbuf + offset, BUFFER_SIZE - offset, "\"dht22\":[");
+  offset += snprintf(buffer + offset, buffer_size - offset, "\"dht22\":[");
   int first_dht = 1;
   for (uint8_t i = 0; i < MAX_DHT22_P; i++) {
     if (dht22[i].typsensr == 2 && dht22[i].valid == true) {
       if (!first_dht) {
-        offset += snprintf(jsonbuf + offset, BUFFER_SIZE - offset, ",");
+        offset += snprintf(buffer + offset, buffer_size - offset, ",");
       }
-      offset += snprintf(jsonbuf + offset, BUFFER_SIZE - offset,
+      offset += snprintf(buffer + offset, buffer_size - offset,
                          "{\"id\":%d,\"temp\":%.2f,\"humidity\":%.2f}",
                          dht22[i].id, dht22[i].temp, dht22[i].humid);
       first_dht = 0;
     }
   }
-  offset += snprintf(jsonbuf + offset, BUFFER_SIZE - offset, "]}");
-  //	printf("%s\n", jsonbuf);
-  return jsonbuf;
+  offset += snprintf(buffer + offset, buffer_size - offset, "]}");
+  return buffer;
 }
 /******************** Moon **************************/
 // Optimized Julian Date calculation
@@ -5200,7 +5157,7 @@ void send_mqtt_timer_batch(struct mg_connection *conn) {
     send_mqtt_message(conn, "/timers/", tbuf);
   }
 }
-uint8_t onlineFlg = 0; // Флаг онлайн статуса
+volatile uint8_t onlineFlg = 0; // Флаг онлайн статуса
 lwdtc_cron_ctx_t offlineTime;
 
 uint8_t getBitValue(const uint8_t *array, uint8_t arraySize) {
@@ -5978,10 +5935,11 @@ void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm) {
                   "{\"error\":\"payload too large\"}");
     return;
   }
-  memcpy(jsonbuf, hm->body.buf, hm->body.len);
-  jsonbuf[hm->body.len] = '\0';
+  char pid_buf[BUFFER_SIZE];
+  memcpy(pid_buf, hm->body.buf, hm->body.len);
+  pid_buf[hm->body.len] = '\0';
 
-  parse_pid_json(jsonbuf);
+  parse_pid_json(pid_buf);
 
   /* Сохранение на Flash */
   uint8_t num = 6;

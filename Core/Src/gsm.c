@@ -155,7 +155,6 @@ void check_speed(void) {
  *  set_comand — отправка AT-команды с ожиданием ответа
  * ──────────────────────────────────────────────────────────── */
 void set_comand(char *buff) {
-  uint8_t count_err = 0;
   char str[SEND_STR_SIZE] = {0};
   snprintf(str, SEND_STR_SIZE, "%s\r\n", buff);
   HAL_UART_Transmit(GSM, (uint8_t *)str, strlen(str), 1000);
@@ -169,7 +168,6 @@ void set_comand(char *buff) {
         str[j++] = gsm_read();
         if (j > SEND_STR_SIZE - 1)
           break;
-        HAL_Delay(1);
       }
       replac_string(str);
       char *p = NULL;
@@ -180,11 +178,12 @@ void set_comand(char *buff) {
           HAL_UART_Transmit(myDEBUG,
                             (uint8_t *)"\n+CPAS not ready, must be '0'\n",
                             strlen("\n+CPAS not ready, must be '0'\n"), 1000);
-          while (1) {
-            count_err++;
+          for (int retry = 0; retry < 50; retry++) {
             HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-            HAL_Delay(100);
+            osDelay(100);
           }
+          printf("[FATAL] +CPAS not ready after retries\r\n");
+          return;
         }
       } else if ((p = strstr(str, "+CREG:")) != NULL) {
         if (strstr(str, "0,1") == NULL) {
@@ -192,11 +191,12 @@ void set_comand(char *buff) {
           HAL_UART_Transmit(myDEBUG,
                             (uint8_t *)"\n+CREG not ready, must be '0,1'\n",
                             strlen("\n+CREG not ready, must be '0,1'\n"), 1000);
-          while (1) {
-            count_err++;
+          for (int retry = 0; retry < 50; retry++) {
             HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-            HAL_Delay(100);
+            osDelay(100);
           }
+          printf("[FATAL] +CREG not registered after retries\r\n");
+          return;
         }
       }
       p = 0;
@@ -205,16 +205,17 @@ void set_comand(char *buff) {
       HAL_UART_Transmit(myDEBUG, (uint8_t *)dbg_str, strlen(dbg_str), 1000);
       return;
     }
-    HAL_Delay(500);
+    osDelay(500);
   }
   HAL_UART_Transmit(myDEBUG, (uint8_t *)"Not reply ", strlen("Not reply "),
                     1000);
   HAL_UART_Transmit(myDEBUG, (uint8_t *)buff, strlen(buff), 1000);
-  while (1) {
-    count_err++;
+  for (int retry = 0; retry < 50; retry++) {
     HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-    HAL_Delay(100);
+    osDelay(100);
   }
+  printf("[FATAL] No reply from modem for '%s'\r\n", buff);
+  return;
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -647,7 +648,6 @@ void process_sim800l_data(void) {
     buf[i++] = gsm_read();
     if (i > GSM_RX_BUFFER_SIZE - 1)
       break;
-    osDelay(1);
   }
   clear_string(buf);
 
@@ -730,7 +730,6 @@ void process_sim800l_data(void) {
           sms_text[j++] = c;
           if (j >= sizeof(sms_text) - 1)
             break;
-          osDelay(1);
         }
         sms_text[j] = '\0';
         /* Обрезаем пробелы в конце */
@@ -916,6 +915,5 @@ void process_sim800l_data(void) {
     buf[j++] = gsm_read();
     if (j > GSM_RX_BUFFER_SIZE - 1)
       break;
-    osDelay(1);
   }
 }
