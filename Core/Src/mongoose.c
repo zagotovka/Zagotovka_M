@@ -26414,6 +26414,14 @@ bool mg_phy_up(struct mg_phy *phy, uint8_t phy_addr, bool *full_duplex,
   if ((bsr & MG_BIT(5)) && !(bsr & MG_BIT(2)))  // some PHYs latch down events
     bsr = phy->read_reg(phy_addr, MG_PHY_REG_BSR);  // read again
   up = bsr & MG_BIT(2);
+  // If link is up but auto-negotiation not complete, parallel detection
+  // may have set 10M half -- wait for AN to finish before trusting speed/duplex
+  if (up && !(bsr & MG_BIT(5))) {
+    uint16_t bcr = phy->read_reg(phy_addr, MG_PHY_REG_BCR);
+    if (bcr & MG_BIT(12)) {  // Auto-negotiation is enabled
+      return false;  // AN not done yet, re-poll next cycle
+    }
+  }
   if (up && full_duplex != NULL && speed != NULL) {
     uint16_t id1 = phy->read_reg(phy_addr, MG_PHY_REG_ID1);
     if (id1 == MG_PHY_DP83x) {
@@ -28103,6 +28111,8 @@ struct stm32f_eth {
 #define ETH_DESC_CNT 4     // Descriptors count
 #define ETH_DS 4           // Descriptor size (words)
 
+uint32_t HAL_GetTick(void);  // Declared in stm32f7xx_hal.h
+
 static uint32_t s_rxdesc[ETH_DESC_CNT][ETH_DS] MG_ETH_RAM;      // RX descriptors
 static uint32_t s_txdesc[ETH_DESC_CNT][ETH_DS] MG_ETH_RAM;      // TX descriptors
 static uint8_t s_rxbuf[ETH_DESC_CNT][ETH_PKT_SIZE] MG_ETH_RAM;  // RX ethernet buffers
@@ -28282,6 +28292,43 @@ static bool mg_tcpip_driver_stm32f_poll(struct mg_tcpip_if *ifp, bool s1) {
   bool up = false, full_duplex = false;
   struct mg_phy phy = {eth_read_phy, eth_write_phy};
   up = mg_phy_up(&phy, phy_addr, &full_duplex, &speed);
+  // Log link state transitions and PHY diagnostics
+  {
+    static bool was_up = false;
+    if (up && !was_up) {
+      uint32_t _bcr = eth_read_phy(phy_addr, 0x00);
+      uint32_t _bsr = eth_read_phy(phy_addr, 0x01);
+      uint32_t _scsr = eth_read_phy(phy_addr, 0x1F);
+      printf("=======================\r\n");
+      printf("[ETH] LINK UP   - %uM %s-duplex\r\n",
+             speed == MG_PHY_SPEED_10M ? 10 : 100,
+             full_duplex ? "full" : "half");
+      printf("=== PHY DIAGNOSTIC ===\r\n");
+      printf("[PHY] BCR=0x%04lX BSR=0x%04lX SCSR=0x%04lX\r\n",
+             _bcr, _bsr, _scsr);
+      printf("[PHY] AutoNeg=%s  Complete=%s\r\n",
+             (_bcr & 0x1000) ? "ON " : "OFF",
+             (_bsr & 0x0020) ? "YES" : "NO ");
+      printf("[PHY] Negotiated: %uM %s-Duplex\r\n",
+             speed == MG_PHY_SPEED_10M ? 10 : 100,
+             full_duplex ? "Full" : "Half");
+      printf("=======================\r\n");
+      // If BCR lost auto-negotiation (e.g. corrupted to 0x0000),
+      // re-init the PHY to recover proper 100M full-duplex
+      if (!(_bcr & MG_BIT(12))) {
+        printf("[PHY] BCR corrupted (0x%04X), re-initializing PHY...\r\n",
+               (unsigned int)_bcr);
+        mg_phy_init(&phy, phy_addr, MG_PHY_CLOCKS_MAC);
+        up = false;  // Link will be down during re-init
+      } else {
+        was_up = true;
+      }
+    } else if (!up && was_up) {
+      printf("[ETH] LINK DOWN - tick=%lu\r\n",
+             (unsigned long)HAL_GetTick());
+      was_up = false;
+    }
+  }
   if ((ifp->state == MG_TCPIP_STATE_DOWN) && up) {  // link state just went up
     // tmp = reg with flags set to the most likely situation: 100M full-duplex
     // if(link is slow or half) set flags otherwise
@@ -28290,8 +28337,6 @@ static bool mg_tcpip_driver_stm32f_poll(struct mg_tcpip_if *ifp, bool s1) {
     if (speed == MG_PHY_SPEED_10M) maccr &= ~MG_BIT(14);    // 10M
     if (full_duplex == false) maccr &= ~MG_BIT(11);         // Half-duplex
     ETH->MACCR = maccr;  // IRQ handler does not fiddle with this register
-    MG_DEBUG(("Link is %uM %s-duplex", maccr & MG_BIT(14) ? 100 : 10,
-              maccr & MG_BIT(11) ? "full" : "half"));
   }
   return up;
 }

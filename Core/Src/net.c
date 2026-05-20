@@ -33,43 +33,60 @@ const char *s_json_header =
 /* ─── WebSocket broadcast infrastructure ─── */
 #define MAX_WS_CLIENTS 4
 #define TAB_NAME_MAX   16
+#define WS_IDLE_TIMEOUT_MS  30000  /* 30 сек без PONG → kill */
+#define WS_SEND_BUF_LIMIT   8192  /* жёсткий лимит send-буфера */
 
 typedef struct {
   struct mg_connection *c;
   char activeTab[TAB_NAME_MAX];  /* "" = только time */
+  uint32_t last_activity;        /* HAL_GetTick() последнего ответа клиента */
 } ws_client_t;
 
 static ws_client_t s_ws_clients[MAX_WS_CLIENTS];
 static int s_ws_count = 0;
+static int s_total_conns = 0;  /* диагностика: число открытых соединений */
 
 static void ws_client_add(struct mg_connection *c) {
-  /* Фаза 1: ищем свободный слот */
+  /* Фаза 1: чистим зомби (closing/draining)  -  MG_EV_CLOSE мог задержаться */
+  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+    struct mg_connection *old = s_ws_clients[i].c;
+    if (old != NULL && (old->is_closing || old->is_draining)) {
+      printf("[WS] cleanup zombie id=%lu (was closing/draining)\r\n", old->id);
+      s_ws_clients[i].c = NULL;
+      s_ws_clients[i].activeTab[0] = '\0';
+      s_ws_count--;
+    }
+  }
+  /* Фаза 2: ищем свободный слот */
   for (int i = 0; i < MAX_WS_CLIENTS; i++) {
     if (s_ws_clients[i].c == NULL) {
       s_ws_clients[i].c = c;
       s_ws_clients[i].activeTab[0] = '\0';
+      s_ws_clients[i].last_activity = HAL_GetTick();
       s_ws_count++;
       printf("[WS] client added id=%lu (total=%d)\r\n",
              c->id, s_ws_count);
       return;
     }
   }
-  /* Фаза 2: все слоты заняты — чистим зомби (closing/draining/overflow) */
-  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-    struct mg_connection *old = s_ws_clients[i].c;
-    if (old != NULL && (old->is_closing || old->is_draining || old->send.len > 4096)) {
-      printf("[WS] evicting zombie id=%lu for new id=%lu\r\n", old->id, c->id);
-      old->is_draining = 1;
-      s_ws_clients[i].c = c;
-      s_ws_clients[i].activeTab[0] = '\0';
-      /* s_ws_count не меняется — замена 1:1 */
-      printf("[WS] client replaced id=%lu (total=%d)\r\n", c->id, s_ws_count);
-      return;
+  /* Фаза 3: все слоты заняты  -  принудительно вытесняем старейшего */
+  {
+    int oldest_i = 0;
+    unsigned long oldest_id = s_ws_clients[0].c ? s_ws_clients[0].c->id : 0;
+    for (int i = 1; i < MAX_WS_CLIENTS; i++) {
+      if (s_ws_clients[i].c && s_ws_clients[i].c->id < oldest_id) {
+        oldest_id = s_ws_clients[i].c->id;
+        oldest_i = i;
+      }
     }
+    printf("[WS] evicting oldest id=%lu for new id=%lu\r\n", oldest_id, c->id);
+    s_ws_clients[oldest_i].c->is_draining = 1;
+    s_ws_clients[oldest_i].c = c;
+    s_ws_clients[oldest_i].activeTab[0] = '\0';
+    s_ws_clients[oldest_i].last_activity = HAL_GetTick();
+    /* s_ws_count не меняется  -  замена 1:1 */
+    printf("[WS] client replaced id=%lu (total=%d)\r\n", c->id, s_ws_count);
   }
-  /* Фаза 3: все соединения живые — реально нет места */
-  printf("[WS] MAX clients reached, rejecting id=%lu\r\n", c->id);
-  mg_close_conn(c);
 }
 
 static void ws_client_remove(struct mg_connection *c) {
@@ -77,7 +94,7 @@ static void ws_client_remove(struct mg_connection *c) {
     if (s_ws_clients[i].c == c) {
       s_ws_clients[i].c = NULL;
       s_ws_clients[i].activeTab[0] = '\0';
-      s_ws_count--;
+      if (s_ws_count > 0) s_ws_count--;
       printf("[WS] client removed id=%lu (total=%d)\r\n",
              c->id, s_ws_count);
       return;
@@ -116,15 +133,26 @@ int ui_event_next(int no, struct ui_event *e) {
 
 uint64_t s_boot_timestamp = 0;
 
+static bool s_sntp_synced = false;  /* время получено  -  не спамим UDP */
+
 static void sfn(struct mg_connection *c, int ev, void *ev_data) {
   if (ev == MG_EV_SNTP_TIME) {
     uint64_t t = *(uint64_t *) ev_data;
     s_boot_timestamp = t - mg_millis();
-    MG_INFO(("SNTP 1"));
+    s_sntp_synced = true;
+    MG_INFO(("SNTP synced"));
   }
 }
 
 static void timer_sntp_fn(void *param) {  // SNTP timer function. Sync up time
+  /* После первой синхронизации  -  не создаём новые UDP соединения.
+     Это предотвращает 540 alloc/free циклов в час на heap_4. */
+  static uint64_t s_last_sntp = 0;
+  if (s_sntp_synced) {
+    /* Ресинхронизация раз в час */
+    if (mg_millis() - s_last_sntp < 3600ULL * 1000) return;
+  }
+  s_last_sntp = mg_millis();
   mg_sntp_connect(param, "udp://time.google.com:123", sfn, NULL);
 }
 
@@ -240,7 +268,7 @@ void handle_settings_set(struct mg_connection *c, struct mg_str body) {
     mg_free(s);
     settings.device_name = (char *)default_name;  // fallback на sentinel
   }
-  /* Освобождаем старый device_name через mg_free() — парный к mg_calloc()
+  /* Освобождаем старый device_name через mg_free()  -  парный к mg_calloc()
      внутри mg_json_get_str(). Корректно при любом MG_ARCH. */
   if (s_settings.device_name != NULL && s_settings.device_name != default_name) {
     mg_free(s_settings.device_name);
@@ -338,7 +366,7 @@ static const char *get_connection_header(struct mg_http_message *hm) {
     if (conn_hdr && mg_strcmp(*conn_hdr, mg_str("close")) == 0) {
         return "Connection: close\r\n";
     }
-    return "Connection: keep-alive\r\n";
+    return "Connection: close\r\n";  // embedded: всегда закрываем
 }
 
 void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
@@ -370,6 +398,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 	// --- General events (for HTTP, HTTPS, and MQTT) ---
 	switch (ev) {
 	case MG_EV_OPEN:
+		if (!c->is_listening) s_total_conns++;
 		MG_INFO(("%lu Connection created (TLS: %d, fn_data: %p)", c->id, c->is_tls, fn_data));
 		break;
 
@@ -379,6 +408,25 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
         mg_snprintf(buf_rem, sizeof(buf_rem), "%M", mg_print_ip_port, &c->rem);
         printf("[NET] new conn from %s\r\n", buf_rem);
         MG_INFO(("Accept: local %M remote %M", mg_print_ip_port, &c->loc, mg_print_ip_port, &c->rem));
+
+        /* ── Блокировка внешних сканеров при выключенном HTTPS ── */
+        if (local_port == atoi(HTTP_PORT) && !c->rem.is_ip6) {
+            if (SetSettings.usehttps != 1) {
+                /* ip4 в network byte order, mg_ntohl преобразует в host byte order */
+                uint32_t ip4 = mg_ntohl(c->rem.addr.ip4);
+                uint8_t b0 = (uint8_t)(ip4 >> 24);
+                uint8_t b1 = (uint8_t)(ip4 >> 16);
+                bool priv = (b0 == 10) ||
+                            (b0 == 172 && (b1 & 0xF0) == 16) ||
+                            (b0 == 192 && b1 == 168) ||
+                            (b0 == 127);
+                if (!priv) {
+                    printf("[NET] rejected external conn from %s (HTTPS disabled)\r\n", buf_rem);
+                    mg_close_conn(c);
+                    return;
+                }
+            }
+        }
 
         if (local_port == atoi(HTTP_PORT)) {
             c->fn_data = (void *)CONN_TYPE_HTTP;
@@ -485,6 +533,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		if (mg_match(hm->uri, mg_str("/ws"), NULL)) {
 			if (u == NULL) {
 				mg_http_reply(c, 403, "", "Unauthorized\n");
+				c->is_draining = 1;  // не авторизован  -  закрываем
 			} else {
 				mg_ws_upgrade(c, hm, NULL);
 				ws_client_add(c);
@@ -553,10 +602,10 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				// Указываем Mongoose, что соединение должно быть закрыто
 				c->is_draining = 1;
 		    } else {
-		        // Если клиент не запросил Connection: close, используем mg_http_serve_dir
+		        // Всегда закрываем соединение после отдачи статики  -  на embedded keep-alive только тратит память.
 		        char extra_headers[256];
 		        snprintf(extra_headers, sizeof(extra_headers),
-		                 "Cache-Control: no-cache, no-store, must-revalidate\r\nConnection: keep-alive\r\n");
+		                 "Cache-Control: no-cache, no-store, must-revalidate\r\nConnection: close\r\n");
 
 		        struct mg_http_serve_opts opts;
 		        memset(&opts, 0, sizeof(opts));
@@ -570,8 +619,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		#endif
 		        opts.extra_headers = extra_headers; // Добавляем кастомные заголовки
 
-		        // Используем mg_http_serve_dir для обслуживания всей директории
+
 		        mg_http_serve_dir(c, ev_data, &opts);
+		        c->is_draining = 1;  // форсируем закрытие после отправки
 		        MG_INFO(("%lu Root path served successfully", c->id));
 		    }
 		}  else {
@@ -746,7 +796,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				memset(&opts, 0, sizeof(opts));
 				
 				char extra_headers[256];
-				snprintf(extra_headers, sizeof(extra_headers), "Cache-Control: no-cache, no-store, must-revalidate\r\n");
+				snprintf(extra_headers, sizeof(extra_headers), "Cache-Control: no-cache, no-store, must-revalidate\r\nConnection: close\r\n");
 				opts.extra_headers = extra_headers;
 				
 #if MG_ARCH == MG_ARCH_UNIX || MG_ARCH == MG_ARCH_WIN32
@@ -758,16 +808,28 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				MG_INFO(("%lu Using packed filesystem root_dir: %s for static content", c->id, opts.root_dir));
 #endif
 				mg_http_serve_dir(c, ev_data, &opts);
+				c->is_draining = 1;  // форсируем закрытие после отправки
 				MG_INFO(("%lu Static content served", c->id));
 			}
 		}
+		c->is_draining = 1;  // embedded: всегда закрываем HTTP после одного запроса
 		MG_INFO(("%lu HTTP/HTTPS request processing completed", c->id));
 		break;
 	}
 	case MG_EV_WS_CTL: {
 	    struct mg_ws_message *wm = (struct mg_ws_message *) ev_data;
-	    if ((wm->flags & 0x0F) == WEBSOCKET_OP_PING) {
+	    uint8_t opcode = wm->flags & 0x0F;
+	    if (opcode == WEBSOCKET_OP_PING) {
 	        mg_ws_send(c, "", 0, WEBSOCKET_OP_PONG);
+	    }
+	    /* PONG или PING  -  клиент жив, обновляем таймер */
+	    if (opcode == WEBSOCKET_OP_PONG || opcode == WEBSOCKET_OP_PING) {
+	        for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+	            if (s_ws_clients[i].c == c) {
+	                s_ws_clients[i].last_activity = HAL_GetTick();
+	                break;
+	            }
+	        }
 	    }
 	    break;
 	}
@@ -786,13 +848,20 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 //				}
 //			}
 //		}
-	    // Ping {} от браузера — отвечаем {}, сбрасываем idle таймер Mongoose
+	    /* Обновляем last_activity при любом WS-сообщении от клиента */
+	    for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+	        if (s_ws_clients[i].c == c) {
+	            s_ws_clients[i].last_activity = HAL_GetTick();
+	            break;
+	        }
+	    }
+	    // Ping {} от браузера  -  отвечаем {}, сбрасываем idle таймер Mongoose
 	    if (wm->data.len <= 2) {
 	        mg_ws_send(c, "{}", 2, WEBSOCKET_OP_TEXT);
 	        break;
 	    }
 	    // Правильно для Mongoose 7.21:
-	        // mg_json_get_str выделяет через mg_calloc — обязательно mg_free!
+	        // mg_json_get_str выделяет через mg_calloc  -  обязательно mg_free!
 	        char *tab_str = mg_json_get_str(wm->data, "$.activeTab");
 	        if (tab_str != NULL) {
 	            for (int i = 0; i < MAX_WS_CLIENTS; i++) {
@@ -809,8 +878,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 	}
 
 	case MG_EV_CLOSE:
+		if (!c->is_listening && s_total_conns > 0) s_total_conns--;
 		ws_client_remove(c);
-		MG_INFO(("%lu Connection closed (TLS: %d)", c->id, c->is_tls));
+		MG_INFO(("%lu Connection closed (TLS: %d, total=%d)", c->id, c->is_tls, s_total_conns));
 		break;
 
 	case MG_EV_ERROR:
@@ -833,7 +903,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 /* ─── ws_broadcast_all: per-client JSON по activeTab ─── */
 
 /* Хелпер: добавляет блок "key":VALUE в ws_buf. Возвращает новый off.
-   need_comma — нужна ли запятая перед блоком. */
+   need_comma  -  нужна ли запятая перед блоком. */
 static int ws_append_block(char *buf, int off, int bufsize,
                            const char *key, const char *json_val, int need_comma) {
   size_t vlen = strlen(json_val);
@@ -843,7 +913,7 @@ static int ws_append_block(char *buf, int off, int bufsize,
 
   // Проверяем ПЕРЕД любой записью
   if (off + hdr + (int)vlen >= bufsize - 10) {
-    return off; // не влезло — буфер не трогаем, возвращаем как есть
+    return off; // не влезло  -  буфер не трогаем, возвращаем как есть
   }
 
   // Только теперь пишем ключ и данные
@@ -865,24 +935,58 @@ void ws_broadcast_all(void) {
   bool do_ping = (now - last_ping) >= 5000;
   if (do_ping) last_ping = now;
 
+  /* ── Фаза 0: Kill мёртвых клиентов ── */
+  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+    if (s_ws_clients[i].c == NULL) continue;
+    struct mg_connection *cc = s_ws_clients[i].c;
+
+    /* Зомби: is_closing/is_draining  -  Mongoose закрывает */
+    if (cc->is_closing || cc->is_draining) {
+      printf("[WS] reap zombie id=%lu\r\n", cc->id);
+      s_ws_clients[i].c = NULL;
+      s_ws_clients[i].activeTab[0] = '\0';
+      if (s_ws_count > 0) s_ws_count--;
+      continue;
+    }
+
+    /* Idle timeout: нет ответа 30 сек → kill */
+    if (now - s_ws_clients[i].last_activity > WS_IDLE_TIMEOUT_MS) {
+      printf("[WS] id=%lu TIMEOUT (%lums idle)  -  kill\r\n",
+             cc->id, (unsigned long)(now - s_ws_clients[i].last_activity));
+      cc->is_draining = 1;
+      s_ws_clients[i].c = NULL;
+      s_ws_clients[i].activeTab[0] = '\0';
+      if (s_ws_count > 0) s_ws_count--;
+      continue;
+    }
+
+    /* Send buffer overflow: > 8KB → kill (heap_4 fragmentation!) */
+    if (cc->send.len > WS_SEND_BUF_LIMIT) {
+      printf("[WS] id=%lu KILLED (send.len=%lu)\r\n",
+             cc->id, (unsigned long)cc->send.len);
+      cc->is_draining = 1;
+      s_ws_clients[i].c = NULL;
+      s_ws_clients[i].activeTab[0] = '\0';
+      if (s_ws_count > 0) s_ws_count--;
+      continue;
+    }
+  }
+
+  if (s_ws_count == 0) return;
+
   for (int i = 0; i < MAX_WS_CLIENTS; i++) {
     if (s_ws_clients[i].c == NULL) continue;
 
     struct mg_connection *c = s_ws_clients[i].c;
 
-    if (c->send.len > 4096) {
-      printf("[WS] id=%lu ZOMBIE killed (buf=%lu)\r\n",
-             c->id, (unsigned long)c->send.len);
-      c->is_draining = 1;
-      continue;
-    }
-    if (c->send.len > 2048) {
-      continue;
-    }
-
-    // WebSocket PING — браузер ответит PONG, сбросит TCP idle таймер Mongoose
+    // WebSocket PING  -  всегда, даже при заполненном буфере
     if (do_ping) {
       mg_ws_send(c, "", 0, WEBSOCKET_OP_PING);
+    }
+
+    /* Backpressure: если буфер > 2KB, пропускаем данные (но PING ушёл) */
+    if (c->send.len > 2048) {
+      continue;
     }
 
     int off = 0;
@@ -936,9 +1040,18 @@ void ws_broadcast_all(void) {
 /****************************************************************/
 
 // MQTT
-// Без volatile это тихая бомба — симптомы могут проявляться непредсказуемо в зависимости от уровня оптимизации компилятора (-O2/-O3 особенно агрессивны).
+// Без volatile это тихая бомба  -  симптомы могут проявляться непредсказуемо в зависимости от уровня оптимизации компилятора (-O2/-O3 особенно агрессивны).
 volatile bool mqtt_connected_reported = false;  // Глобальный: main.c проверяет перед publish_sensor_batch()
 static bool s_mqtt_reconnect_reported = false; // Флаг для однократного вывода reconnecting
+static uint64_t s_mqtt_conn_tick = 0;    /* метка: когда соединение было создано */
+static uint64_t s_mqtt_alive_since = 0;  /* метка: когда MG_EV_MQTT_OPEN был получен */
+
+/* Exponential backoff для TCP-level реконнектов (не только OOM).
+   Без этого каждую секунду alloc/free mg_connection → фрагментация heap_4. */
+static uint8_t  s_tcp_backoff = 0;       /* тиков ожидания перед коннектом */
+static uint8_t  s_tcp_delay_idx = 0;     /* индекс в таблице backoff */
+static const uint8_t s_backoff_tbl[] = {1, 2, 5, 10, 30, 60};
+#define BACKOFF_TBL_SZ (sizeof(s_backoff_tbl)/sizeof(s_backoff_tbl[0]))
 
 static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
   if (ev == MG_EV_OPEN) {
@@ -957,6 +1070,10 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
 	printf("[MQTT] connected to %s\r\n", get_mqtt_url());
 	mqtt_connected_reported = true;
 	s_mqtt_reconnect_reported = false; // Сброс: при следующем дисконнекте снова напечатает 1 раз
+	s_mqtt_conn_tick = mg_millis();    /* сбрасываем таймер watchdog  -  соединение здорово */
+	s_mqtt_alive_since = mg_millis();  /* запоминаем время успешного коннекта */
+	s_tcp_backoff = 0;                 /* сброс backoff  -  соединение успешно */
+	s_tcp_delay_idx = 0;
 	printf("[MQTT_OPEN] s_sub_topic='%s' rxmqttop='%s'\r\n",s_sub_topic, SetSettings.rxmqttop);
     struct mg_str subt = mg_str(s_sub_topic);
     struct mg_str pubt = mg_str(get_mqtt_topic()), data = mg_str("Hello from stm32!");
@@ -1003,12 +1120,13 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     }
   } else if (ev == MG_EV_CLOSE) {
     MG_INFO(("%lu CLOSED", c->id));
-    if (mqtt_connected_reported) {
-      printf("Error: MQTT disconnected\r\n");
-      mqtt_connected_reported = false;
-    }
     if (s_conn == c) {
-      s_conn = NULL;  // Mark that we're closed
+      if (mqtt_connected_reported) {
+        unsigned long alive_sec = (unsigned long)(mg_millis() - s_mqtt_alive_since) / 1000;
+        printf("Error: MQTT disconnected (was up %lus)\r\n", alive_sec);
+        mqtt_connected_reported = false;
+      }
+      s_conn = NULL;
     }
   }
   (void) fn_data;
@@ -1019,27 +1137,93 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
 void timer_fn_mqtt(void *arg) {
   struct mg_mgr *mgr = (struct mg_mgr *) arg;
 
-  /* Watchdog: если соединение зависло (connecting/closing > 5 сек) —
-   * принудительно закрываем, чтобы разрешить reconnect */
-  static uint64_t s_mqtt_conn_tick = 0;  /* метка создания соединения */
-  static uint16_t s_mqtt_retry_cnt = 0;  /* счётчик попыток для диагностики */
+  static uint16_t s_mqtt_retry_cnt = 0;
+  static uint64_t s_close_since = 0;
+  static uint8_t  s_oom_backoff = 0;   /* счётчик тиков при OOM */
+  static uint8_t  s_oom_delay = 5;     /* текущая задержка, растёт 5→10→15→30 */
+  static bool     s_oom_reported = false;
+
   if (s_conn != NULL) {
-    bool is_stale = s_conn->is_connecting || s_conn->is_closing || s_conn->is_draining || !mqtt_connected_reported;
-    if (is_stale && (mg_millis() - s_mqtt_conn_tick > 5000)) {
+    bool timed_out_connecting = (s_conn->is_connecting || !mqtt_connected_reported)
+                             && (mg_millis() - s_mqtt_conn_tick > 5000);
+    bool stuck_closing = (s_conn->is_closing || s_conn->is_draining);
+
+    if (timed_out_connecting) {
+      unsigned long stale_ms = (unsigned long)(mg_millis() - s_mqtt_conn_tick);
       s_mqtt_retry_cnt++;
-      printf("[MQTT] stale conn (%lus), retry #%u — force close\r\n",
-             (unsigned long)(mg_millis() - s_mqtt_conn_tick) / 1000,
+      printf("[MQTT] stale conn  -  %s%s(%lums), retry #%u  -  force close\r\n",
+             s_conn->is_connecting ? "connecting " : "!reported ",
+             s_conn->is_closing    ? "closing "    : "",
+             stale_ms,
              s_mqtt_retry_cnt);
-      s_conn->is_closing = 1;  /* жесткое закрытие через Mongoose */
+      s_conn->is_closing = 1;
       s_mqtt_conn_tick = mg_millis();
       s_mqtt_reconnect_reported = false;
-      return;  /* На следующем тике таймера создастся новое соединение */
+      s_close_since = 0;
+      s_oom_reported = false;
+      s_oom_backoff = 0;
+      s_oom_delay = 5;
+      return;
     }
-    return;  /* Соединение существует и не зависло — ничего не делаем */
+
+    if (stuck_closing) {
+      if (s_close_since == 0) {
+        s_close_since = mg_millis();
+        return;
+      }
+      if (mg_millis() - s_close_since < 10000) {
+        return;
+      }
+      printf("[MQTT] close stuck %lums  -  force reconnect\r\n",
+             (unsigned long)(mg_millis() - s_close_since));
+      s_conn = NULL;
+      s_close_since = 0;
+    } else {
+      s_close_since = 0;
+    }
+
+    if (s_conn != NULL) {
+      if (mqtt_connected_reported && !s_conn->is_closing && !s_conn->is_draining) {
+        static uint64_t s_last_ping = 0;
+        if (mg_millis() - s_last_ping >= 30000) {
+          s_last_ping = mg_millis();
+          mg_mqtt_ping(s_conn);
+        }
+      }
+      return;
+    }
   }
 
-  /* s_conn == NULL — создаём новое MQTT соединение */
+  /* s_conn == NULL - создаём новое MQTT соединение */
   if (!SetSettings.check_mqtt || SetSettings.mqtt_hst[0] == '\0') return;
+
+  /* Сеть не готова - ждём, не тратим попытки */
+  {
+    static bool s_netdown_reported = false;
+    if (mgr->ifp == NULL || mgr->ifp->state != MG_TCPIP_STATE_READY) {
+      if (!s_netdown_reported) {
+        printf("[MQTT] network down (ifp state=%d) - waiting\r\n",
+               mgr->ifp ? (int)mgr->ifp->state : -1);
+        s_netdown_reported = true;
+      }
+      return;
+    }
+    /* Сеть восстановилась - сбрасываем флаг для следующего раза */
+    s_netdown_reported = false;
+  }
+
+  /* Backoff при OOM: после первого провала ждём 5 тиков (5с), потом 10с, 20с... */
+  if (s_oom_backoff > 0) {
+    s_oom_backoff--;
+    return;
+  }
+
+  /* TCP-level backoff: экспоненциальная задержка между попытками
+     Без этого при недоступном брокере - alloc/free каждую 1с → фрагментация */
+  if (s_tcp_backoff > 0) {
+    s_tcp_backoff--;
+    return;
+  }
 
   char url[70];
   snprintf(url, sizeof(url), "mqtt://%s:%d", SetSettings.mqtt_hst, SetSettings.mqtt_prt);
@@ -1061,10 +1245,31 @@ void timer_fn_mqtt(void *arg) {
     opts.pass = mg_str(SetSettings.mqtt_pswd);
 
   s_conn = mg_mqtt_connect(mgr, url, &opts, (mg_event_handler_t) fn_mqtt, NULL);
-  s_mqtt_conn_tick = mg_millis();  /* запоминаем время создания */
-  if (s_conn != NULL && !s_mqtt_reconnect_reported) {
-    printf("[MQTT] reconnecting to %s ...\r\n", url);
-    s_mqtt_reconnect_reported = true; // Больше не печатать до успешного connect
+  s_mqtt_conn_tick = mg_millis();
+  if (s_conn != NULL) {
+    if (!s_mqtt_reconnect_reported) {
+      printf("[MQTT] reconnecting to %s ...\r\n", url);
+      s_mqtt_reconnect_reported = true;
+    }
+    /* Exponential backoff: 1→2→5→10→30→60с между попытками */
+    s_tcp_backoff = s_backoff_tbl[s_tcp_delay_idx];
+    if (s_tcp_delay_idx < BACKOFF_TBL_SZ - 1) s_tcp_delay_idx++;
+    s_oom_reported = false;
+    s_oom_backoff = 0;
+    s_oom_delay = 5;
+  } else {
+    if (!s_oom_reported) {
+      printf("[MQTT] connect failed (likely OOM) - heap=%lu min=%lu - retry with backoff\r\n",
+             (unsigned long)xPortGetFreeHeapSize(),
+             (unsigned long)xPortGetMinimumEverFreeHeapSize());
+      s_oom_reported = true;
+      s_oom_delay = 5;
+      s_oom_backoff = 5;
+    } else {
+      s_oom_backoff = s_oom_delay;
+      if (s_oom_delay < 30) s_oom_delay += 5;
+    }
+    s_mqtt_reconnect_reported = false;
   }
 }
 

@@ -266,14 +266,14 @@ void gen_select_json(const struct dbPinsInfo *pins_info,
 void handle_select_get(struct mg_connection *c) {
   gen_select_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
   mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 void handle_select_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
 
   if (hm->body.len > 0) {
     parse_select_json(hm->body.buf, PinsConf, NUMPIN);
@@ -403,7 +403,7 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
 
 void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
 
   if (hm->body.len > 0) {
     printf("We got a ONOFF JSON: %.*s\n", (int)hm->body.len, hm->body.buf);
@@ -465,7 +465,7 @@ void gen_pintopin_json(struct dbPinToPin *PinsLinks, char *buffer,
 void handle_pintopin_get(struct mg_connection *c) {
   gen_pintopin_json(PinsLinks, jsonbuf, BUFFER_SIZE);
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
   mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
@@ -474,7 +474,7 @@ void handle_pintopin_get(struct mg_connection *c) {
 void handle_switch_get(struct mg_connection *c) {
   gen_switch_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
   mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
@@ -672,14 +672,14 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
 void handle_button_get(struct mg_connection *c) {
   gen_button_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
   mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
 
   if (hm->body.len > 0) {
     parse_button_json(hm->body.buf, PinsConf, PinsInfo, NUMPIN);
@@ -894,14 +894,14 @@ void handle_encoder_get(struct mg_connection *c) {
   gen_encoder_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE, PinsLinks,
                    NUMPINLINKS);
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
   mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
 
   if (hm->body.len > 0) {
     parse_encoder_json(hm->body.buf, PinsConf, PinsLinks, PinsInfo, NUMPIN);
@@ -1231,14 +1231,14 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
 void handle_timers_get(struct mg_connection *c) {
   gen_timer_json(dbCrontxt, MAXSIZE, jsonbuf, BUFFER_SIZE);
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
   mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
 
   if (hm->body.len > 0) {
     char response[256];
@@ -1300,7 +1300,7 @@ void parse_numline_json(char *json_string, struct dbSettings *SetSettings) {
 }
 void handle_numline_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
 
   if (hm->body.len > 0) {
     char response[256];
@@ -1412,14 +1412,14 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
 void handle_mysett_get(struct mg_connection *c) {
   gen_mysett_json(&SetSettings, jsonbuf, BUFFER_SIZE);
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
   mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
 }
 void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
 
   if (hm->body.len > 0) {
     parse_mysett_json(hm->body.buf, &SetSettings);
@@ -2350,7 +2350,7 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
 void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm,
                            struct dbPinToPin PinsLinks[NUMPINLINKS]) {
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
 
   if (hm->body.len > 0) {
     cJSON *root = cJSON_ParseWithLength(hm->body.buf, hm->body.len);
@@ -2765,7 +2765,7 @@ void gen_onewire_json(char *buffer, int buffer_size) {
 
 void handle_onewire_get(struct mg_connection *c) {
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
   gen_onewire_json(jsonbuf, BUFFER_SIZE);
@@ -3079,7 +3079,7 @@ bool parse_sensor_json(const char *json_string) {
 
 void handle_onewire_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
   if (hm->body.len > 0) {
     parse_onewire_json(hm->body.buf, &PinsConf[NUMPIN]);
     char response[256];
@@ -3099,7 +3099,7 @@ void handle_onewire_set(struct mg_connection *c, struct mg_http_message *hm) {
 }
 void handle_sensor_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
   if (hm->body.len > 0) {
     parse_sensor_json(hm->body.buf);
     char response[256];
@@ -3141,7 +3141,7 @@ void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm) {
   char response[256];
   parse_stm32time(response, sizeof(response), &SetSettings);
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
   mg_http_reply(c, 200, extra_headers, "%s", response);
@@ -3149,7 +3149,7 @@ void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm) {
 void handle_temp_get(struct mg_connection *c) {
   pars_temp_sensors(jsonbuf, BUFFER_SIZE);
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
   mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
@@ -3208,7 +3208,7 @@ int gen_security_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pin
 void handle_security_get(struct mg_connection *c) {
   gen_security_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
   mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
@@ -3724,7 +3724,7 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
 
 void handle_security_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
-      "Connection: keep-alive\r\nContent-Type: application/json\r\n";
+      "Connection: close\r\nContent-Type: application/json\r\n";
 
   if (hm->body.len > 0 && hm->body.len < BUFFER_SIZE) {
     char body_buf[hm->body.len + 1];

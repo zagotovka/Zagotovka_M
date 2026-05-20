@@ -396,7 +396,8 @@ unsigned long Te;
 
 static bool check_mqtt_connection(void *conn) {
   struct mg_connection *c = (struct mg_connection *)conn;
-  if (c == NULL || c->is_closing || c->is_draining) {
+  extern volatile bool mqtt_connected_reported;
+  if (c == NULL || c->is_closing || c->is_draining || !mqtt_connected_reported) {
     return false;
   }
   return true;
@@ -668,7 +669,7 @@ int main(void)
   usbQueueHandle = osMessageQueueNew (16, sizeof(uint8_t), &usbQueue_attributes);
 
   /* creation of mqttQueue */
-  mqttQueueHandle = osMessageQueueNew (16, sizeof(MqttMessage_t), &mqttQueue_attributes);
+  mqttQueueHandle = osMessageQueueNew (32, sizeof(MqttMessage_t), &mqttQueue_attributes);
 
   /* creation of mqttRxQueue */
   mqttRxQueueHandle = osMessageQueueNew (4, sizeof(MqttRxMsg_t), &mqttRxQueue_attributes);
@@ -1485,10 +1486,13 @@ void StartWebServerTask(void *argument)
         }
     }
 
-    /* ── WebSocket broadcast каждые 300ms ── */
+    /* ── WebSocket broadcast каждые 500ms ──
+     * 300ms было слишком агрессивно: send-буферы не успевали дренироваться,
+     * backpressure (>2048) срабатывал постоянно → браузер терял данные →
+     * watchdog переподключал WS → фрагментация кучи → OOM. */
     {
       static uint32_t last_ws_bc = 0;
-      if (HAL_GetTick() - last_ws_bc >= 1000) {
+      if (HAL_GetTick() - last_ws_bc >= 500) {
         last_ws_bc = HAL_GetTick();
         ws_broadcast_all();
       }
@@ -1637,28 +1641,6 @@ void StartWebServerTask(void *argument)
     }
 
 
-    /* Диагностический heartbeat — только при изменении heap */
-    {
-        static uint32_t hb_tick = 0;
-        static size_t prev_heap = 0;
-        static uint8_t first_run = 1;
-
-        if (HAL_GetTick() - hb_tick >= 5000) {
-            hb_tick = HAL_GetTick();
-            size_t cur_heap = xPortGetFreeHeapSize();
-
-            if (first_run) {
-                printf("[WebServerTask] heap=%lu\r\n", (unsigned long)cur_heap);
-                prev_heap = cur_heap;
-                first_run = 0;
-            } else if (cur_heap != prev_heap) {
-                printf("[WebServerTask] heap=%lu (delta=%+ld)\r\n",
-                       (unsigned long)cur_heap,
-                       (long)cur_heap - (long)prev_heap);
-                prev_heap = cur_heap;
-            }
-        }
-    }
     
     osDelay(1); /* Yield CPU to RTOS, preventing 100% CPU loop starvation */
   }
@@ -2724,23 +2706,31 @@ void StartPIDTask(void *argument)
 * @param argument: Not used
 * @retval None
 */
-/* Функция диагностики памяти (создана для устранения GNU C nested function) */
+/* Функция диагностики памяти с delta-отслеживанием */
 static void heap_diagnostic(void)
 {
     static unsigned last_free = 0;
     static unsigned last_min_ever = 0;
+    static uint8_t first_run = 1;
 
     unsigned current_free = (unsigned)xPortGetFreeHeapSize();
-    unsigned current_min = (unsigned)xPortGetMinimumEverFreeHeapSize();
+    unsigned current_min  = (unsigned)xPortGetMinimumEverFreeHeapSize();
 
-    /* Печатаем только если показатели изменились! */
+    /* Печатаем только если показатели изменились */
     if (current_free != last_free || current_min != last_min_ever) {
         printf("\r\n=== MEMORY DIAGNOSTIC ===\r\n");
-        printf("FreeRTOS free now:  %u B\r\n", current_free);
-        printf("FreeRTOS min ever:  %u B\r\n", current_min);
+        if (first_run) {
+            printf("FreeRTOS free now:  %u B\r\n", current_free);
+            printf("FreeRTOS min ever:  %u B\r\n", current_min);
+            first_run = 0;
+        } else {
+            printf("FreeRTOS free now:  %u B (delta=%+d)\r\n",
+                   current_free, (int)current_free - (int)last_free);
+            printf("FreeRTOS min ever:  %u B (delta=%+d)\r\n",
+                   current_min, (int)current_min - (int)last_min_ever);
+        }
         printf("=========================\r\n");
 
-        /* Запоминаем новые значения */
         last_free = current_free;
         last_min_ever = current_min;
     }

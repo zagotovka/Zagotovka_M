@@ -168,6 +168,7 @@ void set_comand(char *buff) {
         str[j++] = gsm_read();
         if (j > SEND_STR_SIZE - 1)
           break;
+        osDelay(1);
       }
       replac_string(str);
       char *p = NULL;
@@ -182,8 +183,8 @@ void set_comand(char *buff) {
             HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
             osDelay(100);
           }
-          printf("[FATAL] +CPAS not ready after retries\r\n");
-          return;
+          printf("[FATAL] +CPAS not ready — system reset\r\n");
+          NVIC_SystemReset();
         }
       } else if ((p = strstr(str, "+CREG:")) != NULL) {
         if (strstr(str, "0,1") == NULL) {
@@ -195,8 +196,8 @@ void set_comand(char *buff) {
             HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
             osDelay(100);
           }
-          printf("[FATAL] +CREG not registered after retries\r\n");
-          return;
+          printf("[FATAL] +CREG not registered — system reset\r\n");
+          NVIC_SystemReset();
         }
       }
       p = 0;
@@ -214,8 +215,8 @@ void set_comand(char *buff) {
     HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
     osDelay(100);
   }
-  printf("[FATAL] No reply from modem for '%s'\r\n", buff);
-  return;
+  printf("[FATAL] No reply from modem for '%s' — system reset\r\n", buff);
+  NVIC_SystemReset();
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -648,6 +649,7 @@ void process_sim800l_data(void) {
     buf[i++] = gsm_read();
     if (i > GSM_RX_BUFFER_SIZE - 1)
       break;
+    osDelay(1);
   }
   clear_string(buf);
 
@@ -915,5 +917,6 @@ void process_sim800l_data(void) {
     buf[j++] = gsm_read();
     if (j > GSM_RX_BUFFER_SIZE - 1)
       break;
+    osDelay(1);
   }
 }

@@ -415,6 +415,9 @@ lwdtc_cron_parse_multi(lwdtc_cron_ctx_t* cron_ctx, struct dbCron dbCrontxt[], si
 
     /* Parse all input strings, each to its own cron context structure */
     for (size_t i = 0; i < ctx_len; ++i) {
+        if (dbCrontxt[i].cron[0] == '\0') {
+            continue;  // Skip unconfigured timers
+        }
     	x = strlen(dbCrontxt[i].cron);
         if ((res = lwdtc_cron_parse_with_len(&cron_ctx[i], dbCrontxt[i].cron, x)) != lwdtcOK) {
             if (fail_index != NULL) {

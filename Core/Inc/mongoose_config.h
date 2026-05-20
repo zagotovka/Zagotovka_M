@@ -39,4 +39,18 @@
 #define MG_ENABLE_POSIX_FS 0
 #endif
 
+/* MIP TCP keepalive: 5 минут вместо 45 секунд.
+   На коротком интервале MIP посылает keepalive-пробу и при отсутствии
+   ответа рвёт соединение. WebSocket и так обменивается данными,
+   а для MQTT есть свой PINGREQ/PINGRESP на уровне протокола. */
+#define MG_TCPIP_KEEPALIVE_MS 300000
+
+/* Перенаправляем mg_calloc/mg_free на FreeRTOS heap_4 (192KB, коалесценция).
+   Без этого Mongoose использует свои дефолтные mg_calloc/mg_free,
+   которые вызывают newlib calloc/free (sbrk heap 32KB) → фрагментация,
+   calloc возвращает NULL при 143KB свободного FreeRTOS heap.
+   MG_MALLOC/MG_CALLOC — макросы старого API, которые Mongoose НЕ использует. */
+#define MG_ENABLE_CUSTOM_CALLOC 1
+#include "mg_alloc.h"
+
 // See https://mongoose.ws/documentation/#build-options

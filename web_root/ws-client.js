@@ -22,7 +22,7 @@ let _lastDataTs = 0;
 let _watchdogTimer = null;
 let _pingTimer = null;
 
-const WS_DATA_TIMEOUT = 15000;
+const WS_DATA_TIMEOUT = 30000;
 const WS_PING_INTERVAL = 5000;
 
 function _getWsUrl() {
