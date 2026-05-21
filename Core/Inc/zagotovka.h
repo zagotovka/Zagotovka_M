@@ -257,7 +257,7 @@ void check_DHT22_limits(void);
 void DWT_Init(void);// delay_micros()
 
 char* pars_temp_sensors(char *buffer, int buffer_size);
-void process_actions(const char* actions);
+/* process_actions() удалена — используй action_handler() */
 
 double julianDate(int year, int month, int day, int hour, int minute, int second);
 void trackFullMoon(void);

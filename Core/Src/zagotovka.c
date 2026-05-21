@@ -2632,7 +2632,7 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
               if (strlen(PinsConf[id].sclick) > 0) {
                 printf("Executing single click actions: '%s'\n",
                        PinsConf[id].sclick);
-                process_actions(PinsConf[id].sclick);
+                action_handler(id, PinsConf[id].sclick, "SC");
                 mg_http_reply(
                     c, 200, "Content-Type: text/plain\r\n",
                     "Button %d: The 'SINGLE CLICK' action was performed!\r\n",
@@ -2645,7 +2645,7 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
               if (strlen(PinsConf[id].dclick) > 0) {
                 printf("Executing double click actions: '%s'\n",
                        PinsConf[id].dclick);
-                process_actions(PinsConf[id].dclick);
+                action_handler(id, PinsConf[id].dclick, "DC");
                 mg_http_reply(
                     c, 200, "Content-Type: text/plain\r\n",
                     "Button %d: The 'DOUBLE CLICK' action was performed!\r\n",
@@ -2658,7 +2658,7 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
               if (strlen(PinsConf[id].lpress) > 0) {
                 printf("Executing long press actions: '%s'\n",
                        PinsConf[id].lpress);
-                process_actions(PinsConf[id].lpress);
+                action_handler(id, PinsConf[id].lpress, "LP");
                 mg_http_reply(
                     c, 200, "Content-Type: text/plain\r\n",
                     "Button %d: The 'LONG PRESS' action was performed!\r\n",
@@ -3491,15 +3491,15 @@ void mqtt_message_handler(const char *topic, const char *payload) {
         const char *click_type = last_slash + 1;
         if (strcmp(click_type, "single_click") == 0 &&
             PinsConf[id].sclick[0] != '\0') {
-          process_actions(PinsConf[id].sclick);
+          action_handler(id, PinsConf[id].sclick, "SC");
           printf("[MQTT] Executing single click actions: '%s'\r\n", PinsConf[id].sclick);
         } else if (strcmp(click_type, "double_click") == 0 &&
                    PinsConf[id].dclick[0] != '\0') {
-          process_actions(PinsConf[id].dclick);
+          action_handler(id, PinsConf[id].dclick, "DC");
           printf("[MQTT] Executing double click actions: '%s'\r\n", PinsConf[id].dclick);
         } else if (strcmp(click_type, "long_press") == 0 &&
                    PinsConf[id].lpress[0] != '\0') {
-          process_actions(PinsConf[id].lpress);
+          action_handler(id, PinsConf[id].lpress, "LP");
           printf("[MQTT] Executing long press actions: '%s'\r\n", PinsConf[id].lpress);
         } else {
           printf("[MQTT] Invalid or unconfigured click type: %s\r\n", click_type);
@@ -3936,59 +3936,13 @@ typedef struct {
   bool lwhumact; // Флаг активности нижнего порога влажности
 } sensor_state_t;
 
-void process_actions(
-    const char *actions) { // Будет время откажись от этой функции!!!
-  printf("process_actions called with actions: %s\n",
-         actions ? actions : "NULL");
-  if (actions == NULL || strlen(actions) == 0 || strcmp(actions, "None") == 0 ||
-      strspn(actions, " \t\n\r") ==
-          strlen(actions)) { // проверка на строку из пробельных символов
-    printf("No actions to process\n");
-    return;
-  }
-  /* Используем стековый буфер вместо strdup (malloc) — макс. 125 байт из db.h
-   */
-  char str_buf[128];
-  size_t slen = strlen(actions);
-  if (slen >= sizeof(str_buf))
-    slen = sizeof(str_buf) - 1;
-  memcpy(str_buf, actions, slen);
-  str_buf[slen] = '\0';
-  char *str = str_buf;
-  data_pin_t data_pin = {0}; /* A3: локальная инициализированная копия */
-  char *saveptr = NULL;
-  char *token =
-      strtok_r(str, ", ", &saveptr); // Разбираем строку действий по разделителю ","
-  while (token != NULL) {
-    uint8_t id = 0, action = 0;
-    char *colon = strchr(token, ':');
-    //		printf("Processing token: %s\n", token);
-    if (colon != NULL) {
-      *colon = '\0'; // Разделяем строку на две части
-      id = (uint8_t)atoi(token);
-      action = (uint8_t)atoi(colon + 1);
-      printf("Parsed values - id: %d, action: %d\n", id, action);
-      if (action <= 2) { // 0=OFF, 1=ON, 2=TOGGLE
-        data_pin.id = id;
-        data_pin.action = action;
-        data_pin.cntrlid = id;
-        printf("Sending to queue: id=%d, action=%d, cntrlid=%d\n", data_pin.id,
-               data_pin.action, data_pin.cntrlid);
-        if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) == pdPASS) {
-          printf("Successfully sent to queue\n");
-        } else {
-          printf("Failed to send to queue\n");
-        }
-      } else {
-        printf("Invalid action value: %d\n", action);
-      }
-    } else {
-      printf("Invalid token format (missing colon): %s\n", token);
-    }
-    token = strtok_r(NULL, ", ", &saveptr);
-  }
-  /* str — стековый буфер, free не нужен */
-}
+/* process_actions() удалена.
+ * Все вызовы переведены на action_handler(), который поддерживает:
+ *  - каскадные связи PinsLinks
+ *  - Switch-логику (topin==3)
+ *  - управление PWM (тип 5)
+ *  - проверки onoff / master enable / autotune.
+ */
 
 void check_DHT22_limits(void) {
   // Проверка DHT22 датчиков

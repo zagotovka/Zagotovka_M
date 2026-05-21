@@ -185,14 +185,14 @@ osThreadId_t ds18b20TaskHandle;
 const osThreadAttr_t ds18b20Task_attributes = {
   .name = "ds18b20Task",
   .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .priority = (osPriority_t) osPriorityBelowNormal,
 };
 /* Definitions for dht22Task */
 osThreadId_t dht22TaskHandle;
 const osThreadAttr_t dht22Task_attributes = {
   .name = "dht22Task",
   .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .priority = (osPriority_t) osPriorityBelowNormal,
 };
 /* Definitions for ServiceTask */
 osThreadId_t ServiceTaskHandle;
@@ -2129,7 +2129,7 @@ void StartDs18b20Task(void *argument)
         }
       }
     }
-    osDelay(10);
+    osDelay(2000);
   }
   /* USER CODE END StartDs18b20Task */
 }
@@ -2178,10 +2178,9 @@ void StartDht22Task(void *argument)
           process_dht22(i);
         }
       }
-      check_DHT22_limits(); // В этой функции откажись от process_actions() в
-                            // пользуй action_handler()!
+      check_DHT22_limits();
     }
-    osDelay(10);
+    osDelay(2000);
   }
   /* USER CODE END StartDht22Task */
 }

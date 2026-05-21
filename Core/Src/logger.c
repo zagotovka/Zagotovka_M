@@ -23,7 +23,7 @@ typedef struct {
     uint16_t len;
 } TaskLogBuffer_t;
 
-static TaskLogBuffer_t g_task_bufs[16];
+static TaskLogBuffer_t g_task_bufs[32];// было 16
 
 const char* cat_prefixes[] = {
     "[SYSTEM] ",
@@ -113,8 +113,10 @@ static TaskLogBuffer_t* get_task_buffer(void) {
         return NULL;
     }
     
+    int num_bufs = sizeof(g_task_bufs) / sizeof(g_task_bufs[0]);
+
     // Quick search without critical section
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < num_bufs; i++) {
         if (g_task_bufs[i].task_handle == current_task) {
             return &g_task_bufs[i];
         }
@@ -124,14 +126,14 @@ static TaskLogBuffer_t* get_task_buffer(void) {
     TaskLogBuffer_t *allocated = NULL;
     taskENTER_CRITICAL();
     // Re-check inside critical section
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < num_bufs; i++) {
         if (g_task_bufs[i].task_handle == current_task) {
             allocated = &g_task_bufs[i];
             break;
         }
     }
     if (!allocated) {
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < num_bufs; i++) {
             if (g_task_bufs[i].task_handle == NULL) {
                 g_task_bufs[i].task_handle = current_task;
                 g_task_bufs[i].len = 0;

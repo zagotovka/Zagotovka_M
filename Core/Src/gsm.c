@@ -31,7 +31,7 @@ extern uint32_t swarm_t;
 extern uint8_t read_button_level(uint8_t button_id);
 extern void send_sms(int index);
 extern void Error_Handler(void);
-extern void process_actions(const char *actions);
+/* process_actions() удалена: все вызовы переведены на action_handler() */
 /* MX_USART2_UART_Init — static в main.c, недоступна напрямую.
  * check_speed() переинициализирует UART вручную через HAL_UART_Init(). */
 
@@ -396,14 +396,15 @@ void execute_commands(char *cmd_str) {
             }
 
           } else if (PinsConf[pin].topin == 1 && (value >= 3 && value <= 5)) {
-            /* Для типа BUTTON (topin==1) обрабатываем нажатие */
+            /* Для типа BUTTON (topin==1) обрабатываем нажатие через action_handler:
+               поддерживает PinsLinks, Switch-логику, PWM, onoff/master enable. */
             if (PinsConf[pin].onoff != 0) {
               if (value == 3 && PinsConf[pin].sclick[0] != '\0') {
-                process_actions(PinsConf[pin].sclick);
+                action_handler(pin, PinsConf[pin].sclick, "SC");
               } else if (value == 4 && PinsConf[pin].dclick[0] != '\0') {
-                process_actions(PinsConf[pin].dclick);
+                action_handler(pin, PinsConf[pin].dclick, "DC");
               } else if (value == 5 && PinsConf[pin].lpress[0] != '\0') {
-                process_actions(PinsConf[pin].lpress);
+                action_handler(pin, PinsConf[pin].lpress, "LP");
               }
             }
 
