@@ -6,6 +6,7 @@
  */
 
 #include "zagotovka.h"
+#include "logger.h"
 #include "ds18b20.h"
 #include "ds18b20Config.h"
 #include "gsm.h"
@@ -1440,6 +1441,110 @@ void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm) {
   }
 }
 
+void mqtt_publish_logfilter_status(void) {
+  if (s_conn == NULL) return;
+  uint32_t mask = logger_get_mask();
+  char payload[512];
+  snprintf(payload, sizeof(payload),
+           "{\n"
+           "  \"status\": true,\n"
+           "  \"mask\": %lu,\n"
+           "  \"categories\": {\n"
+           "    \"SYSTEM\": %s,\n"
+           "    \"MQTT\": %s,\n"
+           "    \"NET\": %s,\n"
+           "    \"GSM\": %s,\n"
+           "    \"SCHEDULER\": %s,\n"
+           "    \"SENSORS\": %s,\n"
+           "    \"PID\": %s,\n"
+           "    \"SETTINGS\": %s,\n"
+           "    \"ETH\": %s,\n"
+           "    \"PHY\": %s\n"
+           "  }\n"
+           "}\n",
+           (unsigned long)mask,
+           (mask & LOG_MASK_SYSTEM) ? "true" : "false",
+           (mask & LOG_MASK_MQTT) ? "true" : "false",
+           (mask & LOG_MASK_NET) ? "true" : "false",
+           (mask & LOG_MASK_GSM) ? "true" : "false",
+           (mask & LOG_MASK_SCHEDULER) ? "true" : "false",
+           (mask & LOG_MASK_SENSORS) ? "true" : "false",
+           (mask & LOG_MASK_PID) ? "true" : "false",
+           (mask & LOG_MASK_SETTINGS) ? "true" : "false",
+           (mask & LOG_MASK_ETH) ? "true" : "false",
+           (mask & LOG_MASK_PHY) ? "true" : "false");
+  send_mqtt_message(s_conn, "/log/filter/status", payload);
+}
+
+void handle_logfilter(struct mg_connection *c, struct mg_http_message *hm) {
+  const char *extra_headers =
+      "Connection: close\r\nContent-Type: application/json\r\n";
+
+  if (mg_strcasecmp(hm->method, mg_str("POST")) == 0) {
+    if (hm->body.len > 0) {
+      cJSON *root = cJSON_ParseWithLength(hm->body.buf, hm->body.len);
+      if (root != NULL) {
+        uint32_t current_mask = logger_get_mask();
+        cJSON *mask_item = cJSON_GetObjectItemCaseSensitive(root, "mask");
+        if (cJSON_IsNumber(mask_item)) {
+          current_mask = (uint32_t)mask_item->valueint;
+        } else {
+          // Попробуем распарсить категориальные настройки
+          cJSON *cats = cJSON_GetObjectItemCaseSensitive(root, "categories");
+          if (cats != NULL) {
+            const char* cat_keys[] = {"SYSTEM", "MQTT", "NET", "GSM", "SCHEDULER", "SENSORS", "PID", "SETTINGS", "ETH", "PHY"};
+            LogCategory_t cat_vals[] = {LOG_CAT_SYSTEM, LOG_CAT_MQTT, LOG_CAT_NET, LOG_CAT_GSM, LOG_CAT_SCHEDULER, LOG_CAT_SENSORS, LOG_CAT_PID, LOG_CAT_SETTINGS, LOG_CAT_ETH, LOG_CAT_PHY};
+            for (int i = 0; i < 10; i++) {
+              cJSON *cat_item = cJSON_GetObjectItemCaseSensitive(cats, cat_keys[i]);
+              if (cat_item != NULL) {
+                if (cJSON_IsTrue(cat_item) || (cJSON_IsNumber(cat_item) && cat_item->valueint != 0)) {
+                  current_mask |= (1u << cat_vals[i]);
+                } else {
+                  current_mask &= ~(1u << cat_vals[i]);
+                }
+              }
+            }
+          }
+        }
+        logger_set_mask(current_mask);
+        mqtt_publish_logfilter_status();
+        cJSON_Delete(root);
+      }
+    }
+  }
+
+  // Возвращаем текущую маску
+  uint32_t mask = logger_get_mask();
+  mg_http_reply(c, 200, extra_headers,
+                "{\n"
+                "  \"status\": true,\n"
+                "  \"mask\": %lu,\n"
+                "  \"categories\": {\n"
+                "    \"SYSTEM\": %s,\n"
+                "    \"MQTT\": %s,\n"
+                "    \"NET\": %s,\n"
+                "    \"GSM\": %s,\n"
+                "    \"SCHEDULER\": %s,\n"
+                "    \"SENSORS\": %s,\n"
+                "    \"PID\": %s,\n"
+                "    \"SETTINGS\": %s,\n"
+                "    \"ETH\": %s,\n"
+                "    \"PHY\": %s\n"
+                "  }\n"
+                "}\n",
+                (unsigned long)mask,
+                (mask & LOG_MASK_SYSTEM) ? "true" : "false",
+                (mask & LOG_MASK_MQTT) ? "true" : "false",
+                (mask & LOG_MASK_NET) ? "true" : "false",
+                (mask & LOG_MASK_GSM) ? "true" : "false",
+                (mask & LOG_MASK_SCHEDULER) ? "true" : "false",
+                (mask & LOG_MASK_SENSORS) ? "true" : "false",
+                (mask & LOG_MASK_PID) ? "true" : "false",
+                (mask & LOG_MASK_SETTINGS) ? "true" : "false",
+                (mask & LOG_MASK_ETH) ? "true" : "false",
+                (mask & LOG_MASK_PHY) ? "true" : "false");
+}
+
 /*
     Проверяет входные параметры на корректность.
     Добавляет открывающую и закрывающую кавычки.
@@ -1618,6 +1723,10 @@ void gen_mysett_json(const struct dbSettings *settings, char *buffer,
   // HTTPS настройки
   offset += snprintf(buffer + offset, buffer_size - offset,
                      "\"usehttps\": %d,\n", settings->usehttps);
+
+  // Маска логов
+  offset += snprintf(buffer + offset, buffer_size - offset,
+                     "\"log_filter_mask\": %lu,\n", (unsigned long)settings->log_filter_mask);
 
   // Telegram token - показываем заглушку или пустую строку
   https_get_telegram_token(buffer_temp, sizeof(buffer_temp));
@@ -2027,6 +2136,12 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
   cJSON *check_mqtt = cJSON_GetObjectItemCaseSensitive(json, "check_mqtt");
   if (cJSON_IsNumber(check_mqtt)) {
     settings->check_mqtt = check_mqtt->valueint;
+  }
+
+  cJSON *log_filter_mask = cJSON_GetObjectItemCaseSensitive(json, "log_filter_mask");
+  if (cJSON_IsNumber(log_filter_mask)) {
+    settings->log_filter_mask = (uint32_t)log_filter_mask->valueint;
+    logger_set_mask(settings->log_filter_mask);
   }
 
   cJSON *ip_addr = cJSON_GetObjectItemCaseSensitive(json, "ip_addr");
@@ -3276,7 +3391,7 @@ void parse_sim800l_json(const char *buffer) {
 void mqtt_message_handler(const char *topic, const char *payload) {
   char command[20];
   int id = -1;
-//  printf("[MQTT_HANDLER] topic='%s' payload='%s'\r\n", topic, payload);
+  printf("[MQTT] topic='%s' payload='%s'\r\n", topic, payload);
   const char *msg = NULL;
 
   // Проверяем, начинается ли топик или полезная нагрузка с токена
@@ -3287,39 +3402,84 @@ void mqtt_message_handler(const char *topic, const char *payload) {
              payload[strlen(SetSettings.rxmqttop)] == '/') {
     msg = payload;
   } else {
-    printf("Invalid token in MQTT message (expected: %s). Topic: '%s', Payload: '%s'\n",
+    printf("[MQTT] Invalid token (expected: %s). Topic: '%s', Payload: '%s'\r\n",
            SetSettings.rxmqttop, topic, payload);
     return;
+  }
+
+  // Intercept log/filter/set topic
+  char expected_filter_topic[64];
+  snprintf(expected_filter_topic, sizeof(expected_filter_topic), "%s/log/filter/set", SetSettings.rxmqttop);
+  if (strcmp(topic, expected_filter_topic) == 0) {
+      char cat_name[32];
+      int enable_val = -1;
+      if (sscanf(payload, "%31[^:]:%d", cat_name, &enable_val) == 2) {
+          uint32_t mask = logger_get_mask();
+          LogCategory_t cat = LOG_CAT_COUNT;
+          if (strcmp(cat_name, "SYSTEM") == 0) cat = LOG_CAT_SYSTEM;
+          else if (strcmp(cat_name, "MQTT") == 0) cat = LOG_CAT_MQTT;
+          else if (strcmp(cat_name, "NET") == 0) cat = LOG_CAT_NET;
+          else if (strcmp(cat_name, "GSM") == 0) cat = LOG_CAT_GSM;
+          else if (strcmp(cat_name, "SCHEDULER") == 0) cat = LOG_CAT_SCHEDULER;
+          else if (strcmp(cat_name, "SENSORS") == 0) cat = LOG_CAT_SENSORS;
+          else if (strcmp(cat_name, "PID") == 0) cat = LOG_CAT_PID;
+          else if (strcmp(cat_name, "SETTINGS") == 0) cat = LOG_CAT_SETTINGS;
+          else if (strcmp(cat_name, "ETH") == 0) cat = LOG_CAT_ETH;
+          else if (strcmp(cat_name, "PHY") == 0) cat = LOG_CAT_PHY;
+          
+          if (cat < LOG_CAT_COUNT) {
+              if (enable_val != 0) {
+                  mask |= (1u << cat);
+              } else {
+                  mask &= ~(1u << cat);
+              }
+              logger_set_mask(mask);
+              printf("[MQTT] Log filter updated via dynamic category %s:%d (new mask: %lu)\r\n", cat_name, enable_val, (unsigned long)mask);
+          } else {
+              printf("[MQTT] Unknown log category: %s\r\n", cat_name);
+          }
+      } else {
+          char *endptr;
+          unsigned long val = strtoul(payload, &endptr, 10);
+          if (endptr != payload) {
+              logger_set_mask((uint32_t)val);
+              printf("[MQTT] Log filter updated via mask: %lu\r\n", val);
+          } else {
+              printf("[MQTT] Invalid log filter payload: %s\r\n", payload);
+          }
+      }
+      mqtt_publish_logfilter_status();
+      return;
   }
 
   // Пропускаем префикс (токен + слэш)
   const char *command_start = strchr(msg, '/');
   if (!command_start) {
-    printf("Invalid message format, no command found: %s\n", msg);
+    printf("[MQTT] Invalid message format, no command found: %s\r\n", msg);
     return;
   }
   command_start++; // Пропускаем слэш
 
   // Извлекаем команду
   if (sscanf(command_start, "%[^/]", command) != 1) {
-    printf("Invalid command format in payload: %s\n", command_start);
+    printf("[MQTT] Invalid command format in payload: %s\r\n", command_start);
     return;
   }
 
   // Ищем ID после "id="
   const char *id_part = strstr(command_start, "id=");
   if (!id_part) {
-    printf("No id found in payload\n");
+    printf("[MQTT] No id found in payload\r\n");
     return;
   }
   if (sscanf(id_part + 3, "%d", &id) != 1) {
-    printf("Invalid id format in payload\n");
+    printf("[MQTT] Invalid id format in payload\r\n");
     return;
   }
 
-//  	printf("Parsed command: %s, id: %d\n", command, id);
+  printf("[MQTT] Parsed command: %s, id: %d\r\n", command, id);
   if (id < 0 || id >= NUMPIN) {
-    printf("Invalid ID: %d\n", id);
+    printf("[MQTT] Invalid ID: %d\r\n", id);
     return;
   }
 
@@ -3332,31 +3492,31 @@ void mqtt_message_handler(const char *topic, const char *payload) {
         if (strcmp(click_type, "single_click") == 0 &&
             PinsConf[id].sclick[0] != '\0') {
           process_actions(PinsConf[id].sclick);
-          printf("Executing single click actions: '%s'\n", PinsConf[id].sclick);
+          printf("[MQTT] Executing single click actions: '%s'\r\n", PinsConf[id].sclick);
         } else if (strcmp(click_type, "double_click") == 0 &&
                    PinsConf[id].dclick[0] != '\0') {
           process_actions(PinsConf[id].dclick);
-          printf("Executing double click actions: '%s'\n", PinsConf[id].dclick);
+          printf("[MQTT] Executing double click actions: '%s'\r\n", PinsConf[id].dclick);
         } else if (strcmp(click_type, "long_press") == 0 &&
                    PinsConf[id].lpress[0] != '\0') {
           process_actions(PinsConf[id].lpress);
-          printf("Executing long press actions: '%s'\n", PinsConf[id].lpress);
+          printf("[MQTT] Executing long press actions: '%s'\r\n", PinsConf[id].lpress);
         } else {
-          printf("Invalid or unconfigured click type: %s\n", click_type);
+          printf("[MQTT] Invalid or unconfigured click type: %s\r\n", click_type);
         }
       } else {
-        printf("No click type found in payload\n");
+        printf("[MQTT] No click type found in payload\r\n");
       }
     } else {
-      printf("Error, button with id = %d doesn't exist or has incorrect topin "
-             "value (%d)!\n",
+      printf("[MQTT] Error, button with id = %d doesn't exist or has incorrect topin "
+             "value (%d)!\r\n",
              id, PinsConf[id].topin);
     }
   } else if (strcmp(command, "switch") == 0) {
     if (PinsConf[id].topin == 3) { // SWITCH
       /* Master Enable: если onoff == 0, игнорируем MQTT-команду */
       if (PinsConf[id].onoff == 0) {
-        printf("Switch %d DISABLED (master off), MQTT cmd ignored!\n", id);
+        printf("[MQTT] Switch %d DISABLED (master off), cmd ignored!\r\n", id);
       } else {
         const char *state_part = strstr(command_start, "state=");
         if (state_part) {
@@ -3364,20 +3524,20 @@ void mqtt_message_handler(const char *topic, const char *payload) {
           if (sscanf(state_part + 6, "%d", &value) == 1) {
             if (value == 0 || value == 1) {
               processPins(id, value);
-              printf("Switch id=%d set to %d by mqtt!\n", id, value);
+              printf("[MQTT] Switch id=%d set to %d\r\n", id, value);
             } else {
-              printf("Invalid state value for switch: %d\n", value);
+              printf("[MQTT] Invalid state value for switch: %d\r\n", value);
             }
           } else {
-            printf("Invalid state format in payload\n");
+            printf("[MQTT] Invalid state format in payload\r\n");
           }
         } else {
-          printf("No state value found in payload\n");
+          printf("[MQTT] No state value found in payload\r\n");
         }
       }
     } else {
-      printf("Error, switch with id = %d doesn't exist or has incorrect topin "
-             "value (%d)!\n",
+      printf("[MQTT] Error, switch with id = %d doesn't exist or has incorrect topin "
+             "value (%d)!\r\n",
              id, PinsConf[id].topin);
     }
   } else if (strcmp(command, "pwm") == 0) {
@@ -3395,25 +3555,25 @@ void mqtt_message_handler(const char *topic, const char *payload) {
                   (uint32_t)((uint64_t)value * PinsConf[id].pwmmax / 100ULL);
               __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel,
                                     pulse_mqtt);
-              printf("PWM MQTT [%d] %s: %d%% = %lu steps\n", id,
+              printf("[MQTT] PWM MQTT %s: %d%% = %lu steps\r\n",
                      PinsInfo[id].pins, value, (unsigned long)pulse_mqtt);
             } else {
-              printf("Invalid dvalue for PWM (must be 0-100): %d\n", value);
+              printf("[MQTT] Invalid dvalue for PWM (must be 0-100): %d\r\n", value);
             }
           } else {
-            printf("Invalid dvalue format in payload\n");
+            printf("[MQTT] Invalid dvalue format in payload\r\n");
           }
         } else {
-          printf("No dvalue found in payload\n");
+          printf("[MQTT] No dvalue found in payload\r\n");
         }
       }
     } else {
-      printf("Error, pwm with id = %d doesn't exist or has incorrect topin "
-             "value (%d)!\n",
+      printf("[MQTT] Error, pwm with id = %d doesn't exist or has incorrect topin "
+             "value (%d)!\r\n",
              id, PinsConf[id].topin);
     }
   } else {
-    printf("Unsupported command: %s\n", command);
+    printf("[MQTT] Unsupported command: %s\r\n", command);
   }
 }
 

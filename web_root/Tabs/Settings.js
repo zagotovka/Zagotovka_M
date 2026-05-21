@@ -142,6 +142,17 @@ const FieldRow = ({ label, tipLabel, index, tip, children }) => {
 };
 // ---------------------------------------------------------------------------
 
+const LOG_CATEGORIES = [
+  { id: 0, key: 'SYSTEM',    labelEn: 'System',    labelRu: 'Система' },
+  { id: 1, key: 'MQTT',      labelEn: 'MQTT',      labelRu: 'MQTT' },
+  { id: 2, key: 'NET',       labelEn: 'Network',   labelRu: 'Сеть' },
+  { id: 3, key: 'GSM',       labelEn: 'GSM',       labelRu: 'GSM' },
+  { id: 4, key: 'SCHEDULER', labelEn: 'Scheduler', labelRu: 'Планировщик' },
+  { id: 5, key: 'SENSORS',   labelEn: 'Sensors',   labelRu: 'Датчики' },
+  { id: 6, key: 'PID',       labelEn: 'PID Controller', labelRu: 'ПИД-регулятор' },
+  { id: 7, key: 'SETTINGS',  labelEn: 'Settings',  labelRu: 'Настройки' }
+];
+
 function Settings({ }) {
   const [settings, setSettings] = useState({});
   const [saveResult, setSaveResult] = useState(null);
@@ -312,6 +323,29 @@ function Settings({ }) {
         break;
     }
     return error;
+  };
+
+  const handleLogMaskChange = (newMask) => {
+    const isRu = (settings.lang || 'ru') === 'ru';
+    setSettings(prev => ({ ...prev, log_filter_mask: newMask }));
+    fetch('/api/logfilter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mask: newMask })
+    })
+      .then(r => {
+        if (!r.ok) throw new Error('Network error');
+        return r.json();
+      })
+      .then(data => {
+        if (data.status) {
+          showToast(isRu ? 'Фильтр логов обновлен в RAM' : 'Log filter updated in RAM', 'success');
+        }
+      })
+      .catch(err => {
+        console.error('Error applying log filter in RAM:', err);
+        showToast(isRu ? 'Ошибка обновления RAM фильтра' : 'Error updating RAM log filter', 'error');
+      });
   };
 
   const handleSubmit = (e) => {
@@ -834,6 +868,78 @@ function Settings({ }) {
               <//>
               </tbody>
             </table>
+            </div>
+          </div>
+
+          <!-- ============================================================
+               Log Filter / Фильтр логов
+          ============================================================ -->
+          <div class="w-full mb-6">
+            <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+              <table class="w-full table-fixed text-left border-collapse">
+                <thead>
+                  <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">
+                      ${(settings.lang || 'ru') === 'ru' ? 'Фильтр логов' : 'Log Filter'}
+                    </th>
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">
+                      <div class="flex items-center gap-3">
+                        <span class="text-slate-600 font-medium tracking-wide text-lg">
+                          ${(settings.lang || 'ru') === 'ru' ? 'Маска логов в RAM:' : 'RAM Log Mask:'}
+                        </span>
+                        <span class="px-2 py-0.5 bg-cyan-600/10 text-cyan-700 rounded-md font-mono font-bold text-lg">
+                          ${settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0xFF} (0x${(settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0xFF).toString(16).toUpperCase()})
+                        </span>
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="transition-colors border-b border-slate-200 bg-white/80 hover:bg-slate-200/80">
+                    <td class="w-1/3 text-lg font-bold text-slate-700 px-6 border-r border-slate-500 py-4 cursor-help align-top"
+                        data-tip=${(settings.lang || 'ru') === 'ru' ? 'Выберите категории логов, которые выводятся в UART и отсылаются. Изменения применяются немедленно в RAM!' : 'Select which log categories are enabled. Changes apply immediately in RAM!'}>
+                      ${(settings.lang || 'ru') === 'ru' ? 'Активные категории' : 'Active Categories'}
+                      <div class="mt-4 flex flex-col gap-2">
+                        <button type="button" onClick=${() => handleLogMaskChange(0xFF)}
+                          class="w-full py-1 text-xs font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 hover:text-teal-700 transition-all text-center">
+                          ${(settings.lang || 'ru') === 'ru' ? 'Включить все' : 'Enable All'}
+                        </button>
+                        <button type="button" onClick=${() => handleLogMaskChange(0x00)}
+                          class="w-full py-1 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 hover:text-rose-700 transition-all text-center">
+                          ${(settings.lang || 'ru') === 'ru' ? 'Выключить все' : 'Disable All'}
+                        </button>
+                      </div>
+                    </td>
+                    <td class="w-2/3 pl-4 py-4 pr-6 align-top">
+                      <div class="grid grid-cols-2 gap-4">
+                        ${LOG_CATEGORIES.map(cat => {
+                          const maskVal = settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0xFF;
+                          const isEnabled = (maskVal & (1 << cat.id)) !== 0;
+                          return html`
+                            <label class=${`flex items-center gap-3 p-3 rounded-xl border cursor-pointer select-none transition-all duration-300 ${isEnabled ? 'bg-cyan-50/70 border-cyan-300 shadow-[0_2px_10px_rgba(34,211,238,0.15)] scale-[1.02]' : 'bg-slate-50/40 border-slate-200 hover:bg-slate-100/50'}`}>
+                              <input
+                                type="checkbox"
+                                checked=${isEnabled}
+                                onChange=${(e) => {
+                                  const newMask = e.target.checked
+                                    ? (maskVal | (1 << cat.id))
+                                    : (maskVal & ~(1 << cat.id));
+                                  handleLogMaskChange(newMask);
+                                }}
+                                class="w-5 h-5 text-cyan-600 border-slate-300 rounded focus:ring-cyan-500 focus:ring-2"
+                              />
+                              <div class="flex flex-col">
+                                <span class="font-bold text-slate-800 text-base leading-tight">${cat.key}</span>
+                                <span class="text-xs text-slate-500 font-medium">${(settings.lang || 'ru') === 'ru' ? cat.labelRu : cat.labelEn}</span>
+                              </div>
+                            </label>
+                          `;
+                        })}
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 

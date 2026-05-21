@@ -32,7 +32,7 @@
 #include "multi_button.h"
 #include "net.h"
 #include "setings.h"
-
+#include "logger.h"
 #include "ds18b20.h"
 #include "ds18b20Config.h"
 #include "lwdtc.h"
@@ -229,6 +229,13 @@ const osThreadAttr_t my_DgnTask_attributes = {
   .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+/* Definitions for LoggerTask */
+osThreadId_t LoggerTaskHandle;
+const osThreadAttr_t LoggerTask_attributes = {
+  .name = "LoggerTask",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal,
+};
 /* Definitions for outputQueue */
 osMessageQueueId_t outputQueueHandle;
 const osMessageQueueAttr_t outputQueue_attributes = {
@@ -282,6 +289,7 @@ void StartSIM800LTask(void *argument);
 void StartSecurityTask(void *argument);
 void StartPIDTask(void *argument);
 void StartDgnTask(void *argument);
+void StartLoggerTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -676,6 +684,7 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
+  logger_init();
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -718,8 +727,12 @@ int main(void)
   /* creation of my_DgnTask */
   my_DgnTaskHandle = osThreadNew(StartDgnTask, NULL, &my_DgnTask_attributes);
 
+  /* creation of LoggerTask */
+  LoggerTaskHandle = osThreadNew(StartLoggerTask, NULL, &LoggerTask_attributes);
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
+
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -1094,10 +1107,7 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 /*********************** для printf ******************************/
-PUTCHAR_PROTOTYPE {
-  HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 1, 0xFFFF);
-  return ch;
-}
+/* PUTCHAR_PROTOTYPE перенесен в logger.c */
 /************************ PWM Fade *************************************/
 /* PWM Fade state — без динамических задач, без malloc */
 typedef struct {
@@ -1270,6 +1280,7 @@ void StartConfigTask(void *argument)
         if (fresult == FR_OK) {
           GetSettingsConfig(); // если файл "settings.ini" существует, открываем
                                // его и перезаписываем
+          g_log_filter_mask = (SetSettings.log_filter_mask != 0) ? SetSettings.log_filter_mask : LOG_MASK_ALL;
           GetCronConfig();     // если файл "cron.ini" существует, открываем для
                                // чтения.
           GetPinConfig();      // если файл "pins.ini" существует, открываем для
@@ -1307,6 +1318,7 @@ void StartConfigTask(void *argument)
         } else { // Файл "pins.ini" не существует, создаем его и записываем
                  // данные
           StartSettingsConfig();
+          g_log_filter_mask = LOG_MASK_ALL;
 
           xTaskNotifyGive(WebServerTaskHandle); // ВКЛЮЧАЕМ ЗАДАЧУ WebServerTask
           xTaskNotifyGive(CronTaskHandle);      // ВКЛЮЧАЕМ ЗАДАЧУ CronTask
@@ -1510,7 +1522,7 @@ void StartWebServerTask(void *argument)
     memset(&rxMsg, 0, sizeof(MqttMessage_t));
     status = xQueueReceive(mqttQueueHandle, &rxMsg, 0);
     if (status == pdPASS) {
-//			printf("[MQTT_Q] cmd=%d dev=%d state=%d\r\n", rxMsg.command,rxMsg.deviceId, rxMsg.state); // Подсветит кто спамит в MQTT.
+			printf("[MQTT_Q] cmd=%d dev=%d state=%d\r\n", rxMsg.command,rxMsg.deviceId, rxMsg.state); // Подсветит кто спамит в MQTT.
       /* Защита от повреждённых сообщений в очереди */
       if (rxMsg.deviceId >= NUMPIN && rxMsg.command != 1) {
         printf("MQTT queue: invalid deviceId=%d, cmd=%d — skipped\r\n", rxMsg.deviceId, rxMsg.command);
@@ -2742,37 +2754,103 @@ void StartDgnTask(void *argument)
   /* Немного ждём после загрузки, чтобы сеть успела подняться */
   osDelay(5000);
 
-  /* ── Одноразовый дамп Stack High Water Mark всех задач ── */
-  printf("\r\n=== STACK HWM (words free) ===\r\n");
-  printf("ConfigTask    HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)ConfigTaskHandle));
-  printf("WebServerTask HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)WebServerTaskHandle));
-  printf("OutputTask    HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)OutputTaskHandle));
-  printf("CronTask      HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)CronTaskHandle));
-  printf("InputTask     HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)InputTaskHandle));
-  printf("EncoderTask   HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)EncoderTaskHandle));
-  printf("ds18b20Task   HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)ds18b20TaskHandle));
-  printf("dht22Task     HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)dht22TaskHandle));
-  printf("ServiceTask   HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)ServiceTaskHandle));
-  printf("SIM800LTask   HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)SIM800LTaskHandle));
-  printf("SecurityTask  HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)SecurityTaskHandle));
-  printf("PIDTask       HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)PIDTaskHandle));
-  printf("DgnTask       HWM: %u\r\n", (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)my_DgnTaskHandle));
-  printf("=============================\r\n");
-
-  heap_diagnostic();
+  /* Структура для динамического отслеживания минимума свободного стека (HWM) */
+  struct {
+    osThreadId_t *handle_ptr;
+    const char *name;
+    unsigned min_free_words;
+  } tasks[] = {
+    {&ConfigTaskHandle,    "ConfigTask",    0xFFFF},
+    {&WebServerTaskHandle, "WebServerTask", 0xFFFF},
+    {&OutputTaskHandle,    "OutputTask",    0xFFFF},
+    {&CronTaskHandle,      "CronTask",      0xFFFF},
+    {&InputTaskHandle,     "InputTask",     0xFFFF},
+    {&EncoderTaskHandle,   "EncoderTask",   0xFFFF},
+    {&ds18b20TaskHandle,   "ds18b20Task",   0xFFFF},
+    {&dht22TaskHandle,     "dht22Task",     0xFFFF},
+    {&ServiceTaskHandle,   "ServiceTask",   0xFFFF},
+    {&SIM800LTaskHandle,   "SIM800LTask",   0xFFFF},
+    {&SecurityTaskHandle,  "SecurityTask",  0xFFFF},
+    {&PIDTaskHandle,       "PIDTask",       0xFFFF},
+    {&my_DgnTaskHandle,    "DgnTask",       0xFFFF},
+    {&LoggerTaskHandle,    "LoggerTask",    0xFFFF}
+  };
+  const size_t num_tasks = sizeof(tasks) / sizeof(tasks[0]);
 
   /* Infinite loop */
   for(;;)
   {
       /* 
        * Ожидаем уведомления от других кусков кода (например HTTP/SMS)
-       * с таймаутом 10000 мс (10 секунд).
-       * Если уведомление пришло — выводим сразу, иначе — раз в 10 секунд.
+       * с уменьшенным таймаутом 5000 мс (5 секунд), чтобы чаще проверять стеки под нагрузкой.
        */
-      ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(10000));
+      ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5000));
+      
       heap_diagnostic();
+
+      /* Проверяем HWM для каждой задачи.
+         Если свободный стек уменьшился ниже ранее зафиксированного минимума — выводим предупреждение. */
+      int printed_header = 0;
+      for (size_t i = 0; i < num_tasks; i++) {
+          if (tasks[i].handle_ptr != NULL && *(tasks[i].handle_ptr) != NULL) {
+              unsigned current_hwm = (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)*(tasks[i].handle_ptr));
+              if (current_hwm < tasks[i].min_free_words) {
+                  if (!printed_header) {
+                      printf("\r\n=== STACK HWM WARNING/UPDATE ===\r\n");
+                      printed_header = 1;
+                  }
+                  if (tasks[i].min_free_words == 0xFFFF) {
+                      /* Первый замер при старте */
+                      printf("  %-15s HWM initial: %u words free (%u bytes)\r\n", 
+                             tasks[i].name, current_hwm, current_hwm * 4);
+                  } else {
+                      /* Снижение HWM */
+                      printf("  %-15s HWM DROPPED: %u -> %u words free (%u bytes free!)\r\n", 
+                             tasks[i].name, tasks[i].min_free_words, current_hwm, current_hwm * 4);
+                  }
+                  tasks[i].min_free_words = current_hwm;
+              }
+          }
+      }
+      if (printed_header) {
+          printf("================================\r\n");
+      }
   }
   /* USER CODE END StartDgnTask */
+}
+
+/* USER CODE BEGIN Header_StartLoggerTask */
+/**
+* @brief Function implementing the LoggerTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartLoggerTask */
+void StartLoggerTask(void *argument)
+{
+  /* USER CODE BEGIN StartLoggerTask */
+    (void)argument;
+    char rx_buf[192 + 16];
+  /* Infinite loop */
+  for(;;)
+  {
+      if (xMessageBuffer != NULL) {
+          size_t bytes_received = xMessageBufferReceive(xMessageBuffer, rx_buf, sizeof(rx_buf) - 1, portMAX_DELAY);
+          if (bytes_received > 1) {
+              LogCategory_t cat = (LogCategory_t)rx_buf[0];
+              char *msg = rx_buf + 1;
+              rx_buf[bytes_received] = '\0'; // ensure null termination
+
+              if (cat < LOG_CAT_COUNT && (g_log_filter_mask & (1u << cat))) {
+                  HAL_UART_Transmit(&huart3, (uint8_t*)cat_prefixes[cat], strlen(cat_prefixes[cat]), 0xFFFF);
+                  HAL_UART_Transmit(&huart3, (uint8_t*)msg, strlen(msg), 0xFFFF);
+              }
+          }
+      } else {
+          osDelay(100);
+      }
+  }
+  /* USER CODE END StartLoggerTask */
 }
 
 /**

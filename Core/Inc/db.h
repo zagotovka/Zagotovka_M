@@ -247,6 +247,7 @@ struct dbSettings { 	// Cтруктура для setting
 	uint8_t year;       // OFFLINE год (25 = 2025-2000)
 	short usehttps;     // enable/disable HTTPS
 	uint8_t pidline;    // Количество видимых PID-строк
+	uint32_t log_filter_mask; // Маска фильтра логов
 };
 
 

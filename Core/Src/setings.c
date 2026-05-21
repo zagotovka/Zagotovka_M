@@ -185,6 +185,7 @@ void SetSettingsConfig() {
   writeField(&USBHFile, buffer, "mon", "%d", SetSettings.mon);
   writeField(&USBHFile, buffer, "year", "%d", SetSettings.year);
   writeField(&USBHFile, buffer, "usehttps", "%d", SetSettings.usehttps);
+  writeField(&USBHFile, buffer, "log_filter_mask", "%u", SetSettings.log_filter_mask);
 
   snprintf(buffer, JSON_BUF_SIZE, "\"tel\":\"%s\"", SetSettings.tel);
   //    printf("+++Real size of SetSettings: %u bytes & SetSettings.usehttps =
@@ -276,6 +277,9 @@ void StartSettingsConfig() {
   for (int i = 0; i < 5; i++) {
     writeField(&USBHFile, buffer, "macaddr%d", "%d", i, 0);
   }
+  // Write default log filter mask (0x3FF = all categories enabled)
+  writeField(&USBHFile, buffer, "log_filter_mask", "%d", 0x3FF);
+
   // Write the last MAC address field without comma
   snprintf(buffer, JSON_BUF_SIZE, "\"macaddr5\":%d", 0);
   f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
@@ -643,6 +647,8 @@ void GetSettingsConfig() {
       SetSettings.usehttps = atoi(value);
       //			printf("Found key: %s, value: %s\r\n", key,
       // value);
+    } else if (strcmp(key, "log_filter_mask") == 0) {
+      SetSettings.log_filter_mask = strtoul(value, NULL, 10);
     }
     keyPos = 0;
     valuePos = 0;

@@ -728,6 +728,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/mysett/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/mysett/set", c->id));
 				handle_mysett_set(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/logfilter"), NULL)) {
+				MG_INFO(("%lu Processing /api/logfilter", c->id));
+				handle_logfilter(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/connection/del"), NULL)) {
 				MG_INFO(("%lu Processing /api/connection/del", c->id));
 				handle_connection_del(c, hm, PinsLinks);
@@ -837,17 +840,17 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		struct mg_ws_message *wm = (struct mg_ws_message *) ev_data;
 		// Правильно для Mongoose 7.13:
 		/* Парсим {"activeTab":"encoder"} без malloc */
-//		char tab[TAB_NAME_MAX] = {0};
-//		if (mg_json_unescape(wm->data, "$.activeTab", tab, sizeof(tab)) > 0) {
-//			for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-//				if (s_ws_clients[i].c == c) {
-//					strncpy(s_ws_clients[i].activeTab, tab, TAB_NAME_MAX - 1);
-//					s_ws_clients[i].activeTab[TAB_NAME_MAX - 1] = '\0';
-//					printf("[WS] id=%lu activeTab=%s\r\n", c->id, tab);
-//					break;
-//				}
-//			}
-//		}
+		char tab[TAB_NAME_MAX] = {0};
+		if (mg_json_unescape(wm->data, "$.activeTab", tab, sizeof(tab)) > 0) {
+			for (int i = 0; i < MAX_WS_CLIENTS; i++) {
+				if (s_ws_clients[i].c == c) {
+					strncpy(s_ws_clients[i].activeTab, tab, TAB_NAME_MAX - 1);
+					s_ws_clients[i].activeTab[TAB_NAME_MAX - 1] = '\0';
+					printf("[WS] id=%lu activeTab=%s\r\n", c->id, tab);
+					break;
+				}
+			}
+		}
 	    /* Обновляем last_activity при любом WS-сообщении от клиента */
 	    for (int i = 0; i < MAX_WS_CLIENTS; i++) {
 	        if (s_ws_clients[i].c == c) {
@@ -1074,7 +1077,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
 	s_mqtt_alive_since = mg_millis();  /* запоминаем время успешного коннекта */
 	s_tcp_backoff = 0;                 /* сброс backoff  -  соединение успешно */
 	s_tcp_delay_idx = 0;
-	printf("[MQTT_OPEN] s_sub_topic='%s' rxmqttop='%s'\r\n",s_sub_topic, SetSettings.rxmqttop);
+	printf("[MQTT] txmqttop='%s' rxmqttop='%s'\r\n", SetSettings.txmqttop, SetSettings.rxmqttop);
     struct mg_str subt = mg_str(s_sub_topic);
     struct mg_str pubt = mg_str(get_mqtt_topic()), data = mg_str("Hello from stm32!");
     MG_INFO(("%lu CONNECTED to %s", c->id, get_mqtt_url()));
@@ -1097,13 +1100,14 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     pub_opts.message = data;
     pub_opts.qos = s_qos, pub_opts.retain = false;
     mg_mqtt_pub(c, &pub_opts);
-   MG_INFO(("%lu PUBLISHED %.*s -> %.*s", c->id, (int) data.len, data.buf, (int) pubt.len, pubt.buf));
+    MG_INFO(("%lu PUBLISHED %.*s -> %.*s", c->id, (int) data.len, data.buf, (int) pubt.len, pubt.buf));
+    mqtt_publish_logfilter_status();
   } else if (ev == MG_EV_MQTT_MSG) {
     // When we get echo response, print it
     struct mg_mqtt_message *mm = (struct mg_mqtt_message *) ev_data;
-//    printf("[MQTT_MSG] topic='%.*s' data='%.*s'\r\n",
-//               (int)mm->topic.len, mm->topic.buf,
-//               (int)mm->data.len, mm->data.buf);
+    printf("[MQTT] topic='%.*s' data='%.*s'\r\n",
+               (int)mm->topic.len, mm->topic.buf,
+               (int)mm->data.len, mm->data.buf);
    MG_INFO(("%lu RECEIVED %.*s <- %.*s", c->id, (int) mm->data.len, mm->data.buf, (int) mm->topic.len, mm->topic.buf));
     /* Dispatch received payload to command handler (через очередь,
        чтобы не блокировать mg_mgr_poll) */

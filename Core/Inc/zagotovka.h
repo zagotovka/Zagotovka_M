@@ -315,6 +315,7 @@ void handle_numline_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_mysett_get(struct mg_connection *c);
 void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_logfilter(struct mg_connection *c, struct mg_http_message *hm);
 void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm, struct dbPinToPin PinsLinks[NUMPINLINKS]);
 void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_temp_get(struct mg_connection *c);

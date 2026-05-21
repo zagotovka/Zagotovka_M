@@ -33,6 +33,7 @@ extern "C" {
 /* USER CODE BEGIN Includes */
 #include "db.h"
 #include "multi_button.h"
+#include "logger.h"
 
 extern const char *s_sub_topic;
 extern int s_qos;
