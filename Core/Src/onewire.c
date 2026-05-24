@@ -77,20 +77,20 @@ void OneWire_Init(OneWire_t* OneWireStruct, GPIO_TypeDef* GPIOx, uint16_t GPIO_P
 inline uint8_t OneWire_Reset(OneWire_t* OneWireStruct)
 {
 	uint8_t i;
-	
-	portENTER_CRITICAL(); // Входим в критическую секцию
+
 	/* Line low, and wait 480us */
 	ONEWIRE_LOW(OneWireStruct);
 	ONEWIRE_OUTPUT(OneWireStruct);
 	ONEWIRE_DELAY(480);
 	ONEWIRE_DELAY(20);
 	/* Release line and wait for 70us */
+	taskENTER_CRITICAL();
 	ONEWIRE_INPUT(OneWireStruct);
 	ONEWIRE_DELAY(70);
 	/* Check bit value */
 	i = HAL_GPIO_ReadPin(OneWireStruct->GPIOx, OneWireStruct->GPIO_Pin);
-	portEXIT_CRITICAL(); // Выходим из критической секции
-	
+	taskEXIT_CRITICAL();
+
 	/* Delay for 410 us */
 	ONEWIRE_DELAY(410);
 	/* Return value of presence pulse, 0 = OK, 1 = ERROR */
@@ -99,60 +99,60 @@ inline uint8_t OneWire_Reset(OneWire_t* OneWireStruct)
 
 inline void OneWire_WriteBit(OneWire_t* OneWireStruct, uint8_t bit)
 {
-	portENTER_CRITICAL(); // Входим в критическую секцию
-	if (bit) 
+	taskENTER_CRITICAL();
+	if (bit)
 	{
 		/* Set line low */
 		ONEWIRE_LOW(OneWireStruct);
 		ONEWIRE_OUTPUT(OneWireStruct);
 		ONEWIRE_DELAY(10);
-		
+
 		/* Bit high */
 		ONEWIRE_INPUT(OneWireStruct);
-		
+
 		/* Wait for 55 us and release the line */
 		ONEWIRE_DELAY(55);
 		ONEWIRE_INPUT(OneWireStruct);
-	} 
-	else 
+	}
+	else
 	{
 		/* Set line low */
 		ONEWIRE_LOW(OneWireStruct);
 		ONEWIRE_OUTPUT(OneWireStruct);
 		ONEWIRE_DELAY(65);
-		
+
 		/* Bit high */
 		ONEWIRE_INPUT(OneWireStruct);
-		
+
 		/* Wait for 5 us and release the line */
 		ONEWIRE_DELAY(5);
 		ONEWIRE_INPUT(OneWireStruct);
 	}
-	portEXIT_CRITICAL(); // Выходим из критической секции
+	taskEXIT_CRITICAL();
 }
 
-inline uint8_t OneWire_ReadBit(OneWire_t* OneWireStruct) 
+inline uint8_t OneWire_ReadBit(OneWire_t* OneWireStruct)
 {
 	uint8_t bit = 0;
-	portENTER_CRITICAL(); // Входим в критическую секцию
+	taskENTER_CRITICAL();
 	/* Line low */
 	ONEWIRE_LOW(OneWireStruct);
 	ONEWIRE_OUTPUT(OneWireStruct);
 	ONEWIRE_DELAY(2);
-	
+
 	/* Release line */
 	ONEWIRE_INPUT(OneWireStruct);
 	ONEWIRE_DELAY(10);
-	
-	/* Read line value */
+
+	/* Read line value — timing-critical sample window, ISR jitter ~5us is tolerable */
 	if (HAL_GPIO_ReadPin(OneWireStruct->GPIOx, OneWireStruct->GPIO_Pin)) {
 		/* Bit is HIGH */
 		bit = 1;
 	}
-	
+
 	/* Wait 50us to complete 60us period */
 	ONEWIRE_DELAY(50);
-	portEXIT_CRITICAL(); // Выходим из критической секции
+	taskEXIT_CRITICAL();
 	/* Return bit value */
 	return bit;
 }

@@ -75,12 +75,15 @@ void logger_save_mask(void) {
 
 void logger_send(LogCategory_t cat, const char *fmt, ...) {
     if (cat >= LOG_CAT_COUNT) return;
-    
+
+    // Fast path: all categories disabled → skip formatting + buffer work
+    if (g_log_filter_mask == 0) return;
+
     // Quick runtime check
     if (!(g_log_filter_mask & (1u << cat))) {
         return;
     }
-    
+
     char buf[192 + 2];
     buf[0] = (char)cat;
     
@@ -101,8 +104,8 @@ void logger_send(LogCategory_t cat, const char *fmt, ...) {
             xMessageBufferSend(xMessageBuffer, buf, total_len, 0);
         } else {
             // Before scheduler: print directly to UART
-            HAL_UART_Transmit(&huart3, (uint8_t*)cat_prefixes[cat], strlen(cat_prefixes[cat]), 0xFFFF);
-            HAL_UART_Transmit(&huart3, (uint8_t*)(buf + 1), strlen(buf + 1), 0xFFFF);
+            HAL_UART_Transmit(&huart3, (uint8_t*)cat_prefixes[cat], strlen(cat_prefixes[cat]), 50);
+            HAL_UART_Transmit(&huart3, (uint8_t*)(buf + 1), strlen(buf + 1), 200);
         }
     }
 }
@@ -169,6 +172,9 @@ int __io_putchar(int ch) {
         return ch;
     }
 
+    // Fast path: all categories disabled → skip buffer allocation, parsing, etc.
+    if (g_log_filter_mask == 0) return ch;
+
     TaskLogBuffer_t *buf = get_task_buffer();
     if (!buf) {
         uint8_t c = (uint8_t)ch;
@@ -216,8 +222,8 @@ int __io_putchar(int ch) {
                 xMessageBufferSend(xMessageBuffer, send_buf, send_len + 2, 0);
             } else {
                 // Before scheduler: print directly to UART
-                HAL_UART_Transmit(&huart3, (uint8_t*)cat_prefixes[cat], strlen(cat_prefixes[cat]), 0xFFFF);
-                HAL_UART_Transmit(&huart3, (uint8_t*)msg_start, send_len, 0xFFFF);
+                HAL_UART_Transmit(&huart3, (uint8_t*)cat_prefixes[cat], strlen(cat_prefixes[cat]), 50);
+                HAL_UART_Transmit(&huart3, (uint8_t*)msg_start, send_len, 200);
             }
         }
         buf->len = 0;

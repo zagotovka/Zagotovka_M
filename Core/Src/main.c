@@ -262,6 +262,7 @@ extern struct dbCron dbCrontxt[MAXSIZE];
 extern struct dbPinsConf PinsConf[NUMPIN];
 extern struct dbPinsInfo PinsInfo[NUMPIN];
 extern struct dbPinToPin PinsLinks[NUMPINLINKS];
+extern bool g_log_filter_from_file;  // Флаг: log_filter_mask был в settings.ini
 
 extern ApplicationTypeDef Appli_state;
 
@@ -1280,7 +1281,7 @@ void StartConfigTask(void *argument)
         if (fresult == FR_OK) {
           GetSettingsConfig(); // если файл "settings.ini" существует, открываем
                                // его и перезаписываем
-          g_log_filter_mask = (SetSettings.log_filter_mask != 0) ? SetSettings.log_filter_mask : LOG_MASK_ALL;
+          g_log_filter_mask = g_log_filter_from_file ? SetSettings.log_filter_mask : LOG_MASK_ALL;
           GetCronConfig();     // если файл "cron.ini" существует, открываем для
                                // чтения.
           GetPinConfig();      // если файл "pins.ini" существует, открываем для
@@ -1483,10 +1484,24 @@ void StartWebServerTask(void *argument)
   char mqtt_topic[100];
   char mqtt_payload[300];
 
-//  MG_INFO(("Starting event loop"));
   static uint32_t lsens_tk = 0;  // Батч-публикация сенсоров: 5000мс
+  /* ── Диагностика: задержка между вызовами mg_mgr_poll ── */
+  static uint32_t s_poll_warn_tk = 0;
+  static uint32_t s_last_poll_tk = 0;
   /* Infinite loop */
   for (;;) {
+    /* Измеряем интервал между poll-вызовами */
+    uint32_t now_poll = HAL_GetTick();
+    uint32_t poll_gap = now_poll - s_last_poll_tk;
+    if (poll_gap > 50 && s_last_poll_tk != 0) {  /* >50ms = starvation */
+      if (now_poll - s_poll_warn_tk > 3000) {     /* не спамим чаще 1р/3с */
+        s_poll_warn_tk = now_poll;
+        printf("[NET] WARN: mg_mgr_poll gap=%lums (starvation!)\r\n",
+               (unsigned long)poll_gap);
+      }
+    }
+    s_last_poll_tk = now_poll;
+
     mg_mgr_poll(mgr, 10);
 
     /* Обработка входящих MQTT-команд (вынесена из fn_mqtt callback,
@@ -1509,6 +1524,7 @@ void StartWebServerTask(void *argument)
         ws_broadcast_all();
       }
     }
+
 
     /* Explicit drain: rapidly clear the queue if disconnected to avoid buildup */
     if (s_conn == NULL || s_conn->is_closing || !mqtt_connected_reported) {
@@ -2834,15 +2850,32 @@ void StartLoggerTask(void *argument)
   for(;;)
   {
       if (xMessageBuffer != NULL) {
+          /* Если все категории отключены — не тратим CPU на приём и UART */
+          if (g_log_filter_mask == 0) {
+              /* Сливаем остатки сообщений, которые могли остаться в буфере */
+              while (xMessageBufferReceive(xMessageBuffer, rx_buf, sizeof(rx_buf) - 1, 0) > 0) {}
+              osDelay(200); /* спим 200ms, пользователь может включить фильтр в любой момент */
+              continue;
+          }
+
           size_t bytes_received = xMessageBufferReceive(xMessageBuffer, rx_buf, sizeof(rx_buf) - 1, portMAX_DELAY);
           if (bytes_received > 1) {
               LogCategory_t cat = (LogCategory_t)rx_buf[0];
               char *msg = rx_buf + 1;
-              rx_buf[bytes_received] = '\0'; // ensure null termination
+              rx_buf[bytes_received] = '\0';
 
               if (cat < LOG_CAT_COUNT && (g_log_filter_mask & (1u << cat))) {
-                  HAL_UART_Transmit(&huart3, (uint8_t*)cat_prefixes[cat], strlen(cat_prefixes[cat]), 0xFFFF);
-                  HAL_UART_Transmit(&huart3, (uint8_t*)msg, strlen(msg), 0xFFFF);
+                  int prefix_len = strlen(cat_prefixes[cat]);
+                  int msg_len = strlen(msg);
+                  int total = prefix_len + msg_len;
+                  /* Сборка в один буфер для одной неблокирующей передачи */
+                  char tx_buf[256];
+                  if (total < (int)sizeof(tx_buf)) {
+                      memcpy(tx_buf, cat_prefixes[cat], prefix_len);
+                      memcpy(tx_buf + prefix_len, msg, msg_len);
+                      // Bounded timeout: 200ms хватает на ~2300 байт на 115200 bps
+                      HAL_UART_Transmit(&huart3, (uint8_t*)tx_buf, total, 200);
+                  }
               }
           }
       } else {

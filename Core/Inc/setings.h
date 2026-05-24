@@ -8,6 +8,8 @@
 #ifndef INC_SETINGS_H_
 #define INC_SETINGS_H_
 
+#include <stdbool.h>
+
 void SetSettingsConfig(void);
 void StartSettingsConfig(void);
 void GetSettingsConfig(void);
@@ -22,6 +24,8 @@ void InitMultibutton(void);
 
 void GetOneWireConfig();
 void SetOneWireConfig();
+
+extern bool g_log_filter_from_file; // Флаг: log_filter_mask был прочитан из settings.ini
 
 void GetPidConfig();
 void SetPidConfig();

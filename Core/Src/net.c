@@ -406,7 +406,14 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
         unsigned int local_port = mg_ntohs(c->loc.port);
         char buf_rem[32];
         mg_snprintf(buf_rem, sizeof(buf_rem), "%M", mg_print_ip_port, &c->rem);
-        printf("[NET] new conn from %s\r\n", buf_rem);
+        /* ── Диагностика backlog: интервал и счётчик ── */
+        static uint32_t s_last_accept_tk = 0;
+        uint32_t now_accept = HAL_GetTick();
+        uint32_t accept_interval = now_accept - s_last_accept_tk;
+        s_last_accept_tk = now_accept;
+        printf("[NET] ACCEPT #%d from %s port=%u dt=%lums total_conns=%d\r\n",
+               (int)s_total_conns, buf_rem, local_port,
+               (unsigned long)accept_interval, s_total_conns);
         MG_INFO(("Accept: local %M remote %M", mg_print_ip_port, &c->loc, mg_print_ip_port, &c->rem));
 
         /* ── Блокировка внешних сканеров при выключенном HTTPS ── */
@@ -882,8 +889,16 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
 	case MG_EV_CLOSE:
 		if (!c->is_listening && s_total_conns > 0) s_total_conns--;
+		/* Диагностика: почему закрылось соединение */
+		if (c->is_websocket) {
+			printf("[WS] CLOSE id=%lu is_draining=%d is_closing=%d send.len=%lu recv.len=%lu total=%d\r\n",
+			       c->id, (int)c->is_draining, (int)c->is_closing,
+			       (unsigned long)c->send.len, (unsigned long)c->recv.len,
+			       s_total_conns);
+		} else {
+			MG_INFO(("%lu Connection closed (TLS: %d, total=%d)", c->id, c->is_tls, s_total_conns));
+		}
 		ws_client_remove(c);
-		MG_INFO(("%lu Connection closed (TLS: %d, total=%d)", c->id, c->is_tls, s_total_conns));
 		break;
 
 	case MG_EV_ERROR:
@@ -930,6 +945,10 @@ static int ws_append_block(char *buf, int off, int bufsize,
 
 void ws_broadcast_all(void) {
   if (s_ws_count == 0) return;
+
+  /* ── Диагностика: измеряем время выполнения broadcast ── */
+  static uint32_t s_bc_warn_tk = 0;
+  uint32_t bc_t0 = HAL_GetTick();
 
   static char ws_buf[BUFFER_SIZE];
   static char ws_json[BUFFER_SIZE]; /* собственный буфер вместо глобального jsonbuf */
@@ -1037,6 +1056,16 @@ void ws_broadcast_all(void) {
     off += snprintf(ws_buf + off, BUFFER_SIZE - off, "}");
 
     mg_ws_send(c, ws_buf, (size_t)off, WEBSOCKET_OP_TEXT);
+  }
+
+  /* Предупреждение: broadcast занял > 30ms → блокирует mg_mgr_poll */
+  uint32_t bc_elapsed = HAL_GetTick() - bc_t0;
+  if (bc_elapsed > 30) {
+    if (HAL_GetTick() - s_bc_warn_tk > 5000) { /* не спамим чаще 1 раза в 5с */
+      s_bc_warn_tk = HAL_GetTick();
+      printf("[WS] WARN: ws_broadcast_all took %lums (>30ms!) ws_count=%d\r\n",
+             (unsigned long)bc_elapsed, s_ws_count);
+    }
   }
 }
 

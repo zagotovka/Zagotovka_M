@@ -990,7 +990,7 @@ struct timeval {
 #endif
 
 #ifndef MG_DATA_SIZE
-#define MG_DATA_SIZE 32  // struct mg_connection :: data size
+#define MG_DATA_SIZE 100  //было 32! struct mg_connection :: data size
 #endif
 
 #ifndef MG_MAX_HTTP_HEADERS

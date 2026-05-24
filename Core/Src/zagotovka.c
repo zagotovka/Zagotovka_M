@@ -6,6 +6,7 @@
  */
 
 #include "zagotovka.h"
+#include "setings.h"
 #include "logger.h"
 #include "ds18b20.h"
 #include "ds18b20Config.h"
@@ -1507,6 +1508,7 @@ void handle_logfilter(struct mg_connection *c, struct mg_http_message *hm) {
           }
         }
         logger_set_mask(current_mask);
+        SetSettingsConfig();  // Сохраняем в settings.ini для персистентности
         mqtt_publish_logfilter_status();
         cJSON_Delete(root);
       }
@@ -4454,7 +4456,6 @@ uint8_t DHT22_Start(uint8_t index) {
   GPIO_TypeDef *port = PinsInfo[dht22[index].id].gpio_name;
   uint16_t pin = PinsInfo[dht22[index].id].hal_pin;
   if (!port) return 0; // Protection against uninitialized pins
-  //    ENTER_CRITICAL();
   GPIO_InitTypeDef GPIO_InitStructPrivate = {0};
   GPIO_InitStructPrivate.Pin = pin;
   GPIO_InitStructPrivate.Mode = GPIO_MODE_OUTPUT_PP;
@@ -4463,27 +4464,39 @@ uint8_t DHT22_Start(uint8_t index) {
   HAL_GPIO_Init(port, &GPIO_InitStructPrivate);
 
   HAL_GPIO_WritePin(port, pin, GPIO_PIN_RESET);
-  delay_us(1300);
+  delay_us(1500);
+
+  taskENTER_CRITICAL();
   HAL_GPIO_WritePin(port, pin, GPIO_PIN_SET);
   delay_us(30);
-
   GPIO_InitStructPrivate.Mode = GPIO_MODE_INPUT;
   GPIO_InitStructPrivate.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(port, &GPIO_InitStructPrivate);
 
-  delay_us(40);
+  // Ожидаем, пока датчик прижмет линию к LOW (таймаут 100 мкс)
+  uint32_t t_start = DWT->CYCCNT;
+  uint32_t t_cycles = 100 * (SystemCoreClock / 1000000);
+  while (HAL_GPIO_ReadPin(port, pin) && (DWT->CYCCNT - t_start) < t_cycles) {
+  }
 
+  // Если датчик прижал линию, ждем пока он ее отпустит (таймаут 150 мкс)
   if (!HAL_GPIO_ReadPin(port, pin)) {
-    delay_us(80);
-    if (HAL_GPIO_ReadPin(port, pin))
+    t_start = DWT->CYCCNT;
+    t_cycles = 150 * (SystemCoreClock / 1000000);
+    while (!HAL_GPIO_ReadPin(port, pin) && (DWT->CYCCNT - t_start) < t_cycles) {
+    }
+
+    // Если датчик отпустил линию, ждем спада перед началом передачи данных (таймаут 150 мкс)
+    if (HAL_GPIO_ReadPin(port, pin)) {
+      t_start = DWT->CYCCNT;
+      t_cycles = 150 * (SystemCoreClock / 1000000);
+      while (HAL_GPIO_ReadPin(port, pin) && (DWT->CYCCNT - t_start) < t_cycles) {
+      }
       Response = 1;
+    }
   }
 
-  uint32_t dht_start = DWT->CYCCNT;
-  uint32_t dht_cycles = 100 * (SystemCoreClock / 1000000);
-  while (HAL_GPIO_ReadPin(port, pin) && (DWT->CYCCNT - dht_start) < dht_cycles) {
-  }
-  //    EXIT_CRITICAL();
+  taskEXIT_CRITICAL();
   return Response;
 }
 
@@ -4493,24 +4506,32 @@ uint8_t DHT22_Read(uint8_t index) {
   uint16_t pin = PinsInfo[dht22[index].id].hal_pin;
   if (!port) return 0; // Protection against uninitialized pins
   uint8_t data = 0;
-  //    ENTER_CRITICAL();
   for (uint8_t i = 0; i < 8; i++) {
+    taskENTER_CRITICAL();
+    // 1. Ожидаем перехода линии в HIGH (начало полезного сигнала бита)
     uint32_t t_start = DWT->CYCCNT;
     uint32_t t_cycles = 100 * (SystemCoreClock / 1000000);
-    while (!HAL_GPIO_ReadPin(port, pin) && (DWT->CYCCNT - t_start) < t_cycles)
-      ;
+    while (!HAL_GPIO_ReadPin(port, pin) && (DWT->CYCCNT - t_start) < t_cycles) {
+    }
 
-    delay_us(40);
+    uint32_t t_rise = DWT->CYCCNT;
 
-    if (HAL_GPIO_ReadPin(port, pin)) {
+    // 2. Ожидаем спада линии в LOW (конец полезного сигнала бита)
+    while (HAL_GPIO_ReadPin(port, pin) && (DWT->CYCCNT - t_rise) < t_cycles) {
+    }
+
+    uint32_t t_fall = DWT->CYCCNT;
+    taskEXIT_CRITICAL();
+
+    // Измеряем длительность HIGH-импульса в микросекундах
+    uint32_t high_us = (t_fall - t_rise) / (SystemCoreClock / 1000000);
+
+    // По спецификации DHT22: HIGH импульс ~26-28 мкс - это '0', ~70 мкс - это '1'.
+    // Используем порог 40 мкс для надежной дискриминации.
+    if (high_us > 40) {
       data |= (1 << (7 - i));
-      uint32_t h_start = DWT->CYCCNT;
-      uint32_t h_cycles = 100 * (SystemCoreClock / 1000000);
-      while (HAL_GPIO_ReadPin(port, pin) && (DWT->CYCCNT - h_start) < h_cycles)
-        ;
     }
   }
-  //    EXIT_CRITICAL();
   return data;
 }
 
@@ -4521,17 +4542,22 @@ void process_dht22(uint8_t indx) {
   }
   dht22[indx].lastread = tnow;
 
-  /* Критическая секция ТОЛЬКО на bit-banging (timing-critical) */
+  /* Suspend scheduler to prevent task preemption during the ~5ms DHT22
+   * bit-banging transaction. DHT22_Start/DHT22_Read use per-bit
+   * taskENTER_CRITICAL() for sub-100us timing precision — between bits
+   * interrupts are enabled, giving ETH DMA/SysTick their service windows. */
+  vTaskSuspendAll();
+
   uint8_t response;
   uint8_t data[5] = {0};
-  ENTER_CRITICAL();
   response = DHT22_Start(indx);
   if (response) {
     for (uint8_t i = 0; i < 5; i++) {
       data[i] = DHT22_Read(indx);
     }
   }
-  EXIT_CRITICAL();
+
+  xTaskResumeAll();
 
   /* Обработка данных — ВНЕ критической секции */
   if (response) {

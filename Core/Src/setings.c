@@ -24,6 +24,7 @@ extern osThreadId_t my_DgnTaskHandle;
 // char fsbuffer[35000] = { 0 };//50500/35500 Размер fsbuffer он должен быть
 // достаточным для хранения всего JSON-файла для GetPinConfig().
 char currentChar; // Альтерантива fsbuffer! Считываем файлы "settings.ini",
+bool g_log_filter_from_file = false; // Флаг: log_filter_mask был прочитан из settings.ini
                   // "cron.ini"  посимвольно и каждый символ сохраняем в
                   // currentChar.
 #define JSON_BUF_SIZE 256 // Для новой версии SetSetingsConfig()
@@ -649,6 +650,7 @@ void GetSettingsConfig() {
       // value);
     } else if (strcmp(key, "log_filter_mask") == 0) {
       SetSettings.log_filter_mask = strtoul(value, NULL, 10);
+      g_log_filter_from_file = true; // Маска была явно прочитана из файла
     }
     keyPos = 0;
     valuePos = 0;
