@@ -23,8 +23,7 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 
-#define BUFFER_SIZE 10000 //(max Button = 9835 символов, это не точно!)
-/* jsonbuf теперь static в zagotovka.c — для ws_broadcast_all() свой буфер в net.c */
+#define BUFFER_SIZE 10000 /* max Button = 9835 символов, это не точно! */
 #define ENTER_CRITICAL() taskENTER_CRITICAL()
 #define EXIT_CRITICAL()  taskEXIT_CRITICAL()
 
@@ -326,8 +325,20 @@ void handle_sensor_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_onewire_set(struct mg_connection *c, struct mg_http_message *hm);
 void api_handler(struct mg_connection *c, struct mg_http_message *hm);
 
-/* ─── WebSocket broadcast ─── */
-void ws_broadcast_all(void);
+/* ─── State Slice version counters ─── */
+extern volatile uint32_t g_ver_common;
+extern volatile uint32_t g_ver_sensors;
+extern volatile uint32_t g_ver_pid;
+extern volatile uint32_t g_ver_encoder;
+extern volatile uint32_t g_ver_onewire;
+extern volatile uint32_t g_ver_switch;
+extern volatile uint32_t g_ver_button;
+extern volatile uint32_t g_ver_security;
+
+/* ─── Mark slice dirty ─── */
+void mark_slice_dirty(volatile uint32_t *ver);
+void mark_slice_dirty_from_isr(volatile uint32_t *ver);
+
 void gen_pintopin_json(struct dbPinToPin *PinsLinks, char *buffer, int buffer_size);
 
 //void setup_mqtt(struct mg_mgr *mgr, struct mg_tcpip_if *mif);

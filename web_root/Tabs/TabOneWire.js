@@ -1,8 +1,8 @@
 import { ModalEditSensor } from '../Modals/ModalEditSensor.js';
 import { ModalOneWire } from '../Modals/ModalOneWire.js';
-import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
 import { safeFetch } from '../safeFetch.js';
-import { wsSubscribe, wsUnsubscribe } from '../ws-client.js';
+import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
@@ -263,11 +263,22 @@ const TabOneWire = () => {
   };
 
   useEffect(() => {
-    refresh();
-    safeFetch('/api/temp/get', 'temp').then(updateSensorData); // initial fallback
+    let timer = null;
+    let isFetching = false;
 
-    const wsTempId = wsSubscribe('temp', updateSensorData);
-    return () => wsUnsubscribe(wsTempId);
+    refresh();
+    safeFetch('/api/temp/get', 'temp').then(updateSensorData);
+
+    const poll = () => {
+      if (isFetching) return;
+      isFetching = true;
+      safeFetch('/api/state/sensors', 'sensors-slice').then(data => {
+        if (data) updateSensorData(data);
+      }).finally(() => { isFetching = false; });
+    };
+
+    timer = setInterval(poll, window.pollIntervalMs || 3000);
+    return () => clearInterval(timer);
   }, []);
 
   const closeModal = () => { setIsModalOpen(false); setSelectedSensor(null); setEditingOneWire(null); };

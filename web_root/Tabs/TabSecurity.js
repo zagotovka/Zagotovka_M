@@ -1,8 +1,8 @@
 import { ModalSIM800L } from '../Modals/ModalSIM800L.js';
 import { ModalSecurity } from '../Modals/ModalSecurity.js';
-import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
 import { safeFetch } from '../safeFetch.js';
-import { wsSubscribe, wsUnsubscribe } from '../ws-client.js';
+import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, ruLangsecurity, ruLangsecuritypins } from '../rulang.js';
@@ -277,12 +277,22 @@ const TabSecurity = () => {
   };
 
   useEffect(() => {
-    fetch('/api/security/get').then(r => r.json()).then(data => setLanguage(data.lang || 'ru'));
-    
-    safeFetch('/api/security/get', 'security').then(updateSecurityData); // initial fallback
+    let timer = null;
+    let isFetching = false;
 
-    const wsSecId = wsSubscribe('security', updateSecurityData);
-    return () => wsUnsubscribe(wsSecId);
+    fetch('/api/security/get').then(r => r.json()).then(data => setLanguage(data.lang || 'ru'));
+    safeFetch('/api/security/get', 'security').then(updateSecurityData);
+
+    const poll = () => {
+      if (isFetching) return;
+      isFetching = true;
+      safeFetch('/api/security', 'security-slice').then(data => {
+        if (data) updateSecurityData(data);
+      }).finally(() => { isFetching = false; });
+    };
+
+    timer = setInterval(poll, window.pollIntervalMs || 3000);
+    return () => clearInterval(timer);
   }, [isSaving, lastSaveTime]);
 
   const handleSim800lSave = async (updated) => {

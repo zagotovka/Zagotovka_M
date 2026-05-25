@@ -1,7 +1,7 @@
 import { ModalSwitch } from '../Modals/ModalSwitch.js';
-import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
 import { safeFetch } from '../safeFetch.js';
-import { wsSubscribe, wsUnsubscribe } from '../ws-client.js';
+import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
@@ -100,6 +100,7 @@ function TabSwitch({ }) {
   const [pintopin, setPintopin] = useState([]);
   const [debugInfo, setDebugInfo] = useState('');
   const [isFormValid, setIsFormValid] = useState(false);
+  const isPendingOnOff = useRef(false);
 
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => { initGlobalTooltip(); }, []);
@@ -145,23 +146,27 @@ function TabSwitch({ }) {
   };
 
   useEffect(() => {
-    fetchSwitchData();   // initial fallback
+    let timer = null;
+    let isFetching = false;
+
+    // Initial full data load
+    fetchSwitchData();
     fetchPintopinData();
 
-    const wsSwId = wsSubscribe('switch', data => {
-      if (data && data.switches) {
-        setSwitch(data.switches);
-        setLanguage(data.lang);
-      }
-    });
-    const wsPtpId = wsSubscribe('pintopin', data => {
-      if (data) setPintopin(data);
-    });
-
-    return () => {
-      wsUnsubscribe(wsSwId);
-      wsUnsubscribe(wsPtpId);
+    // Polling with ETag — pintopin included in slice response
+    const poll = () => {
+      if (isFetching) return;
+      if (isPendingOnOff.current) return;
+      isFetching = true;
+      safeFetch('/api/switches', 'switch-slice').then(data => {
+        if (!data) return;
+        if (data.switches) { setSwitch(data.switches); setLanguage(data.lang); }
+        if (data.pintopin) setPintopin(data.pintopin);
+      }).finally(() => { isFetching = false; });
     };
+
+    timer = setInterval(poll, window.pollIntervalMs || 3000);
+    return () => clearInterval(timer);
   }, []);
 
   const getConnectedPins = (switchId) => {
@@ -270,6 +275,14 @@ function TabSwitch({ }) {
   const handleSwitchChange = (updatedSwitch) => {
     console.log('handleSwitchChange:', updatedSwitch);
 
+    // Optimistic UI update
+    setSwitch((prevSwitches) =>
+      prevSwitches.map((sw) =>
+        sw.id === updatedSwitch.id ? updatedSwitch : sw
+      )
+    );
+    isPendingOnOff.current = true;
+
     fetch('/api/onoff/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -281,6 +294,9 @@ function TabSwitch({ }) {
       })
       .catch((error) => {
         console.error('Error calling /api/onoff/set:', error);
+      })
+      .finally(() => {
+        isPendingOnOff.current = false;
       });
 
     closeModal();

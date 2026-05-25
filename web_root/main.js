@@ -1,6 +1,6 @@
 // NOTE: API calls must start with 'api/' in order to serve the app at any URI
 import { safeFetch } from './safeFetch.js';
-import { wsSubscribe, wsUnsubscribe, wsSendActiveTab } from './ws-client.js';
+import { StateContext } from './context.js';
 
 ('use strict');
 import {
@@ -9,6 +9,7 @@ import {
   useState,
   useEffect,
   useRef,
+  useContext,
   html,
   Router
 } from './bundle.js';
@@ -104,12 +105,10 @@ const DelLink = ({ title, href, ids, onclicks }) =>
 
 function Header({ logout, user, setShowSidebar, showSidebar }) {
   const [now, setNow] = useState(new Date());
-  const [stm32Time, setStm32Time] = useState(null);
+  const commonData = useContext(StateContext);
 
   // Функция для преобразования данных времени STM32 в объект Date
-  const stm32ToDate = (timeData, timezone) => {
-    //console.log('timeData.hour:', timeData.hour);
-    //console.log('Timezone:', timezone);
+  const stm32ToDate = (timeData) => {
     return new Date(
       timeData.year + 1900,
       timeData.mon,
@@ -120,27 +119,15 @@ function Header({ logout, user, setShowSidebar, showSidebar }) {
     );
   };
 
-  // Функция для обновления времени STM32
-  const handleStm32TimeData = (data) => {
-    if (data && data.status && data.time) {
-      setStm32Time(stm32ToDate(data.time, data.timezone));
-    } else if (data) {
-      setStm32Time(null);
-    }
-  };
-
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
-    
-    safeFetch('/api/stm32-time', 'stm32-time').then(handleStm32TimeData); // Первоначальное получение времени STM32
-
-    const wsTimeId = wsSubscribe('time', handleStm32TimeData);
-
-    return () => {
-      clearInterval(interval);
-      wsUnsubscribe(wsTimeId);
-    };
+    return () => clearInterval(interval);
   }, []);
+
+  // STM32 time from common state slice
+  const stm32Time = commonData && commonData.time && commonData.time.status
+    ? stm32ToDate(commonData.time.time)
+    : null;
 
   const formatDate = (date) => {
     return date.toLocaleDateString('ru-RU', {
@@ -904,6 +891,7 @@ const App = function ({ }) {
   const [url, setUrl] = useState('/');
   const [user, setUser] = useState('');
   const [showSidebar, setShowSidebar] = useState(true);
+  const [commonData, setCommonData] = useState(null);
 
   const logout = () => fetch('api/logout').then((r) => setUser(''));
   const login = (r) =>
@@ -916,6 +904,29 @@ const App = function ({ }) {
 
   useEffect(() => fetch('api/login').then(login), []);
 
+  // Adaptive polling: active, 30s hidden
+  window.pollIntervalMs = window.pollIntervalMs || 1000; // было 3000s
+  useEffect(() => {
+    const onVis = () => {
+      window.pollIntervalMs = document.hidden ? 30000 : 1000; // было 3000s
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+
+  // Common state polling — always, every 10s
+  useEffect(() => {
+    if (!user) return;
+    const poll = () => {
+      safeFetch('/api/state/common', 'common-state').then(data => {
+        if (data) setCommonData(data);
+      });
+    };
+    poll(); // Initial fetch, было 10000
+    const timer = setInterval(poll, 1000);
+    return () => clearInterval(timer);
+  }, [user]);
+
   if (loading) return ''; // Show blank page on initial load
   if (!user)
     return html`<${Login}
@@ -925,7 +936,8 @@ const App = function ({ }) {
       tipText="To login, use: admin/admin, user1/user1, user2/user2"
     />`; // If not logged in, show login screen
 
-  return html` <div class="min-h-screen bg-slate-100" id="mains">
+  return html`<${StateContext.Provider} value=${commonData}>
+   <div class="min-h-screen bg-slate-100" id="mains">
     <${Sidebar} url=${url} show=${showSidebar} />
     <${Header}
       logout=${logout}
@@ -937,12 +949,7 @@ const App = function ({ }) {
       class="${showSidebar && 'pl-72'} transition-all duration-300 transform"
     >
       <${Router}
-        onChange=${(ev) => {
-          setUrl(ev.url);
-          const _tab = {'/switch':'switch','/button':'button','/encoder':'encoder',
-            '/pid':'pid','/1wire':'temp','/Security':'security'};
-          wsSendActiveTab(_tab[ev.url] || '');
-        }}
+        onChange=${(ev) => setUrl(ev.url)}
         history=${History.createHashHistory()}
       >
         <${Main} default=${true} />
@@ -958,6 +965,7 @@ const App = function ({ }) {
         <${FirmwareUpdate} path="update" />
       <//>
     <//>
+   <//>
   <//>`;
 };
 

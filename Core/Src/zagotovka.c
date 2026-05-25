@@ -99,8 +99,33 @@ void log_headers(const char *headers) {
 }
 
 /*********************** End delay_us() **************************/
+
+/* ─── State Slice version counters ─── */
+volatile uint32_t g_ver_common  = 1;
+volatile uint32_t g_ver_sensors = 1;
+volatile uint32_t g_ver_pid     = 1;
+volatile uint32_t g_ver_encoder = 1;
+volatile uint32_t g_ver_onewire = 1;
+volatile uint32_t g_ver_switch  = 1;
+volatile uint32_t g_ver_button  = 1;
+volatile uint32_t g_ver_security = 1;
+
+void mark_slice_dirty(volatile uint32_t *ver) {
+    taskENTER_CRITICAL();
+    (*ver)++;
+    taskEXIT_CRITICAL();
+}
+
+void mark_slice_dirty_from_isr(volatile uint32_t *ver) {
+    UBaseType_t uxSaved = taskENTER_CRITICAL_FROM_ISR();
+    (*ver)++;
+    taskEXIT_CRITICAL_FROM_ISR(uxSaved);
+}
+
+static char g_buf[BUFFER_SIZE]; /* общий буфер для gen_* обработчиков */
+
 extern uint64_t s_boot_timestamp;
-static char jsonbuf[BUFFER_SIZE]; /* file-local: НЕ extern, ws_broadcast_all() имеет свой буфер */
+/* g_buf moved before stream_* functions below */
 extern osMessageQueueId_t outputQueueHandle;
 /* A3: global data_pin removed — each function uses a local copy */
 /* A4: global mqttMsg removed — each send site uses a local copy */
@@ -266,12 +291,12 @@ void gen_select_json(const struct dbPinsInfo *pins_info,
   //    printf("Generated SELECT json:\n%s\n", buffer);
 }
 void handle_select_get(struct mg_connection *c) {
-  gen_select_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+  gen_select_json(PinsInfo, PinsConf, NUMPIN, g_buf, BUFFER_SIZE);
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
+  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
 }
 void handle_select_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -410,6 +435,17 @@ void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
   if (hm->body.len > 0) {
     printf("We got a ONOFF JSON: %.*s\n", (int)hm->body.len, hm->body.buf);
     parse_onoff_json(hm->body.buf, PinsConf, NUMPIN);
+    /* Mark the relevant version counter dirty immediately so ETag changes.
+       SetPinConfig() also does this, but only after the save queue drains;
+       if the filesystem is unavailable the version would never increment. */
+    if (onoffid >= 0 && onoffid < NUMPIN) {
+      switch (PinsConf[onoffid].topin) {
+        case 1:  mark_slice_dirty(&g_ver_button);   break;
+        case 3:  mark_slice_dirty(&g_ver_switch);    break;
+        case 8:  mark_slice_dirty(&g_ver_encoder);   break;
+        case 10: mark_slice_dirty(&g_ver_security);  break;
+      }
+    }
     char response[256];
     snprintf(
         response, sizeof(response),
@@ -465,21 +501,21 @@ void gen_pintopin_json(struct dbPinToPin *PinsLinks, char *buffer,
   //	printf("Generated pintopin JSON:\n%s\n", buffer);
 }
 void handle_pintopin_get(struct mg_connection *c) {
-  gen_pintopin_json(PinsLinks, jsonbuf, BUFFER_SIZE);
+  gen_pintopin_json(PinsLinks, g_buf, BUFFER_SIZE);
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
+  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
 }
 
 void handle_switch_get(struct mg_connection *c) {
-  gen_switch_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+  gen_switch_json(PinsInfo, PinsConf, NUMPIN, g_buf, BUFFER_SIZE);
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
+  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
 }
 void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm) {
   if (hm->body.len > 0) {
@@ -672,12 +708,12 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
 }
 /*******************************************************************************************************************/
 void handle_button_get(struct mg_connection *c) {
-  gen_button_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+  gen_button_json(PinsInfo, PinsConf, NUMPIN, g_buf, BUFFER_SIZE);
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
+  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
 }
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -893,13 +929,13 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
 }
 
 void handle_encoder_get(struct mg_connection *c) {
-  gen_encoder_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE, PinsLinks,
+  gen_encoder_json(PinsInfo, PinsConf, NUMPIN, g_buf, BUFFER_SIZE, PinsLinks,
                    NUMPINLINKS);
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
+  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
 }
 void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -1231,12 +1267,12 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
 }
 
 void handle_timers_get(struct mg_connection *c) {
-  gen_timer_json(dbCrontxt, MAXSIZE, jsonbuf, BUFFER_SIZE);
+  gen_timer_json(dbCrontxt, MAXSIZE, g_buf, BUFFER_SIZE);
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
+  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
 }
 void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -1412,12 +1448,12 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
 }
 
 void handle_mysett_get(struct mg_connection *c) {
-  gen_mysett_json(&SetSettings, jsonbuf, BUFFER_SIZE);
+  gen_mysett_json(&SetSettings, g_buf, BUFFER_SIZE);
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
+  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
 }
 void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -2885,8 +2921,8 @@ void handle_onewire_get(struct mg_connection *c) {
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  gen_onewire_json(jsonbuf, BUFFER_SIZE);
-  mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
+  gen_onewire_json(g_buf, BUFFER_SIZE);
+  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
 }
 bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
   if (jstr == NULL)
@@ -3264,12 +3300,12 @@ void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm) {
   mg_http_reply(c, 200, extra_headers, "%s", response);
 }
 void handle_temp_get(struct mg_connection *c) {
-  pars_temp_sensors(jsonbuf, BUFFER_SIZE);
+  pars_temp_sensors(g_buf, BUFFER_SIZE);
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
+  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
 }
 int gen_security_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pins_conf, uint8_t num_pins, char *buffer, int buffer_size) {
   if (buffer == NULL || buffer_size <= 0) {
@@ -3323,12 +3359,12 @@ int gen_security_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pin
 }
 
 void handle_security_get(struct mg_connection *c) {
-  gen_security_json(PinsInfo, PinsConf, NUMPIN, jsonbuf, BUFFER_SIZE);
+  gen_security_json(PinsInfo, PinsConf, NUMPIN, g_buf, BUFFER_SIZE);
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", jsonbuf);
+  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
 }
 
 void parse_sim800l_json(const char *buffer) {
@@ -6064,8 +6100,8 @@ void parse_pidline_json(char *json_string, struct dbSettings *settings) {
 
 /* ──── handle_pid_get: HTTP GET /api/pid/get ──── */
 void handle_pid_get(struct mg_connection *c) {
-  gen_pid_json(jsonbuf, BUFFER_SIZE);
-  mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", jsonbuf);
+  gen_pid_json(g_buf, BUFFER_SIZE);
+  mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", g_buf);
 }
 
 /* ──── handle_pid_set: HTTP POST /api/pid/set ──── */
@@ -6096,10 +6132,10 @@ void handle_pidline_set(struct mg_connection *c, struct mg_http_message *hm) {
                   "{\"error\":\"payload too large\"}");
     return;
   }
-  memcpy(jsonbuf, hm->body.buf, hm->body.len);
-  jsonbuf[hm->body.len] = '\0';
+  memcpy(g_buf, hm->body.buf, hm->body.len);
+  g_buf[hm->body.len] = '\0';
 
-  parse_pidline_json(jsonbuf, &SetSettings);
+  parse_pidline_json(g_buf, &SetSettings);
 
   /* Сохранение настроек */
   uint8_t num = 2;
@@ -6715,10 +6751,10 @@ void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
                   "{\"error\":\"payload too large\"}");
     return;
   }
-  memcpy(jsonbuf, hm->body.buf, hm->body.len);
-  jsonbuf[hm->body.len] = '\0';
+  memcpy(g_buf, hm->body.buf, hm->body.len);
+  g_buf[hm->body.len] = '\0';
 
-  cJSON *root = cJSON_Parse(jsonbuf);
+  cJSON *root = cJSON_Parse(g_buf);
   if (!root) {
     mg_http_reply(c, 400, "Content-Type: application/json\r\n",
                   "{\"error\":\"json parse error\"}");

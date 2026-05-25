@@ -103,7 +103,7 @@ function TabCron({ }) {
     fetch('/api/cron/get')
       .then((r) => r.json())
       .then((r) => {
-        console.log('API response:', r);
+//        console.log('API response:', r);
         if (r && Array.isArray(r.timers)) {
           setCron(r.timers);
           setLanguage(r.lang || 'ru');
@@ -141,7 +141,7 @@ function TabCron({ }) {
       body: JSON.stringify({ numline: value })
     })
       .then((response) => response.json())
-      .then((data) => console.log('Numline sent to stm32:', data))
+//      .then((data) => console.log('Numline sent to stm32:', data))
       .catch((error) => console.error('Error sending Crone line to stm32:', error));
   };
 

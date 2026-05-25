@@ -36,11 +36,11 @@ export function safeFetch(url, key, opts = {}, timeoutMs = 5000) {
 
   return fetch(url, { ...opts, signal: controller.signal })
     .then(r => {
+      if (r.status === 304) return null;  // ETag match, no change
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
     })
     .catch(err => {
-      // Тихо глотаем AbortError (таймаут) и сетевые ошибки при polling
       if (err.name !== 'AbortError') {
         console.warn(`[safeFetch] ${key}: ${err.message}`);
       }

@@ -1303,6 +1303,10 @@ void SetPinConfig() {
   if (SetSettings.check_mqtt) {
     mqtt_queue_send_safe(1, 0, 0, 0);
   }
+  mark_slice_dirty(&g_ver_button);
+  mark_slice_dirty(&g_ver_switch);
+  mark_slice_dirty(&g_ver_encoder);
+  mark_slice_dirty(&g_ver_security);
 }
 
 void GetPinToPin() {
@@ -1405,6 +1409,8 @@ void SetPinToPin() {
 
   f_close(&USBHFile);
   printf("File 'PINTOPIN.INI' updated successfully!\r\n");
+  mark_slice_dirty(&g_ver_switch);
+  mark_slice_dirty(&g_ver_encoder);
 }
 
 void InitPin() {
@@ -2264,6 +2270,8 @@ cleanup:
     printf("Error: Failed to write to onewire.ini (error: %d)\n", fresult);
   }
   f_close(&USBHFile);
+  mark_slice_dirty(&g_ver_sensors);
+  mark_slice_dirty(&g_ver_onewire);
 }
 /***********************************************************************************************/
 
@@ -2470,6 +2478,7 @@ cleanup:
   if (fresult != FR_OK) {
     printf("Error: Failed to write pid.ini (error: %d)\n", fresult);
   }
+  mark_slice_dirty(&g_ver_pid);
   f_close(&USBHFile);
   printf("[PID] Config saved to pid.ini\r\n");
 }

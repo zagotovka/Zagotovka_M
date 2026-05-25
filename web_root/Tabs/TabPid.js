@@ -1,7 +1,7 @@
 import { ModalPid } from '../Modals/ModalPid.js';
-import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
 import { safeFetch } from '../safeFetch.js';
-import { wsSubscribe, wsUnsubscribe } from '../ws-client.js';
+import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, rulangpid } from '../rulang.js';
@@ -200,21 +200,30 @@ function TabPid({ }) {
   };
 
   useEffect(() => {
-    fetchPidData();   // initial fallback
+    let timer = null;
+    let isFetching = false;
 
-    const wsPidId = wsSubscribe('pid', data => {
+    fetchPidData();
+
+    const poll = () => {
+      if (isFetching) return;
       if (isPendingOnOff.current) return;
-      if (data && Array.isArray(data.pid)) {
-        setPid(data.pid);
-        setLanguage(data.lang || 'ru');
-        if (typeof data.pidline === 'number') {
-          setPidline(data.pidline);
-          setVisiblePids(data.pidline);
+      isFetching = true;
+      safeFetch('/api/pid', 'pid-slice').then(data => {
+        if (!data) return;
+        if (data && Array.isArray(data.pid)) {
+          setPid(data.pid);
+          setLanguage(data.lang || 'ru');
+          if (typeof data.pidline === 'number') {
+            setPidline(data.pidline);
+            setVisiblePids(data.pidline);
+          }
         }
-      }
-    });
+      }).finally(() => { isFetching = false; });
+    };
 
-    return () => wsUnsubscribe(wsPidId);
+    timer = setInterval(poll, window.pollIntervalMs || 3000);
+    return () => clearInterval(timer);
   }, []);
 
   const isFirstPidlineMount = useRef(true);
@@ -233,7 +242,7 @@ function TabPid({ }) {
       body: JSON.stringify({ pidline: value })
     })
       .then((response) => response.json())
-      .then((data) => console.log('Pidline sent to stm32:', data))
+//      .then((data) => console.log('Pidline sent to stm32:', data))
       .catch((error) => console.error('Error sending PID line to stm32:', error));
   };
 

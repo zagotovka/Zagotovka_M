@@ -1,7 +1,7 @@
 import { ModalEncoder } from '../Modals/ModalEncoder.js';
-import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
 import { safeFetch } from '../safeFetch.js';
-import { wsSubscribe, wsUnsubscribe } from '../ws-client.js';
+import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
@@ -146,24 +146,25 @@ function TabEncoder({ }) {
     };
 
     useEffect(() => {
-      fetchEncoderData();   // initial fallback
+      let timer = null;
+      let isFetching = false;
+
+      fetchEncoderData();
       fetchPintopinData();
 
-      const wsEncId = wsSubscribe('encoder', data => {
+      const poll = () => {
+        if (isFetching) return;
         if (isPendingOnOff.current) return;
-        if (data && data.encoders) {
-          setEncoder(data.encoders);
-          setLanguage(data.lang);
-        }
-      });
-      const wsPtpId = wsSubscribe('pintopin', data => {
-        if (data) setPintopin(data);
-      });
-
-      return () => {
-        wsUnsubscribe(wsEncId);
-        wsUnsubscribe(wsPtpId);
+        isFetching = true;
+        safeFetch('/api/encoders', 'encoder-slice').then(data => {
+          if (!data) return;
+          if (data.encoders) { setEncoder(data.encoders); setLanguage(data.lang); }
+          if (data.pintopin) setPintopin(data.pintopin);
+        }).finally(() => { isFetching = false; });
       };
+
+      timer = setInterval(poll, window.pollIntervalMs || 1000);// было 3000
+      return () => clearInterval(timer);
     }, []);
 
     const handleEncoderChange = (updatedEncoder) => {

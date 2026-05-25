@@ -8,9 +8,6 @@
 #include "main.h"
 #include "compat_ota.h"
 
-extern ds18b20_pin_t ds18num[MAX_DS18B20_P];
-extern dht22_pin_t dht22num[MAX_DHT22_P];
-
 struct user {
   const char *name, *pass, *access_token;
 };
@@ -30,78 +27,7 @@ const char *s_json_header =
     "Content-Type: application/json\r\n"
     "Cache-Control: no-cache\r\n";
 
-/* ─── WebSocket broadcast infrastructure ─── */
-#define MAX_WS_CLIENTS 4
-#define TAB_NAME_MAX   16
-#define WS_IDLE_TIMEOUT_MS  30000  /* 30 сек без PONG → kill */
-#define WS_SEND_BUF_LIMIT   8192  /* жёсткий лимит send-буфера */
-
-typedef struct {
-  struct mg_connection *c;
-  char activeTab[TAB_NAME_MAX];  /* "" = только time */
-  uint32_t last_activity;        /* HAL_GetTick() последнего ответа клиента */
-} ws_client_t;
-
-static ws_client_t s_ws_clients[MAX_WS_CLIENTS];
-static int s_ws_count = 0;
-static int s_total_conns = 0;  /* диагностика: число открытых соединений */
-
-static void ws_client_add(struct mg_connection *c) {
-  /* Фаза 1: чистим зомби (closing/draining)  -  MG_EV_CLOSE мог задержаться */
-  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-    struct mg_connection *old = s_ws_clients[i].c;
-    if (old != NULL && (old->is_closing || old->is_draining)) {
-      printf("[WS] cleanup zombie id=%lu (was closing/draining)\r\n", old->id);
-      s_ws_clients[i].c = NULL;
-      s_ws_clients[i].activeTab[0] = '\0';
-      s_ws_count--;
-    }
-  }
-  /* Фаза 2: ищем свободный слот */
-  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-    if (s_ws_clients[i].c == NULL) {
-      s_ws_clients[i].c = c;
-      s_ws_clients[i].activeTab[0] = '\0';
-      s_ws_clients[i].last_activity = HAL_GetTick();
-      s_ws_count++;
-      printf("[WS] client added id=%lu (total=%d)\r\n",
-             c->id, s_ws_count);
-      return;
-    }
-  }
-  /* Фаза 3: все слоты заняты  -  принудительно вытесняем старейшего */
-  {
-    int oldest_i = 0;
-    unsigned long oldest_id = s_ws_clients[0].c ? s_ws_clients[0].c->id : 0;
-    for (int i = 1; i < MAX_WS_CLIENTS; i++) {
-      if (s_ws_clients[i].c && s_ws_clients[i].c->id < oldest_id) {
-        oldest_id = s_ws_clients[i].c->id;
-        oldest_i = i;
-      }
-    }
-    printf("[WS] evicting oldest id=%lu for new id=%lu\r\n", oldest_id, c->id);
-    s_ws_clients[oldest_i].c->is_draining = 1;
-    s_ws_clients[oldest_i].c = c;
-    s_ws_clients[oldest_i].activeTab[0] = '\0';
-    s_ws_clients[oldest_i].last_activity = HAL_GetTick();
-    /* s_ws_count не меняется  -  замена 1:1 */
-    printf("[WS] client replaced id=%lu (total=%d)\r\n", c->id, s_ws_count);
-  }
-}
-
-static void ws_client_remove(struct mg_connection *c) {
-  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-    if (s_ws_clients[i].c == c) {
-      s_ws_clients[i].c = NULL;
-      s_ws_clients[i].activeTab[0] = '\0';
-      if (s_ws_count > 0) s_ws_count--;
-      printf("[WS] client removed id=%lu (total=%d)\r\n",
-             c->id, s_ws_count);
-      return;
-    }
-  }
-}
-/* ─── End WS infrastructure ─── */
+/* ─── Static file header ─── */
 
 
 int ui_event_next(int no, struct ui_event *e) {
@@ -369,6 +295,17 @@ static const char *get_connection_header(struct mg_http_message *hm) {
     return "Connection: close\r\n";  // embedded: всегда закрываем
 }
 
+static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
+                           volatile uint32_t *ver);
+static void handle_buttons_chunked(struct mg_connection *c);
+static void handle_switches_chunked(struct mg_connection *c);
+static void handle_encoders_chunked(struct mg_connection *c);
+static void handle_pid_chunked(struct mg_connection *c);
+static void handle_security_chunked(struct mg_connection *c);
+static void handle_sensors_chunked(struct mg_connection *c);
+static void handle_common_chunked(struct mg_connection *c);
+static void handle_onewire_chunked(struct mg_connection *c);
+
 void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 	// --- Логирование всех событий для отладки ---
 //	MG_DEBUG(("%lu Event received: %d", c->id, ev));
@@ -398,7 +335,6 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 	// --- General events (for HTTP, HTTPS, and MQTT) ---
 	switch (ev) {
 	case MG_EV_OPEN:
-		if (!c->is_listening) s_total_conns++;
 		MG_INFO(("%lu Connection created (TLS: %d, fn_data: %p)", c->id, c->is_tls, fn_data));
 		break;
 
@@ -411,9 +347,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
         uint32_t now_accept = HAL_GetTick();
         uint32_t accept_interval = now_accept - s_last_accept_tk;
         s_last_accept_tk = now_accept;
-        printf("[NET] ACCEPT #%d from %s port=%u dt=%lums total_conns=%d\r\n",
-               (int)s_total_conns, buf_rem, local_port,
-               (unsigned long)accept_interval, s_total_conns);
+        printf("[NET] ACCEPT from %s port=%u dt=%lums\r\n",
+               buf_rem, local_port,
+               (unsigned long)accept_interval);
         MG_INFO(("Accept: local %M remote %M", mg_print_ip_port, &c->loc, mg_print_ip_port, &c->rem));
 
         /* ── Блокировка внешних сканеров при выключенном HTTPS ── */
@@ -536,18 +472,6 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		struct mg_str uri = hm->uri;
 		MG_INFO(("%lu Checking URI: %.*s (len: %d)", c->id, (int) uri.len, uri.buf, (int) uri.len));
 
-		/* ── WebSocket upgrade: /ws ── */
-		if (mg_match(hm->uri, mg_str("/ws"), NULL)) {
-			if (u == NULL) {
-				mg_http_reply(c, 403, "", "Unauthorized\n");
-				c->is_draining = 1;  // не авторизован  -  закрываем
-			} else {
-				mg_ws_upgrade(c, hm, NULL);
-				ws_client_add(c);
-			}
-			break;
-		}
-
 		// Обработка корневого пути (/) и статических страниц
 		if (uri.len == 1 && strncmp(uri.buf, "/", uri.len) == 0) {
 			MG_INFO(("%lu Serving root path (/) for connection", c->id));
@@ -633,6 +557,60 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		    }
 		}  else {
 			MG_INFO(("%lu Not root path, proceeding to API handling", c->id));
+
+			/* ── State slice polling endpoints (Keep-Alive) ── */
+			if (mg_match(hm->uri, mg_str("/api/state/*"), NULL)) {
+				if (u == NULL) {
+					mg_http_reply(c, 403, "", "Not Authorised\n");
+					c->is_draining = 1;
+				} else if (mg_match(hm->uri, mg_str("/api/state/sensors"), NULL)) {
+					if (!check_etag_304(c, hm, &g_ver_sensors)) handle_sensors_chunked(c);
+				} else if (mg_match(hm->uri, mg_str("/api/state/common"), NULL)) {
+					if (!check_etag_304(c, hm, &g_ver_common)) handle_common_chunked(c);
+				} else if (mg_match(hm->uri, mg_str("/api/state/pid"), NULL)) {
+					if (!check_etag_304(c, hm, &g_ver_pid)) handle_pid_chunked(c);
+				} else if (mg_match(hm->uri, mg_str("/api/state/onewire"), NULL)) {
+					if (!check_etag_304(c, hm, &g_ver_onewire)) handle_onewire_chunked(c);
+				} else if (mg_match(hm->uri, mg_str("/api/state/button"), NULL)) {
+					if (!check_etag_304(c, hm, &g_ver_button)) handle_buttons_chunked(c);
+				} else if (mg_match(hm->uri, mg_str("/api/state/security"), NULL)) {
+					if (!check_etag_304(c, hm, &g_ver_security)) handle_security_chunked(c);
+				} else if (mg_match(hm->uri, mg_str("/api/state/switch"), NULL)) {
+					if (!check_etag_304(c, hm, &g_ver_switch)) handle_switches_chunked(c);
+				} else if (mg_match(hm->uri, mg_str("/api/state/encoder"), NULL)) {
+					if (!check_etag_304(c, hm, &g_ver_encoder)) handle_encoders_chunked(c);
+				} else {
+					mg_http_reply(c, 404, "", "");
+				}
+				break;
+			}
+
+			/* ── Chunked streaming endpoints (ETag + 304, per-page) ── */
+			if (mg_match(hm->uri, mg_str("/api/buttons"), NULL)) {
+				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); c->is_draining = 1; }
+				else if (!check_etag_304(c, hm, &g_ver_button)) handle_buttons_chunked(c);
+				break;
+			}
+			if (mg_match(hm->uri, mg_str("/api/switches"), NULL)) {
+				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); c->is_draining = 1; }
+				else if (!check_etag_304(c, hm, &g_ver_switch)) handle_switches_chunked(c);
+				break;
+			}
+			if (mg_match(hm->uri, mg_str("/api/encoders"), NULL)) {
+				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); c->is_draining = 1; }
+				else if (!check_etag_304(c, hm, &g_ver_encoder)) handle_encoders_chunked(c);
+				break;
+			}
+			if (mg_match(hm->uri, mg_str("/api/pid"), NULL)) {
+				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); c->is_draining = 1; }
+				else if (!check_etag_304(c, hm, &g_ver_pid)) handle_pid_chunked(c);
+				break;
+			}
+			if (mg_match(hm->uri, mg_str("/api/security"), NULL)) {
+				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); c->is_draining = 1; }
+				else if (!check_etag_304(c, hm, &g_ver_security)) handle_security_chunked(c);
+				break;
+			}
 
 			// Обработка API-запросов
 			if (mg_match(hm->uri, mg_str("/api/#"), NULL) && u == NULL) {
@@ -826,79 +804,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		MG_INFO(("%lu HTTP/HTTPS request processing completed", c->id));
 		break;
 	}
-	case MG_EV_WS_CTL: {
-	    struct mg_ws_message *wm = (struct mg_ws_message *) ev_data;
-	    uint8_t opcode = wm->flags & 0x0F;
-	    if (opcode == WEBSOCKET_OP_PING) {
-	        mg_ws_send(c, "", 0, WEBSOCKET_OP_PONG);
-	    }
-	    /* PONG или PING  -  клиент жив, обновляем таймер */
-	    if (opcode == WEBSOCKET_OP_PONG || opcode == WEBSOCKET_OP_PING) {
-	        for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-	            if (s_ws_clients[i].c == c) {
-	                s_ws_clients[i].last_activity = HAL_GetTick();
-	                break;
-	            }
-	        }
-	    }
-	    break;
-	}
-	case MG_EV_WS_MSG: {
-		struct mg_ws_message *wm = (struct mg_ws_message *) ev_data;
-		// Правильно для Mongoose 7.13:
-		/* Парсим {"activeTab":"encoder"} без malloc */
-		char tab[TAB_NAME_MAX] = {0};
-		if (mg_json_unescape(wm->data, "$.activeTab", tab, sizeof(tab)) > 0) {
-			for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-				if (s_ws_clients[i].c == c) {
-					strncpy(s_ws_clients[i].activeTab, tab, TAB_NAME_MAX - 1);
-					s_ws_clients[i].activeTab[TAB_NAME_MAX - 1] = '\0';
-					printf("[WS] id=%lu activeTab=%s\r\n", c->id, tab);
-					break;
-				}
-			}
-		}
-	    /* Обновляем last_activity при любом WS-сообщении от клиента */
-	    for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-	        if (s_ws_clients[i].c == c) {
-	            s_ws_clients[i].last_activity = HAL_GetTick();
-	            break;
-	        }
-	    }
-	    // Ping {} от браузера  -  отвечаем {}, сбрасываем idle таймер Mongoose
-	    if (wm->data.len <= 2) {
-	        mg_ws_send(c, "{}", 2, WEBSOCKET_OP_TEXT);
-	        break;
-	    }
-	    // Правильно для Mongoose 7.21:
-	        // mg_json_get_str выделяет через mg_calloc  -  обязательно mg_free!
-	        char *tab_str = mg_json_get_str(wm->data, "$.activeTab");
-	        if (tab_str != NULL) {
-	            for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-	                if (s_ws_clients[i].c == c) {
-	                    strncpy(s_ws_clients[i].activeTab, tab_str, TAB_NAME_MAX - 1);
-	                    s_ws_clients[i].activeTab[TAB_NAME_MAX - 1] = '\0';
-	                    printf("[WS] id=%lu activeTab=%s\r\n", c->id, s_ws_clients[i].activeTab);
-	                    break;
-	                }
-	            }
-	            mg_free(tab_str); // mg_json_get_str → mg_calloc, парный mg_free
-	        }
-	        break;
-	}
 
 	case MG_EV_CLOSE:
-		if (!c->is_listening && s_total_conns > 0) s_total_conns--;
-		/* Диагностика: почему закрылось соединение */
-		if (c->is_websocket) {
-			printf("[WS] CLOSE id=%lu is_draining=%d is_closing=%d send.len=%lu recv.len=%lu total=%d\r\n",
-			       c->id, (int)c->is_draining, (int)c->is_closing,
-			       (unsigned long)c->send.len, (unsigned long)c->recv.len,
-			       s_total_conns);
-		} else {
-			MG_INFO(("%lu Connection closed (TLS: %d, total=%d)", c->id, c->is_tls, s_total_conns));
-		}
-		ws_client_remove(c);
+		MG_INFO(("%lu Connection closed (TLS: %d)", c->id, c->is_tls));
 		break;
 
 	case MG_EV_ERROR:
@@ -916,157 +824,6 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		MG_DEBUG(("%lu Unknown event: %d", c->id, ev));
 		break;
 	}
-}
-
-/* ─── ws_broadcast_all: per-client JSON по activeTab ─── */
-
-/* Хелпер: добавляет блок "key":VALUE в ws_buf. Возвращает новый off.
-   need_comma  -  нужна ли запятая перед блоком. */
-static int ws_append_block(char *buf, int off, int bufsize,
-                           const char *key, const char *json_val, int need_comma) {
-  size_t vlen = strlen(json_val);
-
-  // Считаем размер заголовка БЕЗ записи в буфер
-  int hdr = snprintf(NULL, 0, "%s\"%s\":", need_comma ? "," : "", key);
-
-  // Проверяем ПЕРЕД любой записью
-  if (off + hdr + (int)vlen >= bufsize - 10) {
-    return off; // не влезло  -  буфер не трогаем, возвращаем как есть
-  }
-
-  // Только теперь пишем ключ и данные
-  off += snprintf(buf + off, bufsize - off, "%s\"%s\":",
-                  need_comma ? "," : "", key);
-  memcpy(buf + off, json_val, vlen);
-  off += (int)vlen;
-
-  return off;
-}
-
-void ws_broadcast_all(void) {
-  if (s_ws_count == 0) return;
-
-  /* ── Диагностика: измеряем время выполнения broadcast ── */
-  static uint32_t s_bc_warn_tk = 0;
-  uint32_t bc_t0 = HAL_GetTick();
-
-  static char ws_buf[BUFFER_SIZE];
-  static char ws_json[BUFFER_SIZE]; /* собственный буфер вместо глобального jsonbuf */
-  static uint32_t last_ping = 0;
-  uint32_t now = HAL_GetTick();
-  bool do_ping = (now - last_ping) >= 5000;
-  if (do_ping) last_ping = now;
-
-  /* ── Фаза 0: Kill мёртвых клиентов ── */
-  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-    if (s_ws_clients[i].c == NULL) continue;
-    struct mg_connection *cc = s_ws_clients[i].c;
-
-    /* Зомби: is_closing/is_draining  -  Mongoose закрывает */
-    if (cc->is_closing || cc->is_draining) {
-      printf("[WS] reap zombie id=%lu\r\n", cc->id);
-      s_ws_clients[i].c = NULL;
-      s_ws_clients[i].activeTab[0] = '\0';
-      if (s_ws_count > 0) s_ws_count--;
-      continue;
-    }
-
-    /* Idle timeout: нет ответа 30 сек → kill */
-    if (now - s_ws_clients[i].last_activity > WS_IDLE_TIMEOUT_MS) {
-      printf("[WS] id=%lu TIMEOUT (%lums idle)  -  kill\r\n",
-             cc->id, (unsigned long)(now - s_ws_clients[i].last_activity));
-      cc->is_draining = 1;
-      s_ws_clients[i].c = NULL;
-      s_ws_clients[i].activeTab[0] = '\0';
-      if (s_ws_count > 0) s_ws_count--;
-      continue;
-    }
-
-    /* Send buffer overflow: > 8KB → kill (heap_4 fragmentation!) */
-    if (cc->send.len > WS_SEND_BUF_LIMIT) {
-      printf("[WS] id=%lu KILLED (send.len=%lu)\r\n",
-             cc->id, (unsigned long)cc->send.len);
-      cc->is_draining = 1;
-      s_ws_clients[i].c = NULL;
-      s_ws_clients[i].activeTab[0] = '\0';
-      if (s_ws_count > 0) s_ws_count--;
-      continue;
-    }
-  }
-
-  if (s_ws_count == 0) return;
-
-  for (int i = 0; i < MAX_WS_CLIENTS; i++) {
-    if (s_ws_clients[i].c == NULL) continue;
-
-    struct mg_connection *c = s_ws_clients[i].c;
-
-    // WebSocket PING  -  всегда, даже при заполненном буфере
-    if (do_ping) {
-      mg_ws_send(c, "", 0, WEBSOCKET_OP_PING);
-    }
-
-    /* Backpressure: если буфер > 2KB, пропускаем данные (но PING ушёл) */
-    if (c->send.len > 2048) {
-      continue;
-    }
-
-    int off = 0;
-    int has_data = 0;
-    const char *tab = s_ws_clients[i].activeTab;
-
-    off += snprintf(ws_buf + off, BUFFER_SIZE - off, "{");
-
-    if (strcmp(tab, "switch") == 0) {
-      gen_switch_json(PinsInfo, PinsConf, NUMPIN, ws_json, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "switch", ws_json, 0);
-      gen_pintopin_json(PinsLinks, ws_json, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "pintopin", ws_json, 1);
-      has_data = 1;
-    } else if (strcmp(tab, "encoder") == 0) {
-      gen_encoder_json(PinsInfo, PinsConf, NUMPIN, ws_json, BUFFER_SIZE,
-                       PinsLinks, NUMPINLINKS);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "encoder", ws_json, 0);
-      gen_pintopin_json(PinsLinks, ws_json, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "pintopin", ws_json, 1);
-      has_data = 1;
-    } else if (strcmp(tab, "pid") == 0) {
-      gen_pid_json(ws_json, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "pid", ws_json, 0);
-      has_data = 1;
-    } else if (strcmp(tab, "button") == 0) {
-      gen_button_json(PinsInfo, PinsConf, NUMPIN, ws_json, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "button", ws_json, 0);
-      has_data = 1;
-    } else if (strcmp(tab, "temp") == 0) {
-      pars_temp_sensors(ws_json, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "temp", ws_json, 0);
-      has_data = 1;
-    } else if (strcmp(tab, "security") == 0) {
-      gen_security_json(PinsInfo, PinsConf, NUMPIN, ws_json, BUFFER_SIZE);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "security", ws_json, 0);
-      has_data = 1;
-    }
-
-    { char tbuf[256];
-      parse_stm32time(tbuf, sizeof(tbuf), &SetSettings);
-      off = ws_append_block(ws_buf, off, BUFFER_SIZE, "time", tbuf, has_data);
-    }
-
-    off += snprintf(ws_buf + off, BUFFER_SIZE - off, "}");
-
-    mg_ws_send(c, ws_buf, (size_t)off, WEBSOCKET_OP_TEXT);
-  }
-
-  /* Предупреждение: broadcast занял > 30ms → блокирует mg_mgr_poll */
-  uint32_t bc_elapsed = HAL_GetTick() - bc_t0;
-  if (bc_elapsed > 30) {
-    if (HAL_GetTick() - s_bc_warn_tk > 5000) { /* не спамим чаще 1 раза в 5с */
-      s_bc_warn_tk = HAL_GetTick();
-      printf("[WS] WARN: ws_broadcast_all took %lums (>30ms!) ws_count=%d\r\n",
-             (unsigned long)bc_elapsed, s_ws_count);
-    }
-  }
 }
 
 /****************************************************************/
@@ -1304,6 +1061,421 @@ void timer_fn_mqtt(void *arg) {
     }
     s_mqtt_reconnect_reported = false;
   }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Chunked Transfer Encoding handlers (zero extra RAM — only stack chunk_buf)
+   ═══════════════════════════════════════════════════════════════════════════ */
+#define CHUNK_BUF_SIZE 640 // 512 буфер маловат для 'handle_buttons_chunked', где строковые поля (info, sclick, dclick, lpress) в худшем случае дают ~519 байт.
+
+/* Returns true (and sends 304) if ETag matches — caller stops.
+   Returns false if data changed — caller proceeds with full chunked response. */
+static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
+                           volatile uint32_t *ver) {
+    char etag[16], hdr[128];
+    snprintf(etag, sizeof(etag), "\"%lu\"", (unsigned long)*ver);
+    struct mg_str *inm = mg_http_get_header(hm, "If-None-Match");
+    if (inm && mg_strcmp(*inm, mg_str(etag)) == 0) {
+        snprintf(hdr, sizeof(hdr),
+            "ETag: %s\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n",
+            etag);
+        mg_http_reply(c, 304, hdr, "");
+        return true;  /* 304 sent, caller stops */
+    }
+    return false;     /* data changed, caller sends full response */
+}
+
+static void chunked_json_start(struct mg_connection *c, volatile uint32_t *ver) {
+    char etag[16];
+    snprintf(etag, sizeof(etag), "\"%lu\"", (unsigned long)*ver);
+    mg_printf(c,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: application/json\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "Cache-Control: no-cache\r\n"
+        "Connection: keep-alive\r\n"
+        "ETag: %s\r\n"
+        "\r\n", etag);
+}
+
+static void chunked_json_end(struct mg_connection *c) {
+    mg_http_printf_chunk(c, "");  /* empty chunk = end of response */
+}
+
+/* ─── /api/buttons ─── */
+static void handle_buttons_chunked(struct mg_connection *c) {
+    char b[CHUNK_BUF_SIZE];
+    int first = 1;
+
+    chunked_json_start(c, &g_ver_button);
+    mg_http_printf_chunk(c, "{\"lang\":\"%s\",\"buttons\":[", SetSettings.lang);
+
+    for (int i = 0; i < NUMPIN; i++) {
+        if (PinsConf[i].topin != 1) continue;  /* only BUTTONs */
+        snprintf(b, sizeof(b),
+            "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
+            "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
+            "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
+            first ? "" : ",", PinsConf[i].topin, i, PinsInfo[i].pins,
+            PinsConf[i].ptype, PinsConf[i].sclick, PinsConf[i].dclick,
+            PinsConf[i].lpress, PinsConf[i].info, PinsConf[i].onoff);
+        mg_http_printf_chunk(c, "%s", b);
+        first = 0;
+    }
+
+    mg_http_printf_chunk(c, "]}");
+    chunked_json_end(c);
+}
+
+/* ─── /api/switches ─── */
+static void handle_switches_chunked(struct mg_connection *c) {
+    char b[CHUNK_BUF_SIZE];
+    int first = 1;
+
+    chunked_json_start(c, &g_ver_switch);
+    mg_http_printf_chunk(c, "{\"lang\":\"%s\",\"switches\":[", SetSettings.lang);
+
+    for (int i = 0; i < NUMPIN; i++) {
+        if (PinsConf[i].topin != 3) continue;  /* only SWITCHes */
+        snprintf(b, sizeof(b),
+            "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
+            "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
+            first ? "" : ",", PinsConf[i].topin, i, PinsInfo[i].pins,
+            PinsConf[i].ptype, PinsConf[i].info, PinsConf[i].onoff);
+        mg_http_printf_chunk(c, "%s", b);
+        first = 0;
+    }
+
+    /* pintopin — streamed in-place, no buffer assembly */
+    mg_http_printf_chunk(c, "],\"pintopin\":[");
+    first = 1;
+    for (int i = 0; i < NUMPINLINKS; i++) {
+        snprintf(b, sizeof(b),
+            "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
+            first ? "" : ",", PinsLinks[i].idin, PinsLinks[i].idout,
+            PinsLinks[i].pins);
+        mg_http_printf_chunk(c, "%s", b);
+        first = 0;
+    }
+
+    mg_http_printf_chunk(c, "]}");
+    chunked_json_end(c);
+}
+
+/* ─── /api/encoders ─── */
+static void handle_encoders_chunked(struct mg_connection *c) {
+    char b[CHUNK_BUF_SIZE];
+    int first = 1;
+
+    chunked_json_start(c, &g_ver_encoder);
+    mg_http_printf_chunk(c, "{\"lang\":\"%s\",\"encoders\":[", SetSettings.lang);
+
+    for (int i = 0; i < NUMPIN; i++) {
+        if (PinsConf[i].topin != 8) continue;  /* only Encoder A */
+        uint8_t encoderb_id = PinsConf[i].encoderb;
+        if (encoderb_id == 0 || encoderb_id > NUMPIN) encoderb_id = 255;
+        const char *encb_pin = (encoderb_id != 255 && encoderb_id < NUMPIN)
+            ? PinsInfo[encoderb_id].pins : "";
+
+        /* find linked PWM */
+        int pwm_dvalue = 0, pwm_freq = 0, pwm_max = 0;
+        for (int j = 0; j < NUMPIN; j++) {
+            if (PinsConf[j].topin == 5) {
+                for (int k = 0; k < NUMPINLINKS; k++) {
+                    if (PinsLinks[k].idin == i && PinsLinks[k].idout == j) {
+                        pwm_dvalue = PinsConf[j].dvalue;
+                        pwm_freq = PinsConf[j].pwm;
+                        pwm_max = PinsConf[j].pwmmax;
+                        break;
+                    }
+                }
+            }
+        }
+
+        snprintf(b, sizeof(b),
+            "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\","
+            "\"encoderb\":%d,\"encdrbpin\":\"%s\","
+            "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,\"ponr\":%d,"
+            "\"pinact\":{",
+            first ? "" : ",", PinsConf[i].topin, i, PinsInfo[i].pins,
+            encoderb_id, encb_pin, pwm_dvalue, pwm_freq, pwm_max,
+            PinsConf[i].ponr);
+        mg_http_printf_chunk(c, "%s", b);
+
+        /* pinact for this encoder */
+        int pa_first = 1;
+        for (int j = 0; j < NUMPIN; j++) {
+            if (PinsConf[j].topin != 5) continue;
+            for (int k = 0; k < NUMPINLINKS; k++) {
+                if (PinsLinks[k].idin == i && PinsLinks[k].idout == j
+                    && PinsLinks[k].pins[0] != '\0') {
+                    snprintf(b, sizeof(b), "%s\"%s\":%d",
+                        pa_first ? "" : ",", PinsLinks[k].pins,
+                        PinsLinks[k].idout);
+                    mg_http_printf_chunk(c, "%s", b);
+                    pa_first = 0;
+                }
+            }
+        }
+
+        snprintf(b, sizeof(b), "},\"info\":\"%s\",\"onoff\":%d}",
+            PinsConf[i].info, PinsConf[i].onoff);
+        mg_http_printf_chunk(c, "%s", b);
+        first = 0;
+    }
+
+    /* pintopin after encoders */
+    mg_http_printf_chunk(c, "],\"pintopin\":[");
+    first = 1;
+    for (int i = 0; i < NUMPINLINKS; i++) {
+        snprintf(b, sizeof(b),
+            "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
+            first ? "" : ",", PinsLinks[i].idin, PinsLinks[i].idout,
+            PinsLinks[i].pins);
+        mg_http_printf_chunk(c, "%s", b);
+        first = 0;
+    }
+
+    mg_http_printf_chunk(c, "]}");
+    chunked_json_end(c);
+}
+
+/* ─── /api/pid ─── */
+static void handle_pid_chunked(struct mg_connection *c) {
+    char b[CHUNK_BUF_SIZE];
+    chunked_json_start(c, &g_ver_pid);
+    mg_http_printf_chunk(c, "{\"lang\":\"%s\",\"pidline\":%d,\"pid\":[",
+        SetSettings.lang, SetSettings.pidline);
+
+    for (int i = 0; i < PID_MAX_SLOTS; i++) {
+        const char *pin_name = "";
+        uint8_t pin_id = PidConf[i].pwm_pin_id;
+        int duty = 0;
+        if (pin_id > 0 && pin_id < NUMPIN) {
+            pin_name = PinsInfo[pin_id].pins;
+            duty = PinsConf[pin_id].dvalue;
+        }
+        snprintf(b, sizeof(b),
+            "%s{\"id\":%d,\"pins\":\"%s\",\"pinact\":{%s\"%s\":%d%s},"
+            "\"selsens\":\"%s\",\"sernum\":\"%s\",\"presets\":\"%u\","
+            "\"tmpset\":\"%.1f\",\"tmpcur\":\"%.1f\","
+            "\"duty\":%d,\"info\":\"%s\",\"onoff\":%d,"
+            "\"tune_state\":%u,\"tune_progress\":%u}",
+            i > 0 ? "," : "", i + 1, pin_name,
+            pin_id > 0 ? "" : "", pin_name, pin_id, pin_id > 0 ? "" : "",
+            PidConf[i].selsens == 1 ? "1" : "2",
+            PidConf[i].sernum,
+            PidConf[i].preset,
+            PidConf[i].tmpset, PidConf[i].tmpcur,
+            duty,
+            PidConf[i].info, PidConf[i].onoff,
+            PidConf[i].tune_state, PidConf[i].tune_progress);
+        mg_http_printf_chunk(c, "%s", b);
+    }
+
+    mg_http_printf_chunk(c, "]}");
+    chunked_json_end(c);
+}
+
+/* ─── /api/security ─── */
+static void handle_security_chunked(struct mg_connection *c) {
+    char b[CHUNK_BUF_SIZE];
+    int first = 1;
+
+    chunked_json_start(c, &g_ver_security);
+    /* sim800l / tel / info / onoff — глобальные настройки безопасности */
+    mg_http_printf_chunk(c,
+        "{\"lang\":\"%s\",\"sim800l\":%d,\"tel\":\"%s\","
+        "\"info\":\"%s\",\"onoff\":%d,\"pins\":[",
+        SetSettings.lang, SetSettings.sim800l, SetSettings.tel,
+        PinsConf[1].info, PinsConf[1].onoff);
+
+    for (int i = 0; i < NUMPIN; i++) {
+        if (PinsConf[i].topin != 10) continue;
+        const char *action = PinsConf[i].sclick[0] ? PinsConf[i].sclick : "None";
+        const char *send_sms = PinsConf[i].send_sms[0] ? PinsConf[i].send_sms : "NO";
+        snprintf(b, sizeof(b),
+            "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
+            "\"action\":\"%s\",\"send_sms\":\"%s\","
+            "\"info\":\"%s\",\"onoff\":%d}",
+            first ? "" : ",",
+            PinsConf[i].topin, i, PinsInfo[i].pins, PinsConf[i].ptype,
+            action, send_sms, PinsConf[i].info, PinsConf[i].onoff);
+        mg_http_printf_chunk(c, "%s", b);
+        first = 0;
+    }
+
+    mg_http_printf_chunk(c, "]}");
+    chunked_json_end(c);
+}
+
+/* ─── /api/state/sensors ─── */
+static void handle_sensors_chunked(struct mg_connection *c) {
+    char b[CHUNK_BUF_SIZE];
+    int first;
+
+    chunked_json_start(c, &g_ver_sensors);
+    mg_http_printf_chunk(c, "{\"ds18b20\":[");
+
+    /* ── DS18B20: только валидные датчики, формат {addr, temp} ── */
+    first = 1;
+    for (int i = 0; i < MAX_DS18B20_P; i++) {
+        if (ds18b20[i].typsensr != 1) continue;
+        for (int j = 0; j < ds18b20[i].numsens && j < MAX_DS18B20_PER_PIN; j++) {
+            if (!ds18b20[i].sensors[j].valid) continue;
+            const uint8_t *a = ds18b20[i].sensors[j].addr;
+            snprintf(b, sizeof(b),
+                "%s{\"addr\":\"%02X%02X%02X%02X%02X%02X%02X%02X\","
+                "\"temp\":%.2f}",
+                first ? "" : ",",
+                a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7],
+                ds18b20[i].sensors[j].temp);
+            mg_http_printf_chunk(c, "%s", b);
+            first = 0;
+        }
+    }
+
+    mg_http_printf_chunk(c, "],\"dht22\":[");
+
+    /* ── DHT22: только валидные, формат {id, temp, humidity} ── */
+    first = 1;
+    for (int i = 0; i < MAX_DHT22_P; i++) {
+        if (dht22[i].typsensr != 2 || !dht22[i].valid) continue;
+        snprintf(b, sizeof(b),
+            "%s{\"id\":%d,\"temp\":%.2f,\"humidity\":%.2f}",
+            first ? "" : ",", dht22[i].id, dht22[i].temp, dht22[i].humid);
+        mg_http_printf_chunk(c, "%s", b);
+        first = 0;
+    }
+
+    mg_http_printf_chunk(c, "]}");
+    chunked_json_end(c);
+}
+
+/* ─── /api/state/common ─── */
+static void handle_common_chunked(struct mg_connection *c) {
+    char b[CHUNK_BUF_SIZE];
+    char tbuf[256];
+
+    parse_stm32time(tbuf, sizeof(tbuf), &SetSettings);
+    chunked_json_start(c, &g_ver_common);
+    snprintf(b, sizeof(b),
+        "{\"uptime\":%lu,\"heap\":%lu,\"ip\":\"%s\",\"gsm\":\"%s\",\"time\":%s}",
+        (unsigned long)(HAL_GetTick() / 1000),
+        (unsigned long)xPortGetFreeHeapSize(), "0.0.0.0", "ok", tbuf);
+    mg_http_printf_chunk(c, "%s", b);
+    chunked_json_end(c);
+}
+
+/* ─── /api/state/onewire ─── */
+static void handle_onewire_chunked(struct mg_connection *c) {
+    char b[CHUNK_BUF_SIZE];
+    int first_pin = 1;
+    bool owfound = false;
+
+    chunked_json_start(c, &g_ver_onewire);
+    mg_http_printf_chunk(c, "{\"lang\":\"%s\",\"pins\":[", SetSettings.lang);
+
+    for (int i = 0; i < NUMPIN; i++) {
+        if (PinsConf[i].topin != 4) continue;
+        owfound = true;
+        bool snsr_fnd = false;
+
+        /* ── ищем DS18B20 на этом пине ── */
+        for (int j = 0; j < MAX_DS18B20_P; j++) {
+            if (ds18b20[j].id == i && ds18b20[j].typsensr == 1) {
+                snsr_fnd = true;
+                snprintf(b, sizeof(b),
+                    "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":%d,"
+                    "\"numsens\":%d,\"onoff\":%d,\"sensors\":[",
+                    first_pin ? "" : ",",
+                    ds18b20[j].id, ds18b20[j].pin, ds18b20[j].typsensr,
+                    ds18b20[j].numsens, ds18b20[j].onoff);
+                mg_http_printf_chunk(c, "%s", b);
+                first_pin = 0;
+
+                for (int k = 0; k < ds18b20[j].numsens && k < MAX_DS18B20_PER_PIN; k++) {
+                    snprintf(b, sizeof(b),
+                        "%s{\"s_number\":\"%02X%02X%02X%02X%02X%02X%02X%02X\","
+                        "\"t\":%.4f,\"valid\":%s,"
+                        "\"ut\":%.2f,\"lt\":%.2f,"
+                        "\"action_ut\":\"%s\",\"action_lt\":\"%s\","
+                        "\"info\":\"%s\"}",
+                        k > 0 ? "," : "",
+                        ds18b20[j].sensors[k].addr[0],
+                        ds18b20[j].sensors[k].addr[1],
+                        ds18b20[j].sensors[k].addr[2],
+                        ds18b20[j].sensors[k].addr[3],
+                        ds18b20[j].sensors[k].addr[4],
+                        ds18b20[j].sensors[k].addr[5],
+                        ds18b20[j].sensors[k].addr[6],
+                        ds18b20[j].sensors[k].addr[7],
+                        ds18b20[j].sensors[k].temp,
+                        ds18b20[j].sensors[k].valid ? "true" : "false",
+                        ds18b20[j].sensors[k].upt,
+                        ds18b20[j].sensors[k].lowt,
+                        ds18b20[j].sensors[k].actup,
+                        ds18b20[j].sensors[k].actlow,
+                        ds18b20[j].sensors[k].info);
+                    mg_http_printf_chunk(c, "%s", b);
+                }
+                mg_http_printf_chunk(c, "]}");
+            }
+        }
+
+        /* ── ищем DHT22 на этом пине ── */
+        for (int j = 0; j < MAX_DHT22_P && !snsr_fnd; j++) {
+            if (dht22[j].id == i && dht22[j].typsensr == 2) {
+                snsr_fnd = true;
+                snprintf(b, sizeof(b),
+                    "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":%d,"
+                    "\"numsens\":%d,\"onoff\":%d,\"sensors\":[",
+                    first_pin ? "" : ",",
+                    dht22[j].id, dht22[j].pin, dht22[j].typsensr,
+                    dht22[j].numsens, dht22[j].onoff);
+                mg_http_printf_chunk(c, "%s", b);
+                first_pin = 0;
+
+                snprintf(b, sizeof(b),
+                    "{\"s_number\":\"DHT22\",\"t\":%.2f,\"humidity\":%.2f,"
+                    "\"valid\":%s,"
+                    "\"ut\":%.2f,\"lt\":%.2f,"
+                    "\"action_ut\":\"%s\",\"action_lt\":\"%s\","
+                    "\"upphumid\":%.2f,\"humlolim\":%.2f,"
+                    "\"actuphum\":\"%s\",\"actlowhum\":\"%s\","
+                    "\"info\":\"%s\"}",
+                    dht22[j].temp, dht22[j].humid,
+                    dht22[j].valid ? "true" : "false",
+                    dht22[j].upt, dht22[j].lowt,
+                    dht22[j].actup, dht22[j].actlow,
+                    dht22[j].uph, dht22[j].lowh,
+                    dht22[j].actuh, dht22[j].actlh,
+                    dht22[j].info);
+                mg_http_printf_chunk(c, "%s", b);
+                mg_http_printf_chunk(c, "]}");
+            }
+        }
+
+        /* ── OneWire пин без активных датчиков ── */
+        if (!snsr_fnd) {
+            snprintf(b, sizeof(b),
+                "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":0,"
+                "\"numsens\":0,\"info\":\"No active sensors found\",\"onoff\":0}",
+                first_pin ? "" : ",", i, PinsInfo[i].pins);
+            mg_http_printf_chunk(c, "%s", b);
+            first_pin = 0;
+        }
+    }
+
+    if (!owfound) {
+        mg_http_printf_chunk(c,
+            "{\"id\":0,\"pin\":\"N/A\",\"typsensr\":0,"
+            "\"numsens\":0,\"info\":\"No OneWire pins found\",\"onoff\":0}");
+    }
+
+    mg_http_printf_chunk(c, "]}");
+    chunked_json_end(c);
 }
 
 //void web_init(struct mg_mgr *mgr) {

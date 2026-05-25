@@ -1513,19 +1513,6 @@ void StartWebServerTask(void *argument)
         }
     }
 
-    /* ── WebSocket broadcast каждые 500ms ──
-     * 300ms было слишком агрессивно: send-буферы не успевали дренироваться,
-     * backpressure (>2048) срабатывал постоянно → браузер терял данные →
-     * watchdog переподключал WS → фрагментация кучи → OOM. */
-    {
-      static uint32_t last_ws_bc = 0;
-      if (HAL_GetTick() - last_ws_bc >= 500) {
-        last_ws_bc = HAL_GetTick();
-        ws_broadcast_all();
-      }
-    }
-
-
     /* Explicit drain: rapidly clear the queue if disconnected to avoid buildup */
     if (s_conn == NULL || s_conn->is_closing || !mqtt_connected_reported) {
       MqttMessage_t drain;
@@ -2133,6 +2120,8 @@ void StartDs18b20Task(void *argument)
                 ds18b20[i].sensors[k].valid = true;
                 ds18b20[i].sensors[k].errorflg = false;
               }
+              mark_slice_dirty(&g_ver_sensors);
+              mark_slice_dirty(&g_ver_onewire);
               printf("[INFO] DS18B20 bus idx %d REINIT OK - %d sensors found!\r\n",
                      i, ds18b20[i].numsens);
             } else {
@@ -2145,6 +2134,7 @@ void StartDs18b20Task(void *argument)
         }
       }
     }
+    mark_slice_dirty(&g_ver_sensors);
     osDelay(2000);
   }
   /* USER CODE END StartDs18b20Task */
@@ -2196,6 +2186,7 @@ void StartDht22Task(void *argument)
       }
       check_DHT22_limits();
     }
+    mark_slice_dirty(&g_ver_sensors);
     osDelay(2000);
   }
   /* USER CODE END StartDht22Task */
@@ -2309,6 +2300,10 @@ void StartServiceTask(void *argument)
  * ═══════════════════════════════════════════════ */
 	    if (HAL_GetTick() - fade_tick >= 1000) {
 	      fade_tick = HAL_GetTick();
+          mark_slice_dirty(&g_ver_common);
+          mark_slice_dirty(&g_ver_sensors);
+          mark_slice_dirty(&g_ver_pid);
+          mark_slice_dirty(&g_ver_onewire);
 	      for (int i = 0; i < NUMPIN; i++) {
 	        if (!fade_state[i].active)   continue;
 	        if (PinsConf[i].topin != 5)  continue;
