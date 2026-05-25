@@ -142,9 +142,7 @@ void handle_pintopin_get(struct mg_connection *c);
 
 void handle_select_get(struct mg_connection *c);
 void handle_select_set(struct mg_connection *c, struct mg_http_message *hm);
-void gen_select_json(const struct dbPinsInfo *pins_info,
-        const struct dbPinsConf *pins_conf, uint8_t num_pins, char *buffer,
-        int buffer_size);
+
 void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf, uint8_t num_pins);
 
 void handle_switch_get(struct mg_connection *c);

@@ -122,10 +122,7 @@ void mark_slice_dirty_from_isr(volatile uint32_t *ver) {
     taskEXIT_CRITICAL_FROM_ISR(uxSaved);
 }
 
-static char g_buf[BUFFER_SIZE]; /* общий буфер для gen_* обработчиков */
-
 extern uint64_t s_boot_timestamp;
-/* g_buf moved before stream_* functions below */
 extern osMessageQueueId_t outputQueueHandle;
 /* A3: global data_pin removed — each function uses a local copy */
 /* A4: global mqttMsg removed — each send site uses a local copy */
@@ -266,37 +263,38 @@ void set_mqtt_topic(const char *topic) {
   s_pub_topic[sizeof(s_pub_topic) - 1] = '\0'; // Ensure null-termination
 }
 
-void gen_select_json(const struct dbPinsInfo *pins_info,
-                     const struct dbPinsConf *pins_conf, uint8_t num_pins,
-                     char *buffer, int buffer_size) {
-  int offset = 0;
-  // Добавляем начальные поля
-  offset += snprintf(buffer + offset, buffer_size - offset,
-                     "{\"lang\":\"%s\",\"sim800l\":%d,\"data\":[",
-                     SetSettings.lang, SetSettings.sim800l);
-  // Генерируем массив данных пинов
-  for (int i = 0; i < num_pins && offset < buffer_size; i++) {
-    offset +=
-        snprintf(buffer + offset, buffer_size - offset,
-                 "{\"id\":%d,\"pins\":\"%s\",\"topin\":%d,"
-                 "\"onewire\":%d,\"pwm\":%d,\"i2cdata\":%d,\"i2cclok\":%d}%s",
-                 i, pins_info[i].pins, pins_conf[i].topin, pins_info[i].onewire,
-                 pins_info[i].pwm, pins_info[i].i2cdata, pins_info[i].i2cclok,
-                 (i < num_pins - 1) ? "," : "");
-  }
-  // Закрываем массив data и основной объект
-  if (offset < buffer_size) {
-    offset += snprintf(buffer + offset, buffer_size - offset, "]}");
-  }
-  //    printf("Generated SELECT json:\n%s\n", buffer);
-}
 void handle_select_get(struct mg_connection *c) {
-  gen_select_json(PinsInfo, PinsConf, NUMPIN, g_buf, BUFFER_SIZE);
+  char buf[512];
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
+
+  mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
+
+  /* Открывающая часть JSON */
+  int len = snprintf(buf, sizeof(buf),
+                     "{\"lang\":\"%s\",\"sim800l\":%d,\"data\":[",
+                     SetSettings.lang, SetSettings.sim800l);
+  mg_send(c, buf, len);
+
+  for (int i = 0; i < NUMPIN; i++) {
+    const struct dbPinsInfo *info = &PinsInfo[i];
+    struct dbPinsConf conf;
+    taskENTER_CRITICAL();
+    conf = PinsConf[i];
+    taskEXIT_CRITICAL();
+
+    len = snprintf(buf, sizeof(buf),
+                   "%s{\"id\":%d,\"pins\":\"%s\",\"topin\":%d,"
+                   "\"onewire\":%d,\"pwm\":%d,\"i2cdata\":%d,\"i2cclok\":%d}",
+                   (i == 0 ? "" : ","),
+                   i, info->pins, conf.topin, info->onewire,
+                   info->pwm, info->i2cdata, info->i2cclok);
+    mg_send(c, buf, len);
+  }
+
+  mg_send(c, "]}", 2);
 }
 void handle_select_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -463,60 +461,36 @@ void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
   }
 }
 
-void gen_pintopin_json(struct dbPinToPin *PinsLinks, char *buffer,
-                       int buffer_size) {
-  int offset = 0;
-  int remaining = buffer_size;
-  // Начало JSON массива
-  offset += snprintf(buffer + offset, remaining, "[");
-  remaining = buffer_size - offset;
+void handle_pintopin_get(struct mg_connection *c) {
+  char buf[512];
+  const char *extra_headers =
+      "Connection: close\r\nContent-Type: application/json\r\n";
+  MG_INFO(("Response headers for connection %ld:", c->id));
+  log_headers(extra_headers);
+
+  mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
+  mg_send(c, "[", 1);
+
   int elements_added = 0;
   for (int i = 0; i < NUMPINLINKS; i++) {
-    //		if (PinsLinks[i].idin == 0 && PinsLinks[i].idout == 0 &&
-    // strlen(PinsLinks[i].pins) == 0) {
-    //			// Пропускаем пустые записи
-    //			continue;
-    //		}
-    // Добавляем запятую, если это не первый элемент
-    if (elements_added > 0) {
-      offset += snprintf(buffer + offset, remaining, ",");
-      remaining = buffer_size - offset;
-    }
-    // Форматируем каждый элемент массива
-    offset +=
-        snprintf(buffer + offset, remaining,
-                 "{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
-                 PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins);
-    remaining = buffer_size - offset;
+    struct dbPinToPin link;
+    taskENTER_CRITICAL();
+    link = PinsLinks[i];
+    taskEXIT_CRITICAL();
+
+    if (elements_added > 0)
+      mg_send(c, ",", 1);
+
+    int len = snprintf(buf, sizeof(buf),
+                       "{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
+                       link.idin, link.idout, link.pins);
+    mg_send(c, buf, len);
     elements_added++;
-    // Проверка на переполнение буфера
-    if (remaining <= 1) {
-      // Буфер переполнен, прерываем цикл
-      break;
-    }
   }
-  if (remaining > 1) { // Закрытие JSON массива
-    snprintf(buffer + offset, remaining, "]");
-  }
-  //	printf("Generated pintopin JSON:\n%s\n", buffer);
-}
-void handle_pintopin_get(struct mg_connection *c) {
-  gen_pintopin_json(PinsLinks, g_buf, BUFFER_SIZE);
-  const char *extra_headers =
-      "Connection: close\r\nContent-Type: application/json\r\n";
-  MG_INFO(("Response headers for connection %ld:", c->id));
-  log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
+
+  mg_send(c, "]", 1);
 }
 
-void handle_switch_get(struct mg_connection *c) {
-  gen_switch_json(PinsInfo, PinsConf, NUMPIN, g_buf, BUFFER_SIZE);
-  const char *extra_headers =
-      "Connection: close\r\nContent-Type: application/json\r\n";
-  MG_INFO(("Response headers for connection %ld:", c->id));
-  log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
-}
 void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm) {
   if (hm->body.len > 0) {
     //	printf("We got a switch JSON: %.*s\n", (int) hm->body.len,
@@ -535,6 +509,44 @@ void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm) {
     mg_http_reply(c, 400, "Content-Type: application/json\r\n",
                   "{\"status\":false,\"message\":\"Empty request body\"}");
   }
+}
+void handle_switch_get(struct mg_connection *c) {
+  char buf[512];
+  const char *extra_headers =
+      "Connection: close\r\nContent-Type: application/json\r\n";
+  MG_INFO(("Response headers for connection %ld:", c->id));
+  log_headers(extra_headers);
+
+  mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
+
+  int len = snprintf(buf, sizeof(buf),
+                     "{\"lang\":\"%s\",\"switches\":[", SetSettings.lang);
+  mg_send(c, buf, len);
+
+  int first_switch = 1;
+  for (int i = 0; i < NUMPIN; i++) {
+    struct dbPinsConf conf;
+    taskENTER_CRITICAL();
+    conf = PinsConf[i];
+    taskEXIT_CRITICAL();
+
+    if (conf.topin != 3)
+      continue;
+
+    if (!first_switch)
+      mg_send(c, ",", 1);
+    else
+      first_switch = 0;
+
+    len = snprintf(buf, sizeof(buf),
+                   "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
+                   "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
+                   conf.topin, i, PinsInfo[i].pins, conf.ptype,
+                   conf.info, conf.onoff);
+    mg_send(c, buf, len);
+  }
+
+  mg_send(c, "]}", 2);
 }
 void gen_switch_json(const struct dbPinsInfo *pins_info,
                      const struct dbPinsConf *pins_conf, int num_pins,
@@ -563,7 +575,6 @@ void gen_switch_json(const struct dbPinsInfo *pins_info,
   }
   //    printf("Generated switch JSON:\n%s\n", buffer);
 }
-// функция для инициализации PinsLinks по умолчанию.
 // void initialize_PinsLinks() {
 //    for (int i = 0; i < NUMPINLINKS; i++) {
 //        PinsLinks[i].idin = -1;
@@ -708,12 +719,44 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
 }
 /*******************************************************************************************************************/
 void handle_button_get(struct mg_connection *c) {
-  gen_button_json(PinsInfo, PinsConf, NUMPIN, g_buf, BUFFER_SIZE);
+  char buf[512];
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
+
+  mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
+
+  int len = snprintf(buf, sizeof(buf),
+                     "{\"lang\":\"%s\",\"buttons\":[", SetSettings.lang);
+  mg_send(c, buf, len);
+
+  int first_button = 1;
+  for (int i = 0; i < NUMPIN; i++) {
+    struct dbPinsConf conf;
+    taskENTER_CRITICAL();
+    conf = PinsConf[i];
+    taskEXIT_CRITICAL();
+
+    if (conf.topin != 1)
+      continue;
+
+    if (!first_button)
+      mg_send(c, ",", 1);
+    else
+      first_button = 0;
+
+    len = snprintf(buf, sizeof(buf),
+                   "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
+                   "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
+                   "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
+                   conf.topin, i, PinsInfo[i].pins, conf.ptype,
+                   conf.sclick, conf.dclick, conf.lpress,
+                   conf.info, conf.onoff);
+    mg_send(c, buf, len);
+  }
+
+  mg_send(c, "]}", 2);
 }
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -929,13 +972,102 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
 }
 
 void handle_encoder_get(struct mg_connection *c) {
-  gen_encoder_json(PinsInfo, PinsConf, NUMPIN, g_buf, BUFFER_SIZE, PinsLinks,
-                   NUMPINLINKS);
+  char buf[512];
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
+
+  mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
+
+  int len = snprintf(buf, sizeof(buf),
+                     "{\"lang\":\"%s\",\"encoders\":[", SetSettings.lang);
+  mg_send(c, buf, len);
+
+  int encoder_count = 0;
+  for (int i = 0; i < NUMPIN; i++) {
+    struct dbPinsConf conf;
+    taskENTER_CRITICAL();
+    conf = PinsConf[i];
+    taskEXIT_CRITICAL();
+
+    if (conf.topin != 8)
+      continue;
+
+    if (encoder_count > 0)
+      mg_send(c, ",", 1);
+
+    uint8_t encoderb_id = conf.encoderb;
+    if (encoderb_id == 0 || encoderb_id > NUMPIN)
+      encoderb_id = 255;
+
+    /* Поиск связанного PWM-пина */
+    int pwm_dvalue = 0, pwm_freq = 0, pwm_max = 0;
+    bool found_pwm = false;
+    for (int j = 0; j < NUMPIN && !found_pwm; j++) {
+      if (PinsConf[j].topin != 5)
+        continue;
+      for (int k = 0; k < NUMPINLINKS; k++) {
+        struct dbPinToPin link;
+        taskENTER_CRITICAL();
+        link = PinsLinks[k];
+        taskEXIT_CRITICAL();
+        if (link.idin == i && link.idout == j) {
+          taskENTER_CRITICAL();
+          pwm_dvalue = PinsConf[j].dvalue;
+          pwm_freq = PinsConf[j].pwm;
+          pwm_max = PinsConf[j].pwmmax;
+          taskEXIT_CRITICAL();
+          found_pwm = true;
+          break;
+        }
+      }
+    }
+
+    const char *encb_pin_name = (encoderb_id != 255 && encoderb_id < NUMPIN)
+                                    ? PinsInfo[encoderb_id].pins
+                                    : "";
+
+    len = snprintf(buf, sizeof(buf),
+                   "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\","
+                   "\"encoderb\":%d,\"encdrbpin\":\"%s\","
+                   "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,"
+                   "\"ponr\":%d",
+                   conf.topin, i, PinsInfo[i].pins, encoderb_id,
+                   encb_pin_name, pwm_dvalue, pwm_freq, pwm_max,
+                   conf.ponr);
+    mg_send(c, buf, len);
+
+    /* pinact */
+    mg_send(c, ",\"pinact\":{", 12);
+    int pinact_count = 0;
+    for (int j = 0; j < NUMPIN; j++) {
+      if (PinsConf[j].topin != 5)
+        continue;
+      for (int k = 0; k < NUMPINLINKS; k++) {
+        struct dbPinToPin link;
+        taskENTER_CRITICAL();
+        link = PinsLinks[k];
+        taskEXIT_CRITICAL();
+        if (link.idin == i && link.idout == j && link.pins[0] != '\0') {
+          if (pinact_count > 0)
+            mg_send(c, ",", 1);
+          len = snprintf(buf, sizeof(buf), "\"%s\":%d", link.pins, link.idout);
+          mg_send(c, buf, len);
+          pinact_count++;
+          break;
+        }
+      }
+    }
+
+    len = snprintf(buf, sizeof(buf),
+                   "},\"info\":\"%s\",\"onoff\":%d}",
+                   conf.info, conf.onoff);
+    mg_send(c, buf, len);
+    encoder_count++;
+  }
+
+  mg_send(c, "]}", 2);
 }
 void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -1267,12 +1399,36 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
 }
 
 void handle_timers_get(struct mg_connection *c) {
-  gen_timer_json(dbCrontxt, MAXSIZE, g_buf, BUFFER_SIZE);
+  char buf[512];
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
+
+  mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
+
+  int len = snprintf(buf, sizeof(buf),
+                     "{\"lang\":\"%s\",\"numline\":%d,\"timers\":[",
+                     SetSettings.lang, SetSettings.numline);
+  mg_send(c, buf, len);
+
+  for (int i = 0; i < MAXSIZE; i++) {
+    struct dbCron cron;
+    taskENTER_CRITICAL();
+    cron = dbCrontxt[i];
+    taskEXIT_CRITICAL();
+
+    if (i > 0)
+      mg_send(c, ",", 1);
+
+    len = snprintf(buf, sizeof(buf),
+                   "{\"id\":%d,\"cron\":\"%s\",\"activ\":\"%s\","
+                   "\"info\":\"%s\",\"onoff\":%d}",
+                   i, cron.cron, cron.activ, cron.info, cron.onoff);
+    mg_send(c, buf, len);
+  }
+
+  mg_send(c, "]}", 2);
 }
 void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -1447,13 +1603,225 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
   //           dbCrontxt[id].onoff);
 }
 
+/* ──── emit_escaped_blob: ключ + строка с экранированием \n \" \\ ──── */
+static void emit_escaped_blob(struct mg_connection *c,
+                              const char *name,
+                              const char *src,
+                              char *out, int out_sz) {
+  int pos;
+  /* ключ + открывающая кавычка */
+  pos = snprintf(out, out_sz, "\"%s\":\"", name);
+  mg_send(c, out, pos);
+
+  pos = 0;
+  while (*src) {
+    if (pos > out_sz - 8) {
+      mg_send(c, out, pos);
+      pos = 0;
+    }
+    switch (*src) {
+    case '\n': out[pos++] = '\\'; out[pos++] = 'n';  break;
+    case '"':  out[pos++] = '\\'; out[pos++] = '"';  break;
+    case '\\': out[pos++] = '\\'; out[pos++] = '\\'; break;
+    case '\r': /* skip */                              break;
+    default:   out[pos++] = *src;                      break;
+    }
+    src++;
+  }
+  if (pos)
+    mg_send(c, out, pos);
+
+  mg_send(c, "\",", 2);
+}
+
+/* ──── блочные emit-функции для /api/mysett/get ──── */
+
+static void emit_system_basic(struct mg_connection *c,
+                              const struct dbSettings *s, char *buf) {
+  int len = snprintf(buf, 512,
+      "\"lang\":\"%s\",\"lon_de\":%.6f,\"lat_de\":%.6f,"
+      "\"sunrise\":\"%s\",\"onsunrise\":%d,"
+      "\"sunset\":\"%s\",\"onsunset\":%d,"
+      "\"dlength\":\"%s\",",
+      s->lang, s->lon_de, s->lat_de,
+      s->sunrise, s->onsunrise,
+      s->sunset, s->onsunset,
+      s->dlength);
+  mg_send(c, buf, len);
+}
+
+static void emit_sunrise_pins(struct mg_connection *c,
+                              const struct dbSettings *s, char *buf) {
+  int len = snprintf(buf, 512, "\"sunrise_pins\":\"%s\",", s->srise_pins);
+  mg_send(c, buf, len);
+}
+
+static void emit_sunset_pins(struct mg_connection *c,
+                             const struct dbSettings *s, char *buf) {
+  int len = snprintf(buf, 512, "\"sunset_pins\":\"%s\",", s->sset_pins);
+  mg_send(c, buf, len);
+}
+
+static void emit_mqtt(struct mg_connection *c,
+                      const struct dbSettings *s, char *buf) {
+  int len = snprintf(buf, 512,
+      "\"check_mqtt\":%d,\"mqtt_prt\":%d,"
+      "\"mqtt_clt\":\"%s\",\"mqtt_usr\":\"%s\",\"mqtt_pswd\":\"%s\","
+      "\"txmqttop\":\"%s\",\"rxmqttop\":\"%s\",\"mqtt_hst\":\"%s\",",
+      s->check_mqtt, s->mqtt_prt,
+      s->mqtt_clt, s->mqtt_usr, s->mqtt_pswd,
+      s->txmqttop, s->rxmqttop, s->mqtt_hst);
+  mg_send(c, buf, len);
+}
+
+static void emit_ip(struct mg_connection *c,
+                    const struct dbSettings *s, char *buf) {
+  int len = snprintf(buf, 512,
+      "\"check_ip\":%d,"
+      "\"ip_addr\":\"%d.%d.%d.%d\","
+      "\"sb_mask\":\"%d.%d.%d.%d\","
+      "\"gateway\":\"%d.%d.%d.%d\",",
+      s->check_ip,
+      s->ip_addr0, s->ip_addr1, s->ip_addr2, s->ip_addr3,
+      s->sb_mask0, s->sb_mask1, s->sb_mask2, s->sb_mask3,
+      s->gateway0, s->gateway1, s->gateway2, s->gateway3);
+  mg_send(c, buf, len);
+}
+
+static void emit_admin(struct mg_connection *c,
+                       const struct dbSettings *s, char *buf) {
+  int len = snprintf(buf, 512,
+      "\"macaddr\":\"00-00-00-00-00-00\","
+      "\"adm_name\":\"%s\",\"adm_pswd\":\"%s\","
+      "\"token\":\"%s\",\"timezone\":%.0f,"
+      "\"fullmoon\":\"%s\",",
+      s->adm_name, s->adm_pswd,
+      s->token, s->timezone,
+      s->fullmoon);
+  mg_send(c, buf, len);
+}
+
+static void emit_offldt(struct mg_connection *c,
+                        const struct dbSettings *s, char *buf) {
+  int len = snprintf(buf, 512,
+      "\"offldt\":\"d:%d.%d.%d t:%02d:%02d:%02d\",",
+      s->mday, s->mon, s->year,
+      s->hour, s->min, s->sec);
+  mg_send(c, buf, len);
+}
+
+static void emit_usehttps_logmask(struct mg_connection *c,
+                                   const struct dbSettings *s, char *buf) {
+  int len = snprintf(buf, 512,
+      "\"usehttps\":%d,\"log_filter_mask\":%lu,",
+      s->usehttps, (unsigned long)s->log_filter_mask);
+  mg_send(c, buf, len);
+}
+
+static void emit_telegram_token(struct mg_connection *c, char *temp, char *buf) {
+  (void)buf;
+  https_get_telegram_token(temp, 1024);
+  if (temp[0] != '\0') {
+    const char s[] = "\"telegram_token\":\"[TELEGRAM TOKEN CONFIGURED]\",";
+    mg_send(c, s, sizeof(s) - 1);
+  } else {
+    const char s[] = "\"telegram_token\":\"\",";
+    mg_send(c, s, sizeof(s) - 1);
+  }
+}
+
+/* ──── stream_mysett_json: потоковая отправка с taskYIELD между секциями ──── */
+static void stream_mysett_json(struct mg_connection *c,
+                               const struct dbSettings *s) {
+  char buf[512];
+  char temp[1024];
+
+  mg_send(c, "{", 1);
+
+  emit_system_basic(c, s, buf);
+  taskYIELD();
+
+  emit_sunrise_pins(c, s, buf);
+  taskYIELD();
+
+  emit_sunset_pins(c, s, buf);
+  taskYIELD();
+
+  emit_mqtt(c, s, buf);
+  taskYIELD();
+
+  emit_ip(c, s, buf);
+  taskYIELD();
+
+  emit_admin(c, s, buf);
+  taskYIELD();
+
+  emit_offldt(c, s, buf);
+  taskYIELD();
+
+  emit_usehttps_logmask(c, s, buf);
+  taskYIELD();
+
+  emit_telegram_token(c, temp, buf);
+  taskYIELD();
+
+  /* TLS-блоки через общий emit_escaped_blob */
+  https_get_tls_cert(temp, sizeof(temp));
+  if (temp[0] != '\0')
+    emit_escaped_blob(c, "tls_cert", temp, buf, sizeof(buf));
+  else {
+    const char s[] = "\"tls_cert\":\"\",";
+    mg_send(c, s, sizeof(s) - 1);
+  }
+  taskYIELD();
+
+  https_get_tls_ca(temp, sizeof(temp));
+  if (temp[0] != '\0') {
+    const char s[] = "\"tls_ca\":\"[CA CERTIFICATE CONFIGURED]\",";
+    mg_send(c, s, sizeof(s) - 1);
+  } else {
+    const char s[] = "\"tls_ca\":\"\",";
+    mg_send(c, s, sizeof(s) - 1);
+  }
+  taskYIELD();
+
+  https_get_tls_key(temp, sizeof(temp));
+  if (temp[0] != '\0') {
+    const char s[] = "\"tls_key\":\"[PRIVATE KEY CONFIGURED]\",";
+    mg_send(c, s, sizeof(s) - 1);
+  } else {
+    const char s[] = "\"tls_key\":\"\",";
+    mg_send(c, s, sizeof(s) - 1);
+  }
+  taskYIELD();
+
+  https_get_domain(temp, sizeof(temp));
+  {
+    int len = snprintf(buf, sizeof(buf),
+                       "\"domain\":\"%s\"", temp[0] ? temp : "");
+    mg_send(c, buf, len);
+  }
+
+  mg_send(c, "}", 1);
+}
+
+/* ──── handle_mysett_get: HTTP GET /api/mysett/get ──── */
 void handle_mysett_get(struct mg_connection *c) {
-  gen_mysett_json(&SetSettings, g_buf, BUFFER_SIZE);
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
+
+  struct dbSettings s;
+  taskENTER_CRITICAL();
+  s = SetSettings;
+  taskEXIT_CRITICAL();
+
+  char hdr[256];
+  int hdr_len = snprintf(hdr, sizeof(hdr),
+                         "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
+  mg_send(c, hdr, hdr_len);
+  stream_mysett_json(c, &s);
 }
 void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -2921,8 +3289,23 @@ void handle_onewire_get(struct mg_connection *c) {
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  gen_onewire_json(g_buf, BUFFER_SIZE);
-  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
+
+  int buf_size = 8192;
+  if (xPortGetFreeHeapSize() < 16384) {
+    mg_http_reply(c, 503, extra_headers, "{\"error\":\"server busy\"}");
+    return;
+  }
+  char *buf = pvPortMalloc(buf_size);
+  if (!buf) {
+    mg_http_reply(c, 500, extra_headers, "{\"error\":\"out of memory\"}");
+    return;
+  }
+  MG_INFO(("heap: free=%lu min=%lu (onewire alloc %d)",
+           xPortGetFreeHeapSize(), xPortGetMinimumEverFreeHeapSize(), buf_size));
+
+  gen_onewire_json(buf, buf_size);
+  mg_http_reply(c, 200, extra_headers, "%s\n", buf);
+  vPortFree(buf);
 }
 bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
   if (jstr == NULL)
@@ -3300,12 +3683,27 @@ void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm) {
   mg_http_reply(c, 200, extra_headers, "%s", response);
 }
 void handle_temp_get(struct mg_connection *c) {
-  pars_temp_sensors(g_buf, BUFFER_SIZE);
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
+
+  int buf_size = 8192;
+  if (xPortGetFreeHeapSize() < 16384) {
+    mg_http_reply(c, 503, extra_headers, "{\"error\":\"server busy\"}");
+    return;
+  }
+  char *buf = pvPortMalloc(buf_size);
+  if (!buf) {
+    mg_http_reply(c, 500, extra_headers, "{\"error\":\"out of memory\"}");
+    return;
+  }
+  MG_INFO(("heap: free=%lu min=%lu (temp alloc %d)",
+           xPortGetFreeHeapSize(), xPortGetMinimumEverFreeHeapSize(), buf_size));
+
+  pars_temp_sensors(buf, buf_size);
+  mg_http_reply(c, 200, extra_headers, "%s\n", buf);
+  vPortFree(buf);
 }
 int gen_security_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pins_conf, uint8_t num_pins, char *buffer, int buffer_size) {
   if (buffer == NULL || buffer_size <= 0) {
@@ -3359,12 +3757,49 @@ int gen_security_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pin
 }
 
 void handle_security_get(struct mg_connection *c) {
-  gen_security_json(PinsInfo, PinsConf, NUMPIN, g_buf, BUFFER_SIZE);
+  char buf[512];
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
   log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s\n", g_buf);
+
+  mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
+
+  int len = snprintf(buf, sizeof(buf),
+                     "{\"lang\":\"%s\",\"sim800l\":%d,"
+                     "\"tel\":\"%s\",\"info\":\"%s\",\"onoff\":%d,\"pins\":[",
+                     SetSettings.lang, SetSettings.sim800l,
+                     SetSettings.tel, PinsConf[1].info, PinsConf[1].onoff);
+  mg_send(c, buf, len);
+
+  int first_pin = 1;
+  for (int i = 0; i < NUMPIN; i++) {
+    struct dbPinsConf conf;
+    taskENTER_CRITICAL();
+    conf = PinsConf[i];
+    taskEXIT_CRITICAL();
+
+    if (conf.topin != 10)
+      continue;
+
+    if (!first_pin)
+      mg_send(c, ",", 1);
+    else
+      first_pin = 0;
+
+    const char *action = (conf.sclick[0] == '\0') ? "None" : conf.sclick;
+    const char *send_sms = (conf.send_sms[0] == '\0') ? "NO" : conf.send_sms;
+
+    len = snprintf(buf, sizeof(buf),
+                   "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
+                   "\"action\":\"%s\",\"send_sms\":\"%s\","
+                   "\"info\":\"%s\",\"onoff\":%d}",
+                   conf.topin, i, PinsInfo[i].pins, conf.ptype,
+                   action, send_sms, conf.info, conf.onoff);
+    mg_send(c, buf, len);
+  }
+
+  mg_send(c, "]}", 2);
 }
 
 void parse_sim800l_json(const char *buffer) {
@@ -6100,8 +6535,59 @@ void parse_pidline_json(char *json_string, struct dbSettings *settings) {
 
 /* ──── handle_pid_get: HTTP GET /api/pid/get ──── */
 void handle_pid_get(struct mg_connection *c) {
-  gen_pid_json(g_buf, BUFFER_SIZE);
-  mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", g_buf);
+  char buf[512];
+
+  mg_printf(c, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n");
+
+  int len = snprintf(buf, sizeof(buf),
+                     "{\"lang\":\"%s\",\"pidline\":%d,\"pid\":[",
+                     SetSettings.lang, SetSettings.pidline);
+  mg_send(c, buf, len);
+
+  for (int i = 0; i < PID_MAX_SLOTS; i++) {
+    dbPidConf pid;
+    taskENTER_CRITICAL();
+    pid = PidConf[i];
+    taskEXIT_CRITICAL();
+
+    if (i > 0)
+      mg_send(c, ",", 1);
+
+    const char *pin_name = "";
+    uint8_t pin_id = pid.pwm_pin_id;
+    int current_duty = 0;
+    if (pin_id > 0 && pin_id < NUMPIN) {
+      pin_name = PinsInfo[pin_id].pins;
+      taskENTER_CRITICAL();
+      current_duty = PinsConf[pin_id].dvalue;
+      taskEXIT_CRITICAL();
+    }
+
+    len = snprintf(buf, sizeof(buf),
+                   "{\"id\":%d,\"pins\":\"%s\",\"pinact\":",
+                   i + 1, pin_name);
+    mg_send(c, buf, len);
+
+    if (pin_id > 0 && pin_id < NUMPIN) {
+      len = snprintf(buf, sizeof(buf), "{\"%s\":%d}", pin_name, pin_id);
+    } else {
+      len = snprintf(buf, sizeof(buf), "{}");
+    }
+    mg_send(c, buf, len);
+
+    len = snprintf(buf, sizeof(buf),
+                   ",\"selsens\":\"%d\",\"sernum\":\"%s\",\"presets\":\"%d\""
+                   ",\"tmpset\":\"%.1f\",\"tmpcur\":\"%.1f\""
+                   ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d"
+                   ",\"tune_state\":%d,\"tune_progress\":%d}",
+                   (int)pid.selsens, pid.sernum,
+                   pid.preset, pid.tmpset, pid.tmpcur,
+                   current_duty, pid.info, pid.onoff,
+                   (int)pid.tune_state, (int)pid.tune_progress);
+    mg_send(c, buf, len);
+  }
+
+  mg_send(c, "]}", 2);
 }
 
 /* ──── handle_pid_set: HTTP POST /api/pid/set ──── */
@@ -6111,7 +6597,12 @@ void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm) {
                   "{\"error\":\"payload too large\"}");
     return;
   }
-  char pid_buf[BUFFER_SIZE];
+  char *pid_buf = pvPortMalloc(hm->body.len + 1);
+  if (!pid_buf) {
+    mg_http_reply(c, 500, "Content-Type: application/json\r\n",
+                  "{\"error\":\"out of memory\"}");
+    return;
+  }
   memcpy(pid_buf, hm->body.buf, hm->body.len);
   pid_buf[hm->body.len] = '\0';
 
@@ -6123,19 +6614,22 @@ void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm) {
 
   mg_http_reply(c, 200, "Content-Type: application/json\r\n",
                 "{\"status\":\"ok\"}");
+  vPortFree(pid_buf);
 }
 
 /* ──── handle_pidline_set: HTTP POST /api/pidline/set ──── */
 void handle_pidline_set(struct mg_connection *c, struct mg_http_message *hm) {
-  if (hm->body.len >= BUFFER_SIZE) {
+  /* Копируем тело в стековый буфер для NUL-терминации перед cJSON_Parse */
+  char buf[512];
+  if (hm->body.len >= sizeof(buf)) {
     mg_http_reply(c, 413, "Content-Type: application/json\r\n",
                   "{\"error\":\"payload too large\"}");
     return;
   }
-  memcpy(g_buf, hm->body.buf, hm->body.len);
-  g_buf[hm->body.len] = '\0';
+  memcpy(buf, hm->body.buf, hm->body.len);
+  buf[hm->body.len] = '\0';
 
-  parse_pidline_json(g_buf, &SetSettings);
+  parse_pidline_json(buf, &SetSettings);
 
   /* Сохранение настроек */
   uint8_t num = 2;
@@ -6746,15 +7240,16 @@ void pid_compute_imc(int slot) {
 /* ──── handle_pid_tune_set: HTTP POST /api/pid/tune ──── */
 /* Body: { "id": N, "action": "start"|"stop" } */
 void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
-  if (hm->body.len >= BUFFER_SIZE) {
+  char buf[256];
+  if (hm->body.len >= sizeof(buf)) {
     mg_http_reply(c, 413, "Content-Type: application/json\r\n",
                   "{\"error\":\"payload too large\"}");
     return;
   }
-  memcpy(g_buf, hm->body.buf, hm->body.len);
-  g_buf[hm->body.len] = '\0';
+  memcpy(buf, hm->body.buf, hm->body.len);
+  buf[hm->body.len] = '\0';
 
-  cJSON *root = cJSON_Parse(g_buf);
+  cJSON *root = cJSON_Parse(buf);
   if (!root) {
     mg_http_reply(c, 400, "Content-Type: application/json\r\n",
                   "{\"error\":\"json parse error\"}");

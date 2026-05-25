@@ -509,14 +509,18 @@ void pwm_event_handler(Button *handle) {
           if (is_pin_in_autotune(i)) break; /* AutoTune lock */
           // dvalue - ПРОЦЕНТ 0-100, step = 1%
           if (PinsConf[handle->button_id].on == 1) {
+            taskENTER_CRITICAL();
             PinsConf[i].dvalue += 1;
             if (PinsConf[i].dvalue > 100)
               PinsConf[i].dvalue = 100;
+            taskEXIT_CRITICAL();
           }
           if (PinsConf[handle->button_id].on == 0) {
+            taskENTER_CRITICAL();
             PinsConf[i].dvalue -= 1;
             if (PinsConf[i].dvalue < 0)
               PinsConf[i].dvalue = 0;
+            taskEXIT_CRITICAL();
           }
           uint32_t pulse_lh = (uint32_t)((uint64_t)PinsConf[i].dvalue *
                                          PinsConf[i].pwmmax / 100ULL);
@@ -2640,8 +2644,10 @@ void StartPIDTask(void *argument)
       /* Если PID выключен - глушим ШИМ и интегратор, но переходим к следующему слоту */
       if (!PidConf[i].onoff) {
           if (PidConf[i].pwm_out > 0 || PidConf[i].integral != 0.0f) {
+              taskENTER_CRITICAL();
               PidConf[i].pwm_out = 0;
               PidConf[i].integral = 0.0f;
+              taskEXIT_CRITICAL();
               pid_set_pwm(i, 0);
           }
           continue;
@@ -2654,8 +2660,10 @@ void StartPIDTask(void *argument)
           if (PidConf[i].pwm_out > 0) {
               printf("[PID] SENSOR LOST slot=%d - no valid T for %d cycles! "
                      "EMERGENCY PWM OFF!\r\n", i, PidConf[i].stale_cnt);
+              taskENTER_CRITICAL();
               PidConf[i].pwm_out = 0;
               PidConf[i].integral = 0.0f;
+              taskEXIT_CRITICAL();
               pid_set_pwm(i, 0);
           }
           continue;

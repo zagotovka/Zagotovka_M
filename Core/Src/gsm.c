@@ -590,8 +590,10 @@ void send_command_result_sms(void) {
     
     if (strlen(message) > 0 && strcmp(message, "None") != 0) {
         /* Сохраняем в MQTT */
+        taskENTER_CRITICAL();
         strncpy(PinsConf[1].sclick, message, sizeof(PinsConf[1].sclick) - 1);
         PinsConf[1].sclick[sizeof(PinsConf[1].sclick) - 1] = '\0';
+        taskEXIT_CRITICAL();
         
         /* Добавляем префикс валидных пинов */
         char temp_msg[280]; /* Увеличен размер, чтобы вместить префикс + message */
@@ -747,8 +749,10 @@ void process_sim800l_data(void) {
 
         /* ── Быстрые команды 777 / 222 ── */
         if (strstr(sms_text, "777") != NULL) {
+          taskENTER_CRITICAL();
           PinsConf[1].onoff = 1;
           strcpy(PinsConf[1].sclick, "All SMS alerts ON!");
+          taskEXIT_CRITICAL();
           send_sms(SMS_ENABLE_CODE);
 
           uint8_t usbnum = 1;
@@ -757,8 +761,10 @@ void process_sim800l_data(void) {
           mqtt_queue_send_safe(6, 1, 0, 0);
 
         } else if (strstr(sms_text, "222") != NULL) {
+          taskENTER_CRITICAL();
           PinsConf[1].onoff = 0;
           strcpy(PinsConf[1].sclick, "All SMS alerts OFF!");
+          taskEXIT_CRITICAL();
           send_sms(SMS_DISABLE_CODE);
 
           uint8_t usbnum = 1;
@@ -847,8 +853,10 @@ void process_sim800l_data(void) {
       /* Быстрые команды 777 / 222 */
       if (dtmf_idx == 3) {
         if (strcmp(dtmf_buf, "777") == 0) {
+          taskENTER_CRITICAL();
           PinsConf[1].onoff = 1;
           strcpy(PinsConf[1].sclick, "All SMS alerts ON!");
+          taskEXIT_CRITICAL();
           send_sms(SMS_ENABLE_CODE);
           memset(dtmf_buf, 0, sizeof(dtmf_buf));
           dtmf_idx = 0;
@@ -858,8 +866,10 @@ void process_sim800l_data(void) {
           return;
         } else if (strcmp(dtmf_buf, "222") == 0) {
           send_sms(SMS_DISABLE_CODE);
+          taskENTER_CRITICAL();
           strcpy(PinsConf[1].sclick, "All SMS alerts OFF!");
           PinsConf[1].onoff = 0;
+          taskEXIT_CRITICAL();
           memset(dtmf_buf, 0, sizeof(dtmf_buf));
           dtmf_idx = 0;
           uint8_t usbnum = 1;
