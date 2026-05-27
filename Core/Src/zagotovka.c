@@ -971,104 +971,128 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
     xTaskNotifyGive(my_DgnTaskHandle);
 }
 
+/* вне функции — один раз, не растёт стек */
+static char json_tmp[256];
+
 void handle_encoder_get(struct mg_connection *c) {
-  char buf[512];
-  const char *extra_headers =
-      "Connection: close\r\nContent-Type: application/json\r\n";
-  MG_INFO(("Response headers for connection %ld:", c->id));
-  log_headers(extra_headers);
+    char buf[512];
+	const char *extra_headers = "Connection: close\r\n"
+			"Content-Type: application/json\r\n";
+//    printf("[INFO] Response headers for connection %lu\r\n", c->id);
+    log_headers(extra_headers);
+    mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
 
-  mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
+    int len = snprintf(buf, sizeof(buf),
+                       "{\"lang\":\"%s\",\"encoders\":[", SetSettings.lang);
+    if (len > 0 && len < (int)sizeof(buf))
+        mg_send(c, buf, len);
 
-  int len = snprintf(buf, sizeof(buf),
-                     "{\"lang\":\"%s\",\"encoders\":[", SetSettings.lang);
-  mg_send(c, buf, len);
-
-  int encoder_count = 0;
-  for (int i = 0; i < NUMPIN; i++) {
-    struct dbPinsConf conf;
-    taskENTER_CRITICAL();
-    conf = PinsConf[i];
-    taskEXIT_CRITICAL();
-
-    if (conf.topin != 8)
-      continue;
-
-    if (encoder_count > 0)
-      mg_send(c, ",", 1);
-
-    uint8_t encoderb_id = conf.encoderb;
-    if (encoderb_id == 0 || encoderb_id > NUMPIN)
-      encoderb_id = 255;
-
-    /* Поиск связанного PWM-пина */
-    int pwm_dvalue = 0, pwm_freq = 0, pwm_max = 0;
-    bool found_pwm = false;
-    for (int j = 0; j < NUMPIN && !found_pwm; j++) {
-      if (PinsConf[j].topin != 5)
-        continue;
-      for (int k = 0; k < NUMPINLINKS; k++) {
-        struct dbPinToPin link;
+    int encoder_count = 0;
+    for (int i = 0; i < NUMPIN; i++) {
+        struct dbPinsConf conf;
         taskENTER_CRITICAL();
-        link = PinsLinks[k];
+        conf = PinsConf[i];
         taskEXIT_CRITICAL();
-        if (link.idin == i && link.idout == j) {
-          taskENTER_CRITICAL();
-          pwm_dvalue = PinsConf[j].dvalue;
-          pwm_freq = PinsConf[j].pwm;
-          pwm_max = PinsConf[j].pwmmax;
-          taskEXIT_CRITICAL();
-          found_pwm = true;
-          break;
-        }
-      }
-    }
 
-    const char *encb_pin_name = (encoderb_id != 255 && encoderb_id < NUMPIN)
-                                    ? PinsInfo[encoderb_id].pins
-                                    : "";
-
-    len = snprintf(buf, sizeof(buf),
-                   "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\","
-                   "\"encoderb\":%d,\"encdrbpin\":\"%s\","
-                   "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,"
-                   "\"ponr\":%d",
-                   conf.topin, i, PinsInfo[i].pins, encoderb_id,
-                   encb_pin_name, pwm_dvalue, pwm_freq, pwm_max,
-                   conf.ponr);
-    mg_send(c, buf, len);
-
-    /* pinact */
-    mg_send(c, ",\"pinact\":{", 12);
-    int pinact_count = 0;
-    for (int j = 0; j < NUMPIN; j++) {
-      if (PinsConf[j].topin != 5)
-        continue;
-      for (int k = 0; k < NUMPINLINKS; k++) {
-        struct dbPinToPin link;
-        taskENTER_CRITICAL();
-        link = PinsLinks[k];
-        taskEXIT_CRITICAL();
-        if (link.idin == i && link.idout == j && link.pins[0] != '\0') {
-          if (pinact_count > 0)
+        if (conf.topin != 8)
+            continue;
+        if (encoder_count > 0)
             mg_send(c, ",", 1);
-          len = snprintf(buf, sizeof(buf), "\"%s\":%d", link.pins, link.idout);
-          mg_send(c, buf, len);
-          pinact_count++;
-          break;
+
+        uint8_t encoderb_id = conf.encoderb;
+        if (encoderb_id == 0 || encoderb_id >= NUMPIN)
+            encoderb_id = 255;
+
+        /* поиск PWM */
+        int pwm_dvalue = 0, pwm_freq = 0, pwm_max = 0;
+        bool found_pwm = false;
+        for (int j = 0; j < NUMPIN && !found_pwm; j++) {
+            if (PinsConf[j].topin != 5)
+                continue;
+            for (int k = 0; k < NUMPINLINKS; k++) {
+                struct dbPinToPin link;
+                taskENTER_CRITICAL();
+                link = PinsLinks[k];
+                taskEXIT_CRITICAL();
+                if (link.idin == i && link.idout == j) {
+                    taskENTER_CRITICAL();
+                    pwm_dvalue = PinsConf[j].dvalue;
+                    pwm_freq   = PinsConf[j].pwm;
+                    pwm_max    = PinsConf[j].pwmmax;
+                    taskEXIT_CRITICAL();
+                    found_pwm = true;
+                    break;
+                }
+            }
         }
-      }
+
+        /* --- pins --- */
+        json_escape_str(json_tmp, PinsInfo[i].pins, sizeof(json_tmp));
+        len = snprintf(buf, sizeof(buf),
+                       "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",",
+                       conf.topin, i, json_tmp);
+        if (len > 0 && len < (int)sizeof(buf))
+            mg_send(c, buf, len);
+
+        /* --- encdrbpin --- (json_tmp свободен) */
+        const char *raw_encb = (encoderb_id != 255 && encoderb_id < NUMPIN)
+                                ? PinsInfo[encoderb_id].pins : "";
+        json_escape_str(json_tmp, raw_encb, sizeof(json_tmp));
+        len = snprintf(buf, sizeof(buf),
+                       "\"encoderb\":%d,\"encdrbpin\":\"%s\",",
+                       encoderb_id, json_tmp);
+        if (len > 0 && len < (int)sizeof(buf))
+            mg_send(c, buf, len);
+
+        /* --- числовые поля + открытие pinact --- */
+        len = snprintf(buf, sizeof(buf),
+                       "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,"
+                       "\"ponr\":%d,\"pinact\":{",
+                       pwm_dvalue, pwm_freq, pwm_max, conf.ponr);
+        if (len > 0 && len < (int)sizeof(buf))
+            mg_send(c, buf, len);
+
+        /* --- pinact --- */
+        int pinact_count = 0;
+        for (int j = 0; j < NUMPIN; j++) {
+            if (PinsConf[j].topin != 5)
+                continue;
+            for (int k = 0; k < NUMPINLINKS; k++) {
+                struct dbPinToPin link;
+                taskENTER_CRITICAL();
+                link = PinsLinks[k];
+                taskEXIT_CRITICAL();
+                if (link.idin == i && link.idout == j && link.pins[0] != '\0') {
+                    if (pinact_count > 0)
+                        mg_send(c, ",", 1);
+                    json_escape_str(json_tmp, link.pins, sizeof(json_tmp));
+                    len = snprintf(buf, sizeof(buf),
+                                   "\"%s\":%d", json_tmp, link.idout);
+                    if (len > 0 && len < (int)sizeof(buf))
+                        mg_send(c, buf, len);
+                    pinact_count++;
+                    break;
+                }
+            }
+        }
+
+        /* --- info + закрытие объекта --- (json_tmp свободен) */
+        json_escape_str(json_tmp, conf.info, sizeof(json_tmp));
+        len = snprintf(buf, sizeof(buf),
+                       "},\"info\":\"%s\",\"onoff\":%d}",
+                       json_tmp, conf.onoff);
+        if (len > 0 && len < (int)sizeof(buf))
+            mg_send(c, buf, len);
+
+        encoder_count++;
     }
 
-    len = snprintf(buf, sizeof(buf),
-                   "},\"info\":\"%s\",\"onoff\":%d}",
-                   conf.info, conf.onoff);
-    mg_send(c, buf, len);
-    encoder_count++;
-  }
-
-  mg_send(c, "]}", 2);
+    mg_send(c, "]}", 2);
+    c->is_draining = 1;
+//	printf("[INFO] %lu encoder JSON completed\r\n", c->id);
+//	printf("[INFO] conn=%lu send=%u drain=%d\r\n", c->id, (unsigned) c->send.len, c->is_draining);
 }
+
 void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
@@ -1174,11 +1198,13 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
       }
       offset += snprintf(buffer + offset, buffer_size - offset, "},\n");
 
+      char gen_esc_info[64];
+      json_escape_str(gen_esc_info, pins_conf[i].info, sizeof(gen_esc_info));
       offset += snprintf(buffer + offset, buffer_size - offset,
                          "      \"info\": \"%s\",\n"
                          "      \"onoff\": %d\n"
                          "    }",
-                         pins_conf[i].info, pins_conf[i].onoff);
+                         gen_esc_info, pins_conf[i].onoff);
       encoder_count++;
     }
   }

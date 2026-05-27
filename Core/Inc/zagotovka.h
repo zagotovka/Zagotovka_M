@@ -337,6 +337,9 @@ extern volatile uint32_t g_ver_security;
 void mark_slice_dirty(volatile uint32_t *ver);
 void mark_slice_dirty_from_isr(volatile uint32_t *ver);
 
+/* JSON string escaping (defined in net.c) */
+const char *json_escape_str(char *dst, const char *src, size_t dst_sz);
+
 void gen_pintopin_json(struct dbPinToPin *PinsLinks, char *buffer, int buffer_size);
 
 //void setup_mqtt(struct mg_mgr *mgr, struct mg_tcpip_if *mif);

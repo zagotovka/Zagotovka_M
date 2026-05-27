@@ -198,7 +198,7 @@ const osThreadAttr_t dht22Task_attributes = {
 osThreadId_t ServiceTaskHandle;
 const osThreadAttr_t ServiceTask_attributes = {
   .name = "ServiceTask",
-  .stack_size = 512 * 4,
+  .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for SIM800LTask */
@@ -233,7 +233,7 @@ const osThreadAttr_t my_DgnTask_attributes = {
 osThreadId_t LoggerTaskHandle;
 const osThreadAttr_t LoggerTask_attributes = {
   .name = "LoggerTask",
-  .stack_size = 256 * 4,
+  .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
 /* Definitions for outputQueue */
@@ -265,6 +265,15 @@ extern struct dbPinToPin PinsLinks[NUMPINLINKS];
 extern bool g_log_filter_from_file;  // Флаг: log_filter_mask был в settings.ini
 
 extern ApplicationTypeDef Appli_state;
+
+/* Глобальные переменные мониторинга пиков и ошибок */
+volatile uint32_t malloc_fail_count = 0;
+static uint32_t mqtt_tx_peak = 0;
+static uint32_t mqtt_rx_peak = 0;
+static uint32_t output_peak = 0;
+static uint32_t usb_peak = 0;
+static uint32_t mg_conn_peak = 0;
+static uint32_t mg_poll_gap_peak = 0;
 
 /* USER CODE END PV */
 
@@ -1111,6 +1120,12 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void vApplicationMallocFailedHook(void)
+{
+    malloc_fail_count++;
+    printf("\r\n!!! CRITICAL: MALLOC FAIL %lu !!!\r\n", malloc_fail_count);
+}
+
 /*********************** для printf ******************************/
 /* PUTCHAR_PROTOTYPE перенесен в logger.c */
 /************************ PWM Fade *************************************/
@@ -1343,6 +1358,12 @@ void StartConfigTask(void *argument)
       }
       // Функция для чтения целых чисел из очереди
       if (xQueueReceive(usbQueueHandle, &usbnum, portMAX_DELAY) == pdTRUE) {
+        {
+          uint32_t cur_usb = uxQueueMessagesWaiting(usbQueueHandle) + 1;
+          if (cur_usb > usb_peak) {
+            usb_peak = cur_usb;
+          }
+        }
         switch (usbnum) {
         case 1:
           SetPinConfig(); // Если файл "pins.ini" не существует, создаем его и
@@ -1497,20 +1518,40 @@ void StartWebServerTask(void *argument)
     /* Измеряем интервал между poll-вызовами */
     uint32_t now_poll = HAL_GetTick();
     uint32_t poll_gap = now_poll - s_last_poll_tk;
-    if (poll_gap > 50 && s_last_poll_tk != 0) {  /* >50ms = starvation */
-      if (now_poll - s_poll_warn_tk > 3000) {     /* не спамим чаще 1р/3с */
-        s_poll_warn_tk = now_poll;
-        printf("[NET] WARN: mg_mgr_poll gap=%lums (starvation!)\r\n",
-               (unsigned long)poll_gap);
+    if (s_last_poll_tk != 0) {
+      if (poll_gap > mg_poll_gap_peak) {
+        mg_poll_gap_peak = poll_gap;
+      }
+      if (poll_gap > 50) {  /* >50ms = starvation */
+        if (now_poll - s_poll_warn_tk > 30000) {     /* не спамим чаще 1р/30с */
+          s_poll_warn_tk = now_poll;
+          printf("[NET] WARN: mg_mgr_poll gap=%lums (starvation!)\r\n",
+                 (unsigned long)poll_gap);
+        }
       }
     }
     s_last_poll_tk = now_poll;
 
     mg_mgr_poll(mgr, 10);
 
+    /* Диагностика пика соединений Mongoose */
+    {
+      uint32_t active_conns = 0;
+      for (struct mg_connection *c = mgr->conns; c != NULL; c = c->next) {
+        active_conns++;
+      }
+      if (active_conns > mg_conn_peak) {
+        mg_conn_peak = active_conns;
+      }
+    }
+
     /* Обработка входящих MQTT-команд (вынесена из fn_mqtt callback,
        чтобы не блокировать mg_mgr_poll) */
     {
+        uint32_t cur_rx = uxQueueMessagesWaiting(mqttRxQueueHandle);
+        if (cur_rx > mqtt_rx_peak) {
+            mqtt_rx_peak = cur_rx;
+        }
         MqttRxMsg_t rx;
         while (xQueueReceive(mqttRxQueueHandle, &rx, 0) == pdPASS) {
             mqtt_message_handler(rx.topic, rx.payload);
@@ -1527,6 +1568,12 @@ void StartWebServerTask(void *argument)
 
     // Получаем данные из очереди (не блокируем поток Mongoose)
     memset(&rxMsg, 0, sizeof(MqttMessage_t));
+    {
+      uint32_t cur_tx = uxQueueMessagesWaiting(mqttQueueHandle);
+      if (cur_tx > mqtt_tx_peak) {
+        mqtt_tx_peak = cur_tx;
+      }
+    }
     status = xQueueReceive(mqttQueueHandle, &rxMsg, 0);
     if (status == pdPASS) {
 			printf("[MQTT_Q] cmd=%d dev=%d state=%d\r\n", rxMsg.command,rxMsg.deviceId, rxMsg.state); // Подсветит кто спамит в MQTT.
@@ -1684,6 +1731,12 @@ void StartOutputTask(void *argument)
   for (;;) {
     data_pin_t data_pin = {0}; /* A3: локальная копия для xQueueReceive */
     if (xQueueReceive(outputQueueHandle, &data_pin, portMAX_DELAY) == pdTRUE) {
+      {
+        uint32_t cur_out = uxQueueMessagesWaiting(outputQueueHandle) + 1;
+        if (cur_out > output_peak) {
+          output_peak = cur_out;
+        }
+      }
       if (data_pin.id >= 0 &&
           data_pin.id < NUMPIN) { // data_pin.id - это ID Devices а не Switch!
         switch (data_pin.action) {
@@ -2010,6 +2063,7 @@ void StartEncoderTask(void *argument)
 	                                       if (val < 0)   val = 0;
 	                                       if (val > 100) val = 100;
 	                                       PinsConf[idpwm].dvalue = (int8_t)val;
+	                                       mark_slice_dirty(&g_ver_encoder);
 
 	                                       /* Применяем к железу только если включено */
 	                                       if (PinsConf[id].onoff != 0) {
@@ -2308,6 +2362,7 @@ void StartServiceTask(void *argument)
           mark_slice_dirty(&g_ver_sensors);
           mark_slice_dirty(&g_ver_pid);
           mark_slice_dirty(&g_ver_onewire);
+          mark_slice_dirty(&g_ver_encoder);
 	      for (int i = 0; i < NUMPIN; i++) {
 	        if (!fade_state[i].active)   continue;
 	        if (PinsConf[i].topin != 5)  continue;
@@ -2741,14 +2796,30 @@ static void heap_diagnostic(void)
 {
     static unsigned last_free = 0;
     static unsigned last_min_ever = 0;
+    static uint32_t last_malloc_fail = 0;
+    static uint32_t last_mqtt_tx_peak = 0;
+    static uint32_t last_mqtt_rx_peak = 0;
+    static uint32_t last_output_peak = 0;
+    static uint32_t last_usb_peak = 0;
+    static uint32_t last_mg_conn_peak = 0;
+    static uint32_t last_mg_poll_gap_peak = 0;
     static uint8_t first_run = 1;
 
     unsigned current_free = (unsigned)xPortGetFreeHeapSize();
     unsigned current_min  = (unsigned)xPortGetMinimumEverFreeHeapSize();
+    uint32_t current_malloc_fail = malloc_fail_count;
 
     /* Печатаем только если показатели изменились */
-    if (current_free != last_free || current_min != last_min_ever) {
-        printf("\r\n=== MEMORY DIAGNOSTIC ===\r\n");
+    if (current_free != last_free || current_min != last_min_ever || 
+        current_malloc_fail != last_malloc_fail ||
+        mqtt_tx_peak != last_mqtt_tx_peak ||
+        mqtt_rx_peak != last_mqtt_rx_peak ||
+        output_peak != last_output_peak ||
+        usb_peak != last_usb_peak ||
+        mg_conn_peak != last_mg_conn_peak ||
+        mg_poll_gap_peak != last_mg_poll_gap_peak) {
+        
+        printf("\r\n=== DIAGNOSTIC REPORT ===\r\n");
         if (first_run) {
             printf("FreeRTOS free now:  %u B\r\n", current_free);
             printf("FreeRTOS min ever:  %u B\r\n", current_min);
@@ -2759,10 +2830,25 @@ static void heap_diagnostic(void)
             printf("FreeRTOS min ever:  %u B (delta=%+d)\r\n",
                    current_min, (int)current_min - (int)last_min_ever);
         }
+        
+        printf("Malloc fail count:  %lu\r\n", current_malloc_fail);
+        printf("MQTT TX queue peak: %lu / 32\r\n", mqtt_tx_peak);
+        printf("MQTT RX queue peak: %lu / 4\r\n", mqtt_rx_peak);
+        printf("Output queue peak:  %lu / 16\r\n", output_peak);
+        printf("USB queue peak:     %lu / 16\r\n", usb_peak);
+        printf("Mongoose conns peak: %lu\r\n", mg_conn_peak);
+        printf("Mongoose gap peak:   %lu ms\r\n", mg_poll_gap_peak);
         printf("=========================\r\n");
 
         last_free = current_free;
         last_min_ever = current_min;
+        last_malloc_fail = current_malloc_fail;
+        last_mqtt_tx_peak = mqtt_tx_peak;
+        last_mqtt_rx_peak = mqtt_rx_peak;
+        last_output_peak = output_peak;
+        last_usb_peak = usb_peak;
+        last_mg_conn_peak = mg_conn_peak;
+        last_mg_poll_gap_peak = mg_poll_gap_peak;
     }
 }
 /* USER CODE END Header_StartDgnTask */
@@ -2773,27 +2859,33 @@ void StartDgnTask(void *argument)
   osDelay(5000);
 
   /* Структура для динамического отслеживания минимума свободного стека (HWM) */
-  struct {
-    osThreadId_t *handle_ptr;
-    const char *name;
-    unsigned min_free_words;
-  } tasks[] = {
-    {&ConfigTaskHandle,    "ConfigTask",    0xFFFF},
-    {&WebServerTaskHandle, "WebServerTask", 0xFFFF},
-    {&OutputTaskHandle,    "OutputTask",    0xFFFF},
-    {&CronTaskHandle,      "CronTask",      0xFFFF},
-    {&InputTaskHandle,     "InputTask",     0xFFFF},
-    {&EncoderTaskHandle,   "EncoderTask",   0xFFFF},
-    {&ds18b20TaskHandle,   "ds18b20Task",   0xFFFF},
-    {&dht22TaskHandle,     "dht22Task",     0xFFFF},
-    {&ServiceTaskHandle,   "ServiceTask",   0xFFFF},
-    {&SIM800LTaskHandle,   "SIM800LTask",   0xFFFF},
-    {&SecurityTaskHandle,  "SecurityTask",  0xFFFF},
-    {&PIDTaskHandle,       "PIDTask",       0xFFFF},
-    {&my_DgnTaskHandle,    "DgnTask",       0xFFFF},
-    {&LoggerTaskHandle,    "LoggerTask",    0xFFFF}
+  struct
+  {
+      osThreadId_t *handle_ptr;
+      const char *name;
+      unsigned min_free_words;
+
+  } tasks[] =
+  {
+      {&ConfigTaskHandle,    "ConfigTask",    0xFFFF},
+      {&WebServerTaskHandle, "WebServerTask", 0xFFFF},
+      {&OutputTaskHandle,    "OutputTask",    0xFFFF},
+      {&CronTaskHandle,      "CronTask",      0xFFFF},
+      {&InputTaskHandle,     "InputTask",     0xFFFF},
+      {&EncoderTaskHandle,   "EncoderTask",   0xFFFF},
+      {&ds18b20TaskHandle,   "ds18b20Task",   0xFFFF},
+      {&dht22TaskHandle,     "dht22Task",     0xFFFF},
+      {&ServiceTaskHandle,   "ServiceTask",   0xFFFF},
+      {&SIM800LTaskHandle,   "SIM800LTask",   0xFFFF},
+      {&SecurityTaskHandle,  "SecurityTask",  0xFFFF},
+      {&PIDTaskHandle,       "PIDTask",       0xFFFF},
+      {&my_DgnTaskHandle,    "DgnTask",       0xFFFF},
+      {&LoggerTaskHandle,    "LoggerTask",    0xFFFF}
+
   };
+
   const size_t num_tasks = sizeof(tasks) / sizeof(tasks[0]);
+  uint32_t last_full_report = xTaskGetTickCount();
 
   /* Infinite loop */
   for(;;)
@@ -2802,36 +2894,76 @@ void StartDgnTask(void *argument)
        * Ожидаем уведомления от других кусков кода (например HTTP/SMS)
        * с уменьшенным таймаутом 5000 мс (5 секунд), чтобы чаще проверять стеки под нагрузкой.
        */
-      ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5000));
+      ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(60000));// было 5000
       
       heap_diagnostic();
 
-      /* Проверяем HWM для каждой задачи.
-         Если свободный стек уменьшился ниже ранее зафиксированного минимума — выводим предупреждение. */
-      int printed_header = 0;
-      for (size_t i = 0; i < num_tasks; i++) {
-          if (tasks[i].handle_ptr != NULL && *(tasks[i].handle_ptr) != NULL) {
-              unsigned current_hwm = (unsigned)uxTaskGetStackHighWaterMark((TaskHandle_t)*(tasks[i].handle_ptr));
-              if (current_hwm < tasks[i].min_free_words) {
-                  if (!printed_header) {
-                      printf("\r\n=== STACK HWM WARNING/UPDATE ===\r\n");
-                      printed_header = 1;
-                  }
-                  if (tasks[i].min_free_words == 0xFFFF) {
-                      /* Первый замер при старте */
-                      printf("  %-15s HWM initial: %u words free (%u bytes)\r\n", 
-                             tasks[i].name, current_hwm, current_hwm * 4);
-                  } else {
-                      /* Снижение HWM */
-                      printf("  %-15s HWM DROPPED: %u -> %u words free (%u bytes free!)\r\n", 
-                             tasks[i].name, tasks[i].min_free_words, current_hwm, current_hwm * 4);
-                  }
-                  tasks[i].min_free_words = current_hwm;
-              }
-          }
-      }
-      if (printed_header) {
-          printf("================================\r\n");
+		int printed_header = 0;
+
+		for (size_t i = 0; i < num_tasks; i++) {
+			if (tasks[i].handle_ptr && *(tasks[i].handle_ptr)) {
+				unsigned current_hwm = uxTaskGetStackHighWaterMark((TaskHandle_t) *(tasks[i].handle_ptr));
+
+				if (current_hwm < tasks[i].min_free_words) {
+					if (!printed_header) {
+						printf("\r\n""=== STACK HWM UPDATE ===\r\n");
+						printed_header = 1;
+					}
+
+					if (tasks[i].min_free_words == 0xFFFF) {
+						printf("%-15s " "initial=%u words " "(%u bytes)\r\n", tasks[i].name, current_hwm,current_hwm * 4);
+					} else {
+						printf("%-15s " "%u -> %u words " "(%u bytes)\r\n",
+						tasks[i].name,
+						tasks[i].min_free_words,
+						current_hwm,
+						current_hwm * 4);
+					}
+					tasks[i].min_free_words = current_hwm;
+				}
+			}
+		}
+
+		if (printed_header) {
+			printf("========================\r\n");
+		}
+
+		/*
+		 * Полный отчёт раз в час
+		 */
+		if ((xTaskGetTickCount() - last_full_report) > pdMS_TO_TICKS(3600000)) {
+			last_full_report = xTaskGetTickCount();
+
+			printf("\r\n" "=== STACK WATERMARK ===\r\n");
+
+			for (size_t i = 0; i < num_tasks; i++) {
+				if (tasks[i].handle_ptr && *(tasks[i].handle_ptr)) {
+					UBaseType_t hwm = uxTaskGetStackHighWaterMark((TaskHandle_t) *(tasks[i].handle_ptr));
+					printf("%-15s %lu words " "(%lu bytes)\r\n", tasks[i].name, (uint32_t) hwm, (uint32_t) hwm * 4);
+				}
+			}
+
+			printf("\r\n""=== HEAP ===\r\n");
+			printf("Free bytes: %lu\r\n",
+			(uint32_t) xPortGetFreeHeapSize());
+			printf("Min ever: %lu\r\n",
+			(uint32_t) xPortGetMinimumEverFreeHeapSize());
+			printf("Malloc fail count: %lu\r\n", malloc_fail_count);
+
+			printf("\r\n""=== QUEUE PEAKS ===\r\n");
+			printf("MQTT TX peak:  %lu / 32\r\n", mqtt_tx_peak);
+			printf("MQTT RX peak:  %lu / 4\r\n", mqtt_rx_peak);
+			printf("Output peak:   %lu / 16\r\n", output_peak);
+			printf("USB peak:      %lu / 16\r\n", usb_peak);
+
+			printf("\r\n""=== MONGOOSE PEAKS ===\r\n");
+			printf("Conns peak:    %lu\r\n", mg_conn_peak);
+			printf("Poll gap peak: %lu ms\r\n", mg_poll_gap_peak);
+
+			printf("\r\n""=== RUNTIME ===\r\n");
+			printf("Tick=%lu\r\n",
+			(uint32_t) xTaskGetTickCount());
+			printf("===================\r\n");
       }
   }
   /* USER CODE END StartDgnTask */

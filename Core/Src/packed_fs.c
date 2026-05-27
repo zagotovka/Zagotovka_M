@@ -34811,9 +34811,9 @@ static const unsigned char v4[] = {
 
 const struct mg_mem_file mg_packed_files[] = {
   {"/web_root/history.min.js", v1, sizeof(v1) - 1, 1716299780},
-  {"/web_root/assets/index-6XaCu9Jv.css", v2, sizeof(v2) - 1, 1779702387},
-  {"/web_root/assets/index-0rI3dfkM.js", v3, sizeof(v3) - 1, 1779702387},
-  {"/web_root/index.html", v4, sizeof(v4) - 1, 1779702387},
+  {"/web_root/assets/index-6XaCu9Jv.css", v2, sizeof(v2) - 1, 1779860416},
+  {"/web_root/assets/index-0rI3dfkM.js", v3, sizeof(v3) - 1, 1779860416},
+  {"/web_root/index.html", v4, sizeof(v4) - 1, 1779860416},
   {NULL, NULL, 0, 0}
 };
 

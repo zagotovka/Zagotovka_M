@@ -1103,6 +1103,23 @@ static void chunked_json_end(struct mg_connection *c) {
     mg_http_printf_chunk(c, "");  /* empty chunk = end of response */
 }
 
+/* Escape JSON-special chars in src → dst (max dst_sz). Returns dst. */
+const char *json_escape_str(char *dst, const char *src, size_t dst_sz) {
+    size_t j = 0;
+    for (size_t i = 0; src[i] && j < dst_sz - 1; i++) {
+        switch (src[i]) {
+            case '"':  if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = '"';  } break;
+            case '\\': if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = '\\'; } break;
+            case '\n': if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = 'n';  } break;
+            case '\r': if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = 'r';  } break;
+            case '\t': if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = 't';  } break;
+            default:   dst[j++] = src[i]; break;
+        }
+    }
+    dst[j] = '\0';
+    return dst;
+}
+
 /* ─── /api/buttons ─── */
 static void handle_buttons_chunked(struct mg_connection *c) {
     char b[CHUNK_BUF_SIZE];
@@ -1113,13 +1130,18 @@ static void handle_buttons_chunked(struct mg_connection *c) {
 
     for (int i = 0; i < NUMPIN; i++) {
         if (PinsConf[i].topin != 1) continue;  /* only BUTTONs */
+        char eb_info[64], eb_sc[200], eb_dc[200], eb_lp[200];
         snprintf(b, sizeof(b),
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
             "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
             "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
             first ? "" : ",", PinsConf[i].topin, i, PinsInfo[i].pins,
-            PinsConf[i].ptype, PinsConf[i].sclick, PinsConf[i].dclick,
-            PinsConf[i].lpress, PinsConf[i].info, PinsConf[i].onoff);
+            PinsConf[i].ptype,
+            json_escape_str(eb_sc, PinsConf[i].sclick, sizeof(eb_sc)),
+            json_escape_str(eb_dc, PinsConf[i].dclick, sizeof(eb_dc)),
+            json_escape_str(eb_lp, PinsConf[i].lpress, sizeof(eb_lp)),
+            json_escape_str(eb_info, PinsConf[i].info, sizeof(eb_info)),
+            PinsConf[i].onoff);
         mg_http_printf_chunk(c, "%s", b);
         first = 0;
     }
@@ -1138,11 +1160,14 @@ static void handle_switches_chunked(struct mg_connection *c) {
 
     for (int i = 0; i < NUMPIN; i++) {
         if (PinsConf[i].topin != 3) continue;  /* only SWITCHes */
+        char es_info[64];
         snprintf(b, sizeof(b),
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
             "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
             first ? "" : ",", PinsConf[i].topin, i, PinsInfo[i].pins,
-            PinsConf[i].ptype, PinsConf[i].info, PinsConf[i].onoff);
+            PinsConf[i].ptype,
+            json_escape_str(es_info, PinsConf[i].info, sizeof(es_info)),
+            PinsConf[i].onoff);
         mg_http_printf_chunk(c, "%s", b);
         first = 0;
     }
@@ -1219,8 +1244,10 @@ static void handle_encoders_chunked(struct mg_connection *c) {
             }
         }
 
+        char esc_info[64];
+        json_escape_str(esc_info, PinsConf[i].info, sizeof(esc_info));
         snprintf(b, sizeof(b), "},\"info\":\"%s\",\"onoff\":%d}",
-            PinsConf[i].info, PinsConf[i].onoff);
+            esc_info, PinsConf[i].onoff);
         mg_http_printf_chunk(c, "%s", b);
         first = 0;
     }
@@ -1269,7 +1296,8 @@ static void handle_pid_chunked(struct mg_connection *c) {
             PidConf[i].preset,
             PidConf[i].tmpset, PidConf[i].tmpcur,
             duty,
-            PidConf[i].info, PidConf[i].onoff,
+            json_escape_str((char[64]){0}, PidConf[i].info, 64),
+            PidConf[i].onoff,
             PidConf[i].tune_state, PidConf[i].tune_progress);
         mg_http_printf_chunk(c, "%s", b);
     }
@@ -1289,7 +1317,8 @@ static void handle_security_chunked(struct mg_connection *c) {
         "{\"lang\":\"%s\",\"sim800l\":%d,\"tel\":\"%s\","
         "\"info\":\"%s\",\"onoff\":%d,\"pins\":[",
         SetSettings.lang, SetSettings.sim800l, SetSettings.tel,
-        PinsConf[1].info, PinsConf[1].onoff);
+        json_escape_str((char[64]){0}, PinsConf[1].info, 64),
+        PinsConf[1].onoff);
 
     for (int i = 0; i < NUMPIN; i++) {
         if (PinsConf[i].topin != 10) continue;
@@ -1301,7 +1330,9 @@ static void handle_security_chunked(struct mg_connection *c) {
             "\"info\":\"%s\",\"onoff\":%d}",
             first ? "" : ",",
             PinsConf[i].topin, i, PinsInfo[i].pins, PinsConf[i].ptype,
-            action, send_sms, PinsConf[i].info, PinsConf[i].onoff);
+            action, send_sms,
+            json_escape_str((char[64]){0}, PinsConf[i].info, 64),
+            PinsConf[i].onoff);
         mg_http_printf_chunk(c, "%s", b);
         first = 0;
     }
@@ -1417,7 +1448,7 @@ static void handle_onewire_chunked(struct mg_connection *c) {
                         ds18b20[j].sensors[k].lowt,
                         ds18b20[j].sensors[k].actup,
                         ds18b20[j].sensors[k].actlow,
-                        ds18b20[j].sensors[k].info);
+                        json_escape_str((char[64]){0}, ds18b20[j].sensors[k].info, 64));
                     mg_http_printf_chunk(c, "%s", b);
                 }
                 mg_http_printf_chunk(c, "]}");
@@ -1451,7 +1482,7 @@ static void handle_onewire_chunked(struct mg_connection *c) {
                     dht22[j].actup, dht22[j].actlow,
                     dht22[j].uph, dht22[j].lowh,
                     dht22[j].actuh, dht22[j].actlh,
-                    dht22[j].info);
+                    json_escape_str((char[64]){0}, dht22[j].info, 64));
                 mg_http_printf_chunk(c, "%s", b);
                 mg_http_printf_chunk(c, "]}");
             }
