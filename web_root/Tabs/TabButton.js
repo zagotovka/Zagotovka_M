@@ -1,6 +1,6 @@
 import { ModalButton } from '../Modals/ModalButton.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
-import { safeFetch } from '../safeFetch.js';
+import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -96,8 +96,9 @@ const TabButton = () => {
   const [showHelp, setShowHelp] = useState(false);
   const [language, setLanguage] = useState('ru');
   const [debugInfo, setDebugInfo] = useState('');
-  const [isUpdating, setIsUpdating] = useState(true);
-
+  const isPendingOnOff = useRef(false);
+  const reqCounter = useRef(0);
+  const pollBusy = useRef(false);
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => { initGlobalTooltip(); }, []);
 
@@ -443,33 +444,45 @@ const TabButton = () => {
         setDebugInfo(`Error fetching data: ${error.message}`);
       });
 
-  const fetchButtonData = () => {
-    safeFetch('/api/button/get', 'button').then(data => {
-      if (!data) return;
-      setButton(data.buttons);
-      setLanguage(data.lang);
-    });
-  };
-
   useEffect(() => {
-    let timer = null;
-    let isFetching = false;
+    let active = true;
+    const reqId = ++reqCounter.current;
 
-    fetchButtonData();
+    // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
+    const controller = new AbortController();
+    const timeoutId = setTimeout(function() { controller.abort(); }, 3000);
 
-    const poll = () => {
-      if (isFetching) return;
-      if (!isUpdating) return;
-      isFetching = true;
-      safeFetch('/api/buttons', 'button-slice').then(data => {
-        if (!data) return;
-        if (data.buttons) { setButton(data.buttons); setLanguage(data.lang); }
-      }).finally(() => { isFetching = false; });
+    fetch('/api/button/get', { signal: controller.signal, cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(data) {
+        if (reqId !== reqCounter.current) return;
+        if (!active) return;
+        if (data !== null && data !== undefined) {
+          if (data.buttons) { setButton(data.buttons); setLanguage(data.lang); }
+        }
+      })
+      .catch(function(err) {
+        if (err.name === 'AbortError') return;
+        console.warn('[TabButton] init fetch:', err.message);
+      })
+      .finally(function() { clearTimeout(timeoutId); });
+
+    // ── Фоновый polling: через pollQueue ──
+    registerPoll('buttons', '/api/buttons', (data) => {
+      if (!active || pollBusy.current) return;
+      if (isPendingOnOff.current) return;
+      if (data !== null && data !== undefined && data.buttons) {
+        setButton(data.buttons);
+        setLanguage(data.lang);
+      }
+    });
+    return () => {
+      active = false;
+      controller.abort();
+      clearTimeout(timeoutId);
+      unregisterPoll('buttons');
     };
-
-    timer = setInterval(poll, window.pollIntervalMs || 3000);
-    return () => clearInterval(timer);
-  }, [isUpdating]);
+  }, []);
 
   const getConnectedPins = (buttonId) => {
     const connectedPins = new Map();
@@ -589,14 +602,12 @@ const TabButton = () => {
     setModalType(type);
     setSelectedButton(buttonData);
     setIsModalOpen(true);
-    setIsUpdating(false);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setModalType(null);
     setSelectedButton(null);
-    setIsUpdating(true);
   };
 
   const handleButtonChange = (updatedButton) => {
@@ -621,6 +632,11 @@ const TabButton = () => {
       })
       .catch((error) => {
         console.error('Error calling /api/onoff/set:', error);
+      })
+      .finally(() => {
+        setTimeout(() => {
+          isPendingOnOff.current = false;
+        }, 1500);
       });
 
     closeModal();

@@ -1,4 +1,5 @@
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, ruLangselect } from '../rulang.js';
@@ -90,12 +91,14 @@ function TabSelect({ }) {
   const [countdown, setCountdown] = useState(3);
   const [gpsEnabled, setGpsEnabled] = useState(false);
   const [language, setLanguage] = useState('ru');
+  const lastChangeTime = useRef(0);
 
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => { initGlobalTooltip(); }, []);
 
   const handleGpsToggle = (enabled) => {
     setGpsEnabled(enabled);
+    lastChangeTime.current = Date.now();
   };
 
   const isRowDisabled = (id) => {
@@ -103,7 +106,7 @@ function TabSelect({ }) {
   };
 
   const refresh = () =>
-    fetch('api/select/get')
+    fetch('/api/select/get', { cache: 'no-store' })
       .then((r) => r.json())
       .then((r) => {
         const data = r.data || r;
@@ -118,7 +121,38 @@ function TabSelect({ }) {
         setSelectedValues(initialValues);
       });
 
-  useEffect(refresh, []);
+  const reqCounter = useRef(0);
+  const pollBusy = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    const reqId = ++reqCounter.current;
+
+    // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
+    refresh();
+
+    // ── Фоновый polling: через pollQueue ──
+    registerPoll('select', '/api/select/get', function(r) {
+      if (!active || pollBusy.current) return;
+      if (Date.now() - lastChangeTime.current < 8000) return;
+      if (r !== null && r !== undefined) {
+        const data = r.data || r;
+        setSelect(data);
+        setGpsEnabled(r.sim800l === 1);
+        if (r.lang) setLanguage(r.lang);
+        const initialValues = {};
+        data.forEach(function(d) {
+          initialValues['topin_' + d.id] = d.topin.toString();
+        });
+        setSelectedValues(initialValues);
+      }
+    });
+
+    return function() {
+      active = false;
+      unregisterPoll('select');
+    };
+  }, []);
 
   useEffect(() => {
     let timer;
@@ -159,7 +193,7 @@ function TabSelect({ }) {
     setCountdown(3);
 
     try {
-      const response = await fetch('api/select/set', {
+      const response = await fetch('/api/select/set', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(jsonData)
@@ -176,6 +210,7 @@ function TabSelect({ }) {
         updatedValues[`topin_${item.id}`] = item.topin.toString();
       });
       setSelectedValues((prevState) => ({ ...prevState, ...updatedValues }));
+      lastChangeTime.current = 0;
 
       refresh();
     } catch (error) {
@@ -187,6 +222,7 @@ function TabSelect({ }) {
   const handleRadioChange = (e) => {
     const { name, value } = e.target;
     setSelectedValues((prevState) => ({ ...prevState, [name]: value }));
+    lastChangeTime.current = Date.now();
   };
 
   const handleLanguageChange = (e) => {

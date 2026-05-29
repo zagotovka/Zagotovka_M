@@ -1,6 +1,7 @@
 import { ModalCron } from '../Modals/ModalCron.js';
 import { ModalPwmCron } from '../Modals/ModalPwmCron.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
@@ -95,16 +96,16 @@ function TabCron({ }) {
   const [showHelp, setShowHelp] = useState(false);
   const [visibleCrons, setVisibleCrons] = useState(1);
   const [numline, setNumline] = useState(0);
+  const isPendingOnOff = useRef(false);
 
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => { initGlobalTooltip(); }, []);
 
   const refresh = () =>
-    fetch('/api/cron/get')
+    fetch('/api/cron/get', { cache: 'no-store' })
       .then((r) => r.json())
       .then((r) => {
-//        console.log('API response:', r);
-        if (r && Array.isArray(r.timers)) {
+        if (r !== null && r !== undefined && Array.isArray(r.timers)) {
           setCron(r.timers);
           setLanguage(r.lang || 'ru');
           if (typeof r.numline === 'number') {
@@ -121,8 +122,33 @@ function TabCron({ }) {
         setCron([]);
       });
 
+  const reqCounter = useRef(0);
+  const pollBusy = useRef(false);
+
   useEffect(() => {
+    let active = true;
+
+    // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
     refresh();
+
+    // ── Фоновый polling: через pollQueue ──
+    registerPoll('cron', '/api/cron/get', function(r) {
+      if (!active || pollBusy.current) return;
+      if (isPendingOnOff.current) return;
+      if (r !== null && r !== undefined && Array.isArray(r.timers)) {
+        setCron(r.timers);
+        setLanguage(r.lang || 'ru');
+        if (typeof r.numline === 'number') {
+          setNumline(r.numline);
+          setVisibleCrons(r.numline);
+        }
+      }
+    });
+
+    return function() {
+      active = false;
+      unregisterPoll('cron');
+    };
   }, []);
 
   const isFirstNumlineMount = useRef(true);
@@ -135,14 +161,19 @@ function TabCron({ }) {
   }, [numline]);
 
   const sendNumlineToStm32 = (value) => {
+    isPendingOnOff.current = true;
     fetch('/api/numline/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ numline: value })
     })
       .then((response) => response.json())
-//      .then((data) => console.log('Numline sent to stm32:', data))
-      .catch((error) => console.error('Error sending Crone line to stm32:', error));
+      .catch((error) => console.error('Error sending Crone line to stm32:', error))
+      .finally(() => {
+        setTimeout(() => {
+          isPendingOnOff.current = false;
+        }, 1500);
+      });
   };
 
   const addCron = () => {
@@ -150,7 +181,6 @@ function TabCron({ }) {
       const newVisibleCrons = visibleCrons + 1;
       setVisibleCrons(newVisibleCrons);
       setNumline(newVisibleCrons);
-      sendNumlineToStm32(newVisibleCrons);
     }
   };
 
@@ -159,7 +189,6 @@ function TabCron({ }) {
       const newVisibleCrons = visibleCrons - 1;
       setVisibleCrons(newVisibleCrons);
       setNumline(newVisibleCrons);
-      sendNumlineToStm32(newVisibleCrons);
     }
   };
 
@@ -426,6 +455,7 @@ function TabCron({ }) {
     console.log('handleCronChange:', updatedCron);
 
     setCron(varcron.map((b) => (b.id === updatedCron.id ? updatedCron : b)));
+    isPendingOnOff.current = true;
 
     fetch('/api/cron/set', {
       method: 'POST',
@@ -434,7 +464,12 @@ function TabCron({ }) {
     })
       .then(response => response.json())
       .then(data => { console.log('Cron job updated successfully:', data); })
-      .catch(error => { console.error('Error updating cron job:', error); });
+      .catch(error => { console.error('Error updating cron job:', error); })
+      .finally(() => {
+        setTimeout(() => {
+          isPendingOnOff.current = false;
+        }, 1500);
+      });
   };
 
   const getCronConnectionOptions = () => {

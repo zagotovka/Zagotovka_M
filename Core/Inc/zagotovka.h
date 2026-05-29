@@ -339,6 +339,12 @@ void mark_slice_dirty_from_isr(volatile uint32_t *ver);
 
 /* JSON string escaping (defined in net.c) */
 const char *json_escape_str(char *dst, const char *src, size_t dst_sz);
+void json_escape_send(struct mg_connection *c, const char *src);
+
+/* Chunked HTTP handlers from net.c */
+void handle_buttons_chunked(struct mg_connection *c);
+void handle_switches_chunked(struct mg_connection *c);
+void handle_encoders_chunked(struct mg_connection *c);
 
 void gen_pintopin_json(struct dbPinToPin *PinsLinks, char *buffer, int buffer_size);
 

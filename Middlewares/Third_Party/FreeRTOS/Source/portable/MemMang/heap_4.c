@@ -434,3 +434,49 @@ uint8_t *puc;
 	}
 }
 
+typedef struct xHeapStats
+{
+	size_t xAvailableHeapSpaceInBytes;
+	size_t xSizeOfLargestFreeBlockInBytes;
+	size_t xSizeOfSmallestFreeBlockInBytes;
+	size_t xNumberOfFreeBlocks;
+	size_t xMinimumEverFreeBytesRemaining;
+} HeapStats_t;
+
+void vPortGetHeapStats( HeapStats_t *pxHeapStats )
+{
+BlockLink_t *pxLink;
+size_t xLargestBlock = 0;
+size_t xSmallestBlock = 0xFFFFFFFF;
+size_t xNumberOfFreeBlocks = 0;
+
+	vTaskSuspendAll();
+	{
+		pxLink = xStart.pxNextFreeBlock;
+		if( pxLink != NULL )
+		{
+			while( pxLink != pxEnd )
+			{
+				xNumberOfFreeBlocks++;
+				if( pxLink->xBlockSize > xLargestBlock )
+				{
+					xLargestBlock = pxLink->xBlockSize;
+				}
+				if( pxLink->xBlockSize < xSmallestBlock )
+				{
+					xSmallestBlock = pxLink->xBlockSize;
+				}
+				pxLink = pxLink->pxNextFreeBlock;
+			}
+		}
+	}
+	( void ) xTaskResumeAll();
+
+	pxHeapStats->xAvailableHeapSpaceInBytes = xFreeBytesRemaining;
+	pxHeapStats->xSizeOfLargestFreeBlockInBytes = xLargestBlock;
+	pxHeapStats->xSizeOfSmallestFreeBlockInBytes = ( xNumberOfFreeBlocks > 0 ) ? xSmallestBlock : 0;
+	pxHeapStats->xNumberOfFreeBlocks = xNumberOfFreeBlocks;
+	pxHeapStats->xMinimumEverFreeBytesRemaining = xMinimumEverFreeBytesRemaining;
+}
+
+

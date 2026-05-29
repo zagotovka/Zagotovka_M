@@ -38,6 +38,31 @@ extern osThreadId_t my_DgnTaskHandle;
 
 #define DHT22_TIMEOUT_TICKS 2
 
+void json_escape_send(struct mg_connection *c, const char *src) {
+    if (!src) return;
+    const char *p = src;
+    const char *start = src;
+    while (*p) {
+        if (*p == '"' || *p == '\\' || *p == '\n' || *p == '\r' || *p == '\t') {
+            if (p > start) {
+                mg_send(c, start, (size_t)(p - start));
+            }
+            switch (*p) {
+                case '"':  mg_send(c, "\\\"", 2); break;
+                case '\\': mg_send(c, "\\\\", 2); break;
+                case '\n': mg_send(c, "\\n", 2); break;
+                case '\r': mg_send(c, "\\r", 2); break;
+                case '\t': mg_send(c, "\\t", 2); break;
+            }
+            start = p + 1;
+        }
+        p++;
+    }
+    if (p > start) {
+        mg_send(c, start, (size_t)(p - start));
+    }
+}
+
 static bool srise_ok = false; // флаг выполнения действий восхода
 static bool sset_ok = false;  // флаг выполнения действий заката
 static time_t lastchk = 0;    // время последней проверки
@@ -511,42 +536,8 @@ void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm) {
   }
 }
 void handle_switch_get(struct mg_connection *c) {
-  char buf[512];
-  const char *extra_headers =
-      "Connection: close\r\nContent-Type: application/json\r\n";
-  MG_INFO(("Response headers for connection %ld:", c->id));
-  log_headers(extra_headers);
-
-  mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
-
-  int len = snprintf(buf, sizeof(buf),
-                     "{\"lang\":\"%s\",\"switches\":[", SetSettings.lang);
-  mg_send(c, buf, len);
-
-  int first_switch = 1;
-  for (int i = 0; i < NUMPIN; i++) {
-    struct dbPinsConf conf;
-    taskENTER_CRITICAL();
-    conf = PinsConf[i];
-    taskEXIT_CRITICAL();
-
-    if (conf.topin != 3)
-      continue;
-
-    if (!first_switch)
-      mg_send(c, ",", 1);
-    else
-      first_switch = 0;
-
-    len = snprintf(buf, sizeof(buf),
-                   "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
-                   "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
-                   conf.topin, i, PinsInfo[i].pins, conf.ptype,
-                   conf.info, conf.onoff);
-    mg_send(c, buf, len);
-  }
-
-  mg_send(c, "]}", 2);
+  handle_switches_chunked(c);
+  c->is_draining = 1;
 }
 void gen_switch_json(const struct dbPinsInfo *pins_info,
                      const struct dbPinsConf *pins_conf, int num_pins,
@@ -719,44 +710,8 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
 }
 /*******************************************************************************************************************/
 void handle_button_get(struct mg_connection *c) {
-  char buf[512];
-  const char *extra_headers =
-      "Connection: close\r\nContent-Type: application/json\r\n";
-  MG_INFO(("Response headers for connection %ld:", c->id));
-  log_headers(extra_headers);
-
-  mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
-
-  int len = snprintf(buf, sizeof(buf),
-                     "{\"lang\":\"%s\",\"buttons\":[", SetSettings.lang);
-  mg_send(c, buf, len);
-
-  int first_button = 1;
-  for (int i = 0; i < NUMPIN; i++) {
-    struct dbPinsConf conf;
-    taskENTER_CRITICAL();
-    conf = PinsConf[i];
-    taskEXIT_CRITICAL();
-
-    if (conf.topin != 1)
-      continue;
-
-    if (!first_button)
-      mg_send(c, ",", 1);
-    else
-      first_button = 0;
-
-    len = snprintf(buf, sizeof(buf),
-                   "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
-                   "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
-                   "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
-                   conf.topin, i, PinsInfo[i].pins, conf.ptype,
-                   conf.sclick, conf.dclick, conf.lpress,
-                   conf.info, conf.onoff);
-    mg_send(c, buf, len);
-  }
-
-  mg_send(c, "]}", 2);
+  handle_buttons_chunked(c);
+  c->is_draining = 1;
 }
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -971,126 +926,9 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
     xTaskNotifyGive(my_DgnTaskHandle);
 }
 
-/* вне функции — один раз, не растёт стек */
-static char json_tmp[256];
-
 void handle_encoder_get(struct mg_connection *c) {
-    char buf[512];
-	const char *extra_headers = "Connection: close\r\n"
-			"Content-Type: application/json\r\n";
-//    printf("[INFO] Response headers for connection %lu\r\n", c->id);
-    log_headers(extra_headers);
-    mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
-
-    int len = snprintf(buf, sizeof(buf),
-                       "{\"lang\":\"%s\",\"encoders\":[", SetSettings.lang);
-    if (len > 0 && len < (int)sizeof(buf))
-        mg_send(c, buf, len);
-
-    int encoder_count = 0;
-    for (int i = 0; i < NUMPIN; i++) {
-        struct dbPinsConf conf;
-        taskENTER_CRITICAL();
-        conf = PinsConf[i];
-        taskEXIT_CRITICAL();
-
-        if (conf.topin != 8)
-            continue;
-        if (encoder_count > 0)
-            mg_send(c, ",", 1);
-
-        uint8_t encoderb_id = conf.encoderb;
-        if (encoderb_id == 0 || encoderb_id >= NUMPIN)
-            encoderb_id = 255;
-
-        /* поиск PWM */
-        int pwm_dvalue = 0, pwm_freq = 0, pwm_max = 0;
-        bool found_pwm = false;
-        for (int j = 0; j < NUMPIN && !found_pwm; j++) {
-            if (PinsConf[j].topin != 5)
-                continue;
-            for (int k = 0; k < NUMPINLINKS; k++) {
-                struct dbPinToPin link;
-                taskENTER_CRITICAL();
-                link = PinsLinks[k];
-                taskEXIT_CRITICAL();
-                if (link.idin == i && link.idout == j) {
-                    taskENTER_CRITICAL();
-                    pwm_dvalue = PinsConf[j].dvalue;
-                    pwm_freq   = PinsConf[j].pwm;
-                    pwm_max    = PinsConf[j].pwmmax;
-                    taskEXIT_CRITICAL();
-                    found_pwm = true;
-                    break;
-                }
-            }
-        }
-
-        /* --- pins --- */
-        json_escape_str(json_tmp, PinsInfo[i].pins, sizeof(json_tmp));
-        len = snprintf(buf, sizeof(buf),
-                       "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",",
-                       conf.topin, i, json_tmp);
-        if (len > 0 && len < (int)sizeof(buf))
-            mg_send(c, buf, len);
-
-        /* --- encdrbpin --- (json_tmp свободен) */
-        const char *raw_encb = (encoderb_id != 255 && encoderb_id < NUMPIN)
-                                ? PinsInfo[encoderb_id].pins : "";
-        json_escape_str(json_tmp, raw_encb, sizeof(json_tmp));
-        len = snprintf(buf, sizeof(buf),
-                       "\"encoderb\":%d,\"encdrbpin\":\"%s\",",
-                       encoderb_id, json_tmp);
-        if (len > 0 && len < (int)sizeof(buf))
-            mg_send(c, buf, len);
-
-        /* --- числовые поля + открытие pinact --- */
-        len = snprintf(buf, sizeof(buf),
-                       "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,"
-                       "\"ponr\":%d,\"pinact\":{",
-                       pwm_dvalue, pwm_freq, pwm_max, conf.ponr);
-        if (len > 0 && len < (int)sizeof(buf))
-            mg_send(c, buf, len);
-
-        /* --- pinact --- */
-        int pinact_count = 0;
-        for (int j = 0; j < NUMPIN; j++) {
-            if (PinsConf[j].topin != 5)
-                continue;
-            for (int k = 0; k < NUMPINLINKS; k++) {
-                struct dbPinToPin link;
-                taskENTER_CRITICAL();
-                link = PinsLinks[k];
-                taskEXIT_CRITICAL();
-                if (link.idin == i && link.idout == j && link.pins[0] != '\0') {
-                    if (pinact_count > 0)
-                        mg_send(c, ",", 1);
-                    json_escape_str(json_tmp, link.pins, sizeof(json_tmp));
-                    len = snprintf(buf, sizeof(buf),
-                                   "\"%s\":%d", json_tmp, link.idout);
-                    if (len > 0 && len < (int)sizeof(buf))
-                        mg_send(c, buf, len);
-                    pinact_count++;
-                    break;
-                }
-            }
-        }
-
-        /* --- info + закрытие объекта --- (json_tmp свободен) */
-        json_escape_str(json_tmp, conf.info, sizeof(json_tmp));
-        len = snprintf(buf, sizeof(buf),
-                       "},\"info\":\"%s\",\"onoff\":%d}",
-                       json_tmp, conf.onoff);
-        if (len > 0 && len < (int)sizeof(buf))
-            mg_send(c, buf, len);
-
-        encoder_count++;
-    }
-
-    mg_send(c, "]}", 2);
-    c->is_draining = 1;
-//	printf("[INFO] %lu encoder JSON completed\r\n", c->id);
-//	printf("[INFO] conn=%lu send=%u drain=%d\r\n", c->id, (unsigned) c->send.len, c->is_draining);
+  handle_encoders_chunked(c);
+  c->is_draining = 1;
 }
 
 void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm) {
@@ -1425,7 +1263,7 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
 }
 
 void handle_timers_get(struct mg_connection *c) {
-  char buf[512];
+  char buf[128];
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   MG_INFO(("Response headers for connection %ld:", c->id));
@@ -1447,10 +1285,17 @@ void handle_timers_get(struct mg_connection *c) {
     if (i > 0)
       mg_send(c, ",", 1);
 
-    len = snprintf(buf, sizeof(buf),
-                   "{\"id\":%d,\"cron\":\"%s\",\"activ\":\"%s\","
-                   "\"info\":\"%s\",\"onoff\":%d}",
-                   i, cron.cron, cron.activ, cron.info, cron.onoff);
+    len = snprintf(buf, sizeof(buf), "{\"id\":%d,\"cron\":\"", i);
+    mg_send(c, buf, len);
+    json_escape_send(c, cron.cron);
+
+    mg_send(c, "\",\"activ\":\"", 11);
+    json_escape_send(c, cron.activ);
+
+    mg_send(c, "\",\"info\":\"", 10);
+    json_escape_send(c, cron.info);
+
+    len = snprintf(buf, sizeof(buf), "\",\"onoff\":%d}", cron.onoff);
     mg_send(c, buf, len);
   }
 

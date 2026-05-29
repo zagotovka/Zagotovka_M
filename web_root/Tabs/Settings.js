@@ -1,4 +1,5 @@
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
+import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote, pageSetting, Toast } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, rulangsettings } from '../rulang.js';
@@ -167,6 +168,7 @@ function Settings({ }) {
   const [isSecretKeyHidden, setIsSecretKeyHidden] = useState(false);
   const [isTelegramTokenHidden, setIsTelegramTokenHidden] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const lastInputTime = useRef(0);
 
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => {
@@ -387,6 +389,7 @@ function Settings({ }) {
         setSaveResult(data);
         showToast('Данные успешно сохранены', 'success');
         showTopNotification('Данные успешно сохранены');
+        lastInputTime.current = 0;
       })
       .catch((error) => {
         setSubmissionStatus('error');
@@ -421,6 +424,7 @@ function Settings({ }) {
       processedValue = value ? 1 : 0;
     }
     setSettings(prev => ({ ...prev, [key]: processedValue }));
+    lastInputTime.current = Date.now();
     if (key === 'usehttps') {
       setErrors({});
       setSubmitButtonDisabled(false);
@@ -430,31 +434,62 @@ function Settings({ }) {
   // FIX: handleDelete удалён — нигде не вызывается, вместо него везде используется handleChange(key, '')
 
   const refresh = () =>
-    fetch('/api/mysett/get')
+    fetch('/api/mysett/get', { cache: 'no-store' })
       .then((r) => r.json())
       .then((r) => {
-        if (r.offldt) {
-          const { date, time } = parseOfflineDateTime(r.offldt);
-          r.offdate = date;
-          r.offtime = time;
+        if (r !== null && r !== undefined) {
+          if (r.offldt) {
+            const { date, time } = parseOfflineDateTime(r.offldt);
+            r.offdate = date;
+            r.offtime = time;
+          }
+          setSettings(r);
         }
-        setSettings(r);
-        return r;  // FIX: возвращаем r, чтобы useEffect мог его использовать
+        return r;
       })
       .catch(error => {
         console.error('Error fetching settings:', error);
         showToast('Ошибка при загрузке настроек', 'error');
       });
 
+  const reqCounter = useRef(0);
+  const pollBusy = useRef(false);
+
   useEffect(() => {
-    refresh().then((r) => {
-      // FIX: используем r из промиса, а не settings из замыкания (stale closure)
-      if (r?.tls_key)        setIsPrivateKeyHidden(true);
-      if (r?.tls_cert)       setIsPublicKeyHidden(true);
-      if (r?.tls_ca)         setIsSecretKeyHidden(true);
-      if (r?.telegram_token) setIsTelegramTokenHidden(true);
-      setIsLoading(false);
+    let active = true;
+    const reqId = ++reqCounter.current;
+
+    // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
+    refresh().finally(function() {
+      if (reqId === reqCounter.current && active) setIsLoading(false);
     });
+
+    // ── Фоновый polling: через pollQueue ──
+    registerPoll('settings', '/api/mysett/get', function(r) {
+      if (!active || pollBusy.current) return;
+      if (Date.now() - lastInputTime.current < 8000) return;
+      var activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
+        return;
+      }
+      if (r !== null && r !== undefined) {
+        if (r.offldt) {
+          var dt = parseOfflineDateTime(r.offldt);
+          r.offdate = dt.date;
+          r.offtime = dt.time;
+        }
+        setSettings(r);
+        if (r.tls_key)        setIsPrivateKeyHidden(true);
+        if (r.tls_cert)       setIsPublicKeyHidden(true);
+        if (r.tls_ca)         setIsSecretKeyHidden(true);
+        if (r.telegram_token) setIsTelegramTokenHidden(true);
+      }
+    });
+
+    return function() {
+      active = false;
+      unregisterPoll('settings');
+    };
   }, []);
 
   useEffect(() => {

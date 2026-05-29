@@ -297,9 +297,9 @@ static const char *get_connection_header(struct mg_http_message *hm) {
 
 static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
                            volatile uint32_t *ver);
-static void handle_buttons_chunked(struct mg_connection *c);
-static void handle_switches_chunked(struct mg_connection *c);
-static void handle_encoders_chunked(struct mg_connection *c);
+void handle_buttons_chunked(struct mg_connection *c);
+void handle_switches_chunked(struct mg_connection *c);
+void handle_encoders_chunked(struct mg_connection *c);
 static void handle_pid_chunked(struct mg_connection *c);
 static void handle_security_chunked(struct mg_connection *c);
 static void handle_sensors_chunked(struct mg_connection *c);
@@ -308,30 +308,9 @@ static void handle_onewire_chunked(struct mg_connection *c);
 
 void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 	// --- Логирование всех событий для отладки ---
-//	MG_DEBUG(("%lu Event received: %d", c->id, ev));
+	// MG_DEBUG(("%lu Event received: %d", c->id, ev));
 	// --- TLS-specific event handling (for HTTPS) ---
-//	if (c->is_tls) {
-//		switch (ev) {
-//		case MG_EV_OPEN:
-//			MG_INFO(("%lu HTTPS connection created (TLS enabled)", c->id));
-//			break;
-//		case MG_EV_READ:
-//			if (c->recv.len > 0) {
-//				MG_INFO(("%lu HTTPS data received (TLS enabled, %lu bytes)", c->id, c->recv.len));
-//			}
-//			break;
-//		case MG_EV_TLS_HS:
-//			MG_INFO(("%lu HTTPS TLS handshake completed", c->id));
-//			break;
-//		case MG_EV_CLOSE:
-//			MG_INFO(("%lu HTTPS connection closed (TLS enabled)", c->id));
-//			break;
-//		default:
-//			// Закомментировано для уменьшения спама
-//			// MG_DEBUG(("%lu TLS-specific event: %d", c->id, ev));
-//			break;
-//		}
-//	}
+	// ...
 	// --- General events (for HTTP, HTTPS, and MQTT) ---
 	switch (ev) {
 	case MG_EV_OPEN:
@@ -343,13 +322,18 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
         char buf_rem[32];
         mg_snprintf(buf_rem, sizeof(buf_rem), "%M", mg_print_ip_port, &c->rem);
         /* ── Диагностика backlog: интервал и счётчик ── */
-        static uint32_t s_last_accept_tk = 0;
-        uint32_t now_accept = HAL_GetTick();
-        uint32_t accept_interval = now_accept - s_last_accept_tk;
-        s_last_accept_tk = now_accept;
-        printf("[NET] ACCEPT from %s port=%u dt=%lums\r\n",
-               buf_rem, local_port,
-               (unsigned long)accept_interval);
+//        static uint32_t s_last_accept_tk = 0;
+//        static bool s_has_prev_accept = false;
+//        uint32_t now_accept = HAL_GetTick();
+//        uint32_t accept_interval = s_has_prev_accept ? (now_accept - s_last_accept_tk) : 999999;
+//        s_last_accept_tk = now_accept;
+//        s_has_prev_accept = true;
+
+//        if (accept_interval < 500) {
+//            printf("[NET] WARN: Rapid reconnect dt=%lums from %s port=%u\r\n",
+//                   (unsigned long)accept_interval, buf_rem, local_port);
+//        }
+
         MG_INFO(("Accept: local %M remote %M", mg_print_ip_port, &c->loc, mg_print_ip_port, &c->rem));
 
         /* ── Блокировка внешних сканеров при выключенном HTTPS ── */
@@ -457,6 +441,10 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 /***************************************************************************/
 	case MG_EV_HTTP_MSG: {
 		struct mg_http_message *hm = (struct mg_http_message*) ev_data;
+		req_total++;
+		if (mg_match(hm->uri, mg_str("/api/#"), NULL)) {
+			req_api++;
+		}
 		MG_INFO(("%lu Received HTTP/HTTPS message (TLS: %d, URI: %.*s)", c->id, c->is_tls, (int) hm->uri.len, hm->uri.buf));
 
 		if (c->is_tls) {
@@ -533,7 +521,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				// Указываем Mongoose, что соединение должно быть закрыто
 				c->is_draining = 1;
 		    } else {
-		        // Всегда закрываем соединение после отдачи статики  -  на embedded keep-alive только тратит память.
+		        // Статика: закрываем соединение после отдачи — embedded, экономия TCP-слотов
 		        char extra_headers[256];
 		        snprintf(extra_headers, sizeof(extra_headers),
 		                 "Cache-Control: no-cache, no-store, must-revalidate\r\nConnection: close\r\n");
@@ -582,33 +570,39 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				} else {
 					mg_http_reply(c, 404, "", "");
 				}
+				c->is_draining = 1;  // API state slice: закрываем соединение
 				break;
 			}
 
 			/* ── Chunked streaming endpoints (ETag + 304, per-page) ── */
 			if (mg_match(hm->uri, mg_str("/api/buttons"), NULL)) {
-				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); c->is_draining = 1; }
-				else if (!check_etag_304(c, hm, &g_ver_button)) handle_buttons_chunked(c);
+				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); }
+				else if (!check_etag_304(c, hm, &g_ver_button)) { handle_buttons_chunked(c); }
+				c->is_draining = 1;
 				break;
 			}
 			if (mg_match(hm->uri, mg_str("/api/switches"), NULL)) {
-				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); c->is_draining = 1; }
-				else if (!check_etag_304(c, hm, &g_ver_switch)) handle_switches_chunked(c);
+				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); }
+				else if (!check_etag_304(c, hm, &g_ver_switch)) { handle_switches_chunked(c); }
+				c->is_draining = 1;
 				break;
 			}
 			if (mg_match(hm->uri, mg_str("/api/encoders"), NULL)) {
-				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); c->is_draining = 1; }
-				else if (!check_etag_304(c, hm, &g_ver_encoder)) handle_encoders_chunked(c);
+				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); }
+				else if (!check_etag_304(c, hm, &g_ver_encoder)) { handle_encoders_chunked(c); }
+				c->is_draining = 1;
 				break;
 			}
 			if (mg_match(hm->uri, mg_str("/api/pid"), NULL)) {
-				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); c->is_draining = 1; }
-				else if (!check_etag_304(c, hm, &g_ver_pid)) handle_pid_chunked(c);
+				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); }
+				else if (!check_etag_304(c, hm, &g_ver_pid)) { handle_pid_chunked(c); }
+				c->is_draining = 1;
 				break;
 			}
 			if (mg_match(hm->uri, mg_str("/api/security"), NULL)) {
-				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); c->is_draining = 1; }
-				else if (!check_etag_304(c, hm, &g_ver_security)) handle_security_chunked(c);
+				if (u == NULL) { mg_http_reply(c, 403, "", "Not Authorised\n"); }
+				else if (!check_etag_304(c, hm, &g_ver_security)) { handle_security_chunked(c); }
+				c->is_draining = 1;
 				break;
 			}
 
@@ -657,6 +651,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				MG_INFO(("%lu Processing /api/device/eraselast", c->id));
 				handle_device_eraselast(c);
 			} else if (mg_match(hm->uri, mg_str("/api/select/get"), NULL)) {
+			
 				MG_INFO(("%lu Processing /api/select/get", c->id));
 				handle_select_get(c);
 			} else if (mg_match(hm->uri, mg_str("/api/pintopin/get"), NULL)) {
@@ -681,11 +676,17 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				MG_INFO(("%lu Processing /api/button/set", c->id));
 				handle_button_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/encoder/get"), NULL)) {
+				req_encoder++;
 				MG_INFO(("%lu Processing /api/encoder/get", c->id));
+				uint32_t t1 = HAL_GetTick();
 				handle_encoder_get(c);
+				printf("[NET] encoder_get=%lu ms\r\n", (unsigned long)(HAL_GetTick() - t1));
 			} else if (mg_match(hm->uri, mg_str("/api/encoder/set"), NULL)) {
+				req_encoder++;
 				MG_INFO(("%lu Processing /api/encoder/set", c->id));
+				uint32_t t1 = HAL_GetTick();
 				handle_encoder_set(c, hm);
+				printf("[NET] encoder_set=%lu ms\r\n", (unsigned long)(HAL_GetTick() - t1));
 			} else if (mg_match(hm->uri, mg_str("/api/pid/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/pid/get", c->id));
 				handle_pid_get(c);
@@ -777,6 +778,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 					MG_ERROR(("%lu Invalid API path format: %.*s", c->id, (int) hm->uri.len, hm->uri.buf));
 					mg_http_reply(c, 400, NULL, "Invalid API path format\n");
 				}
+			c->is_draining = 1;  // API: закрываем соединение после ответа
 			} else {
 				// Обработка статических страниц для всех остальных запросов
 				MG_INFO(("%lu Did not match any API pattern, serving static content", c->id));
@@ -786,7 +788,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				char extra_headers[256];
 				snprintf(extra_headers, sizeof(extra_headers), "Cache-Control: no-cache, no-store, must-revalidate\r\nConnection: close\r\n");
 				opts.extra_headers = extra_headers;
-				
+
 #if MG_ARCH == MG_ARCH_UNIX || MG_ARCH == MG_ARCH_WIN32
                             opts.root_dir = "web_root";
                             MG_INFO(("%lu Using filesystem root_dir: %s for static content", c->id, opts.root_dir));
@@ -796,7 +798,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				MG_INFO(("%lu Using packed filesystem root_dir: %s for static content", c->id, opts.root_dir));
 #endif
 				mg_http_serve_dir(c, ev_data, &opts);
-				c->is_draining = 1;  // форсируем закрытие после отправки
+				c->is_draining = 1;  // форсируем закрытие после отправки статики
 				MG_INFO(("%lu Static content served", c->id));
 			}
 		}
@@ -816,7 +818,15 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 	case MG_EV_POLL:
 		// Закомментировано для уменьшения спама
 		// MG_DEBUG(("%lu MG_EV_POLL: Connection polled", c->id));
-		// Здесь можно добавить проверку таймаутов или обновление состояния, если требуется
+		/* Send buffer watchdog: для MQTT */
+		if (c->fn_data != (void *)CONN_TYPE_HTTP &&
+		    c->fn_data != (void *)CONN_TYPE_HTTPS) {
+			if (c->send.len > 16384) {
+				printf("[NET] WARN: conn %lu send buf=%u, force close\r\n",
+					   (unsigned long)c->id, (unsigned)c->send.len);
+				c->is_draining = 1;
+			}
+		}
 		break;
 
 	default:
@@ -839,7 +849,7 @@ static uint64_t s_mqtt_alive_since = 0;  /* метка: когда MG_EV_MQTT_OP
    Без этого каждую секунду alloc/free mg_connection → фрагментация heap_4. */
 static uint8_t  s_tcp_backoff = 0;       /* тиков ожидания перед коннектом */
 static uint8_t  s_tcp_delay_idx = 0;     /* индекс в таблице backoff */
-static const uint8_t s_backoff_tbl[] = {1, 2, 5, 10, 30, 60};
+static const uint8_t s_backoff_tbl[] = {5, 10, 15, 30, 45, 60};
 #define BACKOFF_TBL_SZ (sizeof(s_backoff_tbl)/sizeof(s_backoff_tbl[0]))
 
 static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
@@ -1078,9 +1088,10 @@ static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
     struct mg_str *inm = mg_http_get_header(hm, "If-None-Match");
     if (inm && mg_strcmp(*inm, mg_str(etag)) == 0) {
         snprintf(hdr, sizeof(hdr),
-            "ETag: %s\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n",
+            "ETag: %s\r\nCache-Control: no-cache\r\nConnection: close\r\n",
             etag);
         mg_http_reply(c, 304, hdr, "");
+        c->is_draining = 1;
         return true;  /* 304 sent, caller stops */
     }
     return false;     /* data changed, caller sends full response */
@@ -1094,7 +1105,7 @@ static void chunked_json_start(struct mg_connection *c, volatile uint32_t *ver) 
         "Content-Type: application/json\r\n"
         "Transfer-Encoding: chunked\r\n"
         "Cache-Control: no-cache\r\n"
-        "Connection: keep-alive\r\n"
+        "Connection: close\r\n"
         "ETag: %s\r\n"
         "\r\n", etag);
 }
@@ -1121,7 +1132,7 @@ const char *json_escape_str(char *dst, const char *src, size_t dst_sz) {
 }
 
 /* ─── /api/buttons ─── */
-static void handle_buttons_chunked(struct mg_connection *c) {
+void handle_buttons_chunked(struct mg_connection *c) {
     char b[CHUNK_BUF_SIZE];
     int first = 1;
 
@@ -1151,7 +1162,7 @@ static void handle_buttons_chunked(struct mg_connection *c) {
 }
 
 /* ─── /api/switches ─── */
-static void handle_switches_chunked(struct mg_connection *c) {
+void handle_switches_chunked(struct mg_connection *c) {
     char b[CHUNK_BUF_SIZE];
     int first = 1;
 
@@ -1189,7 +1200,7 @@ static void handle_switches_chunked(struct mg_connection *c) {
 }
 
 /* ─── /api/encoders ─── */
-static void handle_encoders_chunked(struct mg_connection *c) {
+void handle_encoders_chunked(struct mg_connection *c) {
     char b[CHUNK_BUF_SIZE];
     int first = 1;
 

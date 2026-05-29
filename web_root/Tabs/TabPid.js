@@ -1,6 +1,6 @@
 import { ModalPid } from '../Modals/ModalPid.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
-import { safeFetch } from '../safeFetch.js';
+import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -178,52 +178,63 @@ function TabPid({ }) {
   const [pidline, setPidline] = useState(0);
 
   const isPendingOnOff = useRef(false);
+  const reqCounter = useRef(0);
+  const pollBusy = useRef(false);
 
   useEffect(() => {
     initGlobalTooltip();
     initTuneStyles();
   }, []);
 
-  const fetchPidData = () => {
-    safeFetch('/api/pid/get', 'pid').then(r => {
-      if (!r) return;
+  useEffect(() => {
+    let active = true;
+    const reqId = ++reqCounter.current;
+
+    // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
+    const controller = new AbortController();
+    const timeoutId = setTimeout(function() { controller.abort(); }, 3000);
+
+    fetch('/api/pid/get', { signal: controller.signal, cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(r) {
+        if (reqId !== reqCounter.current) return;
+        if (!active) return;
+        if (isPendingOnOff.current) return;
+        if (r !== null && r !== undefined && Array.isArray(r.pid)) {
+          setPid(r.pid);
+          setLanguage(r.lang || 'ru');
+          if (typeof r.pidline === 'number') {
+            setPidline(r.pidline);
+            setVisiblePids(r.pidline);
+          }
+        }
+      })
+      .catch(function(err) {
+        if (err.name === 'AbortError') return;
+        console.warn('[TabPid] init fetch:', err.message);
+      })
+      .finally(function() { clearTimeout(timeoutId); });
+
+    // ── Фоновый polling: через pollQueue ──
+    registerPoll('pid', '/api/pid', function(data) {
+      if (!active || pollBusy.current) return;
       if (isPendingOnOff.current) return;
-      if (r && Array.isArray(r.pid)) {
-        setPid(r.pid);
-        setLanguage(r.lang || 'ru');
-        if (typeof r.pidline === 'number') {
-          setPidline(r.pidline);
-          setVisiblePids(r.pidline);
+      if (data !== null && data !== undefined && Array.isArray(data.pid)) {
+        setPid(data.pid);
+        setLanguage(data.lang || 'ru');
+        if (typeof data.pidline === 'number') {
+          setPidline(data.pidline);
+          setVisiblePids(data.pidline);
         }
       }
     });
-  };
 
-  useEffect(() => {
-    let timer = null;
-    let isFetching = false;
-
-    fetchPidData();
-
-    const poll = () => {
-      if (isFetching) return;
-      if (isPendingOnOff.current) return;
-      isFetching = true;
-      safeFetch('/api/pid', 'pid-slice').then(data => {
-        if (!data) return;
-        if (data && Array.isArray(data.pid)) {
-          setPid(data.pid);
-          setLanguage(data.lang || 'ru');
-          if (typeof data.pidline === 'number') {
-            setPidline(data.pidline);
-            setVisiblePids(data.pidline);
-          }
-        }
-      }).finally(() => { isFetching = false; });
+    return function() {
+      active = false;
+      controller.abort();
+      clearTimeout(timeoutId);
+      unregisterPoll('pid');
     };
-
-    timer = setInterval(poll, window.pollIntervalMs || 3000);
-    return () => clearInterval(timer);
   }, []);
 
   const isFirstPidlineMount = useRef(true);
@@ -236,14 +247,19 @@ function TabPid({ }) {
   }, [pidline]);
 
   const sendPidlineToStm32 = (value) => {
+    isPendingOnOff.current = true;
     fetch('/api/pidline/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pidline: value })
     })
       .then((response) => response.json())
-//      .then((data) => console.log('Pidline sent to stm32:', data))
-      .catch((error) => console.error('Error sending PID line to stm32:', error));
+      .catch((error) => console.error('Error sending PID line to stm32:', error))
+      .finally(() => {
+        setTimeout(() => {
+          isPendingOnOff.current = false;
+        }, 1500);
+      });
   };
 
   const addPid = () => {
@@ -310,7 +326,9 @@ function TabPid({ }) {
       .then(data => { console.log('PID job updated successfully:', data); })
       .catch(error => { console.error('Error updating PID job:', error); })
       .finally(() => {
-        isPendingOnOff.current = false;
+        setTimeout(() => {
+          isPendingOnOff.current = false;
+        }, 1500);
       });
   };
 

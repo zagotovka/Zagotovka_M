@@ -151,6 +151,20 @@ typedef struct {
     char topic[64];
     char payload[256];
 } MqttRxMsg_t;
+typedef struct xHeapStats
+{
+	size_t xAvailableHeapSpaceInBytes;
+	size_t xSizeOfLargestFreeBlockInBytes;
+	size_t xSizeOfSmallestFreeBlockInBytes;
+	size_t xNumberOfFreeBlocks;
+	size_t xMinimumEverFreeBytesRemaining;
+} HeapStats_t;
+
+void vPortGetHeapStats( HeapStats_t *pxHeapStats );
+
+extern volatile uint32_t req_total;
+extern volatile uint32_t req_encoder;
+extern volatile uint32_t req_api;
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

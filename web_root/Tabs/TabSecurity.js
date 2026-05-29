@@ -1,7 +1,7 @@
 import { ModalSIM800L } from '../Modals/ModalSIM800L.js';
 import { ModalSecurity } from '../Modals/ModalSecurity.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
-import { safeFetch } from '../safeFetch.js';
+import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -270,30 +270,52 @@ const TabSecurity = () => {
 
   useEffect(() => { initGlobalTooltip(); }, []);
   const updateSecurityData = (data) => {
-    if (isSaving || Date.now() - lastSaveTime < 500) return;
+    if (isSaving || Date.now() - lastSaveTime < 2000) return;
     if (!data) { setConnectionStatus('error'); return; }
     setSim800lData({ lang: data.lang, sim800l: data.sim800l, onoff: data.onoff, tel: data.tel, info: data.info });
     setMonitoring(data.pins || []); setConnectionStatus('connected');
   };
 
+  const reqCounter = useRef(0);
+  const pollBusy = useRef(false);
+
   useEffect(() => {
-    let timer = null;
-    let isFetching = false;
+    let active = true;
+    const reqId = ++reqCounter.current;
 
-    fetch('/api/security/get').then(r => r.json()).then(data => setLanguage(data.lang || 'ru'));
-    safeFetch('/api/security/get', 'security').then(updateSecurityData);
+    // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
+    const controller = new AbortController();
+    const timeoutId = setTimeout(function() { controller.abort(); }, 3000);
 
-    const poll = () => {
-      if (isFetching) return;
-      isFetching = true;
-      safeFetch('/api/security', 'security-slice').then(data => {
-        if (data) updateSecurityData(data);
-      }).finally(() => { isFetching = false; });
+    fetch('/api/security/get', { signal: controller.signal, cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(data) {
+        if (reqId !== reqCounter.current) return;
+        if (!active) return;
+        if (data !== null && data !== undefined) {
+          setLanguage(data.lang || 'ru');
+          updateSecurityData(data);
+        }
+      })
+      .catch(function(err) {
+        if (err.name === 'AbortError') return;
+        console.warn('[TabSecurity] init fetch:', err.message);
+      })
+      .finally(function() { clearTimeout(timeoutId); });
+
+    // ── Фоновый polling: через pollQueue ──
+    registerPoll('security', '/api/security', function(data) {
+      if (!active || pollBusy.current) return;
+      if (data !== null && data !== undefined) updateSecurityData(data);
+    });
+
+    return function() {
+      active = false;
+      controller.abort();
+      clearTimeout(timeoutId);
+      unregisterPoll('security');
     };
-
-    timer = setInterval(poll, window.pollIntervalMs || 3000);
-    return () => clearInterval(timer);
-  }, [isSaving, lastSaveTime]);
+  }, []);
 
   const handleSim800lSave = async (updated) => {
     setIsSaving(true);
@@ -374,7 +396,7 @@ const TabSecurity = () => {
                     <td class="px-6 py-4 text-sm text-slate-800 font-medium">${['PIR', 'Normal open', 'Normal close'][d.ptype]}</td>
                     <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.action}</td><td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.send_sms}</td>
                     <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.info}</td>
-                    <td class="px-6 py-4 text-sm text-slate-800 font-medium"><${MyPolzunok} value=${d.onoff} onChange=${(v) => { fetch('/api/onoff/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: d.id, onoff: v }) }); setMonitoring(prev => prev.map(item => item.id === d.id ? { ...item, onoff: v } : item)); }} /></td>
+                    <td class="px-6 py-4 text-sm text-slate-800 font-medium"><${MyPolzunok} value=${d.onoff} onChange=${(v) => { setLastSaveTime(Date.now()); fetch('/api/onoff/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: d.id, onoff: v }) }); setMonitoring(prev => prev.map(item => item.id === d.id ? { ...item, onoff: v } : item)); }} /></td>
                     <td class="px-6 py-4 text-sm text-slate-800 font-medium"><button onClick=${() => { setSelectedSecurity(d); setModalType('edit'); setIsSecurityModalOpen(true); }} class="text-teal-600 hover:text-cyan-600 font-bold transition-colors">${T.edit}</button></td>
                   </tr>`) : html`<tr><td colspan="8" class="px-6 py-4 text-center text-sm text-slate-600 font-medium">${T.noData}</td></tr>`}
               </tbody>

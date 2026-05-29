@@ -45,11 +45,10 @@
    страницы → WS SYN дропался → обрывы. 20 слотов покрывают с запасом. */
 #define MG_DATA_SIZE 100
 
-/* MIP TCP keepalive: 5 минут вместо 45 секунд.
-   На коротком интервале MIP посылает keepalive-пробу и при отсутствии
-   ответа рвёт соединение. WebSocket и так обменивается данными,
-   а для MQTT есть свой PINGREQ/PINGRESP на уровне протокола. */
-#define MG_TCPIP_KEEPALIVE_MS 300000
+/* MIP TCP keepalive: 30 секунд.
+   Мёртвые соединения (браузер ушёл без FIN) убиваются через 30с,
+   освобождая TCP-слоты. Для MQTT есть свой PINGREQ/PINGRESP. */
+#define MG_TCPIP_KEEPALIVE_MS 30000
 
 /* Перенаправляем mg_calloc/mg_free на FreeRTOS heap_4 (192KB, коалесценция).
    Без этого Mongoose использует свои дефолтные mg_calloc/mg_free,

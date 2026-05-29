@@ -1,5 +1,5 @@
 // NOTE: API calls must start with 'api/' in order to serve the app at any URI
-import { safeFetch } from './safeFetch.js';
+import { registerPoll, unregisterPoll } from './pollQueue.js';
 import { StateContext } from './context.js';
 
 ('use strict');
@@ -905,26 +905,22 @@ const App = function ({ }) {
   useEffect(() => fetch('api/login').then(login), []);
 
   // Adaptive polling: active, 30s hidden
-  window.pollIntervalMs = window.pollIntervalMs || 1000; // было 3000s
+  window.pollIntervalMs = window.pollIntervalMs || 2000; // было 3000s
   useEffect(() => {
     const onVis = () => {
-      window.pollIntervalMs = document.hidden ? 30000 : 1000; // было 3000s
+      window.pollIntervalMs = document.hidden ? 30000 : 2000; // было 3000s
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
 
-  // Common state polling — always, every 10s
+  // Common state polling — через pollQueue, единый механизм для всех endpoint'ов
   useEffect(() => {
     if (!user) return;
-    const poll = () => {
-      safeFetch('/api/state/common', 'common-state').then(data => {
-        if (data) setCommonData(data);
-      });
-    };
-    poll(); // Initial fetch, было 10000
-    const timer = setInterval(poll, 1000);
-    return () => clearInterval(timer);
+    registerPoll('common', '/api/state/common', (data) => {
+      if (data) setCommonData(data);
+    });
+    return () => unregisterPoll('common');
   }, [user]);
 
   if (loading) return ''; // Show blank page on initial load

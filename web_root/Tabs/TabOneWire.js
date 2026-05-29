@@ -1,7 +1,7 @@
 import { ModalEditSensor } from '../Modals/ModalEditSensor.js';
 import { ModalOneWire } from '../Modals/ModalOneWire.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
-import { safeFetch } from '../safeFetch.js';
+import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -262,23 +262,44 @@ const TabOneWire = () => {
     }));
   };
 
+  const reqCounter = useRef(0);
+  const pollBusy = useRef(false);
+
   useEffect(() => {
-    let timer = null;
-    let isFetching = false;
+    let active = true;
+    const reqId = ++reqCounter.current;
 
+    // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
     refresh();
-    safeFetch('/api/temp/get', 'temp').then(updateSensorData);
 
-    const poll = () => {
-      if (isFetching) return;
-      isFetching = true;
-      safeFetch('/api/state/sensors', 'sensors-slice').then(data => {
-        if (data) updateSensorData(data);
-      }).finally(() => { isFetching = false; });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(function() { controller.abort(); }, 3000);
+
+    fetch('/api/temp/get', { signal: controller.signal, cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(data) {
+        if (reqId !== reqCounter.current) return;
+        if (!active) return;
+        if (data !== null && data !== undefined) updateSensorData(data);
+      })
+      .catch(function(err) {
+        if (err.name === 'AbortError') return;
+        console.warn('[TabOneWire] init fetch:', err.message);
+      })
+      .finally(function() { clearTimeout(timeoutId); });
+
+    // ── Фоновый polling: через pollQueue ──
+    registerPoll('sensors', '/api/state/sensors', function(data) {
+      if (!active || pollBusy.current) return;
+      if (data !== null && data !== undefined) updateSensorData(data);
+    });
+
+    return function() {
+      active = false;
+      controller.abort();
+      clearTimeout(timeoutId);
+      unregisterPoll('sensors');
     };
-
-    timer = setInterval(poll, window.pollIntervalMs || 3000);
-    return () => clearInterval(timer);
   }, []);
 
   const closeModal = () => { setIsModalOpen(false); setSelectedSensor(null); setEditingOneWire(null); };

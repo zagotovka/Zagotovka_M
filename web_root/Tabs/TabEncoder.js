@@ -1,6 +1,6 @@
 import { ModalEncoder } from '../Modals/ModalEncoder.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
-import { safeFetch } from '../safeFetch.js';
+import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -107,6 +107,8 @@ function TabEncoder({ }) {
     const [language, setLanguage] = useState('ru');
     const [pintopin, setPintopin] = useState([]);
     const isPendingOnOff = useRef(false);
+    const reqCounter = useRef(0);
+    const pollBusy = useRef(false);
 
     // Инициализируем глобальный tooltip один раз при монтировании
     useEffect(() => { initGlobalTooltip(); }, []);
@@ -127,44 +129,53 @@ function TabEncoder({ }) {
           console.error('Error fetching data:', error);
         });
 
-    const fetchEncoderData = () => {
-      safeFetch('/api/encoder/get', 'encoder').then(data => {
-        if (!data) return;
-        if (isPendingOnOff.current) {
-          return;
-        }
-        setEncoder(data.encoders);
-        setLanguage(data.lang);
-      });
-    };
-
-    const fetchPintopinData = () => {
-      safeFetch('/api/pintopin/get', 'pintopin-enc').then(data => {
-        if (!data) return;
-        setPintopin(data);
-      });
-    };
-
     useEffect(() => {
-      let timer = null;
-      let isFetching = false;
+      let active = true;
+      const reqId = ++reqCounter.current;
 
-      fetchEncoderData();
-      fetchPintopinData();
+      // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
+      const controller = new AbortController();
+      const timeoutId = setTimeout(function() { controller.abort(); }, 3000);
 
-      const poll = () => {
-        if (isFetching) return;
+      Promise.all([
+        fetch('/api/encoder/get', { signal: controller.signal, cache: 'no-store' }).then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }),
+        fetch('/api/pintopin/get', { signal: controller.signal, cache: 'no-store' }).then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      ])
+        .then(function(results) {
+          if (reqId !== reqCounter.current) return;
+          if (!active) return;
+          var encoderData = results[0];
+          var pintopinData = results[1];
+          if (encoderData !== null && encoderData !== undefined) {
+            setEncoder(encoderData.encoders);
+            setLanguage(encoderData.lang);
+          }
+          if (pintopinData !== null && pintopinData !== undefined) {
+            setPintopin(pintopinData);
+          }
+        })
+        .catch(function(err) {
+          if (err.name === 'AbortError') return;
+          console.warn('[TabEncoder] init fetch:', err.message);
+        })
+        .finally(function() { clearTimeout(timeoutId); });
+
+      // ── Фоновый polling: через pollQueue ──
+      registerPoll('encoders', '/api/encoders', function(data) {
+        if (!active || pollBusy.current) return;
         if (isPendingOnOff.current) return;
-        isFetching = true;
-        safeFetch('/api/encoders', 'encoder-slice').then(data => {
-          if (!data) return;
+        if (data !== null && data !== undefined) {
           if (data.encoders) { setEncoder(data.encoders); setLanguage(data.lang); }
           if (data.pintopin) setPintopin(data.pintopin);
-        }).finally(() => { isFetching = false; });
-      };
+        }
+      });
 
-      timer = setInterval(poll, window.pollIntervalMs || 1000);// было 3000
-      return () => clearInterval(timer);
+      return function() {
+        active = false;
+        controller.abort();
+        clearTimeout(timeoutId);
+        unregisterPoll('encoders');
+      };
     }, []);
 
     const handleEncoderChange = (updatedEncoder) => {
@@ -189,7 +200,9 @@ function TabEncoder({ }) {
           console.error('Error calling /api/onoff/set (Encoder):', error);
         })
         .finally(() => {
-          isPendingOnOff.current = false;
+          setTimeout(() => {
+            isPendingOnOff.current = false;
+          }, 1500);
         });
     };
 

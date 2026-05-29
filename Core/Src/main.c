@@ -149,8 +149,8 @@ const osThreadAttr_t ConfigTask_attributes = {
 osThreadId_t WebServerTaskHandle;
 const osThreadAttr_t WebServerTask_attributes = {
   .name = "WebServerTask",
-  .stack_size = 4096 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .stack_size = 4608 * 4,
+  .priority = (osPriority_t) osPriorityAboveNormal,
 };
 /* Definitions for OutputTask */
 osThreadId_t OutputTaskHandle;
@@ -184,7 +184,7 @@ const osThreadAttr_t EncoderTask_attributes = {
 osThreadId_t ds18b20TaskHandle;
 const osThreadAttr_t ds18b20Task_attributes = {
   .name = "ds18b20Task",
-  .stack_size = 512 * 4,
+  .stack_size = 768 * 4,
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
 /* Definitions for dht22Task */
@@ -226,7 +226,7 @@ const osThreadAttr_t PIDTask_attributes = {
 osThreadId_t my_DgnTaskHandle;
 const osThreadAttr_t my_DgnTask_attributes = {
   .name = "my_DgnTask",
-  .stack_size = 512 * 4,
+  .stack_size = 768 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for LoggerTask */
@@ -274,6 +274,11 @@ static uint32_t output_peak = 0;
 static uint32_t usb_peak = 0;
 static uint32_t mg_conn_peak = 0;
 static uint32_t mg_poll_gap_peak = 0;
+
+/* Счётчики HTTP запросов */
+volatile uint32_t req_total = 0;
+volatile uint32_t req_encoder = 0;
+volatile uint32_t req_api = 0;
 
 /* USER CODE END PV */
 
@@ -361,12 +366,11 @@ uint64_t mg_millis(void) { return HAL_GetTick(); }
 
 volatile uint32_t mqtt_sent_count = 0;
 
+static bool check_mqtt_connection(void *conn);
+
 void send_mqtt_message(struct mg_connection *conn, const char *topic,
                        const char *msg) {
-  if (conn == NULL || conn->is_closing) { // Проверка соединения
-    if (onlineFlg != 0) {
-      MG_ERROR(("MQTT connection unavailable"));
-    }
+  if (!check_mqtt_connection(conn)) {
     return;
   }
 
@@ -396,6 +400,13 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic,
   taskENTER_CRITICAL();
   mqtt_sent_count++;
   taskEXIT_CRITICAL();
+
+  /* Диагностика длины JSON-сообщения */
+  size_t msg_len = strlen(msg);
+  if (msg_len > 256) {
+    printf("[MQTT] Large publish len=%d on topic %s\r\n", (int)msg_len, full_topic);
+  }
+
   MG_INFO(("%lu PUBLISHED %s -> %.*s", conn->id, msg, (int)pub_opts.topic.len,
            pub_opts.topic.buf));
 }
@@ -2803,11 +2814,17 @@ static void heap_diagnostic(void)
     static uint32_t last_usb_peak = 0;
     static uint32_t last_mg_conn_peak = 0;
     static uint32_t last_mg_poll_gap_peak = 0;
+    static uint32_t last_req_total = 0;
+    static uint32_t last_req_encoder = 0;
+    static uint32_t last_req_api = 0;
     static uint8_t first_run = 1;
 
     unsigned current_free = (unsigned)xPortGetFreeHeapSize();
     unsigned current_min  = (unsigned)xPortGetMinimumEverFreeHeapSize();
     uint32_t current_malloc_fail = malloc_fail_count;
+
+    HeapStats_t stats;
+    vPortGetHeapStats(&stats);
 
     /* Печатаем только если показатели изменились */
     if (current_free != last_free || current_min != last_min_ever || 
@@ -2817,7 +2834,10 @@ static void heap_diagnostic(void)
         output_peak != last_output_peak ||
         usb_peak != last_usb_peak ||
         mg_conn_peak != last_mg_conn_peak ||
-        mg_poll_gap_peak != last_mg_poll_gap_peak) {
+        mg_poll_gap_peak != last_mg_poll_gap_peak ||
+        req_total != last_req_total ||
+        req_encoder != last_req_encoder ||
+        req_api != last_req_api) {
         
         printf("\r\n=== DIAGNOSTIC REPORT ===\r\n");
         if (first_run) {
@@ -2831,6 +2851,14 @@ static void heap_diagnostic(void)
                    current_min, (int)current_min - (int)last_min_ever);
         }
         
+        printf("Heap free blocks:   %lu\r\n", (unsigned long)stats.xNumberOfFreeBlocks);
+        printf("Largest free block: %lu B\r\n", (unsigned long)stats.xSizeOfLargestFreeBlockInBytes);
+        printf("Smallest free block: %lu B\r\n", (unsigned long)stats.xSizeOfSmallestFreeBlockInBytes);
+        if (stats.xAvailableHeapSpaceInBytes > 0) {
+            uint32_t frag_pct = 100 - (uint32_t)((uint64_t)stats.xSizeOfLargestFreeBlockInBytes * 100 / stats.xAvailableHeapSpaceInBytes);
+            printf("Fragmentation:      %lu%%\r\n", (unsigned long)frag_pct);
+        }
+        
         printf("Malloc fail count:  %lu\r\n", current_malloc_fail);
         printf("MQTT TX queue peak: %lu / 32\r\n", mqtt_tx_peak);
         printf("MQTT RX queue peak: %lu / 4\r\n", mqtt_rx_peak);
@@ -2838,6 +2866,8 @@ static void heap_diagnostic(void)
         printf("USB queue peak:     %lu / 16\r\n", usb_peak);
         printf("Mongoose conns peak: %lu\r\n", mg_conn_peak);
         printf("Mongoose gap peak:   %lu ms\r\n", mg_poll_gap_peak);
+        printf("HTTP Requests:      Total=%lu, API=%lu, Encoder=%lu\r\n", 
+               (unsigned long)req_total, (unsigned long)req_api, (unsigned long)req_encoder);
         printf("=========================\r\n");
 
         last_free = current_free;
@@ -2849,6 +2879,9 @@ static void heap_diagnostic(void)
         last_usb_peak = usb_peak;
         last_mg_conn_peak = mg_conn_peak;
         last_mg_poll_gap_peak = mg_poll_gap_peak;
+        last_req_total = req_total;
+        last_req_encoder = req_encoder;
+        last_req_api = req_api;
     }
 }
 /* USER CODE END Header_StartDgnTask */
