@@ -33,7 +33,8 @@ const char *s_json_header =
 int ui_event_next(int no, struct ui_event *e) {
   if (no < 0 || no >= MAX_EVENTS_NO) return 0;
 
-  /* Инициализируем srand() один раз аппаратным RNG */
+  /* Инициализируем srand() один раз аппаратным RNG.
+     rand() используется исключительно для генерации демонстрационных событий (non-security). */
   static bool srand_done = false;
   if (!srand_done) {
     extern RNG_HandleTypeDef hrng;
@@ -41,7 +42,7 @@ int ui_event_next(int no, struct ui_event *e) {
     if (HAL_RNG_GenerateRandomNumber(&hrng, &rnd) == HAL_OK) {
       srand((unsigned) rnd);
     } else {
-      srand((unsigned) mg_millis());  /* fallback */
+      srand((unsigned) mg_millis());  /* fallback (non-security) */
     }
     srand_done = true;
   }
@@ -111,6 +112,19 @@ struct user *authenticate(struct mg_http_message *hm) {
   return result;
 }
 
+static bool require_post_json(struct mg_connection *c, struct mg_http_message *hm) {
+  if (mg_strcasecmp(hm->method, mg_str("POST")) != 0) {
+    mg_http_reply(c, 405, "", "{\"error\":\"method not allowed\"}\n");
+    return false;
+  }
+  struct mg_str *ct = mg_http_get_header(hm, "Content-Type");
+  if (ct == NULL || !mg_match(*ct, mg_str("application/json*"), NULL)) {
+    mg_http_reply(c, 415, "", "{\"error\":\"unsupported media type\"}\n");
+    return false;
+  }
+  return true;
+}
+
 void handle_login(struct mg_connection *c, struct user *u) {
   char cookie[256];
   mg_snprintf(cookie, sizeof(cookie),
@@ -131,14 +145,21 @@ void handle_logout(struct mg_connection *c) {
 }
 
 void handle_debug(struct mg_connection *c, struct mg_http_message *hm) {
-  int level = mg_json_get_long(hm->body, "$.level", MG_LL_DEBUG);
+  int level = (int) mg_json_get_long(hm->body, "$.level", MG_LL_DEBUG);
+
+  if (level < MG_LL_NONE)    level = MG_LL_NONE;
+  if (level > MG_LL_VERBOSE) level = MG_LL_VERBOSE;
+
   mg_log_set(level);
   mg_http_reply(c, 200, "", "Debug level set to %d\n", level);
 }
 
+#define PRINT_INT_ARR_MAX 64  // максимум элементов в points[]
+
 static size_t print_int_arr(void (*out)(char, void *), void *ptr, va_list *ap) {
   size_t i, len = 0, num = va_arg(*ap, size_t);  // Number of items in the array
   int *arr = va_arg(*ap, int *);              // Array ptr
+  if (arr == NULL || num == 0 || num > PRINT_INT_ARR_MAX) return 0;
   for (i = 0; i < num; i++) {
     len += mg_xprintf(out, ptr, "%s%d", i == 0 ? "" : ",", arr[i]);
   }
@@ -180,7 +201,9 @@ void handle_events_get(struct mg_connection *c,
                 print_events, pageno, MG_ESC("totalCount"), MAX_EVENTS_NO);
 }
 
-void handle_settings_set(struct mg_connection *c, struct mg_str body) {
+void handle_settings_set(struct mg_connection *c, struct mg_http_message *hm) {
+  if (!require_post_json(c, hm)) return;
+  struct mg_str body = hm->body;
   struct settings settings;
   char *s = mg_json_get_str(body, "$.device_name");
   bool ok = true;
@@ -244,12 +267,14 @@ void handle_firmware_upload(struct mg_connection *c,
   }
 }
 
-void handle_firmware_commit(struct mg_connection *c) {
+void handle_firmware_commit(struct mg_connection *c, struct mg_http_message *hm) {
+  if (!require_post_json(c, hm)) return;
   mg_http_reply(c, 200, s_json_header, "%s\n",
                 mg_ota_commit() ? "true" : "false");
 }
 
-void handle_firmware_rollback(struct mg_connection *c) {
+void handle_firmware_rollback(struct mg_connection *c, struct mg_http_message *hm) {
+  if (!require_post_json(c, hm)) return;
   mg_http_reply(c, 200, s_json_header, "%s\n",
                 mg_ota_rollback() ? "true" : "false");
 }
@@ -267,7 +292,8 @@ void handle_firmware_status(struct mg_connection *c) {
                 MG_FIRMWARE_CURRENT, print_status, MG_FIRMWARE_PREVIOUS);
 }
 
-void handle_device_reset(struct mg_connection *c) {
+void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm) {
+  if (!require_post_json(c, hm)) return;
   mg_http_reply(c, 200, s_json_header, "true\n");
   mg_timer_add(c->mgr, 500, 0, (void (*)(void *)) mg_device_reset, NULL);
 }
@@ -283,6 +309,12 @@ void handle_device_eraselast(struct mg_connection *c) {
 #define CONN_TYPE_HTTP  1
 #define CONN_TYPE_HTTPS 2
 #define CONN_TYPE_MQTT  3
+
+// Rate limiter для /api/login: блокировка на 30 сек после 5 неудачных попыток
+#define LOGIN_MAX_FAILS   5
+#define LOGIN_BLOCK_MS    30000
+static uint32_t s_login_fail_count  = 0;
+static uint32_t s_login_block_until = 0;
 
 static void *HTTPS_MARKER = (void *) 1; // Маркер для HTTPS-соединений
 
@@ -607,16 +639,35 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			}
 
 			// Обработка API-запросов
-			if (mg_match(hm->uri, mg_str("/api/#"), NULL) && u == NULL) {
-				MG_ERROR(("%lu Unauthorized API request: %.*s", c->id, (int) hm->uri.len, hm->uri.buf));
-				const char *conn_hdr = get_connection_header(hm);
-				mg_http_reply(c, 403, conn_hdr, "Not Authorised\n");
-			} else if (mg_match(hm->uri, mg_str("/api/login"), NULL)) {
-				MG_INFO(("%lu Processing /api/login", c->id));
-				handle_login(c, u);
+			if (mg_match(hm->uri, mg_str("/api/login"), NULL)) {
+			    MG_INFO(("%lu Processing /api/login", c->id));
+			    uint32_t now = mg_millis();
+			    if (now < s_login_block_until) {
+			        mg_http_reply(c, 429, "Connection: close\r\n",
+			                      "{\"error\":\"too many requests\"}\n");
+			        c->is_draining = 1;
+			    } else if (u == NULL) {
+			        // Неудачная попытка: неверные credentials
+			        if (++s_login_fail_count >= LOGIN_MAX_FAILS) {
+			            s_login_block_until = mg_millis() + LOGIN_BLOCK_MS;
+			            MG_ERROR(("%lu Login blocked for %d ms after %d failures",
+			                      c->id, LOGIN_BLOCK_MS, LOGIN_MAX_FAILS));
+			        }
+			        mg_http_reply(c, 403, "Connection: close\r\n",
+			                      "{\"error\":\"Invalid credentials\"}\n");
+			        c->is_draining = 1;
+			    } else {
+			        // Успешный логин: сбрасываем счётчик
+			        s_login_fail_count = 0;
+			        handle_login(c, u);
+			    }
 			} else if (mg_match(hm->uri, mg_str("/api/logout"), NULL)) {
-				MG_INFO(("%lu Processing /api/logout", c->id));
-				handle_logout(c);
+			    MG_INFO(("%lu Processing /api/logout", c->id));
+			    handle_logout(c);
+			} else if (mg_match(hm->uri, mg_str("/api/#"), NULL) && u == NULL) {
+			    MG_ERROR(("%lu Unauthorized API request: %.*s", c->id, (int) hm->uri.len, hm->uri.buf));
+			    const char *conn_hdr = get_connection_header(hm);
+			    mg_http_reply(c, 403, conn_hdr, "Not Authorised\n");
 			} else if (mg_match(hm->uri, mg_str("/api/debug"), NULL)) {
 				MG_INFO(("%lu Processing /api/debug", c->id));
 				handle_debug(c, hm);
@@ -631,27 +682,27 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				handle_settings_get(c);
 			} else if (mg_match(hm->uri, mg_str("/api/settings/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/settings/set", c->id));
-				handle_settings_set(c, hm->body);
+				handle_settings_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/upload"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/upload", c->id));
 				handle_firmware_upload(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/commit"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/commit", c->id));
-				handle_firmware_commit(c);
+				handle_firmware_commit(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/rollback"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/rollback", c->id));
-				handle_firmware_rollback(c);
+				handle_firmware_rollback(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/status"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/status", c->id));
 				handle_firmware_status(c);
 			} else if (mg_match(hm->uri, mg_str("/api/device/reset"), NULL)) {
 				MG_INFO(("%lu Processing /api/device/reset", c->id));
-				handle_device_reset(c);
+				handle_device_reset(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/device/eraselast"), NULL)) {
 				MG_INFO(("%lu Processing /api/device/eraselast", c->id));
 				handle_device_eraselast(c);
 			} else if (mg_match(hm->uri, mg_str("/api/select/get"), NULL)) {
-			
+
 				MG_INFO(("%lu Processing /api/select/get", c->id));
 				handle_select_get(c);
 			} else if (mg_match(hm->uri, mg_str("/api/pintopin/get"), NULL)) {
@@ -784,7 +835,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				MG_INFO(("%lu Did not match any API pattern, serving static content", c->id));
 				struct mg_http_serve_opts opts;
 				memset(&opts, 0, sizeof(opts));
-				
+
 				char extra_headers[256];
 				snprintf(extra_headers, sizeof(extra_headers), "Cache-Control: no-cache, no-store, must-revalidate\r\nConnection: close\r\n");
 				opts.extra_headers = extra_headers;

@@ -530,6 +530,18 @@ export const MyPolzunok = ({ value, onChange }) => {
 // -> Extracted ModalCron to Modals/ModalCron.js
 
 /****************************************************************************/
+// C4-fix: strip dangerous elements & inline handlers from fetched HTML
+const sanitizeHtml = (raw) => {
+  const doc = new DOMParser().parseFromString(raw, 'text/html');
+  doc.querySelectorAll('script,iframe,object,embed').forEach(e => e.remove());
+  doc.querySelectorAll('*').forEach(el =>
+    [...el.attributes]
+      .filter(a => a.name.startsWith('on'))
+      .forEach(a => el.removeAttribute(a.name))
+  );
+  return doc.body.innerHTML;
+};
+
 const HelpInfo = ({ language }) => {
   const [helpContent, setHelpContent] = useState('');
 
@@ -539,7 +551,7 @@ const HelpInfo = ({ language }) => {
       try {
         const response = await fetch(fileName);
         const content = await response.text();
-        setHelpContent(content);
+        setHelpContent(sanitizeHtml(content));
       } catch (error) {
         console.error('Error fetching help content:', error);
         setHelpContent('Error loading help content');
@@ -595,12 +607,18 @@ function FirmwareUpdate({ }) {
   }, [alert]);
 
   const oncommit = (ev) =>
-    fetch('api/firmware/commit')
+    fetch('api/firmware/commit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    })
       .then((r) => r.json())
       .then(refresh);
 
   const onreboot = (ev) =>
-    fetch('api/reboot', {
+    fetch('api/device/reset', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -618,7 +636,14 @@ function FirmwareUpdate({ }) {
           )
       );
 
-  const onrollback = (ev) => fetch('api/firmware/rollback').then(onreboot);
+  const onrollback = (ev) =>
+    fetch('api/firmware/rollback', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    }).then(onreboot);
   const onerase = (ev) => fetch('api/device/eraselast').then(refresh);
 
   const onupload = function (file) {

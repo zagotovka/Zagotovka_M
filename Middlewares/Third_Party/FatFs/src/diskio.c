@@ -96,7 +96,7 @@ DRESULT disk_write (
 	BYTE pdrv,		/* Physical drive nmuber to identify the drive */
 	const BYTE *buff,	/* Data to be written */
 	DWORD sector,		/* Sector address in LBA */
-	UINT count        	/* Number of sectors to write */
+	UINT count	/* Number of sectors to write */
 )
 {
   DRESULT res;
@@ -138,4 +138,3 @@ __weak DWORD get_fattime (void)
 }
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
-

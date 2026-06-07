@@ -1358,7 +1358,7 @@ void GetPinToPin() {
   if (cJSON_IsArray(root)) {
     int count = cJSON_GetArraySize(root);
     if (count > NUMPINLINKS) count = NUMPINLINKS; // Защита от переполнения
-    
+
     for (int i = 0; i < count; i++) {
       cJSON *item = cJSON_GetArrayItem(root, i);
       if (!cJSON_IsObject(item)) continue;
@@ -1743,7 +1743,7 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
   static bool expecting_id = false; // Новый флаг для отслеживания ожидания id
   static char temp_pin[16] = {0};
   //	printf("DEBUG: Processing - Key: %s, Value: %s, NestLevel: %d\n", key,
-  // value, nestLevel); 	printf("DEBUG: Current state - temp_id: %d,
+  // value, nestLevel);	printf("DEBUG: Current state - temp_id: %d,
   // typensor: %d, pinindex: %d\n", temp_id, typensor, pinindex);
   if (nestLevel == 2) {
     // Если встречаем ключ "pins" и значение "id", готовимся к приему id
@@ -2174,7 +2174,7 @@ void SetOneWireConfig() {
           continue;
         }
         cJSON_Delete(sensor_obj);
-    
+
         fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
         if (fresult != FR_OK)
           goto cleanup;
@@ -2221,7 +2221,7 @@ void SetOneWireConfig() {
         continue;
       }
       cJSON_Delete(pin_obj);
-  
+
       // Remove closing brace to add sensors array
       out_str[strlen(out_str) - 1] = '\0';
       fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
@@ -2257,7 +2257,7 @@ void SetOneWireConfig() {
         goto cleanup;
       }
       cJSON_Delete(sensor_obj);
-  
+
       fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
       if (fresult != FR_OK)
         goto cleanup;

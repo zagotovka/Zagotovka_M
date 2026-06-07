@@ -694,4 +694,3 @@ void FLASH_Erase_Sector(uint32_t Sector, uint8_t VoltageRange);
 #endif
 
 #endif /* __STM32F7xx_HAL_FLASH_EX_H */
-

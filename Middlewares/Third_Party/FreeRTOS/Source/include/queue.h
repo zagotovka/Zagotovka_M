@@ -69,7 +69,7 @@ typedef struct QueueDefinition * QueueSetMemberHandle_t;
 /* For internal use only.  These definitions *must* match those in queue.c. */
 #define queueQUEUE_TYPE_BASE				( ( uint8_t ) 0U )
 #define queueQUEUE_TYPE_SET					( ( uint8_t ) 0U )
-#define queueQUEUE_TYPE_MUTEX 				( ( uint8_t ) 1U )
+#define queueQUEUE_TYPE_MUTEX				( ( uint8_t ) 1U )
 #define queueQUEUE_TYPE_COUNTING_SEMAPHORE	( ( uint8_t ) 2U )
 #define queueQUEUE_TYPE_BINARY_SEMAPHORE	( ( uint8_t ) 3U )
 #define queueQUEUE_TYPE_RECURSIVE_MUTEX		( ( uint8_t ) 4U )
@@ -1099,7 +1099,7 @@ void vQueueDelete( QueueHandle_t xQueue ) PRIVILEGED_FUNCTION;
 
  void vFunction( void *pvParameters )
  {
- 	// Create a queue to hold one uint32_t value.  It is strongly
+	// Create a queue to hold one uint32_t value.  It is strongly
 	// recommended *not* to use xQueueOverwriteFromISR() on queues that can
 	// contain more than one value, and doing so will trigger an assertion
 	// if configASSERT() is defined.
@@ -1652,4 +1652,3 @@ uint8_t ucQueueGetQueueType( QueueHandle_t xQueue ) PRIVILEGED_FUNCTION;
 #endif
 
 #endif /* QUEUE_H */
-

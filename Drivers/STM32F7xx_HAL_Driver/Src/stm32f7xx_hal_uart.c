@@ -4049,4 +4049,3 @@ static void UART_RxISR_16BIT(UART_HandleTypeDef *huart)
 /**
   * @}
   */
-

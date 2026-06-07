@@ -8,7 +8,7 @@ uint8_t   temp_cnt = 0;
 uint8_t	  Ds18b20StartConvert = 0;
 uint16_t  Ds18b20Timeout = 0;
 #if (_DS18B20_USE_FREERTOS == 1)
-//osThreadId 	Ds18b20Handle;
+//osThreadId	Ds18b20Handle;
 //void Task_Ds18b20(void const * argument);
 #endif
 
@@ -558,5 +558,3 @@ uint8_t DS18B20_AllDone(OneWire_t* OneWire)
 	/* If read bit is low, then device is not finished yet with calculation temperature */
 	return OneWire_ReadBit(OneWire);
 }
-
-

@@ -24,6 +24,7 @@
 #include "queue.h"
 
 #define BUFFER_SIZE 10000 /* max Button = 9835 символов, это не точно! */
+#define SECURITY_BODY_MAX 4096U /* max body для handle_security_set (heap) */
 #define ENTER_CRITICAL() taskENTER_CRITICAL()
 #define EXIT_CRITICAL()  taskEXIT_CRITICAL()
 
@@ -290,12 +291,12 @@ void handle_debug(struct mg_connection *c, struct mg_http_message *hm);
 void handle_stats_get(struct mg_connection *c);
 void handle_events_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_settings_get(struct mg_connection *c);
-void handle_settings_set(struct mg_connection *c, struct mg_str body);
+void handle_settings_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm);
-void handle_firmware_commit(struct mg_connection *c);
-void handle_firmware_rollback(struct mg_connection *c);
+void handle_firmware_commit(struct mg_connection *c, struct mg_http_message *hm);
+void handle_firmware_rollback(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_status(struct mg_connection *c);
-void handle_device_reset(struct mg_connection *c);
+void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm);
 void handle_device_eraselast(struct mg_connection *c);
 void handle_select_get(struct mg_connection *c);
 void handle_pintopin_get(struct mg_connection *c);

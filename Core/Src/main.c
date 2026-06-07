@@ -105,6 +105,8 @@ int year;
 uint8_t month; // 1-12
 uint8_t day;   // 1-31
 char str[40] = {0};
+char g_ip_addr[16] = "0.0.0.0";
+char g_mac_addr[18] = "00:00:00:00:00:00";
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -142,7 +144,7 @@ UART_HandleTypeDef huart3;
 osThreadId_t ConfigTaskHandle;
 const osThreadAttr_t ConfigTask_attributes = {
   .name = "ConfigTask",
-  .stack_size = 512 * 4,
+  .stack_size = 384 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for WebServerTask */
@@ -274,6 +276,7 @@ static uint32_t output_peak = 0;
 static uint32_t usb_peak = 0;
 static uint32_t mg_conn_peak = 0;
 static uint32_t mg_poll_gap_peak = 0;
+volatile uint32_t mg_poll_gap_over_50ms_cnt = 0;
 
 /* Счётчики HTTP запросов */
 volatile uint32_t req_total = 0;
@@ -452,7 +455,7 @@ void button_event_handler(
   case LONG_PRESS_START: // Начало долгого нажатия
     //       printf("Button %d: LONG_PRESS_START!\r\n", handle->button_id);
     if (handle->button_id < NUMPIN) {
-      //        	 printf("PinsConf[%d].lpress content: %s\n",
+      //	 printf("PinsConf[%d].lpress content: %s\n",
       //        handle->button_id, PinsConf[handle->button_id].lpress);
       action_handler(handle->button_id, PinsConf[handle->button_id].lpress,
                      "long press");
@@ -481,7 +484,7 @@ void button_event_handler(
   case DOUBLE_CLICK: // Двойное нажатие кнопки
     //		printf("Button %d: DOUBLE_CLICK!\r\n", handle->button_id);
     if (handle->button_id < NUMPIN) {
-      //        	 rintf("PinsConf[%d].lpress content: %s\n",
+      //	 rintf("PinsConf[%d].lpress content: %s\n",
       //        handle->button_id, PinsConf[handle->button_id].lpress);
       action_handler(handle->button_id, PinsConf[handle->button_id].dclick,
                      "double press");
@@ -519,7 +522,7 @@ void pwm_event_handler(Button *handle) {
     printf("Button %d: LONG_PRESS_START!\r\n", handle->button_id);
     break;
   case LONG_PRESS_HOLD:
-    //        	  if(PinsConf[handle->button_id].sclick == 2){
+    //	  if(PinsConf[handle->button_id].sclick == 2){
     for (uint8_t a = 0; a < NUMPINLINKS; a++) {
       if (PinsLinks[a].idin == handle->button_id) {
         // PinsInfo[i].tim->CCR1 = 50;
@@ -548,7 +551,7 @@ void pwm_event_handler(Button *handle) {
           printf("PWM LONG [%d] %s: %d%% = %lu steps\r\n", i, PinsInfo[i].pins,
                  PinsConf[i].dvalue, (unsigned long)pulse_lh);
         }
-        // 						data_pin.id =
+        //						data_pin.id =
         // PinsLinks[a].idout;
         // data_pin.action = 2;
         // xQueueSend(outputQueueHandle, (void* ) &data_pin, 0);
@@ -561,7 +564,7 @@ void pwm_event_handler(Button *handle) {
     printf("Button %d: LONG_PRESS_HOLD!\r\n", handle->button_id);
     break;
   case SINGLE_CLICK: // Одиночное нажатие кнопки
-                     //        	  if(PinsConf[handle->button_id].sclick == 2){
+                     //	  if(PinsConf[handle->button_id].sclick == 2){
     for (uint8_t a = 0; a < NUMPINLINKS; a++) {
       if (PinsLinks[a].idin == handle->button_id) {
         // PinsInfo[i].tim->CCR1 = 50;
@@ -592,7 +595,7 @@ void pwm_event_handler(Button *handle) {
                  PinsConf[i].dvalue, (unsigned long)pulse_sc);
         }
 
-        // 						data_pin.id =
+        //						data_pin.id =
         // PinsLinks[a].idout;
         // data_pin.action = 2;
         // xQueueSend(outputQueueHandle, (void* ) &data_pin, 0);
@@ -601,7 +604,7 @@ void pwm_event_handler(Button *handle) {
                PinsConf[handle->button_id].on);
       }
     }
-    //        	  }
+    //	  }
     // printf("Button %d: SINGLE_CLICK PWM!\r\n", handle->button_id);
     break;
   case DOUBLE_CLICK: // Двойное нажатие кнопки
@@ -633,6 +636,57 @@ uint32_t swarm_t; /* используется в gsm.c через extern */
 /* clear_string перенесена в gsm.c */
 /* check_speed перенесена в gsm.c */
 /*************************** END GSM ************************************/
+
+/* Reset reason ---------------------------------------------------------*/
+static uint32_t reset_csr_value = 0;
+static char reset_reason_str[128] = "Unknown";
+
+static void read_reset_reason(void) {
+    reset_csr_value = RCC->CSR;
+    __HAL_RCC_CLEAR_RESET_FLAGS();
+
+    reset_reason_str[0] = '\0';
+    size_t len = 0;
+
+    if (reset_csr_value & RCC_CSR_PORRSTF) {
+        len = strlen(reset_reason_str);
+        snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len, "POR ");
+    }
+    if (reset_csr_value & RCC_CSR_BORRSTF) {
+        len = strlen(reset_reason_str);
+        snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len, "BOR ");
+    }
+    if (reset_csr_value & RCC_CSR_SFTRSTF) {
+        len = strlen(reset_reason_str);
+        snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len, "SFTRST ");
+    }
+    if (reset_csr_value & RCC_CSR_IWDGRSTF) {
+        len = strlen(reset_reason_str);
+        snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len, "IWDG ");
+    }
+    if (reset_csr_value & RCC_CSR_WWDGRSTF) {
+        len = strlen(reset_reason_str);
+        snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len, "WWDG ");
+    }
+    if (reset_csr_value & RCC_CSR_LPWRRSTF) {
+        len = strlen(reset_reason_str);
+        snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len, "LPWRRST ");
+    }
+    if (reset_csr_value & RCC_CSR_PINRSTF) {
+        len = strlen(reset_reason_str);
+        snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len, "PINRST ");
+    }
+
+    // Trim trailing space
+    len = strlen(reset_reason_str);
+    if (len > 0 && reset_reason_str[len - 1] == ' ') {
+        reset_reason_str[len - 1] = '\0';
+    }
+
+    if (reset_reason_str[0] == '\0') {
+        strcpy(reset_reason_str, "None");
+    }
+}
 /* USER CODE END 0 */
 
 /**
@@ -643,7 +697,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  read_reset_reason();
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -677,6 +731,9 @@ int main(void)
   memset(dht22, 0, sizeof(dht22));
   DWT_Init();
   test_init();
+  printf("[SYSTEM] Reset CSR=0x%08lX\r\n", reset_csr_value);
+  printf("[SYSTEM] Reset flags: %s\r\n", reset_reason_str);
+  printf("[SYSTEM] Reset reason: %s (CSR=0x%08lX)\r\n", reset_reason_str, reset_csr_value);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -1467,6 +1524,9 @@ void StartWebServerTask(void *argument)
                             .driver = &mg_tcpip_driver_stm32f,
                             .driver_data = NULL};
 
+  snprintf(g_mac_addr, sizeof(g_mac_addr), "%02X:%02X:%02X:%02X:%02X:%02X",
+           mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]);
+
   MG_INFO(("Initial Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
            mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4],
            mif.mac[5]));
@@ -1513,6 +1573,12 @@ void StartWebServerTask(void *argument)
     mg_mgr_poll(mgr, 0);
   }
 
+  {
+    uint8_t *ip_bytes = (uint8_t *)&mif.ip;
+    snprintf(g_ip_addr, sizeof(g_ip_addr), "%d.%d.%d.%d", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
+    snprintf(g_mac_addr, sizeof(g_mac_addr), "%02X:%02X:%02X:%02X:%02X:%02X", mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]);
+  }
+
   web_init(mgr);
 
   MqttMessage_t rxMsg = {0};
@@ -1534,10 +1600,11 @@ void StartWebServerTask(void *argument)
         mg_poll_gap_peak = poll_gap;
       }
       if (poll_gap > 50) {  /* >50ms = starvation */
+        mg_poll_gap_over_50ms_cnt++; // Увеличиваем счетчик
         if (now_poll - s_poll_warn_tk > 30000) {     /* не спамим чаще 1р/30с */
           s_poll_warn_tk = now_poll;
-          printf("[NET] WARN: mg_mgr_poll gap=%lums (starvation!)\r\n",
-                 (unsigned long)poll_gap);
+          printf("[NET] WARN: mg_mgr_poll gap=%lums (starvation! total cnt: %lu)\r\n",
+                 (unsigned long)poll_gap, (unsigned long)mg_poll_gap_over_50ms_cnt);
         }
       }
     }
@@ -1667,15 +1734,17 @@ void StartWebServerTask(void *argument)
           if (check_mqtt_connection(s_conn)) {
             memset(mqtt_topic, 0, sizeof(mqtt_topic));
             memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            strcpy(mqtt_topic, "/onoff/");
-            strcpy(mqtt_payload, "ID=");
-            char temp[16];
-            sprintf(temp, "%d", rxMsg.deviceId);
-            strcat(mqtt_payload, temp);
-            strcat(mqtt_payload, "/OnOff=");
-            strcat(mqtt_payload, PinsConf[rxMsg.deviceId].onoff ? "ON" : "OFF");
-            strcat(mqtt_payload, "/");
-            strcat(mqtt_payload, PinsConf[rxMsg.deviceId].info);
+            snprintf(mqtt_topic, sizeof(mqtt_topic), "/onoff/");
+            int written = snprintf(mqtt_payload, sizeof(mqtt_payload),
+                                   "ID=%d/OnOff=%s/%s",
+                                   rxMsg.deviceId,
+                                   PinsConf[rxMsg.deviceId].onoff ? "ON" : "OFF",
+                                   PinsConf[rxMsg.deviceId].info);
+            if (written < 0 || (size_t)written >= sizeof(mqtt_payload)) {
+              printf("[MQTT] payload truncated for deviceId=%d, skipping\r\n",
+                     rxMsg.deviceId);
+              break;
+            }
             send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
           } else {
             /* MQTT not connected — состояние логируется однократно в fn_mqtt */
@@ -1697,7 +1766,7 @@ void StartWebServerTask(void *argument)
           uint32_t now = HAL_GetTick();
 
           if (now - lsens_tk >= 5000) {
-        	  lsens_tk = now;
+	  lsens_tk = now;
             if (s_conn != NULL && mqtt_connected_reported && !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining) {
               publish_sensor_batch(s_conn);
             }
@@ -1718,7 +1787,7 @@ void StartWebServerTask(void *argument)
     }
 
 
-    
+
     osDelay(1); /* Yield CPU to RTOS, preventing 100% CPU loop starvation */
   }
   mg_mgr_free(mgr);
@@ -1836,12 +1905,16 @@ void StartCronTask(void *argument)
                  timez_copy.tm_hour, timez_copy.tm_min, timez_copy.tm_sec);
         } else {
           printf("[ONLINE MODE] Initial Date:%02d.%02d.%04d "
-                 "Time:%02d:%02d:%02d\r\n",
+                 "Time:%02d:%02d:%02d IP:%s MAC:%s\r\n",
                  timez_copy.tm_mday, timez_copy.tm_mon + 1, timez_copy.tm_year + 1900,
-                 timez_copy.tm_hour, timez_copy.tm_min, timez_copy.tm_sec);
+                 timez_copy.tm_hour, timez_copy.tm_min, timez_copy.tm_sec,
+                 g_ip_addr, g_mac_addr);
         }
         taskEXIT_CRITICAL();
         t_printd = 1;
+        printf("[SYSTEM] Reset CSR=0x%08lX\r\n", reset_csr_value);
+        printf("[SYSTEM] Reset flags: %s\r\n", reset_reason_str);
+        printf("[SYSTEM] Reset reason: %s (CSR=0x%08lX)\r\n", reset_reason_str, reset_csr_value);
       }
 
       if (cronetime != cronetime_old) {
@@ -2335,9 +2408,17 @@ static void svc_printResults(void) {
     int sunsetHour = (int)sunset;
     int sunsetMinute = (int)((sunset - sunsetHour) * 60);
     // Сохранение времени восхода солнца
-    sprintf(SetSettings.sunrise, "%02d:%02d", sunriseHour, sunriseMinute);
+    snprintf(SetSettings.sunrise,
+             sizeof(SetSettings.sunrise),
+             "%02d:%02d",
+             sunriseHour,
+             sunriseMinute);
     // Сохранение времени заката солнца
-    sprintf(SetSettings.sunset, "%02d:%02d", sunsetHour, sunsetMinute);
+    snprintf(SetSettings.sunset,
+             sizeof(SetSettings.sunset),
+             "%02d:%02d",
+             sunsetHour,
+             sunsetMinute);
     // Calculate day length
     double dayLength = sunset - sunrise;
     if (dayLength < 0)
@@ -2345,8 +2426,11 @@ static void svc_printResults(void) {
     int dayLengthHours = (int)dayLength;
     int dayLengthMinutes = (int)((dayLength - dayLengthHours) * 60);
     // Сохранение длины светового дня
-    sprintf(SetSettings.dlength, "%02d:%02d", dayLengthHours,
-            dayLengthMinutes);
+    snprintf(SetSettings.dlength,
+             sizeof(SetSettings.dlength),
+             "%02d:%02d",
+             dayLengthHours,
+             dayLengthMinutes);
   }
 }
 
@@ -2814,6 +2898,7 @@ static void heap_diagnostic(void)
     static uint32_t last_usb_peak = 0;
     static uint32_t last_mg_conn_peak = 0;
     static uint32_t last_mg_poll_gap_peak = 0;
+    static uint32_t last_mg_poll_gap_over_50ms_cnt = 0;
     static uint32_t last_req_total = 0;
     static uint32_t last_req_encoder = 0;
     static uint32_t last_req_api = 0;
@@ -2827,7 +2912,7 @@ static void heap_diagnostic(void)
     vPortGetHeapStats(&stats);
 
     /* Печатаем только если показатели изменились */
-    if (current_free != last_free || current_min != last_min_ever || 
+    if (current_free != last_free || current_min != last_min_ever ||
         current_malloc_fail != last_malloc_fail ||
         mqtt_tx_peak != last_mqtt_tx_peak ||
         mqtt_rx_peak != last_mqtt_rx_peak ||
@@ -2835,10 +2920,11 @@ static void heap_diagnostic(void)
         usb_peak != last_usb_peak ||
         mg_conn_peak != last_mg_conn_peak ||
         mg_poll_gap_peak != last_mg_poll_gap_peak ||
+        mg_poll_gap_over_50ms_cnt != last_mg_poll_gap_over_50ms_cnt ||
         req_total != last_req_total ||
         req_encoder != last_req_encoder ||
         req_api != last_req_api) {
-        
+
         printf("\r\n=== DIAGNOSTIC REPORT ===\r\n");
         if (first_run) {
             printf("FreeRTOS free now:  %u B\r\n", current_free);
@@ -2850,7 +2936,7 @@ static void heap_diagnostic(void)
             printf("FreeRTOS min ever:  %u B (delta=%+d)\r\n",
                    current_min, (int)current_min - (int)last_min_ever);
         }
-        
+
         printf("Heap free blocks:   %lu\r\n", (unsigned long)stats.xNumberOfFreeBlocks);
         printf("Largest free block: %lu B\r\n", (unsigned long)stats.xSizeOfLargestFreeBlockInBytes);
         printf("Smallest free block: %lu B\r\n", (unsigned long)stats.xSizeOfSmallestFreeBlockInBytes);
@@ -2858,15 +2944,15 @@ static void heap_diagnostic(void)
             uint32_t frag_pct = 100 - (uint32_t)((uint64_t)stats.xSizeOfLargestFreeBlockInBytes * 100 / stats.xAvailableHeapSpaceInBytes);
             printf("Fragmentation:      %lu%%\r\n", (unsigned long)frag_pct);
         }
-        
+
         printf("Malloc fail count:  %lu\r\n", current_malloc_fail);
         printf("MQTT TX queue peak: %lu / 32\r\n", mqtt_tx_peak);
         printf("MQTT RX queue peak: %lu / 4\r\n", mqtt_rx_peak);
         printf("Output queue peak:  %lu / 16\r\n", output_peak);
         printf("USB queue peak:     %lu / 16\r\n", usb_peak);
         printf("Mongoose conns peak: %lu\r\n", mg_conn_peak);
-        printf("Mongoose gap peak:   %lu ms\r\n", mg_poll_gap_peak);
-        printf("HTTP Requests:      Total=%lu, API=%lu, Encoder=%lu\r\n", 
+        printf("Mongoose gap peak:   %lu ms (starvation cnt: %lu)\r\n", mg_poll_gap_peak, (unsigned long)mg_poll_gap_over_50ms_cnt);
+        printf("HTTP Requests:      Total=%lu, API=%lu, Encoder=%lu\r\n",
                (unsigned long)req_total, (unsigned long)req_api, (unsigned long)req_encoder);
         printf("=========================\r\n");
 
@@ -2879,6 +2965,7 @@ static void heap_diagnostic(void)
         last_usb_peak = usb_peak;
         last_mg_conn_peak = mg_conn_peak;
         last_mg_poll_gap_peak = mg_poll_gap_peak;
+        last_mg_poll_gap_over_50ms_cnt = mg_poll_gap_over_50ms_cnt;
         last_req_total = req_total;
         last_req_encoder = req_encoder;
         last_req_api = req_api;
@@ -2923,12 +3010,12 @@ void StartDgnTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-      /* 
+      /*
        * Ожидаем уведомления от других кусков кода (например HTTP/SMS)
        * с уменьшенным таймаутом 5000 мс (5 секунд), чтобы чаще проверять стеки под нагрузкой.
        */
       ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(60000));// было 5000
-      
+
       heap_diagnostic();
 
 		int printed_header = 0;
@@ -2991,7 +3078,7 @@ void StartDgnTask(void *argument)
 
 			printf("\r\n""=== MONGOOSE PEAKS ===\r\n");
 			printf("Conns peak:    %lu\r\n", mg_conn_peak);
-			printf("Poll gap peak: %lu ms\r\n", mg_poll_gap_peak);
+			printf("Poll gap peak: %lu ms (starvation cnt: %lu)\r\n", mg_poll_gap_peak, (unsigned long)mg_poll_gap_over_50ms_cnt);
 
 			printf("\r\n""=== RUNTIME ===\r\n");
 			printf("Tick=%lu\r\n",

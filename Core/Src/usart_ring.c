@@ -62,8 +62,3 @@ int16_t dbg_read(void)
 		return c;
 	}
 }
-
-
-
-
-

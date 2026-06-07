@@ -870,4 +870,3 @@ uint32_t HAL_RNG_GetError(const RNG_HandleTypeDef *hrng)
 /**
   * @}
   */
-

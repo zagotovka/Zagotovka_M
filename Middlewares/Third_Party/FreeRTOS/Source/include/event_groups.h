@@ -203,7 +203,7 @@ typedef TickType_t EventBits_t;
 /**
  * event_groups.h
  *<pre>
-	EventBits_t xEventGroupWaitBits( 	EventGroupHandle_t xEventGroup,
+	EventBits_t xEventGroupWaitBits(	EventGroupHandle_t xEventGroup,
 										const EventBits_t uxBitsToWaitFor,
 										const BaseType_t xClearOnExit,
 										const BaseType_t xWaitForAllBits,
@@ -753,5 +753,3 @@ void vEventGroupClearBitsCallback( void *pvEventGroup, const uint32_t ulBitsToCl
 #endif
 
 #endif /* EVENT_GROUPS_H */
-
-

@@ -418,7 +418,7 @@ lwdtc_cron_parse_multi(lwdtc_cron_ctx_t* cron_ctx, struct dbCron dbCrontxt[], si
         if (dbCrontxt[i].cron[0] == '\0') {
             continue;  // Skip unconfigured timers
         }
-    	x = strlen(dbCrontxt[i].cron);
+	x = strlen(dbCrontxt[i].cron);
         if ((res = lwdtc_cron_parse_with_len(&cron_ctx[i], dbCrontxt[i].cron, x)) != lwdtcOK) {
             if (fail_index != NULL) {
                 *fail_index = i;
@@ -575,4 +575,3 @@ lwdtc_dt_to_tm(const lwdtc_dt_t* dt, struct tm* tm_time) {
 
     return lwdtcOK;
 }
-

@@ -72,15 +72,3 @@ int16_t dbg_read(void);
 
 	return;*/
 /* USER CODE END USART3_IRQn 0 */
-
-
-
-
-
-
-
-
-
-
-
-

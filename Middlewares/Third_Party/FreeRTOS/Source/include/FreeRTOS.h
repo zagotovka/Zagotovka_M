@@ -1127,8 +1127,8 @@ typedef struct xSTATIC_TCB
 		struct	_reent	xDummy17;
 	#endif
 	#if ( configUSE_TASK_NOTIFICATIONS == 1 )
-		uint32_t 		ulDummy18;
-		uint8_t 		ucDummy19;
+		uint32_t		ulDummy18;
+		uint8_t		ucDummy19;
 	#endif
 	#if ( tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE != 0 )
 		uint8_t			uxDummy20;
@@ -1234,12 +1234,12 @@ typedef struct xSTATIC_TIMER
 	void				*pvDummy1;
 	StaticListItem_t	xDummy2;
 	TickType_t			xDummy3;
-	void 				*pvDummy5;
+	void				*pvDummy5;
 	TaskFunction_t		pvDummy6;
 	#if( configUSE_TRACE_FACILITY == 1 )
 		UBaseType_t		uxDummy7;
 	#endif
-	uint8_t 			ucDummy8;
+	uint8_t			ucDummy8;
 
 } StaticTimer_t;
 
@@ -1275,4 +1275,3 @@ typedef StaticStreamBuffer_t StaticMessageBuffer_t;
 #endif
 
 #endif /* INC_FREERTOS_H */
-

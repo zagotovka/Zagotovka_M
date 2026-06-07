@@ -104,7 +104,7 @@ const struct dbPinsInfo PinsInfo[NUMPIN] = {
 		{"PF11", "F", 11,	 GPIO_PIN_11, GPIOF, 0, 0, 0, 0, NULL, 0, GPIO_AF1_TIM1},
 		{"PF12", "F", 12,	 GPIO_PIN_12, GPIOF, 0, 0, 0, 0, NULL, 0, GPIO_AF1_TIM1},
 		{"PF13", "F", 13,	 GPIO_PIN_13, GPIOF, 0, 0, 0, 0, NULL, 0, GPIO_AF1_TIM1},
-		{"PF14", "F", 14, 	 GPIO_PIN_14, GPIOF, 0, 0, 0, 1, NULL, 0, GPIO_AF1_TIM1},
+		{"PF14", "F", 14,	 GPIO_PIN_14, GPIOF, 0, 0, 0, 1, NULL, 0, GPIO_AF1_TIM1},
 		{"PF15", "F", 15,	 GPIO_PIN_15, GPIOF, 0, 0, 1, 0, NULL, 0, GPIO_AF1_TIM1},
 
 		{"PG0", "G", 0,		 GPIO_PIN_0, GPIOG, 0, 0, 0, 0, NULL, 0, GPIO_AF1_TIM1},

@@ -184,6 +184,3 @@ void USBH_Delay(uint32_t Delay);
 /**
   * @}
   */
-
-
-

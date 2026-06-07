@@ -185,7 +185,7 @@ extern "C" {
 #define LL_SYSCFG_TIMBREAK_LOCKUP          SYSCFG_CBR_CLL     /*!< Enables and locks the Lockup output (raised during core
                                                                    lockup state) of Cortex-M7 with Break Input of TIMER1, TIMER8 */
 #define LL_SYSCFG_TIMBREAK_PVD             SYSCFG_CBR_PVDL    /*!< Enables and locks the PVD connection with TIMER1, TIMER8 Break input.
-                                                                   It also locks (write protect) the PVD_EN and PVDSEL[2:0] bits 
+                                                                   It also locks (write protect) the PVD_EN and PVDSEL[2:0] bits
                                                                    of the power controller */
 #endif /* SYSCFG_CBR_CLL */
 /**
@@ -1014,5 +1014,3 @@ __STATIC_INLINE void LL_FLASH_DisableARTReset(void)
 #endif
 
 #endif /* __STM32F7xx_LL_SYSTEM_H */
-
-

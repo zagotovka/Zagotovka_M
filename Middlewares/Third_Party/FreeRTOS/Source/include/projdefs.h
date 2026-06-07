@@ -93,7 +93,7 @@ itself. */
 #define	pdFREERTOS_ERRNO_EFTYPE			79	/* Inappropriate file type or format */
 #define	pdFREERTOS_ERRNO_ENMFILE		89	/* No more files */
 #define	pdFREERTOS_ERRNO_ENOTEMPTY		90	/* Directory not empty */
-#define	pdFREERTOS_ERRNO_ENAMETOOLONG 	91	/* File or path name too long */
+#define	pdFREERTOS_ERRNO_ENAMETOOLONG	91	/* File or path name too long */
 #define	pdFREERTOS_ERRNO_EOPNOTSUPP		95	/* Operation not supported on transport endpoint */
 #define	pdFREERTOS_ERRNO_ENOBUFS		105	/* No buffer space available */
 #define	pdFREERTOS_ERRNO_ENOPROTOOPT	109	/* Protocol not available */
@@ -101,7 +101,7 @@ itself. */
 #define	pdFREERTOS_ERRNO_ETIMEDOUT		116	/* Connection timed out */
 #define	pdFREERTOS_ERRNO_EINPROGRESS	119	/* Connection already in progress */
 #define	pdFREERTOS_ERRNO_EALREADY		120	/* Socket already connected */
-#define	pdFREERTOS_ERRNO_EADDRNOTAVAIL 	125	/* Address not available */
+#define	pdFREERTOS_ERRNO_EADDRNOTAVAIL	125	/* Address not available */
 #define	pdFREERTOS_ERRNO_EISCONN		127	/* Socket is already connected */
 #define	pdFREERTOS_ERRNO_ENOTCONN		128	/* Socket is not connected */
 #define	pdFREERTOS_ERRNO_ENOMEDIUM		135	/* No medium inserted */
@@ -119,6 +119,3 @@ itself. */
 
 
 #endif /* PROJDEFS_H */
-
-
-

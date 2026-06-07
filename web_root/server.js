@@ -165,60 +165,83 @@ const urlMappings = {
   }
 };
 
-export default function redirectMiddleware() {
-  const middleware = async (req, res, next) => {
-    const url = req.url;
-    const mapping = urlMappings[url];
-
-    if (mapping) {
-      const filePath = path.join(process.cwd(), mapping.file);
-
-      if (req.method === 'GET') {
-        try {
-          const fileContent = await fs.promises.readFile(filePath, 'utf-8');
-          res.statusCode = 200;
-          res.setHeader('Content-Type', mapping.contentType);
-          res.end(fileContent);
-        } catch (error) {
-          console.error('Error reading file:', error);
-          res.statusCode = 500;
-          res.end();
-        }
-      } else if (req.method === 'POST') {
-        let body = '';
-        req.on('data', (chunk) => {
-          body += chunk.toString();
-        });
-        req.on('end', async () => {
-          try {
-            const data = JSON.parse(body);
-            await fs.promises.writeFile(
-              filePath,
-              JSON.stringify(data, null, 2),
-              'utf-8'
-            );
-            res.statusCode = 200;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ status: 'success' }));
-          } catch (error) {
-            console.error('Error writing file:', error);
-            res.statusCode = 500;
-            res.end();
-          }
-        });
-      } else {
-        res.statusCode = 405;
-        res.end();
-      }
-    } else {
-      next();
-    }
-  };
-
+export default function redirectMiddleware(mode) {
   return {
     name: 'redirect-middleware',
     configureServer(server) {
-      server.middlewares.use(middleware);
+      if (mode !== 'development') {
+        console.warn('[security] redirectMiddleware disabled in non-dev mode');
+        return;
+      }
+
+      const MOCK_DIR = path.resolve(process.cwd(), 'json');
+      const MAX_BODY = 1024 * 1024; // 1 MB — защита от переполнения диска
+
+      server.middlewares.use(async (req, res, next) => {
+        const url = req.url;
+        const mapping = urlMappings[url];
+
+        if (!mapping) {
+          next();
+          return;
+        }
+
+        // Path traversal protection: resolve only inside MOCK_DIR
+        const safePath = path.resolve(MOCK_DIR, path.basename(mapping.file));
+        if (!safePath.startsWith(MOCK_DIR)) {
+          res.statusCode = 403;
+          res.end('Forbidden');
+          return;
+        }
+
+        if (req.method === 'GET') {
+          try {
+            const fileContent = await fs.promises.readFile(safePath, 'utf-8');
+            res.statusCode = 200;
+            res.setHeader('Content-Type', mapping.contentType);
+            res.end(fileContent);
+          } catch (error) {
+            console.error('Error reading file:', error);
+            res.statusCode = 500;
+            res.end();
+          }
+        } else if (req.method === 'POST') {
+          let body = '';
+          let overflow = false;
+          req.on('data', (chunk) => {
+            body += chunk.toString();
+            if (body.length > MAX_BODY) {
+              overflow = true;
+              req.destroy();
+            }
+          });
+          req.on('end', async () => {
+            if (overflow) {
+              res.statusCode = 413;
+              res.end('Payload Too Large');
+              return;
+            }
+            try {
+              const data = JSON.parse(body);
+              await fs.promises.writeFile(
+                safePath,
+                JSON.stringify(data, null, 2),
+                'utf-8'
+              );
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ status: 'success' }));
+            } catch (error) {
+              console.error('Error writing file:', error);
+              res.statusCode = 500;
+              res.end();
+            }
+          });
+        } else {
+          res.statusCode = 405;
+          res.end();
+        }
+      });
     }
   };
 }

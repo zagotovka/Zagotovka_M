@@ -1,17 +1,17 @@
-/**	
+/**
  * |----------------------------------------------------------------------
  * | Copyright (C) Tilen Majerle, 2014
- * | 
+ * |
  * | This program is free software: you can redistribute it and/or modify
  * | it under the terms of the GNU General Public License as published by
  * | the Free Software Foundation, either version 3 of the License, or
  * | any later version.
- * |  
+ * |
  * | This program is distributed in the hope that it will be useful,
  * | but WITHOUT ANY WARRANTY; without even the implied warranty of
  * | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * | GNU General Public License for more details.
- * | 
+ * |
  * | You should have received a copy of the GNU General Public License
  * | along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * |----------------------------------------------------------------------
@@ -35,20 +35,20 @@ void ONEWIRE_DELAY(uint16_t time_us)
 void ONEWIRE_LOW(OneWire_t *gp)
 {
 	gp->GPIOx->BSRR = gp->GPIO_Pin<<16;
-}	
+}
 void ONEWIRE_HIGH(OneWire_t *gp)
 {
 	gp->GPIOx->BSRR = gp->GPIO_Pin;
-}	
+}
 void ONEWIRE_INPUT(OneWire_t *gp)
 {
 	GPIO_InitTypeDef	gpinit;
 	gpinit.Mode = GPIO_MODE_INPUT;
 	gpinit.Pull = GPIO_NOPULL;
 	gpinit.Speed = GPIO_SPEED_FREQ_HIGH;
-	gpinit.Pin = gp->GPIO_Pin;	
+	gpinit.Pin = gp->GPIO_Pin;
 	HAL_GPIO_Init(gp->GPIOx,&gpinit);
-}	
+}
 void ONEWIRE_OUTPUT(OneWire_t *gp)
 {
 	GPIO_InitTypeDef	gpinit;
@@ -59,8 +59,8 @@ void ONEWIRE_OUTPUT(OneWire_t *gp)
 	HAL_GPIO_Init(gp->GPIOx,&gpinit);
 
 }
-void OneWire_Init(OneWire_t* OneWireStruct, GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin) 
-{	
+void OneWire_Init(OneWire_t* OneWireStruct, GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin)
+{
 	HAL_TIM_Base_Start(&_DS18B20_TIMER);
 
 	OneWireStruct->GPIOx = GPIOx;
@@ -173,7 +173,7 @@ uint8_t OneWire_ReadByte(OneWire_t* OneWireStruct) {
 		byte >>= 1;
 		byte |= (OneWire_ReadBit(OneWireStruct) << 7);
 	}
-	
+
 	return byte;
 }
 
@@ -214,7 +214,7 @@ uint8_t OneWire_Search(OneWire_t* OneWireStruct, uint8_t command) {
 	if (!OneWireStruct->LastDeviceFlag)
 	{
 		// 1-Wire reset
-		if (OneWire_Reset(OneWireStruct)) 
+		if (OneWire_Reset(OneWireStruct))
 		{
 			/* Reset the search */
 			OneWireStruct->LastDiscrepancy = 0;
@@ -223,8 +223,8 @@ uint8_t OneWire_Search(OneWire_t* OneWireStruct, uint8_t command) {
 			return 0;
 		}
 
-		// issue the search command 
-		OneWire_WriteByte(OneWireStruct, command);  
+		// issue the search command
+		OneWire_WriteByte(OneWireStruct, command);
 
 		// loop to do the search
 		do {
@@ -248,7 +248,7 @@ uint8_t OneWire_Search(OneWire_t* OneWireStruct, uint8_t command) {
 						// if equal to last pick 1, if not then pick 0
 						search_direction = (id_bit_number == OneWireStruct->LastDiscrepancy);
 					}
-					
+
 					// if 0 was picked then record its position in LastZero
 					if (search_direction == 0) {
 						last_zero = id_bit_number;
@@ -267,7 +267,7 @@ uint8_t OneWire_Search(OneWire_t* OneWireStruct, uint8_t command) {
 				} else {
 					OneWireStruct->ROM_NO[rom_byte_number] &= ~rom_byte_mask;
 				}
-				
+
 				// serial number search direction write bit
 				OneWire_WriteBit(OneWireStruct, search_direction);
 
@@ -338,7 +338,7 @@ int OneWire_Verify(OneWire_t* OneWireStruct) {
 		rslt = 0;
 	}
 
-	// restore the search state 
+	// restore the search state
 	for (i = 0; i < 8; i++) {
 		OneWireStruct->ROM_NO[i] = rom_backup[i];
 	}
@@ -358,7 +358,7 @@ void OneWire_TargetSetup(OneWire_t* OneWireStruct, uint8_t family_code) {
 	for (i = 1; i < 8; i++) {
 		OneWireStruct->ROM_NO[i] = 0;
 	}
-	
+
 	OneWireStruct->LastDiscrepancy = 64;
 	OneWireStruct->LastFamilyDiscrepancy = 0;
 	OneWireStruct->LastDeviceFlag = 0;
@@ -382,7 +382,7 @@ uint8_t OneWire_GetROM(OneWire_t* OneWireStruct, uint8_t index) {
 void OneWire_Select(OneWire_t* OneWireStruct, uint8_t* addr) {
 	uint8_t i;
 	OneWire_WriteByte(OneWireStruct, ONEWIRE_CMD_MATCHROM);
-	
+
 	for (i = 0; i < 8; i++) {
 		OneWire_WriteByte(OneWireStruct, *(addr + i));
 	}
@@ -391,10 +391,10 @@ void OneWire_Select(OneWire_t* OneWireStruct, uint8_t* addr) {
 void OneWire_SelectWithPointer(OneWire_t* OneWireStruct, uint8_t *ROM) {
 	uint8_t i;
 	OneWire_WriteByte(OneWireStruct, ONEWIRE_CMD_MATCHROM);
-	
+
 	for (i = 0; i < 8; i++) {
 		OneWire_WriteByte(OneWireStruct, *(ROM + i));
-	}	
+	}
 }
 
 void OneWire_GetFullROM(OneWire_t* OneWireStruct, uint8_t pin_index, uint8_t sensor_index) {
@@ -421,7 +421,7 @@ void OneWire_GetFullROM(OneWire_t* OneWireStruct, uint8_t pin_index, uint8_t sen
 
 uint8_t OneWire_CRC8(uint8_t *addr, uint8_t len) {
 	uint8_t crc = 0, inbyte, i, mix;
-	
+
 	while (len--) {
 		inbyte = *addr++;
 		for (i = 8; i; i--) {
@@ -433,8 +433,7 @@ uint8_t OneWire_CRC8(uint8_t *addr, uint8_t len) {
 			inbyte >>= 1;
 		}
 	}
-	
+
 	/* Return calculated CRC */
 	return crc;
 }
-

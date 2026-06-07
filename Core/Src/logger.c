@@ -86,12 +86,12 @@ void logger_send(LogCategory_t cat, const char *fmt, ...) {
 
     char buf[192 + 2];
     buf[0] = (char)cat;
-    
+
     va_list args;
     va_start(args, fmt);
     int len = vsnprintf(buf + 1, sizeof(buf) - 2, fmt, args);
     va_end(args);
-    
+
     if (len > 0) {
         int total_len = len + 1; // cat + chars
         if (total_len >= (int)sizeof(buf)) {
@@ -99,7 +99,7 @@ void logger_send(LogCategory_t cat, const char *fmt, ...) {
         }
         buf[total_len] = '\0';
         total_len++; // include null terminator
-        
+
         if (xMessageBuffer != NULL) {
             xMessageBufferSend(xMessageBuffer, buf, total_len, 0);
         } else {
@@ -115,7 +115,7 @@ static TaskLogBuffer_t* get_task_buffer(void) {
     if (current_task == NULL) {
         return NULL;
     }
-    
+
     int num_bufs = sizeof(g_task_bufs) / sizeof(g_task_bufs[0]);
 
     // Quick search without critical section
@@ -124,7 +124,7 @@ static TaskLogBuffer_t* get_task_buffer(void) {
             return &g_task_bufs[i];
         }
     }
-    
+
     // Not found, allocate a slot in critical section
     TaskLogBuffer_t *allocated = NULL;
     taskENTER_CRITICAL();

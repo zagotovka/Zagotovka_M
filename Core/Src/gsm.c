@@ -338,8 +338,8 @@ void execute_commands(char *cmd_str) {
         value = *cmd - '0';
         cmd += 2; /* пропускаем значение и * */
         valid_format = 1;
-      } else if ((*cmd == 'S' || *cmd == 's') && 
-                 (*(cmd + 1) == 'C' || *(cmd + 1) == 'c') && 
+      } else if ((*cmd == 'S' || *cmd == 's') &&
+                 (*(cmd + 1) == 'C' || *(cmd + 1) == 'c') &&
                  *(cmd + 2) == '*') {
         value = 3;
         cmd += 3;
@@ -454,9 +454,9 @@ void execute_commands(char *cmd_str) {
 
         int inv_len = end - cmd_start;
         if (inv_len > 0) {
-          int cp_len = inv_len < 31 ? inv_len : 31;
           char invalid_cmd[32] = {0};
-          strncpy(invalid_cmd, cmd_start, cp_len);
+          strncpy(invalid_cmd, cmd_start, sizeof(invalid_cmd) - 1);
+          invalid_cmd[sizeof(invalid_cmd) - 1] = '\0';
 
           char inv_str[64];
           snprintf(inv_str, sizeof(inv_str), "%s%s", invldcnt > 0 ? "," : "",
@@ -503,24 +503,24 @@ void send_command_result_sms(void) {
   /* Минимизируем использование стека, т.к. функция вызывается из задач FreeRTOS */
   char message[256];
   message[0] = '\0';
-  
+
   const char valid_prefix[] = "Valid pins: ";
   const char invalid_prefix[] = " Invld pins/cmd: ";
-  
+
   bool has_type_10 = false;
   uint8_t type_10_pin = 0;
-  
+
   /* Обрабатываем валидные пины */
   if (strlen(vldpins) > 0) {
     char sec_buf[128] = {0};
     char out_buf[128] = {0};
     int sec_cnt = 0;
     int out_cnt = 0;
-    
+
     char vldpins_fmt[128];
     strncpy(vldpins_fmt, vldpins, sizeof(vldpins_fmt) - 1);
     vldpins_fmt[sizeof(vldpins_fmt) - 1] = '\0';
-    
+
     char *tok = strtok(vldpins_fmt, ",");
     while (tok != NULL) {
       char pin_number[4] = {0};
@@ -530,11 +530,11 @@ void send_command_result_sms(void) {
         k++;
       }
       uint8_t pin_id = atoi(pin_number);
-      
+
       char *colon = strchr(tok, ':');
       int action_val = -1;
       if (colon) { action_val = atoi(colon + 1); }
-      
+
       if (PinsConf[pin_id].topin == 10) {
         has_type_10 = true;
         type_10_pin = pin_id;
@@ -581,20 +581,20 @@ void send_command_result_sms(void) {
       }
       tok = strtok(NULL, ",");
     }
-    
+
     if (sec_cnt > 0) snprintf(message, sizeof(message), "SEC-TY:%s", sec_buf);
     if (out_cnt > 0) {
       if (sec_cnt > 0) strncat(message, " ", sizeof(message) - strlen(message) - 1);
       strncat(message, out_buf, sizeof(message) - strlen(message) - 1);
     }
-    
+
     if (strlen(message) > 0 && strcmp(message, "None") != 0) {
         /* Сохраняем в MQTT */
         taskENTER_CRITICAL();
         strncpy(PinsConf[1].sclick, message, sizeof(PinsConf[1].sclick) - 1);
         PinsConf[1].sclick[sizeof(PinsConf[1].sclick) - 1] = '\0';
         taskEXIT_CRITICAL();
-        
+
         /* Добавляем префикс валидных пинов */
         char temp_msg[280]; /* Увеличен размер, чтобы вместить префикс + message */
         snprintf(temp_msg, sizeof(temp_msg), "%s%s", valid_prefix, message);
@@ -604,22 +604,22 @@ void send_command_result_sms(void) {
         message[0] = '\0';
     }
   }
-  
+
   if ((has_type_10 && PinsConf[1].onoff == 1 && PinsConf[type_10_pin].onoff == 1) ||
       (validcnt > 0 && PinsConf[1].onoff == 1)) {
-      
+
     if (strlen(invpins) > 0 && strcmp(invpins, "None") != 0) {
         int current_len = strlen(message);
         const char *pfx = (current_len > 0) ? invalid_prefix : "Invld pins/cmd: ";
         snprintf(message + current_len, sizeof(message) - current_len, "%s%.80s", pfx, invpins);
     }
-    
+
     if (strlen(message) > 0) {
         /* Выводим финальное сообщение в консоль отладки */
         char dbg_msg[300];
         snprintf(dbg_msg, sizeof(dbg_msg), "Final SMS: %.250s\n", message);
         HAL_UART_Transmit(myDEBUG, (uint8_t *)dbg_msg, strlen(dbg_msg), 1000);
-        
+
         char str[128];
         snprintf(str, sizeof(str), "AT+CMGS=\"%s\"\r\n", SetSettings.tel);
         HAL_UART_Transmit(GSM, (uint8_t *)str, strlen(str), 1000);
@@ -628,7 +628,7 @@ void send_command_result_sms(void) {
         osDelay(100);
         uint8_t ctrlZ = 26;
         HAL_UART_Transmit(GSM, &ctrlZ, 1, 1000);
-        
+
         if (validcnt > 0) {
             mqtt_queue_send_safe(1, 1, 0, 0);
         }
@@ -751,7 +751,7 @@ void process_sim800l_data(void) {
         if (strstr(sms_text, "777") != NULL) {
           taskENTER_CRITICAL();
           PinsConf[1].onoff = 1;
-          strcpy(PinsConf[1].sclick, "All SMS alerts ON!");
+          snprintf(PinsConf[1].sclick, sizeof(PinsConf[1].sclick), "All SMS alerts ON!");
           taskEXIT_CRITICAL();
           send_sms(SMS_ENABLE_CODE);
 
@@ -763,7 +763,7 @@ void process_sim800l_data(void) {
         } else if (strstr(sms_text, "222") != NULL) {
           taskENTER_CRITICAL();
           PinsConf[1].onoff = 0;
-          strcpy(PinsConf[1].sclick, "All SMS alerts OFF!");
+          snprintf(PinsConf[1].sclick, sizeof(PinsConf[1].sclick), "All SMS alerts OFF!");
           taskEXIT_CRITICAL();
           send_sms(SMS_DISABLE_CODE);
 
@@ -786,13 +786,13 @@ void process_sim800l_data(void) {
                 char c1 = *(q + 1);
                 char c2 = *(q + 2);
                 char c3 = *(q + 3);
-                
+
                 /* Проверяем: цифра 0-5 и звёздочка (поддержка цифровых команд кнопок) */
                 if (c1 >= '0' && c1 <= '5' && c2 == '*') {
                   has_cmd = true;
                   break;
                 }
-                
+
                 /* Проверяем: буквы DC, SC, LP и звёздочка */
                 if ( ((c1 == 'd' || c1 == 'D') && (c2 == 'c' || c2 == 'C') && c3 == '*') ||
                      ((c1 == 's' || c1 == 'S') && (c2 == 'c' || c2 == 'C') && c3 == '*') ||
@@ -855,7 +855,7 @@ void process_sim800l_data(void) {
         if (strcmp(dtmf_buf, "777") == 0) {
           taskENTER_CRITICAL();
           PinsConf[1].onoff = 1;
-          strcpy(PinsConf[1].sclick, "All SMS alerts ON!");
+          snprintf(PinsConf[1].sclick, sizeof(PinsConf[1].sclick), "All SMS alerts ON!");
           taskEXIT_CRITICAL();
           send_sms(SMS_ENABLE_CODE);
           memset(dtmf_buf, 0, sizeof(dtmf_buf));
@@ -867,7 +867,7 @@ void process_sim800l_data(void) {
         } else if (strcmp(dtmf_buf, "222") == 0) {
           send_sms(SMS_DISABLE_CODE);
           taskENTER_CRITICAL();
-          strcpy(PinsConf[1].sclick, "All SMS alerts OFF!");
+          snprintf(PinsConf[1].sclick, sizeof(PinsConf[1].sclick), "All SMS alerts OFF!");
           PinsConf[1].onoff = 0;
           taskEXIT_CRITICAL();
           memset(dtmf_buf, 0, sizeof(dtmf_buf));

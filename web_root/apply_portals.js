@@ -95,12 +95,12 @@ files.forEach(file => {
   return null;
 `;
         // We will omit the deps array '[]' in useEffect to ensure it rerenders when ANY state changes within the modal component.
-        // Since we're rendering to a portal, standard React rules apply: if we omit the dependency array, it runs after every render, 
+        // Since we're rendering to a portal, standard React rules apply: if we omit the dependency array, it runs after every render,
         // replacing the content of the portal, which effectively syncs the portal content with the modal's internal state.
         // Wait, Preact might unmount/remount the DOM node if we return a cleanup function every time.
         // Let's pass the specific props and states as dependencies:
 
-        // Actually, Preact's render directly updates in place, but calling it inside an effect without deps might cause too much DOM thrashing. 
+        // Actually, Preact's render directly updates in place, but calling it inside an effect without deps might cause too much DOM thrashing.
         // Let's use the exact dependencies!
         const effectWithDeps = `
   useEffect(() => {

@@ -361,7 +361,7 @@ const TabOneWire = () => {
     const sensorType = d.typsensor || d.typsensr || 0;
     const numDevices = d.numdevices || d.numsens || 0;
     if (sensorType === 0 || numDevices === 0) return html`<div class="px-4 py-2 text-slate-500 font-medium">${T.noSensors}</div>`;
-    
+
     let sensors = d.sensors || [];
     const rowBg = ['bg-cyan-50/60 border-cyan-200/50', 'bg-slate-100/70 border-slate-200/50'];
 
@@ -434,7 +434,7 @@ const TabOneWire = () => {
         ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
       </div>
     </div>
-    ${isModalOpen && (selectedSensor 
+    ${isModalOpen && (selectedSensor
       ? html`<${ModalEditSensor} typsensor=${selectedSensor} oneWireId=${selectedSensor.oneWireId} pins=${selectedSensor.pins} onClose=${closeModal} onUpdate=${handleSensorUpdate} sensorType=${selectedSensor.sensorType} closeOnOverlayClick=${true} refresh=${refresh} />`
       : html`<${ModalOneWire} oneWire=${editingOneWire} onClose=${closeModal} onUpdate=${handleOneWireUpdate} closeOnOverlayClick=${true} refresh=${refresh} />`
     )}

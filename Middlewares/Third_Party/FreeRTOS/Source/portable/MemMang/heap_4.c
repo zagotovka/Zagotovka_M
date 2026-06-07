@@ -478,5 +478,3 @@ size_t xNumberOfFreeBlocks = 0;
 	pxHeapStats->xNumberOfFreeBlocks = xNumberOfFreeBlocks;
 	pxHeapStats->xMinimumEverFreeBytesRemaining = xMinimumEverFreeBytesRemaining;
 }
-
-

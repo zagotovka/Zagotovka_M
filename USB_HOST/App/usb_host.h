@@ -87,4 +87,3 @@ void MX_USB_HOST_Init(void);
 #endif
 
 #endif /* __USB_HOST__H__ */
-

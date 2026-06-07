@@ -41,17 +41,17 @@ struct dbPinsConf {     // Создали структуру с необходи
 	uint8_t istate;		// Invert state
 	int dvalue;		    // Dimmer value
 	uint8_t ponr;		// Power on restore
-	uint8_t ptype; 		// Pullup type 0 - NONE; 1 - GPIO_PULLUP; 2 - GPIO_PULLDOWN
-	char sclick[125]; 	// SINGLE CLICK, (где 125 - 25-27 пар)
-	char dclick[125]; 	// DOUBLE CLICK,(где 125 - 25-27 пар) где 255 это 51 пара ключ занчение (15:2).
-	char lpress[125]; 	// LONG PRESS, (где 125 - 25-27 пар) где 255 это 51 пара ключ занчение (15:2).
-	uint8_t encoderb; 	// ID of "Encoder B"
+	uint8_t ptype;		// Pullup type 0 - NONE; 1 - GPIO_PULLUP; 2 - GPIO_PULLDOWN
+	char sclick[125];	// SINGLE CLICK, (где 125 - 25-27 пар)
+	char dclick[125];	// DOUBLE CLICK,(где 125 - 25-27 пар) где 255 это 51 пара ключ занчение (15:2).
+	char lpress[125];	// LONG PRESS, (где 125 - 25-27 пар) где 255 это 51 пара ключ занчение (15:2).
+	uint8_t encoderb;	// ID of "Encoder B"
 	char encbpin[5];	// PIN  of "Encoder B"
-	uint8_t hinter; 	// Hold interval
-	uint8_t repeat; 	// Repeat
-	uint8_t rinter; 	// Repeat interval
+	uint8_t hinter;	// Hold interval
+	uint8_t repeat;	// Repeat
+	uint8_t rinter;	// Repeat interval
 	uint8_t dcinter;	// Double-click interval
-	uint8_t pclick; 	// Prevent Click
+	uint8_t pclick;	// Prevent Click
 	char info[30];	    // Info
 	uint8_t onoff;		// On | Off
 	uint8_t event;      // Event (StateChanged - 0, Pressed -1, Released - 2, Repeat - 3, Hold - 4, LongClick - 5, Click - 6, DoubleClick - 7)
@@ -177,15 +177,15 @@ struct dbPinToPin { // Привязка кнопок/выключателей/pw
 	char pins[5];// PWM
 };
 
-struct dbSettings { 	// Cтруктура для setting
+struct dbSettings {	// Cтруктура для setting
 	char adm_name[10];  // Имя пользователя для авторизации
 	char adm_pswd[15];  // Пароль для авторизации
 	char token[11];     // Token для API
 	char lang[3];       // ru,en
 	uint8_t numline;    // Количество строк "Cron jobs"
 	double timezone;    // UTC
-	double lon_de;    	// Longitude - Долгота
-	double lat_de;    	// Latitude - Широта
+	double lon_de;	// Longitude - Долгота
+	double lat_de;	// Latitude - Широта
 	char sunrise[7];    // 07:00
 	char sunset[7];     // 17:00
 	char dlength[7];    // Day length: 10:00
@@ -193,20 +193,20 @@ struct dbSettings { 	// Cтруктура для setting
 	short onsunset;     // onoff sunset chekbox
 	char srise_pins[250];// sunrise action
 	char sset_pins[250]; // sunset action
-	short ip1_sntp0; 	// SMTP Server primary
-	short ip1_sntp1; 	// SMTP Server primary
-	short ip1_sntp2; 	// SMTP Server primary
-	short ip1_sntp3; 	// SMTP Server primary
-	short ip2_sntp0; 	// SMTP Server secondary
-	short ip2_sntp1; 	// SMTP Server secondary
-	short ip2_sntp2; 	// SMTP Server secondary
-	short ip2_sntp3; 	// SMTP Server secondary
-	short ip3_sntp0; 	// SMTP Server teriary
-	short ip3_sntp1; 	// SMTP Server teriary
-	short ip3_sntp2; 	// SMTP Server teriary
-	short ip3_sntp3; 	// SMTP Server teriary
+	short ip1_sntp0;	// SMTP Server primary
+	short ip1_sntp1;	// SMTP Server primary
+	short ip1_sntp2;	// SMTP Server primary
+	short ip1_sntp3;	// SMTP Server primary
+	short ip2_sntp0;	// SMTP Server secondary
+	short ip2_sntp1;	// SMTP Server secondary
+	short ip2_sntp2;	// SMTP Server secondary
+	short ip2_sntp3;	// SMTP Server secondary
+	short ip3_sntp0;	// SMTP Server teriary
+	short ip3_sntp1;	// SMTP Server teriary
+	short ip3_sntp2;	// SMTP Server teriary
+	short ip3_sntp3;	// SMTP Server teriary
 	// Настройки MQTT
-	short check_mqtt; 	// check MQTT on/off
+	short check_mqtt;	// check MQTT on/off
 	int mqtt_prt;       // Your MQTT broker port (default port is set to 1883)
 	char mqtt_clt[32];  // Device's unique identifier.
 	char mqtt_usr[32];  // MQTT Имя пользователя для авторизации
@@ -215,19 +215,19 @@ struct dbSettings { 	// Cтруктура для setting
 	char rxmqttop[32];  // Receive MQTT topic
 	char mqtt_hst[50];  // Your MQTT broker address or domain name (e.g. "192.168.1.100" or "broker.hivemq.com")
 	// Настройки IP адреса
-	short check_ip; 	// check DHCP on/off
-	short ip_addr0; 	// IP адрес
-	short ip_addr1; 	// IP адрес
-	short ip_addr2; 	// IP адрес
-	short ip_addr3; 	// IP адрес
+	short check_ip;	// check DHCP on/off
+	short ip_addr0;	// IP адрес
+	short ip_addr1;	// IP адрес
+	short ip_addr2;	// IP адрес
+	short ip_addr3;	// IP адрес
 	short sb_mask0;		// Маска сети
 	short sb_mask1;		// Маска сети
 	short sb_mask2;		// Маска сети
 	short sb_mask3;		// Маска сети
-	short gateway0; 	// Шлюз
-	short gateway1; 	// Шлюз
-	short gateway2; 	// Шлюз
-	short gateway3; 	// Шлюз
+	short gateway0;	// Шлюз
+	short gateway1;	// Шлюз
+	short gateway2;	// Шлюз
+	short gateway3;	// Шлюз
 	char fullmoon[18];  // Full moon time
 //	uint8_t macaddr0;	// MAC address
 //	uint8_t macaddr1;	// MAC address

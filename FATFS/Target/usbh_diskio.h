@@ -37,4 +37,3 @@ extern const Diskio_drvTypeDef  USBH_Driver;
 /* USER CODE END lastSection */
 
 #endif /* __USBH_DISKIO_H */
-

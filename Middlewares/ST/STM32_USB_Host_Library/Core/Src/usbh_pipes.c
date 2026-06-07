@@ -181,5 +181,3 @@ static uint16_t USBH_GetFreePipe(USBH_HandleTypeDef *phost)
 /**
   * @}
   */
-
-

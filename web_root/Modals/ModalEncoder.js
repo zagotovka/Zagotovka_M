@@ -289,11 +289,11 @@ function ModalEncoder({
                     <td class="p-2">
                       <input
                         type="number"
-                        min="50" 
+                        min="50"
                         max="2000000000"
                         value=${pwmFreq}
-                        oninput=${e => setPwmFreq(e.target.value)} 
-                        class="border rounded p-2 w-full font-mono" 
+                        oninput=${e => setPwmFreq(e.target.value)}
+                        class="border rounded p-2 w-full font-mono"
                         placeholder="50 - 2000000000"
                       />
                       <div class="text-xs ${getFreqStatus(pwmFreq).cls}">

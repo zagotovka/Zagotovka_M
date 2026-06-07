@@ -1,0 +1,1242 @@
+{
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/.claude/settings.local.json": {
+    "mtime": 1779973158.1423886,
+    "ast_hash": "f22e7afc040a50100b1222145f3d496c",
+    "semantic_hash": "f22e7afc040a50100b1222145f3d496c"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/FreeRTOSConfig.h": {
+    "mtime": 1779879892.692339,
+    "ast_hash": "26d349fabd6fe7c954537c42147ac75d",
+    "semantic_hash": "26d349fabd6fe7c954537c42147ac75d"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/cJSON.h": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "24f0538762c32ccb6bede207f14d7d57",
+    "semantic_hash": "24f0538762c32ccb6bede207f14d7d57"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/compat_ota.h": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "9373b4a1dcdc44f7c78a7a53c21fbf71",
+    "semantic_hash": "9373b4a1dcdc44f7c78a7a53c21fbf71"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/db.h": {
+    "mtime": 1779357717.2823036,
+    "ast_hash": "2b940759f08a7c3c4421396967425007",
+    "semantic_hash": "2b940759f08a7c3c4421396967425007"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/ds18b20.h": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "650c254453c866ea71223d1ba5c21b56",
+    "semantic_hash": "650c254453c866ea71223d1ba5c21b56"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/ds18b20Config.h": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "c250290bf4f8911c1f138728fe095542",
+    "semantic_hash": "c250290bf4f8911c1f138728fe095542"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/gsm.h": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "29143a0b5de65d5c1e679656420d71f7",
+    "semantic_hash": "29143a0b5de65d5c1e679656420d71f7"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/hal.h": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "ff11220ee56c4de255d081219a54376f",
+    "semantic_hash": "ff11220ee56c4de255d081219a54376f"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/logger.h": {
+    "mtime": 1779363298.6473567,
+    "ast_hash": "21c6d91a2d54bdb214c8a0775e7a2617",
+    "semantic_hash": "21c6d91a2d54bdb214c8a0775e7a2617"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/lwdtc.h": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "4f8bd97f33c532f9ce08916e3d49809b",
+    "semantic_hash": "4f8bd97f33c532f9ce08916e3d49809b"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/main.h": {
+    "mtime": 1779951196.6466775,
+    "ast_hash": "d9fedc886a2f1b02eb683f468f3d265c",
+    "semantic_hash": "d9fedc886a2f1b02eb683f468f3d265c"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/mg_alloc.h": {
+    "mtime": 1779110994.949832,
+    "ast_hash": "71c5cf557c361422d0e19d55e371935d",
+    "semantic_hash": "71c5cf557c361422d0e19d55e371935d"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/mongoose.h": {
+    "mtime": 1779461326.54874,
+    "ast_hash": "67b1b43c0c1535df1a3e3e24f920524f",
+    "semantic_hash": "67b1b43c0c1535df1a3e3e24f920524f"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/mongoose_config.h": {
+    "mtime": 1779960313.0716486,
+    "ast_hash": "854b3cc063d9f41e55d55b08614f61c5",
+    "semantic_hash": "854b3cc063d9f41e55d55b08614f61c5"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/multi_button.h": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "55a2124b8ca44bf3e1eff22d0c477edb",
+    "semantic_hash": "55a2124b8ca44bf3e1eff22d0c477edb"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/net.h": {
+    "mtime": 1778491493.6794603,
+    "ast_hash": "626f7f9f9650939cd8648d013e774fb0",
+    "semantic_hash": "626f7f9f9650939cd8648d013e774fb0"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/onewire.h": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "817272ff625281b0281a2881fbf24870",
+    "semantic_hash": "817272ff625281b0281a2881fbf24870"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/setings.h": {
+    "mtime": 1779444382.9440687,
+    "ast_hash": "486072f7402c6970d97da6bde891ac4a",
+    "semantic_hash": "486072f7402c6970d97da6bde891ac4a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/stm32f7xx_hal_conf.h": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "6c2fc82ff71fc7bd5129d69ab6cd3fae",
+    "semantic_hash": "6c2fc82ff71fc7bd5129d69ab6cd3fae"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/stm32f7xx_it.h": {
+    "mtime": 1779273668.365,
+    "ast_hash": "2a51921a1507aa5e146535efb73f03a3",
+    "semantic_hash": "2a51921a1507aa5e146535efb73f03a3"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/usart_ring.h": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "9e99678453309570b4214ca33eab8006",
+    "semantic_hash": "9e99678453309570b4214ca33eab8006"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Inc/zagotovka.h": {
+    "mtime": 1779954980.0256069,
+    "ast_hash": "be0026e45541cedc9650ee328a56a239",
+    "semantic_hash": "be0026e45541cedc9650ee328a56a239"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/cJSON.c": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "2e1dfd5489a4165a62b881cc7672735e",
+    "semantic_hash": "2e1dfd5489a4165a62b881cc7672735e"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/compat_ota.c": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "926a89d0afba7af3e0032b0807377001",
+    "semantic_hash": "926a89d0afba7af3e0032b0807377001"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/db.c": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "30a7cee920d3c70cc23b4d0817eff5d0",
+    "semantic_hash": "30a7cee920d3c70cc23b4d0817eff5d0"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/ds18b20.c": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "f6ec8730e6feeb1684b09a31a7b2669f",
+    "semantic_hash": "f6ec8730e6feeb1684b09a31a7b2669f"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/freertos.c": {
+    "mtime": 1777807567.6956816,
+    "ast_hash": "11922d603e8f7fc198c328c7cda01902",
+    "semantic_hash": "11922d603e8f7fc198c328c7cda01902"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/gsm.c": {
+    "mtime": 1779719310.636795,
+    "ast_hash": "67a8be153e8bc7f205ed450513dc9049",
+    "semantic_hash": "67a8be153e8bc7f205ed450513dc9049"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/logger.c": {
+    "mtime": 1779446833.8302617,
+    "ast_hash": "e203f87c381a437f2258aa654e01b3c8",
+    "semantic_hash": "e203f87c381a437f2258aa654e01b3c8"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/lwdtc.c": {
+    "mtime": 1779189439.194951,
+    "ast_hash": "a090cb95b15fbd317570c8c8bf4ef0b5",
+    "semantic_hash": "a090cb95b15fbd317570c8c8bf4ef0b5"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/main.c": {
+    "mtime": 1780418199.0748723,
+    "ast_hash": "35b4ea1e6670c9b3c638ae0d9c402732",
+    "semantic_hash": "35b4ea1e6670c9b3c638ae0d9c402732"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/mongoose.c": {
+    "mtime": 1779193275.405907,
+    "ast_hash": "4a651c1fa38cf571a49bde075389e32c",
+    "semantic_hash": "4a651c1fa38cf571a49bde075389e32c"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/multi_button.c": {
+    "mtime": 1777807567.6996815,
+    "ast_hash": "d717c7c838d270b686e55add1cd079aa",
+    "semantic_hash": "d717c7c838d270b686e55add1cd079aa"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/net.c": {
+    "mtime": 1780506746.82809,
+    "ast_hash": "f70879228dcab7b171ad1c230fb4d2ce",
+    "semantic_hash": "f70879228dcab7b171ad1c230fb4d2ce"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/onewire.c": {
+    "mtime": 1779429702.3417647,
+    "ast_hash": "24648fe2a32f17b65be79949c6c05de7",
+    "semantic_hash": "24648fe2a32f17b65be79949c6c05de7"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/packed_fs.c": {
+    "mtime": 1780043551.506435,
+    "ast_hash": "98da1a1810029dafe1c76cef18cc123a",
+    "semantic_hash": "98da1a1810029dafe1c76cef18cc123a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/setings.c": {
+    "mtime": 1779719582.9017992,
+    "ast_hash": "8ac2ec6eb72c5fff02c363dffdfaa9c1",
+    "semantic_hash": "8ac2ec6eb72c5fff02c363dffdfaa9c1"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/stm32f7xx_hal_msp.c": {
+    "mtime": 1779273668.457,
+    "ast_hash": "fd8a8e9efa6f45174691927c2f3ee8aa",
+    "semantic_hash": "fd8a8e9efa6f45174691927c2f3ee8aa"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/stm32f7xx_hal_timebase_tim.c": {
+    "mtime": 1777807567.7196813,
+    "ast_hash": "5d354c6733a860fb441f20c59f705f95",
+    "semantic_hash": "5d354c6733a860fb441f20c59f705f95"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/stm32f7xx_it.c": {
+    "mtime": 1779956902.0464904,
+    "ast_hash": "81b2f7b493f2161cd5747b7296a596a8",
+    "semantic_hash": "81b2f7b493f2161cd5747b7296a596a8"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/syscalls.c": {
+    "mtime": 1777807567.7196813,
+    "ast_hash": "4449a4ffed0c14f0b79780a75737e342",
+    "semantic_hash": "4449a4ffed0c14f0b79780a75737e342"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/sysmem.c": {
+    "mtime": 1777807567.7196813,
+    "ast_hash": "eb26f179d14b3dd82aaf6c43e0f87f1b",
+    "semantic_hash": "eb26f179d14b3dd82aaf6c43e0f87f1b"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/system_stm32f7xx.c": {
+    "mtime": 1777807567.7196813,
+    "ast_hash": "ea45a7857aa5ea74b1b9dfb4609b6c81",
+    "semantic_hash": "ea45a7857aa5ea74b1b9dfb4609b6c81"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/usart_ring.c": {
+    "mtime": 1778779253.331461,
+    "ast_hash": "a9d253e1c5b9a167030f1dae5c8d49e8",
+    "semantic_hash": "a9d253e1c5b9a167030f1dae5c8d49e8"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Core/Src/zagotovka.c": {
+    "mtime": 1779954998.6268346,
+    "ast_hash": "621503a919a69532641fe8df888316ac",
+    "semantic_hash": "621503a919a69532641fe8df888316ac"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/FATFS/App/fatfs.c": {
+    "mtime": 1777807567.7356808,
+    "ast_hash": "0aef11d286a7198a2f2fe740de676f67",
+    "semantic_hash": "0aef11d286a7198a2f2fe740de676f67"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/FATFS/App/fatfs.h": {
+    "mtime": 1777807567.7356808,
+    "ast_hash": "8bda4cd5a2060de3df6f0feecdeca76f",
+    "semantic_hash": "8bda4cd5a2060de3df6f0feecdeca76f"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/FATFS/Target/ffconf.h": {
+    "mtime": 1777807567.7356808,
+    "ast_hash": "e1821b38467a67b0827ee3c7299831c3",
+    "semantic_hash": "e1821b38467a67b0827ee3c7299831c3"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/FATFS/Target/usbh_diskio.c": {
+    "mtime": 1777807567.7356808,
+    "ast_hash": "2e2aebf0a7a61172a023b957962ae02e",
+    "semantic_hash": "2e2aebf0a7a61172a023b957962ae02e"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/FATFS/Target/usbh_diskio.h": {
+    "mtime": 1777807567.7356808,
+    "ast_hash": "b483ef1ffb2292c47d2cc5b6d63215ec",
+    "semantic_hash": "b483ef1ffb2292c47d2cc5b6d63215ec"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Inc/usbh_msc.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "c08df0808b4003e2dce1519142414429",
+    "semantic_hash": "c08df0808b4003e2dce1519142414429"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Inc/usbh_msc_bot.h": {
+    "mtime": 1779956886.1030014,
+    "ast_hash": "3528a02b395b7071b5b23b83e5af2bc1",
+    "semantic_hash": "3528a02b395b7071b5b23b83e5af2bc1"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Inc/usbh_msc_scsi.h": {
+    "mtime": 1779956886.1030014,
+    "ast_hash": "4cce5255b255ef6cca776f4a3a1f9da7",
+    "semantic_hash": "4cce5255b255ef6cca776f4a3a1f9da7"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Src/usbh_msc.c": {
+    "mtime": 1779956886.0910017,
+    "ast_hash": "2f1bdf685df958d92879f2cb4ae0f8ca",
+    "semantic_hash": "2f1bdf685df958d92879f2cb4ae0f8ca"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Src/usbh_msc_bot.c": {
+    "mtime": 1779956886.0950017,
+    "ast_hash": "62054e592da0f500fe42eaa6f7817ec9",
+    "semantic_hash": "62054e592da0f500fe42eaa6f7817ec9"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Src/usbh_msc_scsi.c": {
+    "mtime": 1779956886.0950017,
+    "ast_hash": "d09d0b79e1f1d8cf06c013414ed01f93",
+    "semantic_hash": "d09d0b79e1f1d8cf06c013414ed01f93"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Core/Inc/usbh_core.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "90150cae53cb842ccee209da840ad76c",
+    "semantic_hash": "90150cae53cb842ccee209da840ad76c"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Core/Inc/usbh_ctlreq.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "4ec6dcb6ddbb4b2bfa30d5416986426f",
+    "semantic_hash": "4ec6dcb6ddbb4b2bfa30d5416986426f"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Core/Inc/usbh_def.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "b745a00cb630d41ad6a254cff69781f8",
+    "semantic_hash": "b745a00cb630d41ad6a254cff69781f8"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Core/Inc/usbh_ioreq.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "a97f856729d9aaa8a45f06684f0c8ba9",
+    "semantic_hash": "a97f856729d9aaa8a45f06684f0c8ba9"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Core/Inc/usbh_pipes.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "82a4f3f411b62471dea3f489315be7a9",
+    "semantic_hash": "82a4f3f411b62471dea3f489315be7a9"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Core/Src/usbh_core.c": {
+    "mtime": 1779956886.0910017,
+    "ast_hash": "d810b4c4de4180cc0fe5b328329b0eee",
+    "semantic_hash": "d810b4c4de4180cc0fe5b328329b0eee"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Core/Src/usbh_ctlreq.c": {
+    "mtime": 1779956886.0910017,
+    "ast_hash": "02cd0a402e5b65b740d310a2a9133743",
+    "semantic_hash": "02cd0a402e5b65b740d310a2a9133743"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Core/Src/usbh_ioreq.c": {
+    "mtime": 1779956886.0910017,
+    "ast_hash": "6258a758735b1aa888da9e574113f35a",
+    "semantic_hash": "6258a758735b1aa888da9e574113f35a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/Core/Src/usbh_pipes.c": {
+    "mtime": 1779956886.0910017,
+    "ast_hash": "712379fdb172fb63795d133be88d6c3a",
+    "semantic_hash": "712379fdb172fb63795d133be88d6c3a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FatFs/src/diskio.c": {
+    "mtime": 1779956886.0910017,
+    "ast_hash": "6a64c24add16e5363f44212a0275704a",
+    "semantic_hash": "6a64c24add16e5363f44212a0275704a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FatFs/src/diskio.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "79bec80df41cb376456e3d0935ed1c40",
+    "semantic_hash": "79bec80df41cb376456e3d0935ed1c40"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FatFs/src/ff.c": {
+    "mtime": 1779956886.0910017,
+    "ast_hash": "2f0d32552fb15a91768d3a860ea58c5e",
+    "semantic_hash": "2f0d32552fb15a91768d3a860ea58c5e"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FatFs/src/ff.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "b0dd69d74704d4a10c6ee64e888628f7",
+    "semantic_hash": "b0dd69d74704d4a10c6ee64e888628f7"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FatFs/src/ff_gen_drv.c": {
+    "mtime": 1779956886.0910017,
+    "ast_hash": "bf69426a322a7bd1492785bacbf014fa",
+    "semantic_hash": "bf69426a322a7bd1492785bacbf014fa"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FatFs/src/ff_gen_drv.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "b18d60847c25cd188826c213efe04eeb",
+    "semantic_hash": "b18d60847c25cd188826c213efe04eeb"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FatFs/src/integer.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "25c2abd27f61b723750dea3e27b0fa74",
+    "semantic_hash": "25c2abd27f61b723750dea3e27b0fa74"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FatFs/src/option/syscall.c": {
+    "mtime": 1779956886.0910017,
+    "ast_hash": "d13cb642b9af16bdacfbbf750ee21455",
+    "semantic_hash": "d13cb642b9af16bdacfbbf750ee21455"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "61b322d17e5c51494983f63fbdcaca37",
+    "semantic_hash": "61b322d17e5c51494983f63fbdcaca37"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.c": {
+    "mtime": 1779956886.0870018,
+    "ast_hash": "2441491c6ec065f5ffaceab2803ef318",
+    "semantic_hash": "2441491c6ec065f5ffaceab2803ef318"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "a03c86c3b1bece2e447df34643aafc0b",
+    "semantic_hash": "a03c86c3b1bece2e447df34643aafc0b"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/croutine.c": {
+    "mtime": 1779956886.083002,
+    "ast_hash": "e7befb5327d136e4f959ba5c10bb83c6",
+    "semantic_hash": "e7befb5327d136e4f959ba5c10bb83c6"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/event_groups.c": {
+    "mtime": 1779956886.083002,
+    "ast_hash": "cc42e3968ecb3801f3e92ee86e21c800",
+    "semantic_hash": "cc42e3968ecb3801f3e92ee86e21c800"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "3f89d6c5d053058d8d215a577777caaf",
+    "semantic_hash": "3f89d6c5d053058d8d215a577777caaf"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/StackMacros.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "6cdc001067b0f1ae113189632698d198",
+    "semantic_hash": "6cdc001067b0f1ae113189632698d198"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/croutine.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "221f30878f9129369e63dbf195b51287",
+    "semantic_hash": "221f30878f9129369e63dbf195b51287"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/deprecated_definitions.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "d80cf973c40efda1475f2fe637369bcd",
+    "semantic_hash": "d80cf973c40efda1475f2fe637369bcd"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/event_groups.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "941dbd39fd891fc4dc58d099322ea379",
+    "semantic_hash": "941dbd39fd891fc4dc58d099322ea379"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/list.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "356c383f8b970076738c130928b848e6",
+    "semantic_hash": "356c383f8b970076738c130928b848e6"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/message_buffer.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "b5fb3c9df8ba1a6c6f6545e2fdbf106a",
+    "semantic_hash": "b5fb3c9df8ba1a6c6f6545e2fdbf106a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/mpu_prototypes.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "33901f92e24efde9f19b5741c29f67a3",
+    "semantic_hash": "33901f92e24efde9f19b5741c29f67a3"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "b5f60ee9e15da9ba321e2c2831a3d720",
+    "semantic_hash": "b5f60ee9e15da9ba321e2c2831a3d720"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/portable.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "36f190865e7b2d8cb4c97ba9e388b9c0",
+    "semantic_hash": "36f190865e7b2d8cb4c97ba9e388b9c0"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "86c870851be890a3cc55a91e7c9408ef",
+    "semantic_hash": "86c870851be890a3cc55a91e7c9408ef"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/queue.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "ca5c2fe264426e68160447c30ca03bb6",
+    "semantic_hash": "ca5c2fe264426e68160447c30ca03bb6"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/semphr.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "36bd9b6581b545cb7f50273dab91fdf3",
+    "semantic_hash": "36bd9b6581b545cb7f50273dab91fdf3"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/stack_macros.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "99616a7db4f8b8b2d74d0fcce428942a",
+    "semantic_hash": "99616a7db4f8b8b2d74d0fcce428942a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/stream_buffer.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "7cd3d2ee03a85fb53b97b20d783a4505",
+    "semantic_hash": "7cd3d2ee03a85fb53b97b20d783a4505"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/task.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "62cc51f2e48e3223ac70a0da6ad216b3",
+    "semantic_hash": "62cc51f2e48e3223ac70a0da6ad216b3"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/include/timers.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "7888e34cf73c4febe19587a874d02ac2",
+    "semantic_hash": "7888e34cf73c4febe19587a874d02ac2"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/list.c": {
+    "mtime": 1779956886.083002,
+    "ast_hash": "9e6d70a50da910f2884bd29edff1e685",
+    "semantic_hash": "9e6d70a50da910f2884bd29edff1e685"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1/port.c": {
+    "mtime": 1779956886.0870018,
+    "ast_hash": "8d4d0a5b4492263a10d48c4df4836360",
+    "semantic_hash": "8d4d0a5b4492263a10d48c4df4836360"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1/portmacro.h": {
+    "mtime": 1779956886.0990014,
+    "ast_hash": "4a2321f24c09cbe961e09713320a0d6a",
+    "semantic_hash": "4a2321f24c09cbe961e09713320a0d6a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/portable/MemMang/heap_4.c": {
+    "mtime": 1779957283.2686384,
+    "ast_hash": "56389ce0d34537a0e02d935ad7d071e3",
+    "semantic_hash": "56389ce0d34537a0e02d935ad7d071e3"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/queue.c": {
+    "mtime": 1779956886.083002,
+    "ast_hash": "8af947a765904d5a59c6bb2c548ae402",
+    "semantic_hash": "8af947a765904d5a59c6bb2c548ae402"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/stream_buffer.c": {
+    "mtime": 1779956886.0870018,
+    "ast_hash": "cd7b4ff4568cb25a702f6c1c29608779",
+    "semantic_hash": "cd7b4ff4568cb25a702f6c1c29608779"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/tasks.c": {
+    "mtime": 1779956886.0870018,
+    "ast_hash": "6e92519dd87b3aefd5627d1bb32aa267",
+    "semantic_hash": "6e92519dd87b3aefd5627d1bb32aa267"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/Third_Party/FreeRTOS/Source/timers.c": {
+    "mtime": 1779956886.0870018,
+    "ast_hash": "97bdd07739ad1c0a2f188726a098bc83",
+    "semantic_hash": "97bdd07739ad1c0a2f188726a098bc83"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/USB_HOST/App/usb_host.c": {
+    "mtime": 1777807567.7436807,
+    "ast_hash": "c5fc8eac92cedd498da1dc4275fb6115",
+    "semantic_hash": "c5fc8eac92cedd498da1dc4275fb6115"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/USB_HOST/App/usb_host.h": {
+    "mtime": 1777807567.7436807,
+    "ast_hash": "5998994d2da5a70e55b76078fd2df8d8",
+    "semantic_hash": "5998994d2da5a70e55b76078fd2df8d8"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/USB_HOST/Target/usbh_conf.c": {
+    "mtime": 1777807567.7436807,
+    "ast_hash": "d8e7d7dfc87636f78cf64649f103323e",
+    "semantic_hash": "d8e7d7dfc87636f78cf64649f103323e"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/USB_HOST/Target/usbh_conf.h": {
+    "mtime": 1777807567.7436807,
+    "ast_hash": "c8236505c6c420717383775a597cafe3",
+    "semantic_hash": "c8236505c6c420717383775a597cafe3"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/USB_HOST/Target/usbh_platform.c": {
+    "mtime": 1777807567.7436807,
+    "ast_hash": "747b209fc2b7f30a8e3c1608caca287f",
+    "semantic_hash": "747b209fc2b7f30a8e3c1608caca287f"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/USB_HOST/Target/usbh_platform.h": {
+    "mtime": 1777807567.7436807,
+    "ast_hash": "9a64499897e028be847132fac5a8b4f3",
+    "semantic_hash": "9a64499897e028be847132fac5a8b4f3"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Zagotovka_Project_Knowledge/.obsidian/app.json": {
+    "mtime": 1777807567.7436807,
+    "ast_hash": "99914b932bd37a50b983c5e7c90ae93b",
+    "semantic_hash": "99914b932bd37a50b983c5e7c90ae93b"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Zagotovka_Project_Knowledge/.obsidian/appearance.json": {
+    "mtime": 1777807567.7436807,
+    "ast_hash": "99914b932bd37a50b983c5e7c90ae93b",
+    "semantic_hash": "99914b932bd37a50b983c5e7c90ae93b"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Zagotovka_Project_Knowledge/.obsidian/core-plugins.json": {
+    "mtime": 1777807567.7436807,
+    "ast_hash": "7c877bea49eaeabb100563bd157b9051",
+    "semantic_hash": "7c877bea49eaeabb100563bd157b9051"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Zagotovka_Project_Knowledge/.obsidian/graph.json": {
+    "mtime": 1777807567.7436807,
+    "ast_hash": "41ffa915f9d880d061cd7db53a247fe1",
+    "semantic_hash": "41ffa915f9d880d061cd7db53a247fe1"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Zagotovka_Project_Knowledge/.obsidian/workspace.json": {
+    "mtime": 1777807567.7476807,
+    "ast_hash": "7979c9e8f9efd856fec9bacc5fda0e84",
+    "semantic_hash": "7979c9e8f9efd856fec9bacc5fda0e84"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/fix_writeField.py": {
+    "mtime": 1780041467.012201,
+    "ast_hash": "652be56a146961edafad683aa6479665",
+    "semantic_hash": "652be56a146961edafad683aa6479665"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/scripts/CertGeneration.sh": {
+    "mtime": 1777807567.7676804,
+    "ast_hash": "974bedd869680299e9a29cfa0c3f6a41",
+    "semantic_hash": "974bedd869680299e9a29cfa0c3f6a41"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/scripts/up.sh": {
+    "mtime": 1777807567.7676804,
+    "ast_hash": "bd8d1d6a541a93e0898d54af0dca2f20",
+    "semantic_hash": "bd8d1d6a541a93e0898d54af0dca2f20"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Modals/ModalButton.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "3f6f41fe903f9de468cd3a972e43fe3d",
+    "semantic_hash": "3f6f41fe903f9de468cd3a972e43fe3d"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Modals/ModalCron.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "d311df3bfee76c72d7fbd3b8f2083a1f",
+    "semantic_hash": "d311df3bfee76c72d7fbd3b8f2083a1f"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Modals/ModalEditSensor.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "9654a9cdd34a8338ae2e947d1a5aa23a",
+    "semantic_hash": "9654a9cdd34a8338ae2e947d1a5aa23a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Modals/ModalEncoder.js": {
+    "mtime": 1777557614.6973002,
+    "ast_hash": "0d6db005d4613f9f81de0dd6c6d0c1ed",
+    "semantic_hash": "0d6db005d4613f9f81de0dd6c6d0c1ed"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Modals/ModalOneWire.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "1e7fb75040665a6e1d3aaba61e26fc7a",
+    "semantic_hash": "1e7fb75040665a6e1d3aaba61e26fc7a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Modals/ModalPid.js": {
+    "mtime": 1775889603.0,
+    "ast_hash": "5e88b92de8a5f2c0c64183333ca5562a",
+    "semantic_hash": "5e88b92de8a5f2c0c64183333ca5562a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Modals/ModalPwmCron.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "c5fc0e92c665f9c202a72313ce823f13",
+    "semantic_hash": "c5fc0e92c665f9c202a72313ce823f13"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Modals/ModalSIM800L.js": {
+    "mtime": 1777895893.0332398,
+    "ast_hash": "32d777971b47879c7bd69444a09e69f8",
+    "semantic_hash": "32d777971b47879c7bd69444a09e69f8"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Modals/ModalSecurity.js": {
+    "mtime": 1777895913.1051917,
+    "ast_hash": "6f3dde1fba362b310dba0a16d250bd40",
+    "semantic_hash": "6f3dde1fba362b310dba0a16d250bd40"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Modals/ModalSwitch.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "47a527fc1da519c3192f9b570a67cccd",
+    "semantic_hash": "47a527fc1da519c3192f9b570a67cccd"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Tabs/Settings.js": {
+    "mtime": 1780043278.8688102,
+    "ast_hash": "ee0d0f56ca9e10bd1532e018f106e4c9",
+    "semantic_hash": "ee0d0f56ca9e10bd1532e018f106e4c9"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Tabs/TabButton.js": {
+    "mtime": 1780043067.998813,
+    "ast_hash": "86ff0aac3ec837ded3988484c08a160f",
+    "semantic_hash": "86ff0aac3ec837ded3988484c08a160f"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Tabs/TabCron.js": {
+    "mtime": 1780043248.7610855,
+    "ast_hash": "12f49a91706f89d3eb6f00fadd7c3e8e",
+    "semantic_hash": "12f49a91706f89d3eb6f00fadd7c3e8e"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Tabs/TabEncoder.js": {
+    "mtime": 1780043112.95037,
+    "ast_hash": "825e5d691b47bf6863bc98661df10eed",
+    "semantic_hash": "825e5d691b47bf6863bc98661df10eed"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Tabs/TabOneWire.js": {
+    "mtime": 1780043189.3536384,
+    "ast_hash": "fbdcce27acddf9bf7ba1886877f05579",
+    "semantic_hash": "fbdcce27acddf9bf7ba1886877f05579"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Tabs/TabPid.js": {
+    "mtime": 1780043020.8992877,
+    "ast_hash": "2d4242ffa9a1bb941b1b53ffba54820d",
+    "semantic_hash": "2d4242ffa9a1bb941b1b53ffba54820d"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Tabs/TabSecurity.js": {
+    "mtime": 1780043205.6494853,
+    "ast_hash": "80b7d3d08164173518e289e8b73db8ee",
+    "semantic_hash": "80b7d3d08164173518e289e8b73db8ee"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Tabs/TabSelect.js": {
+    "mtime": 1780043226.5492907,
+    "ast_hash": "a36f4c781531af3c59d8f6f990a76b53",
+    "semantic_hash": "a36f4c781531af3c59d8f6f990a76b53"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/Tabs/TabSwitch.js": {
+    "mtime": 1780043149.930013,
+    "ast_hash": "cac90781a49223ed5318cc72fc0bb78b",
+    "semantic_hash": "cac90781a49223ed5318cc72fc0bb78b"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/apply_portals.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "00360a8070050ef275c81d1a0a206a85",
+    "semantic_hash": "00360a8070050ef275c81d1a0a206a85"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/bundle.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "1f4bc1a2520a68392a57c8ef80e3b46a",
+    "semantic_hash": "1f4bc1a2520a68392a57c8ef80e3b46a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/components.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "4283f548ac893d9ffaa4e02310eb0094",
+    "semantic_hash": "4283f548ac893d9ffaa4e02310eb0094"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/context.js": {
+    "mtime": 1779608755.7191489,
+    "ast_hash": "d027e907a84508d7771a9eb73d6cb394",
+    "semantic_hash": "d027e907a84508d7771a9eb73d6cb394"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/enlang.js": {
+    "mtime": 1777887683.8070962,
+    "ast_hash": "a94c69dffe93a0479e7c55609931c5e6",
+    "semantic_hash": "a94c69dffe93a0479e7c55609931c5e6"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/extract.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "42b83888a2ebd841e77c863653618a27",
+    "semantic_hash": "42b83888a2ebd841e77c863653618a27"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/extract_modals.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "a2e4037dc858f0992f6c18a015a3e08e",
+    "semantic_hash": "a2e4037dc858f0992f6c18a015a3e08e"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/fix_imports.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "ddb9a2abbd770296da8e08cb512d0e4c",
+    "semantic_hash": "ddb9a2abbd770296da8e08cb512d0e4c"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/history.min.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "1a3c6ab1ed7f17c233f1c5e0ed2880b8",
+    "semantic_hash": "1a3c6ab1ed7f17c233f1c5e0ed2880b8"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/1wire2.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "3a69ef15e6b93932a79066ce0ee709c1",
+    "semantic_hash": "3a69ef15e6b93932a79066ce0ee709c1"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/1wire_extended.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "2f8394777ddb6b667aed38c7043965e9",
+    "semantic_hash": "2f8394777ddb6b667aed38c7043965e9"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Button.json": {
+    "mtime": 1777703579.2433012,
+    "ast_hash": "bfdc7c59fd200f510e6bb9708f960e0c",
+    "semantic_hash": "bfdc7c59fd200f510e6bb9708f960e0c"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Button2.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "2b5bbcf562c1af0a794c3e7e87f44601",
+    "semantic_hash": "2b5bbcf562c1af0a794c3e7e87f44601"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Encoder.json": {
+    "mtime": 1778434656.4136505,
+    "ast_hash": "e6372eec579a5a9b2334250f6aacb412",
+    "semantic_hash": "e6372eec579a5a9b2334250f6aacb412"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Encoder2.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "48c60c5572fc73e5e820f7bbc5d0c34d",
+    "semantic_hash": "48c60c5572fc73e5e820f7bbc5d0c34d"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/PWM.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "0ab3eac71fced3e65ae32ae68472fece",
+    "semantic_hash": "0ab3eac71fced3e65ae32ae68472fece"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/PWM2.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "e84c5f8150734be0072eec85a689a4ea",
+    "semantic_hash": "e84c5f8150734be0072eec85a689a4ea"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Pid.json": {
+    "mtime": 1776866807.0,
+    "ast_hash": "51421e9dbefaae2c7f45c39e64a05498",
+    "semantic_hash": "51421e9dbefaae2c7f45c39e64a05498"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Pid2.json": {
+    "mtime": 1775921706.0,
+    "ast_hash": "8a24443accb8f15de89cfa664116879b",
+    "semantic_hash": "8a24443accb8f15de89cfa664116879b"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Relay.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "85ae2ffd50b2bf4f14d221f6000bd646",
+    "semantic_hash": "85ae2ffd50b2bf4f14d221f6000bd646"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Relay2.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "5c64e48cd5e6bb54432485b783d63910",
+    "semantic_hash": "5c64e48cd5e6bb54432485b783d63910"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Select.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "741bcf60de836f7c780c66ae94d598da",
+    "semantic_hash": "741bcf60de836f7c780c66ae94d598da"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Select2.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "f32742037bac9725eb4203e55b8f121e",
+    "semantic_hash": "f32742037bac9725eb4203e55b8f121e"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Switch.json": {
+    "mtime": 1777225942.0,
+    "ast_hash": "d1e10c2813ffb3ae613be5aa4914aa4a",
+    "semantic_hash": "d1e10c2813ffb3ae613be5aa4914aa4a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Switch2.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "577d3d5905997d61d13dc2c0b40525cf",
+    "semantic_hash": "577d3d5905997d61d13dc2c0b40525cf"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/SwitchOLD.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "fd79a03f9d4299e544afd3c858704a20",
+    "semantic_hash": "fd79a03f9d4299e544afd3c858704a20"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Temp.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "fe015fd6ed2c112d321ef5fec9cb57df",
+    "semantic_hash": "fe015fd6ed2c112d321ef5fec9cb57df"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Timers.json": {
+    "mtime": 1777818528.4890578,
+    "ast_hash": "0222b9d83e5ce0dbdf36234d7efde5da",
+    "semantic_hash": "0222b9d83e5ce0dbdf36234d7efde5da"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Timers2.json": {
+    "mtime": 1773771129.0,
+    "ast_hash": "e3e0ce0520997dc4af9244dce82605b7",
+    "semantic_hash": "e3e0ce0520997dc4af9244dce82605b7"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/Timers3.json": {
+    "mtime": 1779609370.2898738,
+    "ast_hash": "53b9575f7a8dc2ef8281ca94c8a1b664",
+    "semantic_hash": "53b9575f7a8dc2ef8281ca94c8a1b664"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/accept.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "4bbfe32d2f4cba97dc0045a0789f4c21",
+    "semantic_hash": "4bbfe32d2f4cba97dc0045a0789f4c21"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/connections.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "e027179e7149dab8ab4dfa5b636d6b89",
+    "semantic_hash": "e027179e7149dab8ab4dfa5b636d6b89"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/form1wire.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "37cfca90d20e920b094f821ba2658be8",
+    "semantic_hash": "37cfca90d20e920b094f821ba2658be8"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/formbutton.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "9429d096f3c29933e01140074ddaadd8",
+    "semantic_hash": "9429d096f3c29933e01140074ddaadd8"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/formcron.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "7a71eefa3c575dab566fb9dd648003aa",
+    "semantic_hash": "7a71eefa3c575dab566fb9dd648003aa"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/formencoder.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "f48e8ae7ffa6a034298af25120b1f690",
+    "semantic_hash": "f48e8ae7ffa6a034298af25120b1f690"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/formpwm.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "4d35ce5eefb7fc50478f7493a20c6cbb",
+    "semantic_hash": "4d35ce5eefb7fc50478f7493a20c6cbb"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/formrelay.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "65d9ee79b724ea3be77038530e91c7dd",
+    "semantic_hash": "65d9ee79b724ea3be77038530e91c7dd"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/formswitch.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "1003dc6d719c6058c3eee8b97161f640",
+    "semantic_hash": "1003dc6d719c6058c3eee8b97161f640"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/login.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "3d3ec48fd71da1adfe142d37273337e0",
+    "semantic_hash": "3d3ec48fd71da1adfe142d37273337e0"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/main.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "174a6cc9ea5b48cc0c48b0f7955ddf44",
+    "semantic_hash": "174a6cc9ea5b48cc0c48b0f7955ddf44"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/onewire.json": {
+    "mtime": 1778434649.1777978,
+    "ast_hash": "14bd957f3ffdaba73af5bead1db84197",
+    "semantic_hash": "14bd957f3ffdaba73af5bead1db84197"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/onewire2.json": {
+    "mtime": 1777224522.0,
+    "ast_hash": "b43654727dfc838872ae81b01d409991",
+    "semantic_hash": "b43654727dfc838872ae81b01d409991"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/onewire3.json": {
+    "mtime": 1777225449.0,
+    "ast_hash": "89816ff627fc36367eb82d30de58d678",
+    "semantic_hash": "89816ff627fc36367eb82d30de58d678"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/onoff.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "f2c0aade14b7e1e64d9af2299c58cc88",
+    "semantic_hash": "f2c0aade14b7e1e64d9af2299c58cc88"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/ow_dht22.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "e2dd92bd48647a60d33e564cc0c9201f",
+    "semantic_hash": "e2dd92bd48647a60d33e564cc0c9201f"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/ow_ds18b20.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "cf97686ee7e5c5ffae38dbf22bd2abd2",
+    "semantic_hash": "cf97686ee7e5c5ffae38dbf22bd2abd2"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/pintopin.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "6b4924fd49ea5a989f26fa463d60ca4a",
+    "semantic_hash": "6b4924fd49ea5a989f26fa463d60ca4a"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/security.json": {
+    "mtime": 1777901535.371584,
+    "ast_hash": "2ffe48c6154e0f2dc7c89ec5b8e24549",
+    "semantic_hash": "2ffe48c6154e0f2dc7c89ec5b8e24549"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/security2.json": {
+    "mtime": 1777897088.2103755,
+    "ast_hash": "54ce26866d5dec246d62bffc3001eec7",
+    "semantic_hash": "54ce26866d5dec246d62bffc3001eec7"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/settings.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "556d4bc6fcff50c6d09811477b2f8104",
+    "semantic_hash": "556d4bc6fcff50c6d09811477b2f8104"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/settings2.json": {
+    "mtime": 1775653937.0,
+    "ast_hash": "ff3f9dacbd9e81797e9196a21d4650f6",
+    "semantic_hash": "ff3f9dacbd9e81797e9196a21d4650f6"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/stm32time.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "5158d1e09ff777071cbae68da632e9cc",
+    "semantic_hash": "5158d1e09ff777071cbae68da632e9cc"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/json/upload.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "f2cd438d0edf6d5f0808f683ca285e98",
+    "semantic_hash": "f2cd438d0edf6d5f0808f683ca285e98"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/main.js": {
+    "mtime": 1779974240.4285128,
+    "ast_hash": "0e87e7b68583b34b76f14ddded0f483b",
+    "semantic_hash": "0e87e7b68583b34b76f14ddded0f483b"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/package.json": {
+    "mtime": 1773666260.0,
+    "ast_hash": "76dbfb972fe0a4a0ba1a57a8460c227c",
+    "semantic_hash": "76dbfb972fe0a4a0ba1a57a8460c227c"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/pollQueue.js": {
+    "mtime": 1780042958.4559362,
+    "ast_hash": "840680494b1531709e32f6fd4df1a81e",
+    "semantic_hash": "840680494b1531709e32f6fd4df1a81e"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/postcss.config.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "854b38759e7a8b4b82306ae2d9a3a833",
+    "semantic_hash": "854b38759e7a8b4b82306ae2d9a3a833"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/rulang.js": {
+    "mtime": 1777887560.631384,
+    "ast_hash": "a1e80cd2afb11900db2402d4510b77c5",
+    "semantic_hash": "a1e80cd2afb11900db2402d4510b77c5"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/safeFetch.js": {
+    "mtime": 1779972688.3049722,
+    "ast_hash": "145a2a056c85d62e266d1f1ae2aaf28b",
+    "semantic_hash": "145a2a056c85d62e266d1f1ae2aaf28b"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/server.js": {
+    "mtime": 1777895927.9571562,
+    "ast_hash": "aea853788db757e570a22ec2a8382741",
+    "semantic_hash": "aea853788db757e570a22ec2a8382741"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/tailwind.config.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "3f4b909c0f0b474fac7db27055ff8909",
+    "semantic_hash": "3f4b909c0f0b474fac7db27055ff8909"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/test_extract.js": {
+    "mtime": 1773666260.0,
+    "ast_hash": "1d40602ac5041f7fc718ba3fefe13802",
+    "semantic_hash": "1d40602ac5041f7fc718ba3fefe13802"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/vite.config.mjs": {
+    "mtime": 1773666260.0,
+    "ast_hash": "0f06249079c0f9efc4fbc93a7799cbd0",
+    "semantic_hash": "0f06249079c0f9efc4fbc93a7799cbd0"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/.agent/skills/arm-cortex-expert/SKILL.md": {
+    "mtime": 1779880671.2709234,
+    "ast_hash": "101ffdbb644805eaaacf138497e23729",
+    "semantic_hash": "101ffdbb644805eaaacf138497e23729"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/.agent/skills/cpp-build-resolver.md": {
+    "mtime": 1779880671.2709234,
+    "ast_hash": "0774a5504cbb350e9327eddae4f30f9b",
+    "semantic_hash": "0774a5504cbb350e9327eddae4f30f9b"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/.agent/skills/cpp-reviewer.md": {
+    "mtime": 1779880671.2709234,
+    "ast_hash": "9aba6aa5f917a814eb61547e7af220ad",
+    "semantic_hash": "9aba6aa5f917a814eb61547e7af220ad"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/.agent/skills/cpp-standards.md": {
+    "mtime": 1779880671.2709234,
+    "ast_hash": "d2286ed7b7b845f1e0d292a0c64103b0",
+    "semantic_hash": "d2286ed7b7b845f1e0d292a0c64103b0"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/.agent/skills/stm32-expert.md": {
+    "mtime": 1779880671.2709234,
+    "ast_hash": "1bc69e9c52bab624b7fc2905011bc117",
+    "semantic_hash": "1bc69e9c52bab624b7fc2905011bc117"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/.agent/skills/web-expert.md": {
+    "mtime": 1779880671.2709234,
+    "ast_hash": "67f6a8588e8fc27ddf6df86afed07137",
+    "semantic_hash": "67f6a8588e8fc27ddf6df86afed07137"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/.agent/skills/zagotovka-frontend/SKILL.md": {
+    "mtime": 1779880671.2709234,
+    "ast_hash": "43f231481ba2e4a7a585cbcb74564813",
+    "semantic_hash": "43f231481ba2e4a7a585cbcb74564813"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/.github/workflows/update.yml": {
+    "mtime": 1779880671.2709234,
+    "ast_hash": "26c9cd8b24792dd5dd47d79d593c72e4",
+    "semantic_hash": "26c9cd8b24792dd5dd47d79d593c72e4"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/AGENTS.md": {
+    "mtime": 1777978811.3317215,
+    "ast_hash": "83c01b4b019d93053da2e9a8bd070cf9",
+    "semantic_hash": "83c01b4b019d93053da2e9a8bd070cf9"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Middlewares/ST/STM32_USB_Host_Library/LICENSE.txt": {
+    "mtime": 1779956886.019004,
+    "ast_hash": "992f98e43c4d71633498e76462f94f1c",
+    "semantic_hash": "992f98e43c4d71633498e76462f94f1c"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/README.md": {
+    "mtime": 1777807567.7436807,
+    "ast_hash": "745ba4f29c91effdc051d7973f4b526c",
+    "semantic_hash": "745ba4f29c91effdc051d7973f4b526c"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Zagotovka_Project_Knowledge/Debug_PID_Hysteresis.md.md": {
+    "mtime": 1777807567.7476807,
+    "ast_hash": "6634b662b0b1452ea910f2db81969131",
+    "semantic_hash": "6634b662b0b1452ea910f2db81969131"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Zagotovka_Project_Knowledge/MCU_Info.md": {
+    "mtime": 1777807567.7476807,
+    "ast_hash": "423238dc71f1e24782f8233b25438639",
+    "semantic_hash": "423238dc71f1e24782f8233b25438639"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/Zagotovka_Project_Knowledge/Welcome.md": {
+    "mtime": 1777807567.7476807,
+    "ast_hash": "5dce4937496ad2d20178a7578f1a1368",
+    "semantic_hash": "5dce4937496ad2d20178a7578f1a1368"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/index.html": {
+    "mtime": 1773666260.0,
+    "ast_hash": "55bc2e58e6b18928548be71569ae3d54",
+    "semantic_hash": "55bc2e58e6b18928548be71569ae3d54"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/1.png": {
+    "mtime": 1777807567.7476807,
+    "ast_hash": "6cde1017e1a69e92c884cea73816462f",
+    "semantic_hash": "6cde1017e1a69e92c884cea73816462f"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/10.png": {
+    "mtime": 1777807567.7476807,
+    "ast_hash": "05816d1855896fcae20fa72883373b6c",
+    "semantic_hash": "05816d1855896fcae20fa72883373b6c"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/11.png": {
+    "mtime": 1777807567.7476807,
+    "ast_hash": "55a1fad3724fd360fc100835c27b4858",
+    "semantic_hash": "55a1fad3724fd360fc100835c27b4858"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/12.png": {
+    "mtime": 1777807567.7476807,
+    "ast_hash": "2c5f4d2497d02087d183cb1cc0510af0",
+    "semantic_hash": "2c5f4d2497d02087d183cb1cc0510af0"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/13.png": {
+    "mtime": 1777807567.7476807,
+    "ast_hash": "ea476adabb060d82ab05f1631fe0d47e",
+    "semantic_hash": "ea476adabb060d82ab05f1631fe0d47e"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/14.png": {
+    "mtime": 1777807567.7476807,
+    "ast_hash": "0a042e68824b40452df67a46bfdab991",
+    "semantic_hash": "0a042e68824b40452df67a46bfdab991"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/15.png": {
+    "mtime": 1777807567.7476807,
+    "ast_hash": "2241d49623aa73920cf0cc1cc8257eda",
+    "semantic_hash": "2241d49623aa73920cf0cc1cc8257eda"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/16.png": {
+    "mtime": 1777807567.7476807,
+    "ast_hash": "2d9b7a2477ef24c057ae4b4c98bdb622",
+    "semantic_hash": "2d9b7a2477ef24c057ae4b4c98bdb622"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/17.png": {
+    "mtime": 1777807567.7516806,
+    "ast_hash": "9cd1446984113ca51e32dc3ef29c043e",
+    "semantic_hash": "9cd1446984113ca51e32dc3ef29c043e"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/18.png": {
+    "mtime": 1777807567.7516806,
+    "ast_hash": "c73bb8ed540cbf8438172901a0ebb6a4",
+    "semantic_hash": "c73bb8ed540cbf8438172901a0ebb6a4"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/19.png": {
+    "mtime": 1777807567.7516806,
+    "ast_hash": "125383cfaf94698929cdaa27d5e6fb27",
+    "semantic_hash": "125383cfaf94698929cdaa27d5e6fb27"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/2.png": {
+    "mtime": 1777807567.7516806,
+    "ast_hash": "230fac46bf5eaf18ac300ceba93f213c",
+    "semantic_hash": "230fac46bf5eaf18ac300ceba93f213c"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/20.png": {
+    "mtime": 1777807567.7516806,
+    "ast_hash": "65cdaee5199f68a430f97e5b4936fdc4",
+    "semantic_hash": "65cdaee5199f68a430f97e5b4936fdc4"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/21.png": {
+    "mtime": 1777807567.7516806,
+    "ast_hash": "1fa08f60da85f70b960f3c93b96c22bf",
+    "semantic_hash": "1fa08f60da85f70b960f3c93b96c22bf"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/3.png": {
+    "mtime": 1777807567.7516806,
+    "ast_hash": "1bb6c718f0b3b3ea9f3f80f5450c8f41",
+    "semantic_hash": "1bb6c718f0b3b3ea9f3f80f5450c8f41"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/4.png": {
+    "mtime": 1777807567.7516806,
+    "ast_hash": "48e782c823821ca26239970b8d61ba69",
+    "semantic_hash": "48e782c823821ca26239970b8d61ba69"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/5.png": {
+    "mtime": 1777807567.7516806,
+    "ast_hash": "fce4e5b10ac247d2b9fb2c94c0b9bfc8",
+    "semantic_hash": "fce4e5b10ac247d2b9fb2c94c0b9bfc8"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/6.png": {
+    "mtime": 1777807567.7516806,
+    "ast_hash": "c136ef518ca4958580f8e9989de58c24",
+    "semantic_hash": "c136ef518ca4958580f8e9989de58c24"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/7.png": {
+    "mtime": 1777807567.7556806,
+    "ast_hash": "668830f5efd4c8762806208316723452",
+    "semantic_hash": "668830f5efd4c8762806208316723452"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/8.png": {
+    "mtime": 1777807567.7556806,
+    "ast_hash": "0cdca3c20d97542c99b421d8bb1c8570",
+    "semantic_hash": "0cdca3c20d97542c99b421d8bb1c8570"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/9.png": {
+    "mtime": 1777807567.7556806,
+    "ast_hash": "aff7bbfba2002b59ea6edabec7ba262f",
+    "semantic_hash": "aff7bbfba2002b59ea6edabec7ba262f"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/New_sxema.png": {
+    "mtime": 1777807567.7596805,
+    "ast_hash": "492bc29bf1651e612aa5aa4786185eaf",
+    "semantic_hash": "492bc29bf1651e612aa5aa4786185eaf"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/OLD_sxema.png": {
+    "mtime": 1777807567.7596805,
+    "ast_hash": "40ba900ce689a00f2c40e7d245fee030",
+    "semantic_hash": "40ba900ce689a00f2c40e7d245fee030"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/Rutube.png": {
+    "mtime": 1777807567.7596805,
+    "ast_hash": "b401c2a8c69bb76213c91aa989514e59",
+    "semantic_hash": "b401c2a8c69bb76213c91aa989514e59"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/icons8-youtube-48.png": {
+    "mtime": 1777807567.7596805,
+    "ast_hash": "ca52040004058032766383ad85952220",
+    "semantic_hash": "ca52040004058032766383ad85952220"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/provoda_NEW.png": {
+    "mtime": 1777807567.7636805,
+    "ast_hash": "f8abad4d6a0b324e19dbcd6f7052b6fc",
+    "semantic_hash": "f8abad4d6a0b324e19dbcd6f7052b6fc"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/icons/provoda_OLD.png": {
+    "mtime": 1777807567.7676804,
+    "ast_hash": "e47d64adf22fd620f03db15b16a80dbe",
+    "semantic_hash": "e47d64adf22fd620f03db15b16a80dbe"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/icons/1w.svg": {
+    "mtime": 1773666260.0,
+    "ast_hash": "a8abd88bb1a5963f54f39ca65784f613",
+    "semantic_hash": "a8abd88bb1a5963f54f39ca65784f613"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/icons/Encoder.svg": {
+    "mtime": 1773666260.0,
+    "ast_hash": "a69268c96fa259aeacde6f043a9ec25b",
+    "semantic_hash": "a69268c96fa259aeacde6f043a9ec25b"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/icons/button.svg": {
+    "mtime": 1773666260.0,
+    "ast_hash": "a394e69300d21d0495a86827b9e5d2b8",
+    "semantic_hash": "a394e69300d21d0495a86827b9e5d2b8"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/icons/switch.svg": {
+    "mtime": 1773666260.0,
+    "ast_hash": "b2b4b996b7d60bd7e1054201657319ae",
+    "semantic_hash": "b2b4b996b7d60bd7e1054201657319ae"
+  },
+  "/home/zerg/STM32CubeIDE/workspace_1.15.1/Zagotovka_M/web_root/icons/timer.svg": {
+    "mtime": 1773666260.0,
+    "ast_hash": "b52502c48cbcbac85f9054743c988d06",
+    "semantic_hash": "b52502c48cbcbac85f9054743c988d06"
+  }
+}

@@ -1,6 +1,6 @@
 // onewire.h
 #ifndef ONEWIRE_H
-#define ONEWIRE_H 
+#define ONEWIRE_H
 
 #ifdef __cplusplus
 extern "C" {

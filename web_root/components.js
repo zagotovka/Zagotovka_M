@@ -772,7 +772,7 @@ export function Login({ loginFn, logoIcon, title, tipText }) {
           type="text"
           autocomplete="current-user"
           required
-          class="font-normal bg-white rounded border border-gray-300 w-full 
+          class="font-normal bg-white rounded border border-gray-300 w-full
         flex-1 py-0.5 px-2 text-gray-900 placeholder:text-gray-400
         focus:outline-none sm:text-sm sm:leading-6 disabled:cursor-not-allowed
         disabled:bg-gray-100 disabled:text-gray-500"

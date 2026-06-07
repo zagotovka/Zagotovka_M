@@ -39,7 +39,7 @@ else
 
   # Создание или добавление содержимого в переменную без архивации
   for p in "$pathA" "$pathB"; do
-    if [ -d "$p" ]; then      
+    if [ -d "$p" ]; then
       echo "test2"
       while IFS= read -r -d '' file; do
         #content+=$(realpath "$file.gz" --relative-to="$PWD")$'\n'

@@ -24,9 +24,9 @@
 #include <errno.h>
 #include <stdint.h>
 
-/* 
- * Отключаем весь системный sysmem.c, 
- * так как мы реализовали свой _sbrk (через FreeRTOS) в syscalls.c 
+/*
+ * Отключаем весь системный sysmem.c,
+ * так как мы реализовали свой _sbrk (через FreeRTOS) в syscalls.c
  */
 #if 0
 

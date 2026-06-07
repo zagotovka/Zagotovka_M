@@ -2423,20 +2423,44 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
 
   cJSON *ip_addr = cJSON_GetObjectItemCaseSensitive(json, "ip_addr");
   if (cJSON_IsString(ip_addr) && (ip_addr->valuestring != NULL)) {
-    sscanf(ip_addr->valuestring, "%hu.%hu.%hu.%hu", &settings->ip_addr0,
-           &settings->ip_addr1, &settings->ip_addr2, &settings->ip_addr3);
+    unsigned int a, b, c, d;
+    if (sscanf(ip_addr->valuestring, "%u.%u.%u.%u", &a, &b, &c, &d) == 4 &&
+        a <= 255 && b <= 255 && c <= 255 && d <= 255) {
+      settings->ip_addr0 = (uint8_t)a;
+      settings->ip_addr1 = (uint8_t)b;
+      settings->ip_addr2 = (uint8_t)c;
+      settings->ip_addr3 = (uint8_t)d;
+    } else {
+      MG_ERROR(("Invalid IP address: %s", ip_addr->valuestring));
+    }
   }
 
   cJSON *sb_mask = cJSON_GetObjectItemCaseSensitive(json, "sb_mask");
   if (cJSON_IsString(sb_mask) && (sb_mask->valuestring != NULL)) {
-    sscanf(sb_mask->valuestring, "%hu.%hu.%hu.%hu", &settings->sb_mask0,
-           &settings->sb_mask1, &settings->sb_mask2, &settings->sb_mask3);
+    unsigned int a, b, c, d;
+    if (sscanf(sb_mask->valuestring, "%u.%u.%u.%u", &a, &b, &c, &d) == 4 &&
+        a <= 255 && b <= 255 && c <= 255 && d <= 255) {
+      settings->sb_mask0 = (uint8_t)a;
+      settings->sb_mask1 = (uint8_t)b;
+      settings->sb_mask2 = (uint8_t)c;
+      settings->sb_mask3 = (uint8_t)d;
+    } else {
+      MG_ERROR(("Invalid subnet mask: %s", sb_mask->valuestring));
+    }
   }
 
   cJSON *gateway = cJSON_GetObjectItemCaseSensitive(json, "gateway");
   if (cJSON_IsString(gateway) && (gateway->valuestring != NULL)) {
-    sscanf(gateway->valuestring, "%hu.%hu.%hu.%hu", &settings->gateway0,
-           &settings->gateway1, &settings->gateway2, &settings->gateway3);
+    unsigned int a, b, c, d;
+    if (sscanf(gateway->valuestring, "%u.%u.%u.%u", &a, &b, &c, &d) == 4 &&
+        a <= 255 && b <= 255 && c <= 255 && d <= 255) {
+      settings->gateway0 = (uint8_t)a;
+      settings->gateway1 = (uint8_t)b;
+      settings->gateway2 = (uint8_t)c;
+      settings->gateway3 = (uint8_t)d;
+    } else {
+      MG_ERROR(("Invalid gateway address: %s", gateway->valuestring));
+    }
   }
 
   cJSON *token = cJSON_GetObjectItemCaseSensitive(json, "token");
@@ -3580,7 +3604,7 @@ int gen_security_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pin
   if (buffer == NULL || buffer_size <= 0) {
     return -1;
   }
-  
+
   uint8_t gps_state = SetSettings.sim800l;
   char *phone = SetSettings.tel;
   char *info = PinsConf[1].info;           // PA3
@@ -3623,7 +3647,7 @@ int gen_security_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pin
   if (offset < buffer_size) {
     offset += snprintf(buffer + offset, buffer_size - offset, "\n  ]\n}");
   }
-  
+
   return offset;
 }
 
@@ -3770,7 +3794,7 @@ void mqtt_message_handler(const char *topic, const char *payload) {
           else if (strcmp(cat_name, "SETTINGS") == 0) cat = LOG_CAT_SETTINGS;
           else if (strcmp(cat_name, "ETH") == 0) cat = LOG_CAT_ETH;
           else if (strcmp(cat_name, "PHY") == 0) cat = LOG_CAT_PHY;
-          
+
           if (cat < LOG_CAT_COUNT) {
               if (enable_val != 0) {
                   mask |= (1u << cat);
@@ -4230,47 +4254,63 @@ void handle_security_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
 
-  if (hm->body.len > 0 && hm->body.len < BUFFER_SIZE) {
-    char body_buf[hm->body.len + 1];
-    memcpy(body_buf, hm->body.buf, hm->body.len);
-    body_buf[hm->body.len] = '\0';
-    
-    // Определяем тип запроса
-    cJSON *root = cJSON_Parse(body_buf);
-    if (root) {
-      cJSON *type = cJSON_GetObjectItem(root, "type");
-      if (cJSON_IsString(type)) {
-        if (strcmp(type->valuestring, "sim800l") == 0) {
-          parse_sim800l_json(body_buf);
-        } else if (strcmp(type->valuestring, "monitoring") == 0) {
-          parse_monitoring_json(body_buf, PinsConf, PinsInfo, NUMPIN);
-        }
-      }
-      cJSON_Delete(root);
-    } else {
-      // Фолбэк, если JSON кривой или без типа, пробуем просто strstr
-      if (strstr(body_buf, "\"type\":\"sim800l\"") || strstr(body_buf, "\"type\": \"sim800l\"")) {
+  size_t len = hm->body.len;
+
+  /* ── Валидация размера ── */
+  if (len == 0) {
+    mg_http_reply(c, 400, extra_headers,
+                  "{\"status\":false,\"message\":\"Empty request body\"}");
+    return;
+  }
+  if (len > SECURITY_BODY_MAX) {
+    mg_http_reply(c, 413, extra_headers,
+                  "{\"status\":false,\"message\":\"Payload too large\"}");
+    return;
+  }
+
+  /* ── Heap-аллокация вместо VLA — безопасно для стека FreeRTOS ── */
+  char *body_buf = pvPortMalloc(len + 1);
+  if (!body_buf) {
+    mg_http_reply(c, 500, extra_headers,
+                  "{\"status\":false,\"message\":\"Out of memory\"}");
+    return;
+  }
+  memcpy(body_buf, hm->body.buf, len);
+  body_buf[len] = '\0';
+
+  /* ── Определяем тип запроса ── */
+  cJSON *root = cJSON_Parse(body_buf);
+  if (root) {
+    cJSON *type = cJSON_GetObjectItem(root, "type");
+    if (cJSON_IsString(type)) {
+      if (strcmp(type->valuestring, "sim800l") == 0) {
         parse_sim800l_json(body_buf);
-      } else if (strstr(body_buf, "\"type\":\"monitoring\"") || strstr(body_buf, "\"type\": \"monitoring\"")) {
+      } else if (strcmp(type->valuestring, "monitoring") == 0) {
         parse_monitoring_json(body_buf, PinsConf, PinsInfo, NUMPIN);
       }
     }
-
-    char response[256];
-    snprintf(
-        response, sizeof(response),
-        "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
-        (unsigned long)hm->body.len);
-
-    MG_INFO(("Response headers for connection %ld:", c->id));
-    log_headers(extra_headers);
-    mg_http_reply(c, 200, extra_headers, "%s", response);
+    cJSON_Delete(root);
   } else {
-    MG_INFO(("Response headers for connection %ld:", c->id));
-    log_headers(extra_headers);
-    mg_http_reply(c, 400, extra_headers,
-                  "{\"status\":false,\"message\":\"Empty request body\"}");
+    /* Фолбэк, если JSON кривой или без типа, пробуем просто strstr */
+    if (strstr(body_buf, "\"type\":\"sim800l\"") || strstr(body_buf, "\"type\": \"sim800l\"")) {
+      parse_sim800l_json(body_buf);
+    } else if (strstr(body_buf, "\"type\":\"monitoring\"") || strstr(body_buf, "\"type\": \"monitoring\"")) {
+      parse_monitoring_json(body_buf, PinsConf, PinsInfo, NUMPIN);
+    }
   }
+
+  /* ── Ответ — единственная точка выхода после malloc ── */
+  char response[256];
+  snprintf(
+      response, sizeof(response),
+      "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
+      (unsigned long)len);
+
+  MG_INFO(("Response headers for connection %ld:", c->id));
+  log_headers(extra_headers);
+  mg_http_reply(c, 200, extra_headers, "%s", response);
+
+  vPortFree(body_buf);
 }
 /****************************** OneWire *******************************/
 typedef struct {
@@ -4432,7 +4472,7 @@ void init_ds18b20(OneWire_t *OneWire, GPIO_TypeDef *OneWirePort,
       (*temp_cnt)++;
       OneWire_GetFullROM(OneWire, pin_index, *temp_cnt - 1);
       //			printf("[DEBUG] Found sensor %d, address: ",
-      //*temp_cnt); 			for (int j = 0; j < 8; j++) {
+      //*temp_cnt);			for (int j = 0; j < 8; j++) {
       // printf("%02X ", ds18b20[pin_index].sensors[*temp_cnt - 1].addr[j]);
       //			}
       //			printf("\r\n");
@@ -4458,8 +4498,8 @@ void init_ds18b20(OneWire_t *OneWire, GPIO_TypeDef *OneWirePort,
     for (uint8_t i = 0; i < *temp_cnt; i++) {
       osDelay(50);
       //			printf("[DEBUG] Configuring sensor %d on pin
-      //%d...\r\n", i + 1, pin_id); 			printf("[DEBUG] Sensor
-      //%d address: ", i + 1); 			for (int j = 0; j < 8;
+      //%d...\r\n", i + 1, pin_id);			printf("[DEBUG] Sensor
+      //%d address: ", i + 1);			for (int j = 0; j < 8;
       // j++) {
       // printf("%02X ", ds18b20[pin_index].sensors[i].addr[j]);  // Обновлено
       //			}
