@@ -94,7 +94,7 @@ zero. */
  * Items are queued by copy, not reference.  See the following link for the
  * rationale: https://www.freertos.org/Embedded-RTOS-Queues.html
  */
-typedef struct QueueDefinition		/* The old naming convention is used to prevent breaking kernel aware debuggers. */
+typedef struct QueueDefinition 		/* The old naming convention is used to prevent breaking kernel aware debuggers. */
 {
 	int8_t *pcHead;					/*< Points to the beginning of the queue storage area. */
 	int8_t *pcWriteTo;				/*< Points to the free next place in the storage area. */
@@ -2927,3 +2927,15 @@ Queue_t * const pxQueue = xQueue;
 	}
 
 #endif /* configUSE_QUEUE_SETS */
+
+
+
+
+
+
+
+
+
+
+
+

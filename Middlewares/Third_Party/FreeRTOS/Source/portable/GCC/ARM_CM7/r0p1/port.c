@@ -56,7 +56,7 @@
 #define portNVIC_SYSTICK_INT_BIT			( 1UL << 1UL )
 #define portNVIC_SYSTICK_ENABLE_BIT			( 1UL << 0UL )
 #define portNVIC_SYSTICK_COUNT_FLAG_BIT		( 1UL << 16UL )
-#define portNVIC_PENDSVCLEAR_BIT			( 1UL << 27UL )
+#define portNVIC_PENDSVCLEAR_BIT 			( 1UL << 27UL )
 #define portNVIC_PEND_SYSTICK_CLEAR_BIT		( 1UL << 25UL )
 
 #define portNVIC_PENDSV_PRI					( ( ( uint32_t ) configKERNEL_INTERRUPT_PRIORITY ) << 16UL )
@@ -64,7 +64,7 @@
 
 /* Constants required to check the validity of an interrupt priority. */
 #define portFIRST_USER_INTERRUPT_NUMBER		( 16 )
-#define portNVIC_IP_REGISTERS_OFFSET_16	( 0xE000E3F0 )
+#define portNVIC_IP_REGISTERS_OFFSET_16 	( 0xE000E3F0 )
 #define portAIRCR_REG						( * ( ( volatile uint32_t * ) 0xE000ED0C ) )
 #define portMAX_8_BIT_VALUE					( ( uint8_t ) 0xff )
 #define portTOP_BIT_OF_BYTE					( ( uint8_t ) 0x80 )
@@ -242,7 +242,7 @@ void vPortSVCHandler( void )
 					"	ldmia r0!, {r4-r11, r14}		\n" /* Pop the registers that are not automatically saved on exception entry and the critical nesting count. */
 					"	msr psp, r0						\n" /* Restore the task stack pointer. */
 					"	isb								\n"
-					"	mov r0, #0						\n"
+					"	mov r0, #0 						\n"
 					"	msr	basepri, r0					\n"
 					"	bx r14							\n"
 					"									\n"
@@ -259,9 +259,9 @@ static void prvPortStartFirstTask( void )
 	would otherwise result in the unnecessary leaving of space in the SVC stack
 	for lazy saving of FPU registers. */
 	__asm volatile(
-					" ldr r0, =0xE000ED08	\n" /* Use the NVIC offset register to locate the stack. */
-					" ldr r0, [r0]			\n"
-					" ldr r0, [r0]			\n"
+					" ldr r0, =0xE000ED08 	\n" /* Use the NVIC offset register to locate the stack. */
+					" ldr r0, [r0] 			\n"
+					" ldr r0, [r0] 			\n"
 					" msr msp, r0			\n" /* Set the msp back to the start of the stack. */
 					" mov r0, #0			\n" /* Clear the bit that indicates the FPU is in use, see comment above. */
 					" msr control, r0		\n"
@@ -436,7 +436,7 @@ void xPortPendSVHandler( void )
 	"	str r0, [r2]						\n" /* Save the new top of stack into the first member of the TCB. */
 	"										\n"
 	"	stmdb sp!, {r0, r3}					\n"
-	"	mov r0, %0							\n"
+	"	mov r0, %0 							\n"
 	"	cpsid i								\n" /* Errata workaround. */
 	"	msr basepri, r0						\n"
 	"	dsb									\n"
@@ -761,3 +761,5 @@ static void vPortEnableVFP( void )
 	}
 
 #endif /* configASSERT_DEFINED */
+
+

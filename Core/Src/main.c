@@ -287,6 +287,7 @@ volatile uint32_t req_api = 0;
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+static void MPU_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_ETH_Init(void);
 static void MX_USART3_UART_Init(void);
@@ -358,7 +359,18 @@ bool mg_random(void *buf, size_t len) { // Use on-board RNG
   return true;
 }
 
-uint64_t mg_millis(void) { return HAL_GetTick(); }
+uint64_t mg_millis(void) {
+    // Proper 64-bit extension of 32-bit HAL_GetTick.
+    // HAL_GetTick wraps at ~49.7 days; we track wraps in a 64-bit accumulator.
+    // Called frequently enough (every mg_mgr_poll) to never miss a wrap.
+    static uint32_t last_tick;
+    static uint64_t ms64;
+    uint32_t now = HAL_GetTick();
+    uint32_t delta = now - last_tick;  // Safe modulo-2^32 subtraction
+    ms64 += delta;
+    last_tick = now;
+    return ms64;
+}
 
 /*
  Порядок у меня правильный:
@@ -699,6 +711,21 @@ int main(void)
   /* USER CODE BEGIN 1 */
   read_reset_reason();
   /* USER CODE END 1 */
+
+  /* MPU Configuration--------------------------------------------------------*/
+  MPU_Config();
+
+  /* Барьеры после MPU_Config — гарантируют, что MPU активна до кеша */
+  __DSB();
+  __ISB();
+
+  /* Enable the CPU Cache */
+
+  /* Enable I-Cache---------------------------------------------------------*/
+  SCB_EnableICache();
+
+  /* Enable D-Cache---------------------------------------------------------*/
+  SCB_EnableDCache();
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -1610,7 +1637,25 @@ void StartWebServerTask(void *argument)
     }
     s_last_poll_tk = now_poll;
 
-    mg_mgr_poll(mgr, 10);
+    uint32_t t_poll = HAL_GetTick();
+    mg_mgr_poll(mgr, 0); // Было 10
+    t_poll = HAL_GetTick() - t_poll;
+    /* Статический пик времени выполнения mg_mgr_poll */
+    {
+      static uint32_t s_poll_exec_peak = 0;
+      static uint32_t s_poll_warn_exec_tk = 0;
+      if (t_poll > s_poll_exec_peak) {
+        s_poll_exec_peak = t_poll;
+      }
+      if (t_poll > 10) { /* >10ms в одном poll - аномалия */
+        if (now_poll - s_poll_warn_exec_tk > 30000) {
+          s_poll_warn_exec_tk = now_poll;
+          printf("[NET] WARN: mg_mgr_poll exec=%lums (peak=%lu, gap=%lu)\r\n",
+                 (unsigned long)t_poll, (unsigned long)s_poll_exec_peak,
+                 (unsigned long)poll_gap);
+        }
+      }
+    }
 
     /* Диагностика пика соединений Mongoose */
     {
@@ -2148,6 +2193,7 @@ void StartEncoderTask(void *argument)
 	                                       if (val > 100) val = 100;
 	                                       PinsConf[idpwm].dvalue = (int8_t)val;
 	                                       mark_slice_dirty(&g_ver_encoder);
+                                       mark_slice_dirty(&g_ver_pins);
 
 	                                       /* Применяем к железу только если включено */
 	                                       if (PinsConf[id].onoff != 0) {
@@ -2197,8 +2243,7 @@ void StartDs18b20Task(void *argument)
           }
           ow_conf[owpinnum].OneWirePort = PinsInfo[i].gpio_name;
           ow_conf[owpinnum].OneWirePin = PinsInfo[i].hal_pin;
-          snprintf(ds18b20[j].pin, sizeof(ds18b20[j].pin), "%s",
-                   PinsInfo[i].pins);
+          snprintf(ds18b20[j].pin, sizeof(ds18b20[j].pin), "%.*s", (int)sizeof(ds18b20[j].pin) - 1, PinsInfo[i].pins);
 
           init_ds18b20(&ow_conf[owpinnum].OneWire,
                        ow_conf[owpinnum].OneWirePort,
@@ -2264,6 +2309,7 @@ void StartDs18b20Task(void *argument)
               }
               mark_slice_dirty(&g_ver_sensors);
               mark_slice_dirty(&g_ver_onewire);
+              mark_slice_dirty(&g_ver_pins);
               printf("[INFO] DS18B20 bus idx %d REINIT OK - %d sensors found!\r\n",
                      i, ds18b20[i].numsens);
             } else {
@@ -2458,6 +2504,7 @@ void StartServiceTask(void *argument)
           mark_slice_dirty(&g_ver_pid);
           mark_slice_dirty(&g_ver_onewire);
           mark_slice_dirty(&g_ver_encoder);
+          mark_slice_dirty(&g_ver_pins);
 	      for (int i = 0; i < NUMPIN; i++) {
 	        if (!fade_state[i].active)   continue;
 	        if (PinsConf[i].topin != 5)  continue;
@@ -3138,6 +3185,42 @@ void StartLoggerTask(void *argument)
       }
   }
   /* USER CODE END StartLoggerTask */
+}
+
+ /* MPU Configuration */
+
+void MPU_Config(void)
+{
+  MPU_Region_InitTypeDef MPU_InitStruct = {0};
+
+  /* Disables the MPU */
+  HAL_MPU_Disable();
+
+  /*--- Region 0: Вся AXI SRAM 0x20020000..0x2007FFFF (384 KB) ---
+   * Normal memory, Non-cacheable, Non-shareable.
+   * Покрывает ВСЮ AXI SRAM (SRAM1 368KB + SRAM2 16KB).
+   * FreeRTOS heap, .bss, стеки задач — всё здесь.
+   * MPU требует size = power-of-2, BaseAddress кратен size.
+   * Используем 512KB от 0x20000000 и отключаем sub-region 0
+   * (0x20000000-0x2001FFFF = DTCM, не нуждается в MPU).
+   */
+  MPU_InitStruct.Enable = MPU_REGION_ENABLE;
+  MPU_InitStruct.Number = MPU_REGION_NUMBER0;
+  MPU_InitStruct.BaseAddress = 0x20000000;
+  MPU_InitStruct.Size = MPU_REGION_SIZE_512KB;
+  MPU_InitStruct.SubRegionDisable = 0x0;  /* Все sub-regions включены */
+  MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL1; /* TEX=001, C=0, B=0 → Normal, Non-cacheable */
+  MPU_InitStruct.AccessPermission = MPU_REGION_FULL_ACCESS;
+  MPU_InitStruct.DisableExec = MPU_INSTRUCTION_ACCESS_DISABLE;
+  MPU_InitStruct.IsShareable = MPU_ACCESS_NOT_SHAREABLE;
+  MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
+  MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
+
+  HAL_MPU_ConfigRegion(&MPU_InitStruct);
+
+  /* Enables the MPU */
+  HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
+
 }
 
 /**

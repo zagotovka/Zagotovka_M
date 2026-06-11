@@ -121,19 +121,12 @@ function TabSelect({ }) {
         setSelectedValues(initialValues);
       });
 
-  const reqCounter = useRef(0);
-  const pollBusy = useRef(false);
-
   useEffect(() => {
     let active = true;
-    const reqId = ++reqCounter.current;
 
-    // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
-    refresh();
-
-    // ── Фоновый polling: через pollQueue ──
+    // ── Загрузка + polling через pollQueue (одно соединение, без нового handshake) ──
     registerPoll('select', '/api/select/get', function(r) {
-      if (!active || pollBusy.current) return;
+      if (!active) return;
       if (Date.now() - lastChangeTime.current < 8000) return;
       if (r !== null && r !== undefined) {
         const data = r.data || r;
@@ -146,7 +139,7 @@ function TabSelect({ }) {
         });
         setSelectedValues(initialValues);
       }
-    });
+    }, { immediate: true });
 
     return function() {
       active = false;

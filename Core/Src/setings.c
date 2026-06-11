@@ -1306,6 +1306,7 @@ void SetPinConfig() {
   mark_slice_dirty(&g_ver_switch);
   mark_slice_dirty(&g_ver_encoder);
   mark_slice_dirty(&g_ver_security);
+  mark_slice_dirty(&g_ver_pins);
 }
 
 void GetPinToPin() {
@@ -1415,6 +1416,7 @@ void SetPinToPin() {
   printf("File 'PINTOPIN.INI' updated successfully!\r\n");
   mark_slice_dirty(&g_ver_switch);
   mark_slice_dirty(&g_ver_encoder);
+  mark_slice_dirty(&g_ver_pins);
 }
 
 void InitPin() {
@@ -2277,6 +2279,7 @@ cleanup:
   f_close(&USBHFile);
   mark_slice_dirty(&g_ver_sensors);
   mark_slice_dirty(&g_ver_onewire);
+  mark_slice_dirty(&g_ver_pins);
 }
 /***********************************************************************************************/
 

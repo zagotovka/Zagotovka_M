@@ -276,43 +276,19 @@ const TabSecurity = () => {
     setMonitoring(data.pins || []); setConnectionStatus('connected');
   };
 
-  const reqCounter = useRef(0);
-  const pollBusy = useRef(false);
-
   useEffect(() => {
     let active = true;
-    const reqId = ++reqCounter.current;
 
-    // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
-    const controller = new AbortController();
-    const timeoutId = setTimeout(function() { controller.abort(); }, 3000);
-
-    fetch('/api/security/get', { signal: controller.signal, cache: 'no-store' })
-      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function(data) {
-        if (reqId !== reqCounter.current) return;
-        if (!active) return;
-        if (data !== null && data !== undefined) {
-          setLanguage(data.lang || 'ru');
-          updateSecurityData(data);
-        }
-      })
-      .catch(function(err) {
-        if (err.name === 'AbortError') return;
-        console.warn('[TabSecurity] init fetch:', err.message);
-      })
-      .finally(function() { clearTimeout(timeoutId); });
-
-    // ── Фоновый polling: через pollQueue ──
-    registerPoll('security', '/api/security', function(data) {
-      if (!active || pollBusy.current) return;
-      if (data !== null && data !== undefined) updateSecurityData(data);
-    });
+    registerPoll('security', '/api/state/security', function(data) {
+      if (!active) return;
+      if (data !== null && data !== undefined) {
+        setLanguage(data.lang || 'ru');
+        updateSecurityData(data);
+      }
+    }, {immediate: true});
 
     return function() {
       active = false;
-      controller.abort();
-      clearTimeout(timeoutId);
       unregisterPoll('security');
     };
   }, []);

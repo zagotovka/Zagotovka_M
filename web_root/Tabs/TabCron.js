@@ -122,19 +122,11 @@ function TabCron({ }) {
         setCron([]);
       });
 
-  const reqCounter = useRef(0);
-  const pollBusy = useRef(false);
-
   useEffect(() => {
     let active = true;
 
-    // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
-    refresh();
-
-    // ── Фоновый polling: через pollQueue ──
     registerPoll('cron', '/api/cron/get', function(r) {
-      if (!active || pollBusy.current) return;
-      if (isPendingOnOff.current) return;
+      if (!active || isPendingOnOff.current) return;
       if (r !== null && r !== undefined && Array.isArray(r.timers)) {
         setCron(r.timers);
         setLanguage(r.lang || 'ru');
@@ -143,7 +135,7 @@ function TabCron({ }) {
           setVisibleCrons(r.numline);
         }
       }
-    });
+    }, {immediate: true});
 
     return function() {
       active = false;

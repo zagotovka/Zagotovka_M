@@ -506,3 +506,5 @@ typedef struct _USBH_HandleTypeDef
 #endif
 
 #endif /* USBH_DEF_H */
+
+

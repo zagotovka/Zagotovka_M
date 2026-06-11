@@ -454,21 +454,11 @@ function Settings({ }) {
         showToast('Ошибка при загрузке настроек', 'error');
       });
 
-  const reqCounter = useRef(0);
-  const pollBusy = useRef(false);
-
   useEffect(() => {
     let active = true;
-    const reqId = ++reqCounter.current;
 
-    // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
-    refresh().finally(function() {
-      if (reqId === reqCounter.current && active) setIsLoading(false);
-    });
-
-    // ── Фоновый polling: через pollQueue ──
     registerPoll('settings', '/api/mysett/get', function(r) {
-      if (!active || pollBusy.current) return;
+      if (!active) return;
       if (Date.now() - lastInputTime.current < 8000) return;
       var activeEl = document.activeElement;
       if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
@@ -481,12 +471,13 @@ function Settings({ }) {
           r.offtime = dt.time;
         }
         setSettings(r);
+        setIsLoading(false);
         if (r.tls_key)        setIsPrivateKeyHidden(true);
         if (r.tls_cert)       setIsPublicKeyHidden(true);
         if (r.tls_ca)         setIsSecretKeyHidden(true);
         if (r.telegram_token) setIsTelegramTokenHidden(true);
       }
-    });
+    }, {immediate: true});
 
     return function() {
       active = false;

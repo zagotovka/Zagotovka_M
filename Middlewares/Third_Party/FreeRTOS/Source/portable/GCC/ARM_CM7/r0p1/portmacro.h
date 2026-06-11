@@ -76,7 +76,7 @@ typedef unsigned long UBaseType_t;
 /*-----------------------------------------------------------*/
 
 /* Scheduler utilities. */
-#define portYIELD()															\
+#define portYIELD() 															\
 {																				\
 	/* Set a PendSV to request a context switch. */								\
 	portNVIC_INT_CTRL_REG = portNVIC_PENDSVSET_BIT;								\
@@ -154,7 +154,7 @@ not necessary for to use this port.  They are defined so the common demo files
 
 #ifdef configASSERT
 	void vPortValidateInterruptPriority( void );
-	#define portASSERT_IF_INTERRUPT_PRIORITY_INVALID()	vPortValidateInterruptPriority()
+	#define portASSERT_IF_INTERRUPT_PRIORITY_INVALID() 	vPortValidateInterruptPriority()
 #endif
 
 /* portNOP() is not required by this port. */
@@ -244,3 +244,4 @@ portFORCE_INLINE static void vPortSetBASEPRI( uint32_t ulNewMaskValue )
 #endif
 
 #endif /* PORTMACRO_H */
+

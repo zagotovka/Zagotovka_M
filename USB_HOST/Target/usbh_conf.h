@@ -90,8 +90,8 @@
 
 /****************************************/
 /* #define for FS and HS identification */
-#define HOST_HS		0
-#define HOST_FS		1
+#define HOST_HS 		0
+#define HOST_FS 		1
 
 #if (USBH_USE_OS == 1)
   #include "cmsis_os.h"
@@ -191,3 +191,4 @@
 #endif
 
 #endif /* __USBH_CONF__H__ */
+

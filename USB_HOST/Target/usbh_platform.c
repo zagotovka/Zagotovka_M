@@ -49,3 +49,4 @@ void MX_DriverVbusFS(uint8_t state)
   /* USER CODE END PREPARE_GPIO_DATA_VBUS_FS */
   HAL_GPIO_WritePin(GPIOG,GPIO_PIN_6,(GPIO_PinState)data);
 }
+

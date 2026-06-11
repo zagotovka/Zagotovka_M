@@ -1770,3 +1770,4 @@ HAL_StatusTypeDef HAL_RCCEx_DisablePLLSAI(void)
 /**
   * @}
   */
+

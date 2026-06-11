@@ -1136,3 +1136,5 @@ typedef QueueHandle_t SemaphoreHandle_t;
 #define uxSemaphoreGetCount( xSemaphore ) uxQueueMessagesWaiting( ( QueueHandle_t ) ( xSemaphore ) )
 
 #endif /* SEMAPHORE_H */
+
+

@@ -24,6 +24,16 @@
 #define MG_STMPACK_NET 0
 #define MG_ENABLE_CUSTOM_RANDOM 1
 
+/* Увеличиваем IO buffer granularity для ускорения передачи больших файлов через TLS.
+   По умолчанию 2048 — Mongoose отдаёт статику порциями по MG_IO_SIZE байт.
+   При 512-байтовых TLS records это 4 записи на итерацию poll вместо 1.
+
+   Важно: MG_IO_SIZE влияет на размер буфера аллокации, не на TLS record size.
+   TLS record остаётся стандартным (до 16384 байт), но Mongoose будет читать из packed FS
+   и шифровать большими кусками за раз.
+   */
+#define MG_IO_SIZE 4096 //8192
+
 // Translate to Mongoose macros
 #if MG_STMPACK_NET == 0
 #define MG_ENABLE_TCPIP 1

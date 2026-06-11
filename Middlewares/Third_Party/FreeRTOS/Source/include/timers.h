@@ -51,7 +51,7 @@ be used solely through the macros that make up the public software timer API,
 as defined below.  The commands that are sent from interrupts must use the
 highest numbers as tmrFIRST_FROM_ISR_COMMAND is used to determine if the task
 or interrupt version of the queue send function should be used. */
-#define tmrCOMMAND_EXECUTE_CALLBACK_FROM_ISR	( ( BaseType_t ) -2 )
+#define tmrCOMMAND_EXECUTE_CALLBACK_FROM_ISR 	( ( BaseType_t ) -2 )
 #define tmrCOMMAND_EXECUTE_CALLBACK				( ( BaseType_t ) -1 )
 #define tmrCOMMAND_START_DONT_TRACE				( ( BaseType_t ) 0 )
 #define tmrCOMMAND_START					    ( ( BaseType_t ) 1 )
@@ -88,11 +88,11 @@ typedef void (*TimerCallbackFunction_t)( TimerHandle_t xTimer );
 typedef void (*PendedFunction_t)( void *, uint32_t );
 
 /**
- * TimerHandle_t xTimerCreate(	const char * const pcTimerName,
- *								TickType_t xTimerPeriodInTicks,
- *								UBaseType_t uxAutoReload,
- *								void * pvTimerID,
- *								TimerCallbackFunction_t pxCallbackFunction );
+ * TimerHandle_t xTimerCreate( 	const char * const pcTimerName,
+ * 								TickType_t xTimerPeriodInTicks,
+ * 								UBaseType_t uxAutoReload,
+ * 								void * pvTimerID,
+ * 								TimerCallbackFunction_t pxCallbackFunction );
  *
  * Creates a new software timer instance, and returns a handle by which the
  * created software timer can be referenced.
@@ -161,8 +161,8 @@ typedef void (*PendedFunction_t)( void *, uint32_t );
  * int32_t lArrayIndex;
  * const int32_t xMaxExpiryCountBeforeStopping = 10;
  *
- *	   // Optionally do something if the pxTimer parameter is NULL.
- *	   configASSERT( pxTimer );
+ * 	   // Optionally do something if the pxTimer parameter is NULL.
+ * 	   configASSERT( pxTimer );
  *
  *     // Which timer expired?
  *     lArrayIndex = ( int32_t ) pvTimerGetTimerID( pxTimer );
@@ -234,10 +234,10 @@ typedef void (*PendedFunction_t)( void *, uint32_t );
 
 /**
  * TimerHandle_t xTimerCreateStatic(const char * const pcTimerName,
- *									TickType_t xTimerPeriodInTicks,
- *									UBaseType_t uxAutoReload,
- *									void * pvTimerID,
- *									TimerCallbackFunction_t pxCallbackFunction,
+ * 									TickType_t xTimerPeriodInTicks,
+ * 									UBaseType_t uxAutoReload,
+ * 									void * pvTimerID,
+ * 									TimerCallbackFunction_t pxCallbackFunction,
  *									StaticTimer_t *pxTimerBuffer );
  *
  * Creates a new software timer instance, and returns a handle by which the
@@ -546,7 +546,7 @@ TaskHandle_t xTimerGetTimerDaemonTaskHandle( void ) PRIVILEGED_FUNCTION;
 #define xTimerStop( xTimer, xTicksToWait ) xTimerGenericCommand( ( xTimer ), tmrCOMMAND_STOP, 0U, NULL, ( xTicksToWait ) )
 
 /**
- * BaseType_t xTimerChangePeriod(	TimerHandle_t xTimer,
+ * BaseType_t xTimerChangePeriod( 	TimerHandle_t xTimer,
  *										TickType_t xNewPeriod,
  *										TickType_t xTicksToWait );
  *
@@ -788,7 +788,7 @@ TaskHandle_t xTimerGetTimerDaemonTaskHandle( void ) PRIVILEGED_FUNCTION;
 #define xTimerReset( xTimer, xTicksToWait ) xTimerGenericCommand( ( xTimer ), tmrCOMMAND_RESET, ( xTaskGetTickCount() ), NULL, ( xTicksToWait ) )
 
 /**
- * BaseType_t xTimerStartFromISR(	TimerHandle_t xTimer,
+ * BaseType_t xTimerStartFromISR( 	TimerHandle_t xTimer,
  *									BaseType_t *pxHigherPriorityTaskWoken );
  *
  * A version of xTimerStart() that can be called from an interrupt service
@@ -874,7 +874,7 @@ TaskHandle_t xTimerGetTimerDaemonTaskHandle( void ) PRIVILEGED_FUNCTION;
 #define xTimerStartFromISR( xTimer, pxHigherPriorityTaskWoken ) xTimerGenericCommand( ( xTimer ), tmrCOMMAND_START_FROM_ISR, ( xTaskGetTickCountFromISR() ), ( pxHigherPriorityTaskWoken ), 0U )
 
 /**
- * BaseType_t xTimerStopFromISR(	TimerHandle_t xTimer,
+ * BaseType_t xTimerStopFromISR( 	TimerHandle_t xTimer,
  *									BaseType_t *pxHigherPriorityTaskWoken );
  *
  * A version of xTimerStop() that can be called from an interrupt service
@@ -1010,7 +1010,7 @@ TaskHandle_t xTimerGetTimerDaemonTaskHandle( void ) PRIVILEGED_FUNCTION;
 #define xTimerChangePeriodFromISR( xTimer, xNewPeriod, pxHigherPriorityTaskWoken ) xTimerGenericCommand( ( xTimer ), tmrCOMMAND_CHANGE_PERIOD_FROM_ISR, ( xNewPeriod ), ( pxHigherPriorityTaskWoken ), 0U )
 
 /**
- * BaseType_t xTimerResetFromISR(	TimerHandle_t xTimer,
+ * BaseType_t xTimerResetFromISR( 	TimerHandle_t xTimer,
  *									BaseType_t *pxHigherPriorityTaskWoken );
  *
  * A version of xTimerReset() that can be called from an interrupt service
@@ -1290,3 +1290,6 @@ BaseType_t xTimerGenericCommand( TimerHandle_t xTimer, const BaseType_t xCommand
 }
 #endif
 #endif /* TIMERS_H */
+
+
+

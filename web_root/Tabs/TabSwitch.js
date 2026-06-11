@@ -101,8 +101,6 @@ function TabSwitch({ }) {
   const [debugInfo, setDebugInfo] = useState('');
   const [isFormValid, setIsFormValid] = useState(false);
   const isPendingOnOff = useRef(false);
-  const reqCounter = useRef(0);
-  const pollBusy = useRef(false);
 
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => { initGlobalTooltip(); }, []);
@@ -134,49 +132,19 @@ function TabSwitch({ }) {
 
   useEffect(() => {
     let active = true;
-    const reqId = ++reqCounter.current;
 
-    // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
-    const controller = new AbortController();
-    const timeoutId = setTimeout(function() { controller.abort(); }, 3000);
-
-    Promise.all([
-      fetch('/api/switch/get', { signal: controller.signal, cache: 'no-store' }).then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }),
-      fetch('/api/pintopin/get', { signal: controller.signal, cache: 'no-store' }).then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    ])
-      .then(function(results) {
-        if (reqId !== reqCounter.current) return;
-        if (!active) return;
-        var switchData = results[0];
-        var pintopinData = results[1];
-        if (switchData !== null && switchData !== undefined) {
-          setSwitch(switchData.switches);
-          setLanguage(switchData.lang);
-        }
-        if (pintopinData !== null && pintopinData !== undefined) {
-          setPintopin(pintopinData);
-        }
-      })
-      .catch(function(err) {
-        if (err.name === 'AbortError') return;
-        console.warn('[TabSwitch] init fetch:', err.message);
-      })
-      .finally(function() { clearTimeout(timeoutId); });
-
-    // ── Фоновый polling: через pollQueue ──
-    registerPoll('switches', '/api/switches', function(data) {
-      if (!active || pollBusy.current) return;
+    // ── Загрузка + polling через pollQueue (одно соединение, без нового handshake) ──
+    registerPoll('switches', '/api/state/switch', function(data) {
+      if (!active) return;
       if (isPendingOnOff.current) return;
       if (data !== null && data !== undefined) {
         if (data.switches) { setSwitch(data.switches); setLanguage(data.lang); }
         if (data.pintopin) setPintopin(data.pintopin);
       }
-    });
+    }, { immediate: true });
 
     return function() {
       active = false;
-      controller.abort();
-      clearTimeout(timeoutId);
       unregisterPoll('switches');
     };
   }, []);

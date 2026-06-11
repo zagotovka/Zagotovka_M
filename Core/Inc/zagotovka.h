@@ -333,6 +333,7 @@ extern volatile uint32_t g_ver_onewire;
 extern volatile uint32_t g_ver_switch;
 extern volatile uint32_t g_ver_button;
 extern volatile uint32_t g_ver_security;
+extern volatile uint32_t g_ver_pins;
 
 /* ─── Mark slice dirty ─── */
 void mark_slice_dirty(volatile uint32_t *ver);

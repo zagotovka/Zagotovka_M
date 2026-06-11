@@ -39,3 +39,4 @@ void MX_DriverVbusFS(uint8_t state);
 #endif
 
 #endif /* __USBH_PLATFORM_H__ */
+

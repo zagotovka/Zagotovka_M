@@ -36,7 +36,7 @@
 ENTRY(Reset_Handler)
 
 /* Highest address of the user mode stack */
-_estack = ORIGIN(RAM) + LENGTH(RAM); /* end of "RAM" Ram type memory */
+_estack = 0x20080000; /* Конец всей физической 512КБ RAM */
 
 _Min_Heap_Size = 0x8000; /* required amount of heap */
 _Min_Stack_Size = 0x800; /* required amount of stack */
@@ -44,9 +44,9 @@ _Min_Stack_Size = 0x800; /* required amount of stack */
 /* Memories definition */
 MEMORY
 {
-  RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 512K
-  FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 2048K
-  ZERG_FLASH (rx)  : ORIGIN = 0x081C0000,   LENGTH = 256K/* Sector 11 */
+  RAM      (xrw)    : ORIGIN = 0x20000000,   LENGTH = 512K
+  FLASH    (rx)     : ORIGIN = 0x8000000,    LENGTH = 2048K
+  ZERG_FLASH (rx)  : ORIGIN = 0x081C0000,   LENGTH = 256K  /* Sector 11 */
 }
 
 /* Sections */
@@ -86,14 +86,14 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
-  .ARM.extab (READONLY) : /* The "READONLY" keyword is only supported in GCC11 and later, remove it if using GCC10 or earlier. */
+  .ARM.extab (READONLY) : 
   {
     . = ALIGN(4);
     *(.ARM.extab* .gnu.linkonce.armextab.*)
     . = ALIGN(4);
   } >FLASH
 
-  .ARM (READONLY) : /* The "READONLY" keyword is only supported in GCC11 and later, remove it if using GCC10 or earlier. */
+  .ARM (READONLY) : 
   {
     . = ALIGN(4);
     __exidx_start = .;
@@ -102,7 +102,7 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
-  .preinit_array (READONLY) : /* The "READONLY" keyword is only supported in GCC11 and later, remove it if using GCC10 or earlier. */
+  .preinit_array (READONLY) : 
   {
     . = ALIGN(4);
     PROVIDE_HIDDEN (__preinit_array_start = .);
@@ -111,7 +111,7 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
-  .init_array (READONLY) : /* The "READONLY" keyword is only supported in GCC11 and later, remove it if using GCC10 or earlier. */
+  .init_array (READONLY) : 
   {
     . = ALIGN(4);
     PROVIDE_HIDDEN (__init_array_start = .);
@@ -121,7 +121,7 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
-  .fini_array (READONLY) : /* The "READONLY" keyword is only supported in GCC11 and later, remove it if using GCC10 or earlier. */
+  .fini_array (READONLY) : 
   {
     . = ALIGN(4);
     PROVIDE_HIDDEN (__fini_array_start = .);
@@ -149,6 +149,30 @@ SECTIONS
 
   } >RAM AT> FLASH
 
+  /* 
+     Размещаем кучу и стек в начале памяти (в свободном окне DTCM RAM), 
+     чтобы полностью утилизировать эти 128 КБ памяти до адреса 0x20020000.
+  */
+  ._user_heap_stack :
+  {
+    . = ALIGN(8);
+    PROVIDE ( end = . );
+    PROVIDE ( _end = . );
+    . = . + _Min_Heap_Size;
+    . = . + _Min_Stack_Size;
+    . = ALIGN(8);
+  } >RAM
+
+  /* Принудительно фиксируем сетевую секцию на адрес 0x20020000 (начало AxiSRAM) */
+  .ethernet_dma 0x20020000 (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.RxDecripSection)    
+    *(.TxDecripSection)    
+    *(.eth_ram)            
+    . = ALIGN(4);
+  } >RAM
+
   /* Uninitialized data section into "RAM" Ram type memory */
   . = ALIGN(4);
   .bss :
@@ -166,23 +190,12 @@ SECTIONS
   } >RAM
 
   /* Секция .zagotovka_section в области ZERG_FLASH */
-	.zagotovka_section ORIGIN(ZERG_FLASH) :
-	{
-	    . = ALIGN(8);
-	    KEEP(*(.zagotovka_section))
-	    . = ALIGN(8);
-	} >ZERG_FLASH AT> FLASH
-
-  /* User_heap_stack section, used to check that there is enough "RAM" Ram  type memory left */
-  ._user_heap_stack :
+  .zagotovka_section ORIGIN(ZERG_FLASH) :
   {
-    . = ALIGN(8);
-    PROVIDE ( end = . );
-    PROVIDE ( _end = . );
-    . = . + _Min_Heap_Size;
-    . = . + _Min_Stack_Size;
-    . = ALIGN(8);
-  } >RAM
+      . = ALIGN(8);
+      KEEP(*(.zagotovka_section))
+      . = ALIGN(8);
+  } >ZERG_FLASH AT> FLASH
 
   /* Remove information from the compiler libraries */
   /DISCARD/ :

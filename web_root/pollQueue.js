@@ -12,24 +12,32 @@
  *   import { registerPoll, unregisterPoll } from './pollQueue.js';
  *
  *   useEffect(() => {
- *     registerPoll('buttons', '/api/buttons', (data) => {
+ *     registerPoll('buttons', '/api/state/button', (data) => {
  *       if (data !== null && data !== undefined) setButton(data.buttons);
  *     });
  *     return () => unregisterPoll('buttons');
  *   }, []);
  */
 
-const _registered = new Map();  // key → { url, callback, etag }
+const _registered = new Map();  // key → { url, callback, etag, oneShot }
 let _active = false;
 let _timer = null;
 let _keys = [];
 let _idx = 0;
 
-const POLL_INTERVAL = 1500;   // интервал между запросами (мс)
-const FETCH_TIMEOUT = 3000;   // таймаут одного запроса (мс)
+const POLL_INTERVAL = 1000;   // интервал между запросами (мс)
+const FETCH_TIMEOUT = 5000;   // таймаут одного запроса (мс)
 const MAX_QUEUE = 8;          // максимальная глубина очереди
 
-export function registerPoll(key, url, callback) {
+/**
+ * @param {string} key
+ * @param {string} url
+ * @param {function} callback  — вызывается с данными (или null)
+ * @param {object} [opts]
+ * @param {boolean} [opts.immediate] — вставить в начало очереди и выполнить немедленно
+ * @param {boolean} [opts.oneShot]   — удалить после первого успешного ответа
+ */
+export function registerPoll(key, url, callback, opts = {}) {
   // Ограничение глубины очереди: вытесняем самую старую запись, кроме 'common'
   if (_keys.length >= MAX_QUEUE && !_registered.has(key)) {
     for (let i = 0; i < _keys.length; i++) {
@@ -43,8 +51,18 @@ export function registerPoll(key, url, callback) {
     }
   }
 
-  _registered.set(key, { url, callback, etag: null });
+  _registered.set(key, { url, callback, etag: null, oneShot: opts.oneShot || false });
   _keys = Array.from(_registered.keys());
+  // immediate: этот ключ будет опрошен СЛЕДУЮЩИМ тиком
+  if (opts.immediate) {
+    _idx = _keys.indexOf(key);
+    // Если в данный момент опрос не активен (idle), сбрасываем таймер и запускаем опрос мгновенно
+    if (!_active) {
+      _clearTimer();
+      _timer = setTimeout(_tick, 0);
+      return;
+    }
+  }
   if (!_timer) _schedule();
 }
 
@@ -64,9 +82,9 @@ function _clearTimer() {
   _timer = null;
 }
 
-function _schedule() {
+function _schedule(ms) {
   _clearTimer();
-  _timer = setTimeout(_tick, POLL_INTERVAL);
+  _timer = setTimeout(_tick, ms !== undefined ? ms : POLL_INTERVAL);
 }
 
 async function _tick() {
@@ -77,7 +95,7 @@ async function _tick() {
 
   // Round-robin: следующий endpoint
   if (_idx >= _keys.length) _idx = 0;
-  const key = _keys[_idx++];
+  const key = _keys[_idx];
   const entry = _registered.get(key);
 
   if (entry) {
@@ -99,7 +117,15 @@ async function _tick() {
       if (newEtag) entry.etag = newEtag;
 
       if (r.status === 304) { /* no change */ }
-      else if (r.ok) { const data = await r.json(); entry.callback(data); }
+      else if (r.ok) {
+        const data = await r.json();
+        entry.callback(data);
+        // oneShot: удаляем после первого успешного ответа
+        if (entry.oneShot) {
+          _registered.delete(key);
+          _keys = Array.from(_registered.keys());
+        }
+      }
     } catch (err) {
       clearTimeout(timeoutId);
       if (err.name !== 'AbortError') {
@@ -111,5 +137,14 @@ async function _tick() {
 
   _active = false;
 
-  if (_keys.length > 0) _schedule(); else _clearTimer();
+  // Переходим к следующему ключу для следующего шага
+  _idx++;
+  if (_idx >= _keys.length) {
+    // Закончили полный круг всех эндпоинтов, делаем паузу на POLL_INTERVAL
+    _idx = 0;
+    if (_keys.length > 0) _schedule(POLL_INTERVAL); else _clearTimer();
+  } else {
+    // В текущем круге остались не опрошенные ключи, опрашиваем следующий немедленно (0 мс)
+    if (_keys.length > 0) _schedule(0); else _clearTimer();
+  }
 }

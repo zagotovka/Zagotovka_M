@@ -3552,3 +3552,4 @@ HAL_StatusTypeDef HAL_RCCEx_DisablePLLSAI(void);
 #endif
 
 #endif /* __STM32F7xx_HAL_RCC_EX_H */
+

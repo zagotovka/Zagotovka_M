@@ -14593,12 +14593,18 @@ static bool mg_tls_server_send_hello(struct mg_connection *c) {
       0x00, 0x2b, 0x00, 0x02, 0x03, 0x04};
   // clang-format on
 
-  // calculate keyshare
+  // calculate keyshare — pre-computed server keypair (saves ~500ms per handshake)
+  static uint8_t s_x25519_pub[X25519_BYTES];
+  static uint8_t s_x25519_prv[X25519_BYTES];
+  static bool s_x25519_ready = false;
   uint8_t x25519_pub[X25519_BYTES];
-  uint8_t x25519_prv[X25519_BYTES];
-  if (!mg_random(x25519_prv, sizeof(x25519_prv))) mg_error(c, "RNG");
-  mg_tls_x25519(x25519_pub, x25519_prv, X25519_BASE_POINT, 1);
-  mg_tls_x25519(tls->x25519_sec, x25519_prv, tls->x25519_cli, 1);
+  if (!s_x25519_ready) {
+    if (!mg_random(s_x25519_prv, sizeof(s_x25519_prv))) mg_error(c, "RNG");
+    mg_tls_x25519(s_x25519_pub, s_x25519_prv, X25519_BASE_POINT, 1);
+    s_x25519_ready = true;
+  }
+  memcpy(x25519_pub, s_x25519_pub, X25519_BYTES);
+  mg_tls_x25519(tls->x25519_sec, s_x25519_prv, tls->x25519_cli, 1);
   mg_tls_hexdump("s x25519 sec", tls->x25519_sec, sizeof(tls->x25519_sec));
 
   // fill in the gaps: random + session ID + keyshare

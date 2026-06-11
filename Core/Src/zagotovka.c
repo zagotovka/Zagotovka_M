@@ -23,6 +23,10 @@
 /*********************** Moon *****************************/
 #include "net.h"
 #include <math.h>
+
+/* Shared static buffer from net.c — mongoose event loop is single-threaded */
+extern char g_body[16384];
+
 #define PI 3.14159265358979323846
 #define RAD (PI / 180.0)
 extern int year;
@@ -134,6 +138,7 @@ volatile uint32_t g_ver_onewire = 1;
 volatile uint32_t g_ver_switch  = 1;
 volatile uint32_t g_ver_button  = 1;
 volatile uint32_t g_ver_security = 1;
+volatile uint32_t g_ver_pins     = 1;
 
 void mark_slice_dirty(volatile uint32_t *ver) {
     taskENTER_CRITICAL();
@@ -289,19 +294,16 @@ void set_mqtt_topic(const char *topic) {
 }
 
 void handle_select_get(struct mg_connection *c) {
-  char buf[512];
-  const char *extra_headers =
-      "Connection: close\r\nContent-Type: application/json\r\n";
-  MG_INFO(("Response headers for connection %ld:", c->id));
-  log_headers(extra_headers);
+  mg_printf(c,
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Type: application/json\r\n"
+    "Transfer-Encoding: chunked\r\n"
+    "Cache-Control: no-cache\r\n"
+    "\r\n");
 
-  mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
-
-  /* Открывающая часть JSON */
-  int len = snprintf(buf, sizeof(buf),
-                     "{\"lang\":\"%s\",\"sim800l\":%d,\"data\":[",
-                     SetSettings.lang, SetSettings.sim800l);
-  mg_send(c, buf, len);
+  mg_http_printf_chunk(c,
+    "{\"lang\":\"%s\",\"sim800l\":%d,\"data\":[",
+    SetSettings.lang, SetSettings.sim800l);
 
   for (int i = 0; i < NUMPIN; i++) {
     const struct dbPinsInfo *info = &PinsInfo[i];
@@ -310,16 +312,16 @@ void handle_select_get(struct mg_connection *c) {
     conf = PinsConf[i];
     taskEXIT_CRITICAL();
 
-    len = snprintf(buf, sizeof(buf),
-                   "%s{\"id\":%d,\"pins\":\"%s\",\"topin\":%d,"
-                   "\"onewire\":%d,\"pwm\":%d,\"i2cdata\":%d,\"i2cclok\":%d}",
-                   (i == 0 ? "" : ","),
-                   i, info->pins, conf.topin, info->onewire,
-                   info->pwm, info->i2cdata, info->i2cclok);
-    mg_send(c, buf, len);
+    mg_http_printf_chunk(c,
+      "%s{\"id\":%d,\"pins\":\"%s\",\"topin\":%d,"
+      "\"onewire\":%d,\"pwm\":%d,\"i2cdata\":%d,\"i2cclok\":%d}",
+      (i == 0 ? "" : ","),
+      i, info->pins, conf.topin, info->onewire,
+      info->pwm, info->i2cdata, info->i2cclok);
   }
 
-  mg_send(c, "]}", 2);
+  mg_http_printf_chunk(c, "]}");
+  mg_http_write_chunk(c, "", 0);
 }
 void handle_select_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -468,6 +470,7 @@ void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
         case 8:  mark_slice_dirty(&g_ver_encoder);   break;
         case 10: mark_slice_dirty(&g_ver_security);  break;
       }
+      mark_slice_dirty(&g_ver_pins);
     }
     char response[256];
     snprintf(
@@ -509,7 +512,7 @@ void handle_pintopin_get(struct mg_connection *c) {
     int len = snprintf(buf, sizeof(buf),
                        "{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
                        link.idin, link.idout, link.pins);
-    mg_send(c, buf, len);
+    mg_http_write_chunk(c, buf, (size_t)len);
     elements_added++;
   }
 
@@ -1263,18 +1266,16 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
 }
 
 void handle_timers_get(struct mg_connection *c) {
-  char buf[128];
-  const char *extra_headers =
-      "Connection: close\r\nContent-Type: application/json\r\n";
-  MG_INFO(("Response headers for connection %ld:", c->id));
-  log_headers(extra_headers);
+  mg_printf(c,
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Type: application/json\r\n"
+    "Transfer-Encoding: chunked\r\n"
+    "Cache-Control: no-cache\r\n"
+    "\r\n");
 
-  mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
-
-  int len = snprintf(buf, sizeof(buf),
-                     "{\"lang\":\"%s\",\"numline\":%d,\"timers\":[",
-                     SetSettings.lang, SetSettings.numline);
-  mg_send(c, buf, len);
+  mg_http_printf_chunk(c,
+    "{\"lang\":\"%s\",\"numline\":%d,\"timers\":[",
+    SetSettings.lang, SetSettings.numline);
 
   for (int i = 0; i < MAXSIZE; i++) {
     struct dbCron cron;
@@ -1282,24 +1283,22 @@ void handle_timers_get(struct mg_connection *c) {
     cron = dbCrontxt[i];
     taskEXIT_CRITICAL();
 
+    char esc_cron[72], esc_activ[512], esc_info[64];
+    json_escape_str(esc_cron, cron.cron, sizeof(esc_cron));
+    json_escape_str(esc_activ, cron.activ, sizeof(esc_activ));
+    json_escape_str(esc_info, cron.info, sizeof(esc_info));
+
     if (i > 0)
-      mg_send(c, ",", 1);
+      mg_http_printf_chunk(c, ",");
 
-    len = snprintf(buf, sizeof(buf), "{\"id\":%d,\"cron\":\"", i);
-    mg_send(c, buf, len);
-    json_escape_send(c, cron.cron);
-
-    mg_send(c, "\",\"activ\":\"", 11);
-    json_escape_send(c, cron.activ);
-
-    mg_send(c, "\",\"info\":\"", 10);
-    json_escape_send(c, cron.info);
-
-    len = snprintf(buf, sizeof(buf), "\",\"onoff\":%d}", cron.onoff);
-    mg_send(c, buf, len);
+    mg_http_printf_chunk(c,
+      "{\"id\":%d,\"cron\":\"%s\",\"activ\":\"%s\","
+      "\"info\":\"%s\",\"onoff\":%d}",
+      i, esc_cron, esc_activ, esc_info, cron.onoff);
   }
 
-  mg_send(c, "]}", 2);
+  mg_http_printf_chunk(c, "]}");
+  mg_http_write_chunk(c, "", 0);
 }
 void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -1482,12 +1481,12 @@ static void emit_escaped_blob(struct mg_connection *c,
   int pos;
   /* ключ + открывающая кавычка */
   pos = snprintf(out, out_sz, "\"%s\":\"", name);
-  mg_send(c, out, pos);
+  mg_http_write_chunk(c, out, (size_t)pos);
 
   pos = 0;
   while (*src) {
     if (pos > out_sz - 8) {
-      mg_send(c, out, pos);
+      mg_http_write_chunk(c, out, (size_t)pos);
       pos = 0;
     }
     switch (*src) {
@@ -1500,9 +1499,9 @@ static void emit_escaped_blob(struct mg_connection *c,
     src++;
   }
   if (pos)
-    mg_send(c, out, pos);
+    mg_http_write_chunk(c, out, (size_t)pos);
 
-  mg_send(c, "\",", 2);
+  mg_http_write_chunk(c, "\",", 2);
 }
 
 /* ──── блочные emit-функции для /api/mysett/get ──── */
@@ -1518,19 +1517,19 @@ static void emit_system_basic(struct mg_connection *c,
       s->sunrise, s->onsunrise,
       s->sunset, s->onsunset,
       s->dlength);
-  mg_send(c, buf, len);
+  mg_http_write_chunk(c, buf, (size_t)len);
 }
 
 static void emit_sunrise_pins(struct mg_connection *c,
                               const struct dbSettings *s, char *buf) {
   int len = snprintf(buf, 512, "\"sunrise_pins\":\"%s\",", s->srise_pins);
-  mg_send(c, buf, len);
+  mg_http_write_chunk(c, buf, (size_t)len);
 }
 
 static void emit_sunset_pins(struct mg_connection *c,
                              const struct dbSettings *s, char *buf) {
   int len = snprintf(buf, 512, "\"sunset_pins\":\"%s\",", s->sset_pins);
-  mg_send(c, buf, len);
+  mg_http_write_chunk(c, buf, (size_t)len);
 }
 
 static void emit_mqtt(struct mg_connection *c,
@@ -1542,7 +1541,7 @@ static void emit_mqtt(struct mg_connection *c,
       s->check_mqtt, s->mqtt_prt,
       s->mqtt_clt, s->mqtt_usr, s->mqtt_pswd,
       s->txmqttop, s->rxmqttop, s->mqtt_hst);
-  mg_send(c, buf, len);
+  mg_http_write_chunk(c, buf, (size_t)len);
 }
 
 static void emit_ip(struct mg_connection *c,
@@ -1556,7 +1555,7 @@ static void emit_ip(struct mg_connection *c,
       s->ip_addr0, s->ip_addr1, s->ip_addr2, s->ip_addr3,
       s->sb_mask0, s->sb_mask1, s->sb_mask2, s->sb_mask3,
       s->gateway0, s->gateway1, s->gateway2, s->gateway3);
-  mg_send(c, buf, len);
+  mg_http_write_chunk(c, buf, (size_t)len);
 }
 
 static void emit_admin(struct mg_connection *c,
@@ -1569,7 +1568,7 @@ static void emit_admin(struct mg_connection *c,
       s->adm_name, s->adm_pswd,
       s->token, s->timezone,
       s->fullmoon);
-  mg_send(c, buf, len);
+  mg_http_write_chunk(c, buf, (size_t)len);
 }
 
 static void emit_offldt(struct mg_connection *c,
@@ -1578,7 +1577,7 @@ static void emit_offldt(struct mg_connection *c,
       "\"offldt\":\"d:%d.%d.%d t:%02d:%02d:%02d\",",
       s->mday, s->mon, s->year,
       s->hour, s->min, s->sec);
-  mg_send(c, buf, len);
+  mg_http_write_chunk(c, buf, (size_t)len);
 }
 
 static void emit_usehttps_logmask(struct mg_connection *c,
@@ -1586,7 +1585,7 @@ static void emit_usehttps_logmask(struct mg_connection *c,
   int len = snprintf(buf, 512,
       "\"usehttps\":%d,\"log_filter_mask\":%lu,",
       s->usehttps, (unsigned long)s->log_filter_mask);
-  mg_send(c, buf, len);
+  mg_http_write_chunk(c, buf, (size_t)len);
 }
 
 static void emit_telegram_token(struct mg_connection *c, char *temp, char *buf) {
@@ -1594,10 +1593,10 @@ static void emit_telegram_token(struct mg_connection *c, char *temp, char *buf) 
   https_get_telegram_token(temp, 1024);
   if (temp[0] != '\0') {
     const char s[] = "\"telegram_token\":\"[TELEGRAM TOKEN CONFIGURED]\",";
-    mg_send(c, s, sizeof(s) - 1);
+    mg_http_write_chunk(c, s, sizeof(s) - 1);
   } else {
     const char s[] = "\"telegram_token\":\"\",";
-    mg_send(c, s, sizeof(s) - 1);
+    mg_http_write_chunk(c, s, sizeof(s) - 1);
   }
 }
 
@@ -1607,7 +1606,7 @@ static void stream_mysett_json(struct mg_connection *c,
   char buf[512];
   char temp[1024];
 
-  mg_send(c, "{", 1);
+  mg_http_write_chunk(c, "{", 1);
 
   emit_system_basic(c, s, buf);
   taskYIELD();
@@ -1642,27 +1641,27 @@ static void stream_mysett_json(struct mg_connection *c,
     emit_escaped_blob(c, "tls_cert", temp, buf, sizeof(buf));
   else {
     const char s[] = "\"tls_cert\":\"\",";
-    mg_send(c, s, sizeof(s) - 1);
+    mg_http_write_chunk(c, s, sizeof(s) - 1);
   }
   taskYIELD();
 
   https_get_tls_ca(temp, sizeof(temp));
   if (temp[0] != '\0') {
     const char s[] = "\"tls_ca\":\"[CA CERTIFICATE CONFIGURED]\",";
-    mg_send(c, s, sizeof(s) - 1);
+    mg_http_write_chunk(c, s, sizeof(s) - 1);
   } else {
     const char s[] = "\"tls_ca\":\"\",";
-    mg_send(c, s, sizeof(s) - 1);
+    mg_http_write_chunk(c, s, sizeof(s) - 1);
   }
   taskYIELD();
 
   https_get_tls_key(temp, sizeof(temp));
   if (temp[0] != '\0') {
     const char s[] = "\"tls_key\":\"[PRIVATE KEY CONFIGURED]\",";
-    mg_send(c, s, sizeof(s) - 1);
+    mg_http_write_chunk(c, s, sizeof(s) - 1);
   } else {
     const char s[] = "\"tls_key\":\"\",";
-    mg_send(c, s, sizeof(s) - 1);
+    mg_http_write_chunk(c, s, sizeof(s) - 1);
   }
   taskYIELD();
 
@@ -1670,30 +1669,28 @@ static void stream_mysett_json(struct mg_connection *c,
   {
     int len = snprintf(buf, sizeof(buf),
                        "\"domain\":\"%s\"", temp[0] ? temp : "");
-    mg_send(c, buf, len);
+    mg_http_write_chunk(c, buf, (size_t)len);
   }
 
-  mg_send(c, "}", 1);
+  mg_http_write_chunk(c, "}", 1);
+  mg_http_write_chunk(c, "", 0);
 }
 
 /* ──── handle_mysett_get: HTTP GET /api/mysett/get ──── */
 void handle_mysett_get(struct mg_connection *c) {
-  const char *extra_headers =
-      "Connection: close\r\nContent-Type: application/json\r\n";
-  MG_INFO(("Response headers for connection %ld:", c->id));
-  log_headers(extra_headers);
-
   struct dbSettings s;
   taskENTER_CRITICAL();
   s = SetSettings;
   taskEXIT_CRITICAL();
 
-  char hdr[256];
-  int hdr_len = snprintf(hdr, sizeof(hdr),
-                         "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
-  mg_send(c, hdr, hdr_len);
+  mg_printf(c, "HTTP/1.1 200 OK\r\n"
+            "Content-Type: application/json\r\n"
+            "Transfer-Encoding: chunked\r\n"
+            "Cache-Control: no-cache\r\n"
+            "\r\n");
   stream_mysett_json(c, &s);
 }
+
 void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
@@ -3179,29 +3176,14 @@ void gen_onewire_json(char *buffer, int buffer_size) {
   //    xQueueSend(usbQueueHandle, &usbnum, 0);
 }
 
+/* ─── /api/onewire/get ─── */
 void handle_onewire_get(struct mg_connection *c) {
-  const char *extra_headers =
-      "Connection: close\r\nContent-Type: application/json\r\n";
-  MG_INFO(("Response headers for connection %ld:", c->id));
-  log_headers(extra_headers);
-
-  int buf_size = 8192;
-  if (xPortGetFreeHeapSize() < 16384) {
-    mg_http_reply(c, 503, extra_headers, "{\"error\":\"server busy\"}");
-    return;
-  }
-  char *buf = pvPortMalloc(buf_size);
-  if (!buf) {
-    mg_http_reply(c, 500, extra_headers, "{\"error\":\"out of memory\"}");
-    return;
-  }
-  MG_INFO(("heap: free=%lu min=%lu (onewire alloc %d)",
-           xPortGetFreeHeapSize(), xPortGetMinimumEverFreeHeapSize(), buf_size));
-
-  gen_onewire_json(buf, buf_size);
-  mg_http_reply(c, 200, extra_headers, "%s\n", buf);
-  vPortFree(buf);
+  gen_onewire_json(g_body, sizeof(g_body));
+  mg_http_reply(c, 200, s_json_header, "%s", g_body);
+  /* НЕТ pvPortMalloc / vPortFree
+   * НЕТ c->is_draining = 1 — Keep-Alive работает */
 }
+
 bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
   if (jstr == NULL)
     return false;
@@ -3577,28 +3559,13 @@ void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm) {
   log_headers(extra_headers);
   mg_http_reply(c, 200, extra_headers, "%s", response);
 }
+/* ─── /api/temp/get ─── */
 void handle_temp_get(struct mg_connection *c) {
-  const char *extra_headers =
-      "Connection: close\r\nContent-Type: application/json\r\n";
-  MG_INFO(("Response headers for connection %ld:", c->id));
-  log_headers(extra_headers);
-
-  int buf_size = 8192;
-  if (xPortGetFreeHeapSize() < 16384) {
-    mg_http_reply(c, 503, extra_headers, "{\"error\":\"server busy\"}");
-    return;
-  }
-  char *buf = pvPortMalloc(buf_size);
-  if (!buf) {
-    mg_http_reply(c, 500, extra_headers, "{\"error\":\"out of memory\"}");
-    return;
-  }
-  MG_INFO(("heap: free=%lu min=%lu (temp alloc %d)",
-           xPortGetFreeHeapSize(), xPortGetMinimumEverFreeHeapSize(), buf_size));
-
-  pars_temp_sensors(buf, buf_size);
-  mg_http_reply(c, 200, extra_headers, "%s\n", buf);
-  vPortFree(buf);
+  pars_temp_sensors(g_body, sizeof(g_body));
+  mg_http_reply(c, 200, s_json_header, "%s\n", g_body);
+  /* НЕТ pvPortMalloc / vPortFree
+   * НЕТ Connection: close — Keep-Alive работает
+   * НЕТ проверки heap — буфер всегда доступен */
 }
 int gen_security_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pins_conf, uint8_t num_pins, char *buffer, int buffer_size) {
   if (buffer == NULL || buffer_size <= 0) {
@@ -3665,7 +3632,7 @@ void handle_security_get(struct mg_connection *c) {
                      "\"tel\":\"%s\",\"info\":\"%s\",\"onoff\":%d,\"pins\":[",
                      SetSettings.lang, SetSettings.sim800l,
                      SetSettings.tel, PinsConf[1].info, PinsConf[1].onoff);
-  mg_send(c, buf, len);
+  mg_http_write_chunk(c, buf, (size_t)len);
 
   int first_pin = 1;
   for (int i = 0; i < NUMPIN; i++) {
@@ -3691,7 +3658,7 @@ void handle_security_get(struct mg_connection *c) {
                    "\"info\":\"%s\",\"onoff\":%d}",
                    conf.topin, i, PinsInfo[i].pins, conf.ptype,
                    action, send_sms, conf.info, conf.onoff);
-    mg_send(c, buf, len);
+    mg_http_write_chunk(c, buf, (size_t)len);
   }
 
   mg_send(c, "]}", 2);
@@ -4250,67 +4217,56 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
     xTaskNotifyGive(my_DgnTaskHandle);
 }
 
+/* ─── POST /api/security/set ─── */
 void handle_security_set(struct mg_connection *c, struct mg_http_message *hm) {
-  const char *extra_headers =
-      "Connection: close\r\nContent-Type: application/json\r\n";
-
   size_t len = hm->body.len;
 
   /* ── Валидация размера ── */
   if (len == 0) {
-    mg_http_reply(c, 400, extra_headers,
+    mg_http_reply(c, 400, s_json_header,
                   "{\"status\":false,\"message\":\"Empty request body\"}");
     return;
   }
-  if (len > SECURITY_BODY_MAX) {
-    mg_http_reply(c, 413, extra_headers,
+  if (len >= sizeof(g_body)) {
+    mg_http_reply(c, 413, s_json_header,
                   "{\"status\":false,\"message\":\"Payload too large\"}");
     return;
   }
 
-  /* ── Heap-аллокация вместо VLA — безопасно для стека FreeRTOS ── */
-  char *body_buf = pvPortMalloc(len + 1);
-  if (!body_buf) {
-    mg_http_reply(c, 500, extra_headers,
-                  "{\"status\":false,\"message\":\"Out of memory\"}");
-    return;
-  }
-  memcpy(body_buf, hm->body.buf, len);
-  body_buf[len] = '\0';
+  memcpy(g_body, hm->body.buf, len);
+  g_body[len] = '\0';
 
-  /* ── Определяем тип запроса ── */
-  cJSON *root = cJSON_Parse(body_buf);
+  /* ── Определяем тип запроса через cJSON ── */
+  cJSON *root = cJSON_Parse(g_body);
   if (root) {
     cJSON *type = cJSON_GetObjectItem(root, "type");
     if (cJSON_IsString(type)) {
       if (strcmp(type->valuestring, "sim800l") == 0) {
-        parse_sim800l_json(body_buf);
+        parse_sim800l_json(g_body);
       } else if (strcmp(type->valuestring, "monitoring") == 0) {
-        parse_monitoring_json(body_buf, PinsConf, PinsInfo, NUMPIN);
+        parse_monitoring_json(g_body, PinsConf, PinsInfo, NUMPIN);
       }
     }
     cJSON_Delete(root);
   } else {
-    /* Фолбэк, если JSON кривой или без типа, пробуем просто strstr */
-    if (strstr(body_buf, "\"type\":\"sim800l\"") || strstr(body_buf, "\"type\": \"sim800l\"")) {
-      parse_sim800l_json(body_buf);
-    } else if (strstr(body_buf, "\"type\":\"monitoring\"") || strstr(body_buf, "\"type\": \"monitoring\"")) {
-      parse_monitoring_json(body_buf, PinsConf, PinsInfo, NUMPIN);
+    /* Фолбэк без cJSON */
+    if (strstr(g_body, "\"type\":\"sim800l\"") ||
+        strstr(g_body, "\"type\": \"sim800l\"")) {
+      parse_sim800l_json(g_body);
+    } else if (strstr(g_body, "\"type\":\"monitoring\"") ||
+               strstr(g_body, "\"type\": \"monitoring\"")) {
+      parse_monitoring_json(g_body, PinsConf, PinsInfo, NUMPIN);
     }
   }
 
-  /* ── Ответ — единственная точка выхода после malloc ── */
+  /* ── Ответ ── */
   char response[256];
-  snprintf(
-      response, sizeof(response),
-      "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
-      (unsigned long)len);
+  snprintf(response, sizeof(response),
+           "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
+           (unsigned long)len);
 
-  MG_INFO(("Response headers for connection %ld:", c->id));
-  log_headers(extra_headers);
-  mg_http_reply(c, 200, extra_headers, "%s", response);
-
-  vPortFree(body_buf);
+  mg_http_reply(c, 200, s_json_header, "%s", response);
+  /* НЕТ pvPortMalloc / vPortFree */
 }
 /****************************** OneWire *******************************/
 typedef struct {
@@ -6453,7 +6409,7 @@ void handle_pid_get(struct mg_connection *c) {
   int len = snprintf(buf, sizeof(buf),
                      "{\"lang\":\"%s\",\"pidline\":%d,\"pid\":[",
                      SetSettings.lang, SetSettings.pidline);
-  mg_send(c, buf, len);
+  mg_http_write_chunk(c, buf, (size_t)len);
 
   for (int i = 0; i < PID_MAX_SLOTS; i++) {
     dbPidConf pid;
@@ -6477,14 +6433,14 @@ void handle_pid_get(struct mg_connection *c) {
     len = snprintf(buf, sizeof(buf),
                    "{\"id\":%d,\"pins\":\"%s\",\"pinact\":",
                    i + 1, pin_name);
-    mg_send(c, buf, len);
+    mg_http_write_chunk(c, buf, (size_t)len);
 
     if (pin_id > 0 && pin_id < NUMPIN) {
       len = snprintf(buf, sizeof(buf), "{\"%s\":%d}", pin_name, pin_id);
     } else {
       len = snprintf(buf, sizeof(buf), "{}");
     }
-    mg_send(c, buf, len);
+    mg_http_write_chunk(c, buf, (size_t)len);
 
     len = snprintf(buf, sizeof(buf),
                    ",\"selsens\":\"%d\",\"sernum\":\"%s\",\"presets\":\"%d\""
@@ -6495,7 +6451,7 @@ void handle_pid_get(struct mg_connection *c) {
                    pid.preset, pid.tmpset, pid.tmpcur,
                    current_duty, pid.info, pid.onoff,
                    (int)pid.tune_state, (int)pid.tune_progress);
-    mg_send(c, buf, len);
+    mg_http_write_chunk(c, buf, (size_t)len);
   }
 
   mg_send(c, "]}", 2);
@@ -6503,29 +6459,26 @@ void handle_pid_get(struct mg_connection *c) {
 
 /* ──── handle_pid_set: HTTP POST /api/pid/set ──── */
 void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm) {
-  if (hm->body.len >= BUFFER_SIZE) {
-    mg_http_reply(c, 413, "Content-Type: application/json\r\n",
-                  "{\"error\":\"payload too large\"}");
+  if (hm->body.len == 0) {
+    mg_http_reply(c, 400, s_json_header, "{\"error\":\"empty body\"}");
     return;
   }
-  char *pid_buf = pvPortMalloc(hm->body.len + 1);
-  if (!pid_buf) {
-    mg_http_reply(c, 500, "Content-Type: application/json\r\n",
-                  "{\"error\":\"out of memory\"}");
+  if (hm->body.len >= sizeof(g_body)) {
+    mg_http_reply(c, 413, s_json_header, "{\"error\":\"payload too large\"}");
     return;
   }
-  memcpy(pid_buf, hm->body.buf, hm->body.len);
-  pid_buf[hm->body.len] = '\0';
 
-  parse_pid_json(pid_buf);
+  memcpy(g_body, hm->body.buf, hm->body.len);
+  g_body[hm->body.len] = '\0';
+
+  parse_pid_json(g_body);
 
   /* Сохранение на Flash */
   uint8_t num = 6;
   xQueueSend(usbQueueHandle, &num, 0);
 
-  mg_http_reply(c, 200, "Content-Type: application/json\r\n",
-                "{\"status\":\"ok\"}");
-  vPortFree(pid_buf);
+  mg_http_reply(c, 200, s_json_header, "{\"status\":\"ok\"}");
+  /* НЕТ pvPortMalloc / vPortFree */
 }
 
 /* ──── handle_pidline_set: HTTP POST /api/pidline/set ──── */

@@ -178,8 +178,6 @@ function TabPid({ }) {
   const [pidline, setPidline] = useState(0);
 
   const isPendingOnOff = useRef(false);
-  const reqCounter = useRef(0);
-  const pollBusy = useRef(false);
 
   useEffect(() => {
     initGlobalTooltip();
@@ -188,37 +186,9 @@ function TabPid({ }) {
 
   useEffect(() => {
     let active = true;
-    const reqId = ++reqCounter.current;
 
-    // ── Начальная загрузка: прямой fetch, сразу, без очереди ──
-    const controller = new AbortController();
-    const timeoutId = setTimeout(function() { controller.abort(); }, 3000);
-
-    fetch('/api/pid/get', { signal: controller.signal, cache: 'no-store' })
-      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function(r) {
-        if (reqId !== reqCounter.current) return;
-        if (!active) return;
-        if (isPendingOnOff.current) return;
-        if (r !== null && r !== undefined && Array.isArray(r.pid)) {
-          setPid(r.pid);
-          setLanguage(r.lang || 'ru');
-          if (typeof r.pidline === 'number') {
-            setPidline(r.pidline);
-            setVisiblePids(r.pidline);
-          }
-        }
-      })
-      .catch(function(err) {
-        if (err.name === 'AbortError') return;
-        console.warn('[TabPid] init fetch:', err.message);
-      })
-      .finally(function() { clearTimeout(timeoutId); });
-
-    // ── Фоновый polling: через pollQueue ──
-    registerPoll('pid', '/api/pid', function(data) {
-      if (!active || pollBusy.current) return;
-      if (isPendingOnOff.current) return;
+    registerPoll('pid', '/api/state/pid', function(data) {
+      if (!active || isPendingOnOff.current) return;
       if (data !== null && data !== undefined && Array.isArray(data.pid)) {
         setPid(data.pid);
         setLanguage(data.lang || 'ru');
@@ -227,12 +197,10 @@ function TabPid({ }) {
           setVisiblePids(data.pidline);
         }
       }
-    });
+    }, {immediate: true});
 
     return function() {
       active = false;
-      controller.abort();
-      clearTimeout(timeoutId);
       unregisterPoll('pid');
     };
   }, []);
