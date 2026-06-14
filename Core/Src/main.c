@@ -1395,6 +1395,7 @@ void StartConfigTask(void *argument)
         if (fresult == FR_OK) {
           GetSettingsConfig(); // если файл "settings.ini" существует, открываем
                                // его и перезаписываем
+          mysett_cache_reload();
           g_log_filter_mask = g_log_filter_from_file ? SetSettings.log_filter_mask : LOG_MASK_ALL;
           GetCronConfig();     // если файл "cron.ini" существует, открываем для
                                // чтения.

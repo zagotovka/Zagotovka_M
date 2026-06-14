@@ -33,6 +33,9 @@ struct ui_event {
 };
 
 extern volatile bool mqtt_connected_reported;  // true после MG_EV_MQTT_OPEN, false после MG_EV_CLOSE
+extern char s_tls_cert[1024];
+extern char s_tls_key[512];
+extern bool s_tls_loaded;
 void web_init(struct mg_mgr *mgr);
 
 /*********************************** From Zagotovka ****************************************************/

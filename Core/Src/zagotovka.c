@@ -23,9 +23,11 @@
 /*********************** Moon *****************************/
 #include "net.h"
 #include <math.h>
+#include "fmt_float.h"
 
 /* Shared static buffer from net.c — mongoose event loop is single-threaded */
 extern char g_body[16384];
+extern bool s_tls_loaded;  /* TLS cert+key preload cache, invalidated on cert/key update */
 
 #define PI 3.14159265358979323846
 #define RAD (PI / 180.0)
@@ -1508,12 +1510,14 @@ static void emit_escaped_blob(struct mg_connection *c,
 
 static void emit_system_basic(struct mg_connection *c,
                               const struct dbSettings *s, char *buf) {
+  char s_ln[16]; fmt_float(s_ln, sizeof(s_ln), s->lon_de, 6);
+  char s_lt[16]; fmt_float(s_lt, sizeof(s_lt), s->lat_de, 6);
   int len = snprintf(buf, 512,
-      "\"lang\":\"%s\",\"lon_de\":%.6f,\"lat_de\":%.6f,"
+      "\"lang\":\"%s\",\"lon_de\":%s,\"lat_de\":%s,"
       "\"sunrise\":\"%s\",\"onsunrise\":%d,"
       "\"sunset\":\"%s\",\"onsunset\":%d,"
       "\"dlength\":\"%s\",",
-      s->lang, s->lon_de, s->lat_de,
+      s->lang, s_ln, s_lt,
       s->sunrise, s->onsunrise,
       s->sunset, s->onsunset,
       s->dlength);
@@ -1560,13 +1564,14 @@ static void emit_ip(struct mg_connection *c,
 
 static void emit_admin(struct mg_connection *c,
                        const struct dbSettings *s, char *buf) {
+  char s_tz[16]; fmt_float(s_tz, sizeof(s_tz), s->timezone, 0);
   int len = snprintf(buf, 512,
       "\"macaddr\":\"00-00-00-00-00-00\","
       "\"adm_name\":\"%s\",\"adm_pswd\":\"%s\","
-      "\"token\":\"%s\",\"timezone\":%.0f,"
+      "\"token\":\"%s\",\"timezone\":%s,"
       "\"fullmoon\":\"%s\",",
       s->adm_name, s->adm_pswd,
-      s->token, s->timezone,
+      s->token, s_tz,
       s->fullmoon);
   mg_http_write_chunk(c, buf, (size_t)len);
 }
@@ -1588,87 +1593,78 @@ static void emit_usehttps_logmask(struct mg_connection *c,
   mg_http_write_chunk(c, buf, (size_t)len);
 }
 
-static void emit_telegram_token(struct mg_connection *c, char *temp, char *buf) {
-  (void)buf;
-  https_get_telegram_token(temp, 1024);
-  if (temp[0] != '\0') {
-    const char s[] = "\"telegram_token\":\"[TELEGRAM TOKEN CONFIGURED]\",";
-    mg_http_write_chunk(c, s, sizeof(s) - 1);
-  } else {
-    const char s[] = "\"telegram_token\":\"\",";
-    mg_http_write_chunk(c, s, sizeof(s) - 1);
-  }
+/* ──── Кэш файловых настроек для устранения starvation в mg_mgr_poll ──── */
+static char s_cached_tls_ca[512]     = {0};
+static char s_cached_domain[128]     = {0};
+static char s_cached_tg_token[256]   = {0};
+static bool s_mysett_cache_valid     = false;
+
+void mysett_cache_reload(void) {
+    https_get_tls_cert(s_tls_cert, sizeof(s_tls_cert));
+    https_get_tls_key(s_tls_key, sizeof(s_tls_key));
+    https_get_tls_ca(s_cached_tls_ca, sizeof(s_cached_tls_ca));
+    https_get_domain(s_cached_domain, sizeof(s_cached_domain));
+    https_get_telegram_token(s_cached_tg_token, sizeof(s_cached_tg_token));
+    s_mysett_cache_valid = true;
 }
 
-/* ──── stream_mysett_json: потоковая отправка с taskYIELD между секциями ──── */
+/* ──── stream_mysett_json: потоковая отправка без f_read и taskYIELD ──── */
 static void stream_mysett_json(struct mg_connection *c,
                                const struct dbSettings *s) {
   char buf[512];
-  char temp[1024];
+
+  if (!s_mysett_cache_valid) {
+    mg_http_write_chunk(c, "{\"error\":\"cache not ready\"}", 27);
+    mg_http_write_chunk(c, "", 0);
+    return;
+  }
 
   mg_http_write_chunk(c, "{", 1);
 
   emit_system_basic(c, s, buf);
-  taskYIELD();
-
   emit_sunrise_pins(c, s, buf);
-  taskYIELD();
-
   emit_sunset_pins(c, s, buf);
-  taskYIELD();
-
   emit_mqtt(c, s, buf);
-  taskYIELD();
-
   emit_ip(c, s, buf);
-  taskYIELD();
-
   emit_admin(c, s, buf);
-  taskYIELD();
-
   emit_offldt(c, s, buf);
-  taskYIELD();
-
   emit_usehttps_logmask(c, s, buf);
-  taskYIELD();
 
-  emit_telegram_token(c, temp, buf);
-  taskYIELD();
+  if (s_cached_tg_token[0] != '\0') {
+    const char str[] = "\"telegram_token\":\"[TELEGRAM TOKEN CONFIGURED]\",";
+    mg_http_write_chunk(c, str, sizeof(str) - 1);
+  } else {
+    const char str[] = "\"telegram_token\":\"\",";
+    mg_http_write_chunk(c, str, sizeof(str) - 1);
+  }
 
-  /* TLS-блоки через общий emit_escaped_blob */
-  https_get_tls_cert(temp, sizeof(temp));
-  if (temp[0] != '\0')
-    emit_escaped_blob(c, "tls_cert", temp, buf, sizeof(buf));
+  if (s_tls_cert[0] != '\0')
+    emit_escaped_blob(c, "tls_cert", s_tls_cert, buf, sizeof(buf));
   else {
-    const char s[] = "\"tls_cert\":\"\",";
-    mg_http_write_chunk(c, s, sizeof(s) - 1);
+    const char str[] = "\"tls_cert\":\"\",";
+    mg_http_write_chunk(c, str, sizeof(str) - 1);
   }
-  taskYIELD();
 
-  https_get_tls_ca(temp, sizeof(temp));
-  if (temp[0] != '\0') {
-    const char s[] = "\"tls_ca\":\"[CA CERTIFICATE CONFIGURED]\",";
-    mg_http_write_chunk(c, s, sizeof(s) - 1);
+  if (s_cached_tls_ca[0] != '\0') {
+    const char str[] = "\"tls_ca\":\"[CA CERTIFICATE CONFIGURED]\",";
+    mg_http_write_chunk(c, str, sizeof(str) - 1);
   } else {
-    const char s[] = "\"tls_ca\":\"\",";
-    mg_http_write_chunk(c, s, sizeof(s) - 1);
+    const char str[] = "\"tls_ca\":\"\",";
+    mg_http_write_chunk(c, str, sizeof(str) - 1);
   }
-  taskYIELD();
 
-  https_get_tls_key(temp, sizeof(temp));
-  if (temp[0] != '\0') {
-    const char s[] = "\"tls_key\":\"[PRIVATE KEY CONFIGURED]\",";
-    mg_http_write_chunk(c, s, sizeof(s) - 1);
+  if (s_tls_key[0] != '\0') {
+    const char str[] = "\"tls_key\":\"[PRIVATE KEY CONFIGURED]\",";
+    mg_http_write_chunk(c, str, sizeof(str) - 1);
   } else {
-    const char s[] = "\"tls_key\":\"\",";
-    mg_http_write_chunk(c, s, sizeof(s) - 1);
+    const char str[] = "\"tls_key\":\"\",";
+    mg_http_write_chunk(c, str, sizeof(str) - 1);
   }
-  taskYIELD();
 
-  https_get_domain(temp, sizeof(temp));
   {
     int len = snprintf(buf, sizeof(buf),
-                       "\"domain\":\"%s\"", temp[0] ? temp : "");
+                       "\"domain\":\"%s\"",
+                       s_cached_domain[0] ? s_cached_domain : "");
     mg_http_write_chunk(c, buf, (size_t)len);
   }
 
@@ -1697,6 +1693,8 @@ void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm) {
 
   if (hm->body.len > 0) {
     parse_mysett_json(hm->body.buf, &SetSettings);
+    s_mysett_cache_valid = false;
+    mysett_cache_reload();
     char response[256];
     snprintf(
         response, sizeof(response),
@@ -1919,10 +1917,12 @@ void gen_mysett_json(const struct dbSettings *settings, char *buffer,
   // Основные настройки
   offset += snprintf(buffer + offset, buffer_size - offset,
                      " \"lang\": \"%s\",\n", settings->lang);
+  { char s[16]; fmt_float(s, sizeof(s), settings->lon_de, 6);
   offset += snprintf(buffer + offset, buffer_size - offset,
-                     "\"lon_de\": %.6f,\n", settings->lon_de);
+                     "\"lon_de\": %s,\n", s); }
+  { char s[16]; fmt_float(s, sizeof(s), settings->lat_de, 6);
   offset += snprintf(buffer + offset, buffer_size - offset,
-                     "\"lat_de\": %.6f,\n", settings->lat_de);
+                     "\"lat_de\": %s,\n", s); }
   offset += snprintf(buffer + offset, buffer_size - offset,
                      "\"sunrise\": \"%s\",\n", settings->sunrise);
   offset += snprintf(buffer + offset, buffer_size - offset,
@@ -1983,8 +1983,9 @@ void gen_mysett_json(const struct dbSettings *settings, char *buffer,
                      "\"adm_pswd\": \"%s\",\n", settings->adm_pswd);
   offset += snprintf(buffer + offset, buffer_size - offset,
                      "\"token\": \"%s\",\n", settings->token);
+  { char s[16]; fmt_float(s, sizeof(s), settings->timezone, 0);
   offset += snprintf(buffer + offset, buffer_size - offset,
-                     "\"timezone\": %.0f,\n", settings->timezone);
+                     "\"timezone\": %s,\n", s); }
   offset += snprintf(buffer + offset, buffer_size - offset,
                      "\"fullmoon\": \"%s\",\n", settings->fullmoon);
 
@@ -3085,14 +3086,17 @@ void gen_onewire_json(char *buffer, int buffer_size) {
                 ds18b20[j].sensors[k].addr[4], ds18b20[j].sensors[k].addr[5],
                 ds18b20[j].sensors[k].addr[6], ds18b20[j].sensors[k].addr[7]);
 
+            char s_t[16];  fmt_float(s_t,  sizeof(s_t),  ds18b20[j].sensors[k].temp, 4);
+            char s_ut[16]; fmt_float(s_ut, sizeof(s_ut), ds18b20[j].sensors[k].upt,  2);
+            char s_lt[16]; fmt_float(s_lt, sizeof(s_lt), ds18b20[j].sensors[k].lowt, 2);
             offset += snprintf(
                 buffer + offset, buffer_size - offset,
-                "{\"s_number\":\"%s\",\"t\":%.4f,\"valid\":%s,"
-                "\"ut\":%.2f,\"lt\":%.2f,\"action_ut\":\"%s\","
+                "{\"s_number\":\"%s\",\"t\":%s,\"valid\":%s,"
+                "\"ut\":%s,\"lt\":%s,\"action_ut\":\"%s\","
                 "\"action_lt\":\"%s\",\"info\":\"%s\"}",
-                address_str, ds18b20[j].sensors[k].temp,
+                address_str, s_t,
                 ds18b20[j].sensors[k].valid ? "true" : "false",
-                ds18b20[j].sensors[k].upt, ds18b20[j].sensors[k].lowt,
+                s_ut, s_lt,
                 ds18b20[j].sensors[k].actup, ds18b20[j].sensors[k].actlow,
                 ds18b20[j].sensors[k].info);
           }
@@ -3120,18 +3124,24 @@ void gen_onewire_json(char *buffer, int buffer_size) {
                              dht22[j].id, dht22[j].pin, dht22[j].typsensr,
                              dht22[j].numsens, dht22[j].onoff);
 
+          char s_t[16];  fmt_float(s_t,  sizeof(s_t),  dht22[j].temp,  2);
+          char s_h[16];  fmt_float(s_h,  sizeof(s_h),  dht22[j].humid, 2);
+          char s_ut[16]; fmt_float(s_ut, sizeof(s_ut), dht22[j].upt,   2);
+          char s_lt[16]; fmt_float(s_lt, sizeof(s_lt), dht22[j].lowt,  2);
+          char s_uh[16]; fmt_float(s_uh, sizeof(s_uh), dht22[j].uph,   2);
+          char s_lh[16]; fmt_float(s_lh, sizeof(s_lh), dht22[j].lowh,  2);
           offset += snprintf(
               buffer + offset, buffer_size - offset,
-              "{\"s_number\":\"DHT22\",\"t\":%.2f,\"humidity\":%.2f,"
+              "{\"s_number\":\"DHT22\",\"t\":%s,\"humidity\":%s,"
               "\"valid\":%"
               "s,"
-              "\"ut\":%.2f,\"lt\":%.2f,\"action_ut\":\"%s\",\"action_lt\":\"%"
+              "\"ut\":%s,\"lt\":%s,\"action_ut\":\"%s\",\"action_lt\":\"%"
               "s\","
-              "\"upphumid\":%.2f,\"humlolim\":%.2f,\"actuphum\":\"%s\","
+              "\"upphumid\":%s,\"humlolim\":%s,\"actuphum\":\"%s\","
               "\"actlowhum\":\"%s\",\"info\":\"%s\"}",
-              dht22[j].temp, dht22[j].humid, dht22[j].valid ? "true" : "false",
-              dht22[j].upt, dht22[j].lowt, dht22[j].actup, dht22[j].actlow,
-              dht22[j].uph, dht22[j].lowh, dht22[j].actuh, dht22[j].actlh,
+              s_t, s_h, dht22[j].valid ? "true" : "false",
+              s_ut, s_lt, dht22[j].actup, dht22[j].actlow,
+              s_uh, s_lh, dht22[j].actuh, dht22[j].actlh,
               dht22[j].info);
 
           offset += snprintf(buffer + offset, buffer_size - offset, "]}");
@@ -3179,9 +3189,10 @@ void gen_onewire_json(char *buffer, int buffer_size) {
 /* ─── /api/onewire/get ─── */
 void handle_onewire_get(struct mg_connection *c) {
   gen_onewire_json(g_body, sizeof(g_body));
-  mg_http_reply(c, 200, s_json_header, "%s", g_body);
-  /* НЕТ pvPortMalloc / vPortFree
-   * НЕТ c->is_draining = 1 — Keep-Alive работает */
+  size_t len = strlen(g_body);
+  mg_printf(c, "HTTP/1.1 200 OK\r\n%sContent-Length: %d\r\n\r\n", s_json_header, (int)len);
+  mg_send(c, g_body, len);
+  c->is_resp = 0;
 }
 
 bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
@@ -3540,14 +3551,15 @@ void parse_stm32time(char *response, size_t response_size,
     return;
   }
   // Отправляем сырые данные из структуры tm, включая часовой пояс из settings
+  char s_tz[16]; fmt_float(s_tz, sizeof(s_tz), settings->timezone, 1);
   snprintf(response, response_size,
            "{\"status\":true,\"time\":{\"sec\":%d,\"min\":%d,\"hour\":%d,"
            "\"mday\":%d,\"mon\":%d,\"year\":%d,\"wday\":%d,\"yday\":%d,"
            "\"isdst\":%d},"
-           "\"timezone\":%.1f}",
+           "\"timezone\":%s}",
            timez_copy.tm_sec, timez_copy.tm_min, timez_copy.tm_hour, timez_copy.tm_mday,
            timez_copy.tm_mon, timez_copy.tm_year, timez_copy.tm_wday, timez_copy.tm_yday,
-           timez_copy.tm_isdst, settings->timezone);
+           timez_copy.tm_isdst, s_tz);
 }
 
 void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm) {
@@ -3562,10 +3574,10 @@ void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm) {
 /* ─── /api/temp/get ─── */
 void handle_temp_get(struct mg_connection *c) {
   pars_temp_sensors(g_body, sizeof(g_body));
-  mg_http_reply(c, 200, s_json_header, "%s\n", g_body);
-  /* НЕТ pvPortMalloc / vPortFree
-   * НЕТ Connection: close — Keep-Alive работает
-   * НЕТ проверки heap — буфер всегда доступен */
+  size_t len = strlen(g_body);
+  mg_printf(c, "HTTP/1.1 200 OK\r\n%sContent-Length: %d\r\n\r\n", s_json_header, (int)len);
+  mg_send(c, g_body, len);
+  c->is_resp = 0;
 }
 int gen_security_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pins_conf, uint8_t num_pins, char *buffer, int buffer_size) {
   if (buffer == NULL || buffer_size <= 0) {
@@ -4304,8 +4316,10 @@ void check_DHT22_limits(void) {
           dht22[pin].lowflag = 0;
           if (dht22[pin].actup[0] != '\0') {
             action_handler(pin, dht22[pin].actup, "DHT22_HIGH_T");
-            printf("DHT22 Pin %d: Temperature HIGH trigger for %s: %.4f >= %.4f\n",
-                   pin, dht22[pin].info, temp, dht22[pin].upt + t_hyst);
+            { char s_t[16]; fmt_float(s_t, sizeof(s_t), temp, 4);
+              char s_th[16]; fmt_float(s_th, sizeof(s_th), dht22[pin].upt + t_hyst, 4);
+              printf("DHT22 Pin %d: Temperature HIGH trigger for %s: %s >= %s\n",
+                   pin, dht22[pin].info, s_t, s_th); }
           }
         }
       } else if (temp <= (dht22[pin].lowt - t_hyst)) {
@@ -4314,8 +4328,10 @@ void check_DHT22_limits(void) {
           dht22[pin].upflag = 0;
           if (dht22[pin].actlow[0] != '\0') {
             action_handler(pin, dht22[pin].actlow, "DHT22_LOW_T");
-            printf("DHT22 Pin %d: Temperature LOW trigger for %s: %.4f <= %.4f\n",
-                   pin, dht22[pin].info, temp, dht22[pin].lowt - t_hyst);
+            { char s_t[16]; fmt_float(s_t, sizeof(s_t), temp, 4);
+              char s_tl[16]; fmt_float(s_tl, sizeof(s_tl), dht22[pin].lowt - t_hyst, 4);
+              printf("DHT22 Pin %d: Temperature LOW trigger for %s: %s <= %s\n",
+                   pin, dht22[pin].info, s_t, s_tl); }
           }
         }
       }
@@ -4325,8 +4341,10 @@ void check_DHT22_limits(void) {
           dht22[pin].upflag = 1;
           if (dht22[pin].actup[0] != '\0') {
             action_handler(pin, dht22[pin].actup, "DHT22_HIGH_T");
-            printf("DHT22 Pin %d: Temperature HIGH trigger for %s: %.4f >= %.4f\n",
-                   pin, dht22[pin].info, temp, dht22[pin].upt);
+            { char s_t[16]; fmt_float(s_t, sizeof(s_t), temp, 4);
+              char s_th[16]; fmt_float(s_th, sizeof(s_th), dht22[pin].upt, 4);
+              printf("DHT22 Pin %d: Temperature HIGH trigger for %s: %s >= %s\n",
+                   pin, dht22[pin].info, s_t, s_th); }
           }
         }
       } else if (temp <= (dht22[pin].upt - t_hyst)) {
@@ -4338,8 +4356,10 @@ void check_DHT22_limits(void) {
           dht22[pin].lowflag = 1;
           if (dht22[pin].actlow[0] != '\0') {
             action_handler(pin, dht22[pin].actlow, "DHT22_LOW_T");
-            printf("DHT22 Pin %d: Temperature LOW trigger for %s: %.4f <= %.4f\n",
-                   pin, dht22[pin].info, temp, dht22[pin].lowt);
+            { char s_t[16]; fmt_float(s_t, sizeof(s_t), temp, 4);
+              char s_tl[16]; fmt_float(s_tl, sizeof(s_tl), dht22[pin].lowt, 4);
+              printf("DHT22 Pin %d: Temperature LOW trigger for %s: %s <= %s\n",
+                   pin, dht22[pin].info, s_t, s_tl); }
           }
         }
       } else if (temp >= (dht22[pin].lowt + t_hyst)) {
@@ -4355,8 +4375,10 @@ void check_DHT22_limits(void) {
           dht22[pin].lowhflg = 0;
           if (dht22[pin].actuh[0] != '\0') {
             action_handler(pin, dht22[pin].actuh, "DHT22_HIGH_H");
-            printf("DHT22 Pin %d: Humidity HIGH trigger for %s: %.4f >= %.4f\n",
-                   pin, dht22[pin].info, humid, dht22[pin].uph + h_hyst);
+            { char s_h[16]; fmt_float(s_h, sizeof(s_h), humid, 4);
+              char s_hh[16]; fmt_float(s_hh, sizeof(s_hh), dht22[pin].uph + h_hyst, 4);
+              printf("DHT22 Pin %d: Humidity HIGH trigger for %s: %s >= %s\n",
+                   pin, dht22[pin].info, s_h, s_hh); }
           }
         }
       } else if (humid <= (dht22[pin].lowh - h_hyst)) {
@@ -4365,8 +4387,10 @@ void check_DHT22_limits(void) {
           dht22[pin].uphflg = 0;
           if (dht22[pin].actlh[0] != '\0') {
             action_handler(pin, dht22[pin].actlh, "DHT22_LOW_H");
-            printf("DHT22 Pin %d: Humidity LOW trigger for %s: %.4f <= %.4f\n",
-                   pin, dht22[pin].info, humid, dht22[pin].lowh - h_hyst);
+            { char s_h[16]; fmt_float(s_h, sizeof(s_h), humid, 4);
+              char s_hl[16]; fmt_float(s_hl, sizeof(s_hl), dht22[pin].lowh - h_hyst, 4);
+              printf("DHT22 Pin %d: Humidity LOW trigger for %s: %s <= %s\n",
+                   pin, dht22[pin].info, s_h, s_hl); }
           }
         }
       }
@@ -4376,8 +4400,10 @@ void check_DHT22_limits(void) {
           dht22[pin].uphflg = 1;
           if (dht22[pin].actuh[0] != '\0') {
             action_handler(pin, dht22[pin].actuh, "DHT22_HIGH_H");
-            printf("DHT22 Pin %d: Humidity HIGH trigger for %s: %.4f >= %.4f\n",
-                   pin, dht22[pin].info, humid, dht22[pin].uph);
+            { char s_h[16]; fmt_float(s_h, sizeof(s_h), humid, 4);
+              char s_hh[16]; fmt_float(s_hh, sizeof(s_hh), dht22[pin].uph, 4);
+              printf("DHT22 Pin %d: Humidity HIGH trigger for %s: %s >= %s\n",
+                   pin, dht22[pin].info, s_h, s_hh); }
           }
         }
       } else if (humid <= (dht22[pin].uph - h_hyst)) {
@@ -4389,8 +4415,10 @@ void check_DHT22_limits(void) {
           dht22[pin].lowhflg = 1;
           if (dht22[pin].actlh[0] != '\0') {
             action_handler(pin, dht22[pin].actlh, "DHT22_LOW_H");
-            printf("DHT22 Pin %d: Humidity LOW trigger for %s: %.4f <= %.4f\n",
-                   pin, dht22[pin].info, humid, dht22[pin].lowh);
+            { char s_h[16]; fmt_float(s_h, sizeof(s_h), humid, 4);
+              char s_hl[16]; fmt_float(s_hl, sizeof(s_hl), dht22[pin].lowh, 4);
+              printf("DHT22 Pin %d: Humidity LOW trigger for %s: %s <= %s\n",
+                   pin, dht22[pin].info, s_h, s_hl); }
           }
         }
       } else if (humid >= (dht22[pin].lowh + h_hyst)) {
@@ -4567,8 +4595,10 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
               ds18b20[pin].sensors[sens].upflag = 1;
               ds18b20[pin].sensors[sens].lowflag = 0;
               if (ds18b20[pin].sensors[sens].actup[0] != '\0') {
-                printf("DS18B20 Pin %d, Sensor %d Temperature HIGH trigger for %s: %.4f >= %.4f\n",
-                       pin, sens, ds18b20[pin].sensors[sens].info, temp, upt + t_hyst);
+                { char s_t[16]; fmt_float(s_t, sizeof(s_t), temp, 4);
+                  char s_th[16]; fmt_float(s_th, sizeof(s_th), upt + t_hyst, 4);
+                  printf("DS18B20 Pin %d, Sensor %d Temperature HIGH trigger for %s: %s >= %s\n",
+                       pin, sens, ds18b20[pin].sensors[sens].info, s_t, s_th); }
                 action_handler(pin, ds18b20[pin].sensors[sens].actup, "DS18B20_HIGH_T");
               }
             }
@@ -4577,14 +4607,16 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
               ds18b20[pin].sensors[sens].lowflag = 1;
               ds18b20[pin].sensors[sens].upflag = 0;
               if (ds18b20[pin].sensors[sens].actlow[0] != '\0') {
-                printf("DS18B20 Pin %d, Sensor %d with "
+                { char s_t[16]; fmt_float(s_t, sizeof(s_t), temp, 4);
+                  char s_tl[16]; fmt_float(s_tl, sizeof(s_tl), lowt - t_hyst, 4);
+                  printf("DS18B20 Pin %d, Sensor %d with "
                        "address:%02X%02X%02X%02X%02X%02X%02X%02X Temperature LOW "
-                       "trigger for %s: %.4f <= %.4f\n",
+                       "trigger for %s: %s <= %s\n",
                        pin, sens, ds18b20[pin].sensors[sens].addr[0],
                        ds18b20[pin].sensors[sens].addr[1], ds18b20[pin].sensors[sens].addr[2],
                        ds18b20[pin].sensors[sens].addr[3], ds18b20[pin].sensors[sens].addr[4],
                        ds18b20[pin].sensors[sens].addr[5], ds18b20[pin].sensors[sens].addr[6],
-                       ds18b20[pin].sensors[sens].addr[7], ds18b20[pin].sensors[sens].info, temp, lowt - t_hyst);
+                       ds18b20[pin].sensors[sens].addr[7], ds18b20[pin].sensors[sens].info, s_t, s_tl); }
                 action_handler(pin, ds18b20[pin].sensors[sens].actlow, "DS18B20_LOW_T");
               }
             }
@@ -4595,8 +4627,10 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
             if (!ds18b20[pin].sensors[sens].upflag) {
               ds18b20[pin].sensors[sens].upflag = 1;
               if (ds18b20[pin].sensors[sens].actup[0] != '\0') {
-                printf("DS18B20 Pin %d, Sensor %d Temperature HIGH trigger for %s: %.4f >= %.4f\n",
-                       pin, sens, ds18b20[pin].sensors[sens].info, temp, upt);
+                { char s_t[16]; fmt_float(s_t, sizeof(s_t), temp, 4);
+                  char s_th[16]; fmt_float(s_th, sizeof(s_th), upt, 4);
+                  printf("DS18B20 Pin %d, Sensor %d Temperature HIGH trigger for %s: %s >= %s\n",
+                       pin, sens, ds18b20[pin].sensors[sens].info, s_t, s_th); }
                 action_handler(pin, ds18b20[pin].sensors[sens].actup, "DS18B20_HIGH_T");
               }
             }
@@ -4608,14 +4642,16 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
             if (!ds18b20[pin].sensors[sens].lowflag) {
               ds18b20[pin].sensors[sens].lowflag = 1;
               if (ds18b20[pin].sensors[sens].actlow[0] != '\0') {
-                printf("DS18B20 Pin %d, Sensor %d with "
+                { char s_t[16]; fmt_float(s_t, sizeof(s_t), temp, 4);
+                  char s_tl[16]; fmt_float(s_tl, sizeof(s_tl), lowt, 4);
+                  printf("DS18B20 Pin %d, Sensor %d with "
                        "address:%02X%02X%02X%02X%02X%02X%02X%02X Temperature LOW "
-                       "trigger for %s: %.4f <= %.4f\n",
+                       "trigger for %s: %s <= %s\n",
                        pin, sens, ds18b20[pin].sensors[sens].addr[0],
                        ds18b20[pin].sensors[sens].addr[1], ds18b20[pin].sensors[sens].addr[2],
                        ds18b20[pin].sensors[sens].addr[3], ds18b20[pin].sensors[sens].addr[4],
                        ds18b20[pin].sensors[sens].addr[5], ds18b20[pin].sensors[sens].addr[6],
-                       ds18b20[pin].sensors[sens].addr[7], ds18b20[pin].sensors[sens].info, temp, lowt);
+                       ds18b20[pin].sensors[sens].addr[7], ds18b20[pin].sensors[sens].info, s_t, s_tl); }
                 action_handler(pin, ds18b20[pin].sensors[sens].actlow, "DS18B20_LOW_T");
               }
             }
@@ -4667,15 +4703,17 @@ void print_all_sensors_data(void) {
       for (uint8_t i = 0; i < ds18b20[pin].numsens && i < MAX_DS18B20_PER_PIN;
            i++) {
         if (ds18b20[pin].sensors[i].valid) {
-          printf(
-              "ROM:%02X%02X%02X%02X%02X%02X%02X%02X Sensor[%d] temp = %.5f "
-              "Limits: %.2f to %.2f C Info:",
+          { char s_t[16];  fmt_float(s_t,  sizeof(s_t),  ds18b20[pin].sensors[i].temp, 5);
+            char s_lo[16]; fmt_float(s_lo, sizeof(s_lo), ds18b20[pin].sensors[i].lowt, 2);
+            char s_hi[16]; fmt_float(s_hi, sizeof(s_hi), ds18b20[pin].sensors[i].upt,  2);
+            printf(
+              "ROM:%02X%02X%02X%02X%02X%02X%02X%02X Sensor[%d] temp = %s "
+              "Limits: %s to %s C Info:",
               ds18b20[pin].sensors[i].addr[0], ds18b20[pin].sensors[i].addr[1],
               ds18b20[pin].sensors[i].addr[2], ds18b20[pin].sensors[i].addr[3],
               ds18b20[pin].sensors[i].addr[4], ds18b20[pin].sensors[i].addr[5],
               ds18b20[pin].sensors[i].addr[6], ds18b20[pin].sensors[i].addr[7],
-              i, ds18b20[pin].sensors[i].temp, ds18b20[pin].sensors[i].lowt,
-              ds18b20[pin].sensors[i].upt);
+              i, s_t, s_lo, s_hi); }
           if (ds18b20[pin].sensors[i].info[0] != '\0') {
             printf("%s\r\n", ds18b20[pin].sensors[i].info);
           }
@@ -4696,14 +4734,17 @@ void print_all_sensors_data(void) {
     printf("\r\nDHT22 Pin[%s] sensor:\r\n", dht22[pin].pin);
 
     if (dht22[pin].valid) {
-      printf("  Temperature = %.5f C, Humidity = %.5f%%\r\n", dht22[pin].temp,
-             dht22[pin].humid);
+      { char s_t[16]; fmt_float(s_t, sizeof(s_t), dht22[pin].temp, 5);
+        char s_h[16]; fmt_float(s_h, sizeof(s_h), dht22[pin].humid, 5);
+        printf("  Temperature = %s C, Humidity = %s%%\r\n", s_t, s_h); }
 
       // Вывод информации о пределах
-      printf("    Temperature limits: %.2f to %.2f C\r\n", dht22[pin].lowt,
-             dht22[pin].upt);
-      printf("    Humidity limits: %.2f to %.2f %%\r\n", dht22[pin].lowh,
-             dht22[pin].uph);
+      { char s_lo[16]; fmt_float(s_lo, sizeof(s_lo), dht22[pin].lowt, 2);
+        char s_hi[16]; fmt_float(s_hi, sizeof(s_hi), dht22[pin].upt, 2);
+        printf("    Temperature limits: %s to %s C\r\n", s_lo, s_hi); }
+      { char s_lo[16]; fmt_float(s_lo, sizeof(s_lo), dht22[pin].lowh, 2);
+        char s_hi[16]; fmt_float(s_hi, sizeof(s_hi), dht22[pin].uph, 2);
+        printf("    Humidity limits: %s to %s %%\r\n", s_lo, s_hi); }
       if (dht22[pin].info[0] != '\0') {
         printf("    Info: %s\r\n", dht22[pin].info);
       }
@@ -4941,14 +4982,15 @@ char *pars_temp_sensors(char *buffer, int buffer_size) {
           if (!first_ds) {
             offset += snprintf(buffer + offset, buffer_size - offset, ",");
           }
-          offset += snprintf(
+          { char s_t[16]; fmt_float(s_t, sizeof(s_t), ds18b20[i].sensors[j].temp, 2);
+            offset += snprintf(
               buffer + offset, buffer_size - offset,
-              "{\"addr\":\"%02X%02X%02X%02X%02X%02X%02X%02X\",\"temp\":%.2f}",
+              "{\"addr\":\"%02X%02X%02X%02X%02X%02X%02X%02X\",\"temp\":%s}",
               ds18b20[i].sensors[j].addr[0], ds18b20[i].sensors[j].addr[1],
               ds18b20[i].sensors[j].addr[2], ds18b20[i].sensors[j].addr[3],
               ds18b20[i].sensors[j].addr[4], ds18b20[i].sensors[j].addr[5],
               ds18b20[i].sensors[j].addr[6], ds18b20[i].sensors[j].addr[7],
-              ds18b20[i].sensors[j].temp);
+              s_t); }
           first_ds = 0;
         }
       }
@@ -4963,9 +5005,11 @@ char *pars_temp_sensors(char *buffer, int buffer_size) {
       if (!first_dht) {
         offset += snprintf(buffer + offset, buffer_size - offset, ",");
       }
-      offset += snprintf(buffer + offset, buffer_size - offset,
-                         "{\"id\":%d,\"temp\":%.2f,\"humidity\":%.2f}",
-                         dht22[i].id, dht22[i].temp, dht22[i].humid);
+      { char s_t[16]; fmt_float(s_t, sizeof(s_t), dht22[i].temp, 2);
+        char s_h[16]; fmt_float(s_h, sizeof(s_h), dht22[i].humid, 2);
+        offset += snprintf(buffer + offset, buffer_size - offset,
+                         "{\"id\":%d,\"temp\":%s,\"humidity\":%s}",
+                         dht22[i].id, s_t, s_h); }
       first_dht = 0;
     }
   }
@@ -5416,8 +5460,9 @@ void publish_sensor_batch(struct mg_connection *conn) {
       /* Добавляем в пакет: ключ = серийный номер DS18B20 */
       avail = sizeof(batch_buf) - off;
       if (avail > 64) {
+        char s_t[16]; fmt_float(s_t, sizeof(s_t), ds18b20[pin].sensors[s].temp, 2);
         int added = snprintf(batch_buf + off, avail,
-                        "%s\"%02X%02X%02X%02X%02X%02X%02X%02X\":%.2f",
+                        "%s\"%02X%02X%02X%02X%02X%02X%02X%02X\":%s",
                         count > 0 ? "," : "",
                         ds18b20[pin].sensors[s].addr[0],
                         ds18b20[pin].sensors[s].addr[1],
@@ -5427,7 +5472,7 @@ void publish_sensor_batch(struct mg_connection *conn) {
                         ds18b20[pin].sensors[s].addr[5],
                         ds18b20[pin].sensors[s].addr[6],
                         ds18b20[pin].sensors[s].addr[7],
-                        ds18b20[pin].sensors[s].temp);
+                        s_t);
         if (added > 0 && added < avail) {
           off += added;
           ds18b20[pin].sensors[s].prevtemp = ds18b20[pin].sensors[s].temp;
@@ -5459,11 +5504,13 @@ void publish_sensor_batch(struct mg_connection *conn) {
       /* Добавляем в пакет: "h<pin>":[temp, humidity] */
       avail = sizeof(batch_buf) - off;
       if (avail > 64) {
+        char s_t[16]; fmt_float(s_t, sizeof(s_t), dht22[j].temp, 1);
+        char s_h[16]; fmt_float(s_h, sizeof(s_h), dht22[j].humid, 1);
         int added = snprintf(batch_buf + off, avail,
-                        "%s\"h%d\":[%.1f,%.1f]",
+                        "%s\"h%d\":[%s,%s]",
                         count > 0 ? "," : "",
                         /* Определяем номер пина по dht22[j].id */
-                        dht22[j].id, dht22[j].temp, dht22[j].humid);
+                        dht22[j].id, s_t, s_h);
         if (added > 0 && added < avail) {
           off += added;
           dht22[j].prevtemp = dht22[j].temp;
@@ -5901,6 +5948,7 @@ bool https_set_tls_key(const char *key) {
   strncpy(new_settings->tls_key, key, sizeof(new_settings->tls_key) - 1);
   new_settings->tls_key[sizeof(new_settings->tls_key) - 1] = '\0';
 
+  s_tls_loaded = false;  /* invalidate TLS cert+key cache */
   return update_and_write_settings(new_settings);
 }
 
@@ -5931,6 +5979,7 @@ bool https_set_tls_cert(const char *cert) {
   strncpy(new_settings->tls_cert, cert, sizeof(new_settings->tls_cert) - 1);
   new_settings->tls_cert[sizeof(new_settings->tls_cert) - 1] = '\0';
 
+  s_tls_loaded = false;  /* invalidate TLS cert+key cache */
   return update_and_write_settings(new_settings);
 }
 
@@ -6249,13 +6298,15 @@ void gen_pid_json(char *buffer, int buffer_size) {
       pos += snprintf(buffer + pos, buffer_size - pos, "{}");
     }
 
+    char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[i].tmpset, 1);
+    char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), PidConf[i].tmpcur, 1);
     pos += snprintf(buffer + pos, buffer_size - pos,
                     ",\"selsens\":\"%d\",\"sernum\":\"%s\",\"presets\":\"%d\""
-                    ",\"tmpset\":\"%.1f\",\"tmpcur\":\"%.1f\""
+                    ",\"tmpset\":\"%s\",\"tmpcur\":\"%s\""
                     ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d"
                     ",\"tune_state\":%d,\"tune_progress\":%d}",
                     (int)PidConf[i].selsens, PidConf[i].sernum,
-                    PidConf[i].preset, PidConf[i].tmpset, PidConf[i].tmpcur,
+                    PidConf[i].preset, s_ts, s_tc,
                     current_duty, PidConf[i].info, PidConf[i].onoff,
                     (int)PidConf[i].tune_state, (int)PidConf[i].tune_progress);
   }
@@ -6379,10 +6430,11 @@ void parse_pid_json(const char *json) {
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
 
-  printf("[PID] Slot %d updated: pwm=%d sens=%d preset=%d tmpset=%.1f "
+  { char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[id].tmpset, 1);
+    printf("[PID] Slot %d updated: pwm=%d sens=%d preset=%d tmpset=%s "
          "onoff=%d\r\n",
          id, PidConf[id].pwm_pin_id, (int)PidConf[id].selsens,
-         PidConf[id].preset, PidConf[id].tmpset, PidConf[id].onoff);
+         PidConf[id].preset, s_ts, PidConf[id].onoff); }
 }
 
 /* ──── parse_pidline_json: парсит { "pidline": N } ──── */
@@ -6442,15 +6494,17 @@ void handle_pid_get(struct mg_connection *c) {
     }
     mg_http_write_chunk(c, buf, (size_t)len);
 
-    len = snprintf(buf, sizeof(buf),
+    { char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), pid.tmpset, 1);
+      char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), pid.tmpcur, 1);
+      len = snprintf(buf, sizeof(buf),
                    ",\"selsens\":\"%d\",\"sernum\":\"%s\",\"presets\":\"%d\""
-                   ",\"tmpset\":\"%.1f\",\"tmpcur\":\"%.1f\""
+                   ",\"tmpset\":\"%s\",\"tmpcur\":\"%s\""
                    ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d"
                    ",\"tune_state\":%d,\"tune_progress\":%d}",
                    (int)pid.selsens, pid.sernum,
-                   pid.preset, pid.tmpset, pid.tmpcur,
+                   pid.preset, s_ts, s_tc,
                    current_duty, pid.info, pid.onoff,
-                   (int)pid.tune_state, (int)pid.tune_progress);
+                   (int)pid.tune_state, (int)pid.tune_progress); }
     mg_http_write_chunk(c, buf, (size_t)len);
   }
 
@@ -6656,20 +6710,22 @@ void pid_autotune_start(int slot) {
 
   /* ── 3. Валидация уставок vs пределов ── */
   if (PidConf[slot].tmpset >= PidConf[slot].temp_max) {
-    printf("[PID] AutoTune ERROR: Tset=%.1f >= temp_max=%.1f\r\n",
-           PidConf[slot].tmpset, PidConf[slot].temp_max);
+    { char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[slot].tmpset, 1);
+      char s_tm[16]; fmt_float(s_tm, sizeof(s_tm), PidConf[slot].temp_max, 1);
+      printf("[PID] AutoTune ERROR: Tset=%s >= temp_max=%s\r\n", s_ts, s_tm); }
     PidConf[slot].tune_state = PID_TUNE_ERROR;
     return;
   }
   if ((PidConf[slot].temp_max - PidConf[slot].tmpset) < 2.0f) {
-    printf("[PID] AutoTune ERROR: margin to temp_max < 2C (%.1f)\r\n",
-           PidConf[slot].temp_max - PidConf[slot].tmpset);
+    { char s_m[16]; fmt_float(s_m, sizeof(s_m), PidConf[slot].temp_max - PidConf[slot].tmpset, 1);
+      printf("[PID] AutoTune ERROR: margin to temp_max < 2C (%s)\r\n", s_m); }
     PidConf[slot].tune_state = PID_TUNE_ERROR;
     return;
   }
   if (PidConf[slot].tmpset <= PidConf[slot].temp_min) {
-    printf("[PID] AutoTune ERROR: Tset=%.1f <= temp_min=%.1f\r\n",
-           PidConf[slot].tmpset, PidConf[slot].temp_min);
+    { char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[slot].tmpset, 1);
+      char s_tm[16]; fmt_float(s_tm, sizeof(s_tm), PidConf[slot].temp_min, 1);
+      printf("[PID] AutoTune ERROR: Tset=%s <= temp_min=%s\r\n", s_ts, s_tm); }
     PidConf[slot].tune_state = PID_TUNE_ERROR;
     return;
   }
@@ -6709,15 +6765,17 @@ void pid_autotune_start(int slot) {
   float T = -999.0f;
   for (int attempt = 0; attempt < 3; attempt++) {
     T = pid_read_temperature(slot);
-    printf("[PID] AutoTune read attempt %d: T=%.2f\r\n", attempt, T);
+    { char s_t[16]; fmt_float(s_t, sizeof(s_t), T, 2);
+      printf("[PID] AutoTune read attempt %d: T=%s\r\n", attempt, s_t); }
     if (T > -900.0f)
       break;      /* Валидное значение */
     osDelay(500); /* Ждём 500 мс и пробуем снова */
   }
 
   if (T < -900.0f) {
-    printf("[PID] AutoTune ERROR: slot=%d sensor not readable (T=%.1f)\r\n",
-           slot, T);
+    { char s_t[16]; fmt_float(s_t, sizeof(s_t), T, 1);
+      printf("[PID] AutoTune ERROR: slot=%d sensor not readable (T=%s)\r\n",
+           slot, s_t); }
     PidConf[slot].tune_state = PID_TUNE_ERROR;
     return;
   }
@@ -6754,11 +6812,15 @@ void pid_autotune_start(int slot) {
   pid_set_pwm_f(slot, PidConf[slot].tune_step_pwm);
 
   PidConf[slot].tune_state = PID_TUNE_STEP;
-  printf("[PID] AutoTune STARTED slot=%d T=%.1f pwm_start=%d "
-         "sigma_thr=%.2f err_thr=%.2f stable_req=%d step_delta=%.1f%%\r\n",
-         slot, T, PidConf[slot].pwm_start,
-         PidConf[slot].tune_sigma_thr, PidConf[slot].tune_err_thr,
-         PidConf[slot].tune_stable_req, PidConf[slot].tune_step_delta);
+  { char s_t[16];  fmt_float(s_t,  sizeof(s_t),  T, 1);
+    char s_st[16]; fmt_float(s_st, sizeof(s_st), PidConf[slot].tune_sigma_thr, 2);
+    char s_et[16]; fmt_float(s_et, sizeof(s_et), PidConf[slot].tune_err_thr, 2);
+    char s_sd[16]; fmt_float(s_sd, sizeof(s_sd), PidConf[slot].tune_step_delta, 1);
+    printf("[PID] AutoTune STARTED slot=%d T=%s pwm_start=%d "
+         "sigma_thr=%s err_thr=%s stable_req=%d step_delta=%s%%\r\n",
+         slot, s_t, PidConf[slot].pwm_start,
+         s_st, s_et,
+         PidConf[slot].tune_stable_req, s_sd); }
 }
 
 /* ──── pid_autotune_stop: остановка авто-тюна ──── */
@@ -6790,8 +6852,10 @@ void pid_autotune_tick(int slot) {
     pid_set_pwm(slot, 0);
     PidConf[slot].tune_state = PID_TUNE_ERROR;
     PidConf[slot].tune_progress = 0;
-    printf("[PID] SAFETY TRIP slot=%d T=%.2f >= temp_max=%.2f\r\n",
-           slot, T_raw, PidConf[slot].temp_max);
+    { char s_t[16];  fmt_float(s_t,  sizeof(s_t),  T_raw, 2);
+      char s_tm[16]; fmt_float(s_tm, sizeof(s_tm), PidConf[slot].temp_max, 2);
+      printf("[PID] SAFETY TRIP slot=%d T=%s >= temp_max=%s\r\n",
+           slot, s_t, s_tm); }
     return;
   }
 
@@ -6840,8 +6904,10 @@ void pid_autotune_tick(int slot) {
         pid_set_pwm_f(slot, PidConf[slot].tune_step_pwm);
 
         PidConf[slot].tune_step_phase = 1;
-        printf("[PID] Step test: phase 0->1, T_start=%.2f, PWM->%.1f%%\r\n",
-               PidConf[slot].tune_T_start, PidConf[slot].tune_step_pwm);
+        { char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[slot].tune_T_start, 2);
+          char s_pw[16]; fmt_float(s_pw, sizeof(s_pw), PidConf[slot].tune_step_pwm, 1);
+          printf("[PID] Step test: phase 0->1, T_start=%s, PWM->%s%%\r\n",
+               s_ts, s_pw); }
       }
       break;
 
@@ -6907,18 +6973,22 @@ void pid_autotune_tick(int slot) {
 
         /* Валидация */
         if (fabsf(PidConf[slot].K_gain) < 0.001f || PidConf[slot].tau < 1.0f) {
-          printf("[PID] Step test FAILED: K=%.4f tau=%.1f\r\n",
-                 PidConf[slot].K_gain, PidConf[slot].tau);
+          { char s_k[16]; fmt_float(s_k, sizeof(s_k), PidConf[slot].K_gain, 4);
+            char s_tau[16]; fmt_float(s_tau, sizeof(s_tau), PidConf[slot].tau, 1);
+            printf("[PID] Step test FAILED: K=%s tau=%s\r\n", s_k, s_tau); }
           PidConf[slot].tune_state = PID_TUNE_ERROR;
           PidConf[slot].tune_progress = 0;
           pid_set_pwm(slot, 0);
           return;
         }
 
-        printf(
-            "[PID] Step test DONE: K=%.4f tau=%.1f T_start=%.2f T_end=%.2f\r\n",
-            PidConf[slot].K_gain, PidConf[slot].tau, PidConf[slot].tune_T_start,
-            PidConf[slot].tune_T_end);
+        { char s_k[16];  fmt_float(s_k,  sizeof(s_k),  PidConf[slot].K_gain, 4);
+          char s_tau[16]; fmt_float(s_tau, sizeof(s_tau), PidConf[slot].tau, 1);
+          char s_ts[16];  fmt_float(s_ts,  sizeof(s_ts),  PidConf[slot].tune_T_start, 2);
+          char s_te[16];  fmt_float(s_te,  sizeof(s_te),  PidConf[slot].tune_T_end, 2);
+          printf(
+            "[PID] Step test DONE: K=%s tau=%s T_start=%s T_end=%s\r\n",
+            s_k, s_tau, s_ts, s_te); }
 
         /* Переход к бинарному поиску Bias */
         PidConf[slot].tune_state = PID_TUNE_BIAS;
@@ -6983,7 +7053,8 @@ void pid_autotune_tick(int slot) {
         (PidConf[slot].tune_hi - PidConf[slot].tune_lo) < 0.01f) {
       PidConf[slot].bias =
           (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
-      printf("[PID] Bias CONVERGED early: bias=%.3f%%\r\n", PidConf[slot].bias);
+      { char s_b[16]; fmt_float(s_b, sizeof(s_b), PidConf[slot].bias, 3);
+        printf("[PID] Bias CONVERGED early: bias=%s%%\r\n", s_b); }
       goto tune_done;
     }
 
@@ -6998,10 +7069,15 @@ void pid_autotune_tick(int slot) {
         PidConf[slot].tune_lo = mid;
       }
 
-      printf("[PID] Bias iter=%d phase=%c lo=%.3f hi=%.3f mid=%.3f T=%.2f "
-             "Tset=%.1f\r\n",
+      { char s_lo[16]; fmt_float(s_lo, sizeof(s_lo), PidConf[slot].tune_lo, 3);
+        char s_hi[16]; fmt_float(s_hi, sizeof(s_hi), PidConf[slot].tune_hi, 3);
+        char s_mid[16]; fmt_float(s_mid, sizeof(s_mid), mid, 3);
+        char s_t[16];  fmt_float(s_t,  sizeof(s_t),  T, 2);
+        char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), Tset, 1);
+        printf("[PID] Bias iter=%d phase=%c lo=%s hi=%s mid=%s T=%s "
+             "Tset=%s\r\n",
              PidConf[slot].tune_iter, PidConf[slot].tune_phase_b ? 'B' : 'A',
-             PidConf[slot].tune_lo, PidConf[slot].tune_hi, mid, T, Tset);
+             s_lo, s_hi, s_mid, s_t, s_ts); }
     }
 
     PidConf[slot].tune_iter++;
@@ -7037,13 +7113,17 @@ void pid_autotune_tick(int slot) {
           PidConf[slot].tune_hi = 100.0f;
         PidConf[slot].tune_iter = 0;
         PidConf[slot].tune_phase_b = 1;
-        printf("[PID] Bias phase A->B: rough=%.3f range=[%.3f,%.3f]\r\n",
-               bias_rough, PidConf[slot].tune_lo, PidConf[slot].tune_hi);
+        { char s_br[16]; fmt_float(s_br, sizeof(s_br), bias_rough, 3);
+          char s_lo[16]; fmt_float(s_lo, sizeof(s_lo), PidConf[slot].tune_lo, 3);
+          char s_hi[16]; fmt_float(s_hi, sizeof(s_hi), PidConf[slot].tune_hi, 3);
+          printf("[PID] Bias phase A->B: rough=%s range=[%s,%s]\r\n",
+               s_br, s_lo, s_hi); }
       } else {
         /* Фаза B завершена */
         PidConf[slot].bias =
             (PidConf[slot].tune_lo + PidConf[slot].tune_hi) / 2.0f;
-        printf("[PID] Bias phase B DONE: bias=%.3f%%\r\n", PidConf[slot].bias);
+        { char s_b[16]; fmt_float(s_b, sizeof(s_b), PidConf[slot].bias, 3);
+          printf("[PID] Bias phase B DONE: bias=%s%%\r\n", s_b); }
         goto tune_done;
       }
     }
@@ -7058,10 +7138,13 @@ void pid_autotune_tick(int slot) {
     /* Применяем bias на PWM */
     pid_set_pwm_f(slot, PidConf[slot].bias);
 
-    printf("[PID] AutoTune COMPLETE slot=%d Kp=%.4f Ki=%.4f Kd=%.4f "
-           "bias=%.2f%%\r\n",
-           slot, PidConf[slot].Kp, PidConf[slot].Ki, PidConf[slot].Kd,
-           PidConf[slot].bias);
+    { char s_kp[16]; fmt_float(s_kp, sizeof(s_kp), PidConf[slot].Kp, 4);
+      char s_ki[16]; fmt_float(s_ki, sizeof(s_ki), PidConf[slot].Ki, 4);
+      char s_kd[16]; fmt_float(s_kd, sizeof(s_kd), PidConf[slot].Kd, 4);
+      char s_b[16];  fmt_float(s_b,  sizeof(s_b),  PidConf[slot].bias, 2);
+      printf("[PID] AutoTune COMPLETE slot=%d Kp=%s Ki=%s Kd=%s "
+           "bias=%s%%\r\n",
+           slot, s_kp, s_ki, s_kd, s_b); }
 
     /* Сохранение результатов на USB */
     uint8_t num = 6;
@@ -7096,9 +7179,15 @@ void pid_compute_imc(int slot) {
   PidConf[slot].Ki = PidConf[slot].Kp / (tau + theta / 2.0f);
   PidConf[slot].Kd = PidConf[slot].Kp * tau * theta / (2.0f * tau + theta);
 
-  printf(
-      "[PID] IMC: tau=%.1f K=%.4f lambda=%.1f => Kp=%.4f Ki=%.6f Kd=%.4f\r\n",
-      tau, K, lambda, PidConf[slot].Kp, PidConf[slot].Ki, PidConf[slot].Kd);
+  { char s_tau[16]; fmt_float(s_tau, sizeof(s_tau), tau, 1);
+    char s_k[16];   fmt_float(s_k,   sizeof(s_k),   K, 4);
+    char s_lam[16]; fmt_float(s_lam, sizeof(s_lam), lambda, 1);
+    char s_kp[16];  fmt_float(s_kp,  sizeof(s_kp),  PidConf[slot].Kp, 4);
+    char s_ki[16];  fmt_float(s_ki,  sizeof(s_ki),  PidConf[slot].Ki, 6);
+    char s_kd[16];  fmt_float(s_kd,  sizeof(s_kd),  PidConf[slot].Kd, 4);
+    printf(
+      "[PID] IMC: tau=%s K=%s lambda=%s => Kp=%s Ki=%s Kd=%s\r\n",
+      s_tau, s_k, s_lam, s_kp, s_ki, s_kd); }
 }
 
 /* ──── handle_pid_tune_set: HTTP POST /api/pid/tune ──── */

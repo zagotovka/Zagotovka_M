@@ -185,3 +185,5 @@ SECTIONS
 
   .ARM.attributes 0 : { *(.ARM.attributes) }
 }
+
+ASSERT((_ebss + _Min_Stack_Size) <= _estack, "BSS+Stack overflow SRAM!")

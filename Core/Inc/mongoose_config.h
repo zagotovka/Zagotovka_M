@@ -32,7 +32,7 @@
    TLS record остаётся стандартным (до 16384 байт), но Mongoose будет читать из packed FS
    и шифровать большими кусками за раз.
    */
-#define MG_IO_SIZE 4096 //8192
+#define MG_IO_SIZE 2048 // was 4096, reduced to save 16KB constant RAM (8 conns × 2KB)
 
 // Translate to Mongoose macros
 #if MG_STMPACK_NET == 0
@@ -53,7 +53,7 @@
    По умолчанию MG_DATA_SIZE=32 → только 6 слотов.
    Браузер открывает до 6 HTTP + 1 WS соединений одновременно при загрузке
    страницы → WS SYN дропался → обрывы. 20 слотов покрывают с запасом. */
-#define MG_DATA_SIZE 100
+#define MG_DATA_SIZE 32  // was 100; per-conn scratch buffer, 32B enough for small headers
 
 /* MIP TCP keepalive: 30 секунд.
    Мёртвые соединения (браузер ушёл без FIN) убиваются через 30с,

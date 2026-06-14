@@ -7,6 +7,7 @@
 #include "ds18b20Config.h"
 #include "main.h"
 #include "compat_ota.h"
+#include "fmt_float.h"
 
 struct user {
   const char *name, *pass, *access_token;
@@ -325,6 +326,10 @@ static struct {
 	uint64_t      accept_ms;
 } s_tls_hs_track[TLS_HS_TRACK_MAX];
 
+char s_tls_cert[1024] = {0};  /* PEM certificate, loaded once in web_init() */
+char s_tls_key[512]   = {0};  /* PEM private key, loaded once in web_init() */
+bool s_tls_loaded = false;           /* true after successful preload */
+
 static void tls_hs_track_start(unsigned long conn_id) {
 	for (int i = 0; i < TLS_HS_TRACK_MAX; i++) {
 		if (s_tls_hs_track[i].conn_id == 0) {
@@ -380,10 +385,35 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		break;
 
     case MG_EV_ACCEPT: {
-        if (s_active_conns >= MAX_CONNS) {
-            MG_DEBUG(("conn limit reached (%d), closing", s_active_conns));
-            mg_close_conn(c);
-            return;
+        // Считаем активные соединения и закрываем старые idle
+        int cnt = 0;
+        uint32_t now = HAL_GetTick();
+        struct mg_connection *oldest_idle = NULL;
+        uint32_t oldest_time = now;
+
+        for (struct mg_connection *t = c->mgr->conns; t; t = t->next) {
+            if (t == c) continue;
+            if ((uintptr_t)t->fn_data == CONN_TYPE_HTTP ||
+                (uintptr_t)t->fn_data == CONN_TYPE_HTTPS) {
+                cnt++;
+                // Ищем самое старое idle соединение (нет данных в буфере)
+                if (t->send.len == 0 && t->recv.len == 0) {
+                    // Используем data[0..3] как timestamp последнего запроса
+                    uint32_t last_used = *(uint32_t*)t->data;
+                    if (last_used < oldest_time) {
+                        oldest_time = last_used;
+                        oldest_idle = t;
+                    }
+                }
+            }
+        }
+
+        // Если соединений слишком много — закрыть самое старое idle
+        if (cnt > 8 && oldest_idle != NULL &&
+            (now - oldest_time) > 1000) {  // старше 1 сек
+            MG_INFO(("Closing idle conn %lu (age %lu ms)",
+                     oldest_idle->id, now - oldest_time));
+            mg_close_conn(oldest_idle);
         }
         s_active_conns++;
         unsigned int local_port = mg_ntohs(c->loc.port);
@@ -420,47 +450,23 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
             /* is_tls и is_tls_hs выставляет mg_tls_init() — здесь не трогаем */
             MG_INFO(("HTTPS connection accepted on port %s", HTTPS_PORT));
 /***************************************************************************/
-            if (SetSettings.usehttps == 1){
+            if (SetSettings.usehttps == 1) {
                 uint32_t t_start = HAL_GetTick();
-                // Засекаем время начала TLS handshake (для MG_EV_TLS_HS)
                 tls_hs_track_start(c->id);
 
-                // Локальные буферы для сертификатов и ключей делаем static, чтобы избежать переполнения стека
-                static char cert_buffer[1024];
-                static char key_buffer[512];
-                memset(cert_buffer, 0, sizeof(cert_buffer));
-                memset(key_buffer, 0, sizeof(key_buffer));
-
-                // Загрузка сертификатов
-                uint32_t t_cert = HAL_GetTick();
-                bool cert_loaded = https_get_tls_cert(cert_buffer, sizeof(cert_buffer));
-                bool key_loaded = https_get_tls_key(key_buffer, sizeof(key_buffer));
-                printf("[TLS] cert+key load from flash: %lu ms\r\n", (unsigned long)(HAL_GetTick() - t_cert));
-
-                if (!cert_loaded || !key_loaded) {
-                    MG_ERROR(("Error: Failed to load certificate or key"));
-                    mg_close_conn(c); // Закрываем соединение в случае ошибки
-                    return;
-                }
-
-                // Проверка корректности формата данных (опционально, для повышения надежности)
-                if (strstr(cert_buffer, "-----BEGIN CERTIFICATE-----") == NULL ||
-                    strstr(cert_buffer, "-----END CERTIFICATE-----") == NULL) {
-                    MG_ERROR(("Error: Invalid certificate format"));
-                    mg_close_conn(c);
-                    return;
-                }
-                if (strstr(key_buffer, "-----BEGIN EC PRIVATE KEY-----") == NULL ||
-                    strstr(key_buffer, "-----END EC PRIVATE KEY-----") == NULL) {
-                    MG_ERROR(("Error: Invalid key format"));
+                /* Сертификаты уже загружены в web_init() — никакого файлового I/O */
+                if (!s_tls_loaded ||
+                    s_tls_cert[0] == '\0' || s_tls_key[0] == '\0') {
+                    MG_ERROR(("TLS cert/key not preloaded"));
                     mg_close_conn(c);
                     return;
                 }
 
-                // Инициализация TLS с использованием данных в чистом PEM-формате
+                printf("[TLS] cert+key from cache\r\n");
+
                 struct mg_tls_opts opts = {
-                    .cert = mg_str(cert_buffer),
-                    .key = mg_str(key_buffer),
+                    .cert = mg_str(s_tls_cert),
+                    .key  = mg_str(s_tls_key),
                 };
                 uint32_t t_init = HAL_GetTick();
                 mg_tls_init(c, &opts);
@@ -468,10 +474,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
                        (unsigned)opts.cert.len, (unsigned)opts.key.len,
                        (unsigned long)(HAL_GetTick() - t_init));
 
-                // Проверяем успешность инициализации TLS
                 if (c->tls == NULL) {
                     MG_ERROR(("Error: TLS initialization failed"));
-                    mg_close_conn(c); // Закрываем соединение в случае ошибки
+                    mg_close_conn(c);
                     return;
                 }
                 printf("[TLS] ACCEPT total init: %lu ms (conn %lu)\r\n",
@@ -490,6 +495,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 /***************************************************************************/
 	case MG_EV_HTTP_MSG: {
 		uint32_t t_req_start = HAL_GetTick();
+		*(uint32_t*)c->data = t_req_start;  // timestamp last request
 		struct mg_http_message *hm = (struct mg_http_message*) ev_data;
 		req_total++;
 		if (mg_match(hm->uri, mg_str("/api/#"), NULL)) {
@@ -506,95 +512,24 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
 		struct mg_str uri = hm->uri;
 
-		// Обработка корневого пути (/) и статических страниц
+		// Обработка корневого пути (/)
 		if (uri.len == 1 && strncmp(uri.buf, "/", uri.len) == 0) {
 			MG_DEBUG(("%lu Serving root /", c->id));
-			struct mg_http_message *hm = (struct mg_http_message*) ev_data;
-
-			// Проверяем, запросил ли клиент Connection: close
-			struct mg_str *conn_value = mg_http_get_header(hm, "Connection");
-			bool is_connection_close = conn_value && mg_strcmp(*conn_value, mg_str("close")) == 0;
-
-			if (is_connection_close) {
-				// Если клиент запросил Connection: close, используем кастомную отправку ответа
-				char extra_headers[256];
-				snprintf(extra_headers, sizeof(extra_headers), "Cache-Control: max-age=3600\r\nConnection: close\r\n");
-
-				// Читаем содержимое index.html (или другого файла) вручную
-				struct mg_http_serve_opts opts;
-				memset(&opts, 0, sizeof(opts));
-#if MG_ARCH == MG_ARCH_UNIX || MG_ARCH == MG_ARCH_WIN32
-		        opts.root_dir = "web_root";
-		        MG_INFO(("%lu Using filesystem root_dir: %s", c->id, opts.root_dir));
-		#else
-				opts.root_dir = "/web_root";
-				opts.fs = &mg_fs_packed;
-				MG_INFO(("%lu Using packed filesystem root_dir: %s", c->id, opts.root_dir));
-#endif
-
-				// Читаем файл index.html
-				char path[256];
-				snprintf(path, sizeof(path), "%s/index.html", opts.root_dir);
-				struct mg_fd *fd = mg_fs_open(opts.fs, path, MG_FS_READ);
-				if (fd == NULL) {
-					mg_http_reply(c, 404, extra_headers, "Not found\n");
-				} else {
-					// Читаем содержимое файла
-					char *data = NULL;
-					size_t size = 0;
-					struct mg_str file_content = mg_file_read(&mg_fs_posix, path);
-					if (file_content.len > 0) {
-						data = file_content.buf;
-						size = file_content.len;
-					}
-
-					if (data == NULL) {
-						mg_http_reply(c, 500, extra_headers, "Error reading file\n");
-					} else {
-						// Отправляем ответ с кастомными заголовками
-						mg_printf(c, "HTTP/1.1 200 OK\r\n"
-								"Content-Type: text/html; charset=utf-8\r\n"
-								"Content-Length: %u\r\n"
-								"%s"
-								"\r\n", size, extra_headers);
-						mg_send(c, data, size);
-						mg_free(data); // mg_file_read выделяет через mg_calloc
-					}
-					mg_fs_close(fd);
-				}
-
-				// Указываем Mongoose, что соединение должно быть закрыто
-				c->is_draining = 1;
-		    } else {
-		        char extra_headers[256];
-		        bool is_js  = mg_match(hm->uri, mg_str("/assets/*.js"),  NULL) ||
-		                      mg_match(hm->uri, mg_str("/history.min.js"), NULL);
-		        bool is_css = mg_match(hm->uri, mg_str("*.css"), NULL) ||
-		                      mg_match(hm->uri, mg_str("/assets/*.css"), NULL);
-
-                    snprintf(extra_headers, sizeof(extra_headers),
-                             "Cache-Control: %s\r\n"
-                             "Connection: close\r\n"
-                             "%s",
-                             (is_js || is_css) ? "max-age=31536000" : "no-cache, no-store, must-revalidate",
-                             (is_js || is_css) ? "Content-Encoding: gzip\r\n" : "");
-
-		        struct mg_http_serve_opts opts;
-		        memset(&opts, 0, sizeof(opts));
-		#if MG_ARCH == MG_ARCH_UNIX || MG_ARCH == MG_ARCH_WIN32
-		        opts.root_dir = "web_root";
-		        MG_INFO(("%lu Using filesystem root_dir: %s", c->id, opts.root_dir));
-		#else
-		        opts.root_dir = "/web_root";
-		        opts.fs = &mg_fs_packed;
-		        MG_INFO(("%lu Using packed filesystem root_dir: %s", c->id, opts.root_dir));
-		#endif
-		        opts.extra_headers = extra_headers; // Добавляем кастомные заголовки
-
-
-		        mg_http_serve_dir(c, ev_data, &opts);
-                c->is_draining = 1;  // close connection after root path
-		    }
+			char extra_headers[256];
+			bool is_js  = mg_match(hm->uri, mg_str("/assets/*.js"),  NULL) ||
+			              mg_match(hm->uri, mg_str("/history.min.js"), NULL);
+			bool is_css = mg_match(hm->uri, mg_str("*.css"), NULL) ||
+			              mg_match(hm->uri, mg_str("/assets/*.css"), NULL);
+			snprintf(extra_headers, sizeof(extra_headers),
+			         "Cache-Control: %s\r\nConnection: close\r\n%s",
+			         (is_js || is_css) ? "max-age=31536000" : "no-cache, no-store, must-revalidate",
+			         (is_js || is_css) ? "Content-Encoding: gzip\r\n" : "");
+			struct mg_http_serve_opts opts = {0};
+			opts.root_dir = "/web_root";
+			opts.fs = &mg_fs_packed;
+			opts.extra_headers = extra_headers;
+			mg_http_serve_dir(c, ev_data, &opts);
+			c->is_draining = 1;
 		}  else {
 			MG_INFO(("%lu Not root path, proceeding to API handling", c->id));
 
@@ -1621,10 +1556,12 @@ static void handle_pid_chunked(struct mg_connection *c) {
             break;  // JSON будет неполным но не битым — закроем массив ниже
         }
 
+        char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[i].tmpset, 1);
+        char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), PidConf[i].tmpcur, 1);
         pos += snprintf(g_body + pos, sizeof(g_body) - pos,
             "%s{\"id\":%d,\"pins\":\"%s\",\"pinact\":{\"%s\":%d},"
             "\"selsens\":\"%s\",\"sernum\":\"%s\",\"presets\":\"%u\","
-            "\"tmpset\":\"%.1f\",\"tmpcur\":\"%.1f\","
+            "\"tmpset\":\"%s\",\"tmpcur\":\"%s\","
             "\"duty\":%d,\"info\":\"%s\",\"onoff\":%d,"
             "\"tune_state\":%u,\"tune_progress\":%u}",
             first ? "" : ",",
@@ -1633,7 +1570,7 @@ static void handle_pid_chunked(struct mg_connection *c) {
             PidConf[i].selsens == 1 ? "1" : "2",
             PidConf[i].sernum,
             PidConf[i].preset,
-            PidConf[i].tmpset, PidConf[i].tmpcur,
+            s_ts, s_tc,
             duty,
             esc_info,
             PidConf[i].onoff,
@@ -1740,11 +1677,12 @@ static void handle_sensors_chunked(struct mg_connection *c) {
             }
 
             const uint8_t *a = ds18b20[i].sensors[j].addr;
+            char s_t[16]; fmt_float(s_t, sizeof(s_t), ds18b20[i].sensors[j].temp, 2);
             pos += snprintf(g_body + pos, sizeof(g_body) - pos,
-                "%s{\"addr\":\"%02X%02X%02X%02X%02X%02X%02X%02X\",\"temp\":%.2f}",
+                "%s{\"addr\":\"%02X%02X%02X%02X%02X%02X%02X%02X\",\"temp\":%s}",
                 first ? "" : ",",
                 a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7],
-                ds18b20[i].sensors[j].temp);
+                s_t);
             first = false;
         }
     }
@@ -1764,10 +1702,12 @@ close_ds18b20:
             break;
         }
 
+        char s_t[16]; fmt_float(s_t, sizeof(s_t), dht22[i].temp, 2);
+        char s_h[16]; fmt_float(s_h, sizeof(s_h), dht22[i].humid, 2);
         pos += snprintf(g_body + pos, sizeof(g_body) - pos,
-            "%s{\"id\":%d,\"temp\":%.2f,\"humidity\":%.2f}",
+            "%s{\"id\":%d,\"temp\":%s,\"humidity\":%s}",
             first ? "" : ",",
-            dht22[i].id, dht22[i].temp, dht22[i].humid);
+            dht22[i].id, s_t, s_h);
         first = false;
     }
 
@@ -1856,10 +1796,13 @@ static void handle_onewire_chunked(struct mg_connection *c) {
                 char esc_info[64];
                 json_escape_str(esc_info, ds18b20[j].sensors[k].info, sizeof(esc_info));
 
+                char s_t[16];   fmt_float(s_t,  sizeof(s_t),  ds18b20[j].sensors[k].temp, 4);
+                char s_ut[16];  fmt_float(s_ut, sizeof(s_ut), ds18b20[j].sensors[k].upt,  2);
+                char s_lt[16];  fmt_float(s_lt, sizeof(s_lt), ds18b20[j].sensors[k].lowt, 2);
                 pos += snprintf(g_body + pos, sizeof(g_body) - pos,
                     "%s{\"s_number\":\"%02X%02X%02X%02X%02X%02X%02X%02X\","
-                    "\"t\":%.4f,\"valid\":%s,"
-                    "\"ut\":%.2f,\"lt\":%.2f,"
+                    "\"t\":%s,\"valid\":%s,"
+                    "\"ut\":%s,\"lt\":%s,"
                     "\"action_ut\":\"%s\",\"action_lt\":\"%s\","
                     "\"info\":\"%s\"}",
                     first_sens ? "" : ",",
@@ -1867,9 +1810,9 @@ static void handle_onewire_chunked(struct mg_connection *c) {
                     ds18b20[j].sensors[k].addr[2], ds18b20[j].sensors[k].addr[3],
                     ds18b20[j].sensors[k].addr[4], ds18b20[j].sensors[k].addr[5],
                     ds18b20[j].sensors[k].addr[6], ds18b20[j].sensors[k].addr[7],
-                    ds18b20[j].sensors[k].temp,
+                    s_t,
                     ds18b20[j].sensors[k].valid ? "true" : "false",
-                    ds18b20[j].sensors[k].upt,  ds18b20[j].sensors[k].lowt,
+                    s_ut, s_lt,
                     ds18b20[j].sensors[k].actup, ds18b20[j].sensors[k].actlow,
                     esc_info);
                 first_sens = false;
@@ -1892,25 +1835,31 @@ static void handle_onewire_chunked(struct mg_connection *c) {
             char esc_info[64];
             json_escape_str(esc_info, dht22[j].info, sizeof(esc_info));
 
+            char s_t[16];  fmt_float(s_t,  sizeof(s_t),  dht22[j].temp,  2);
+            char s_h[16];  fmt_float(s_h,  sizeof(s_h),  dht22[j].humid, 2);
+            char s_ut[16]; fmt_float(s_ut, sizeof(s_ut), dht22[j].upt,   2);
+            char s_lt[16]; fmt_float(s_lt, sizeof(s_lt), dht22[j].lowt,  2);
+            char s_uh[16]; fmt_float(s_uh, sizeof(s_uh), dht22[j].uph,   2);
+            char s_lh[16]; fmt_float(s_lh, sizeof(s_lh), dht22[j].lowh,  2);
             pos += snprintf(g_body + pos, sizeof(g_body) - pos,
                 "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":%d,"
                 "\"numsens\":%d,\"onoff\":%d,\"sensors\":["
-                "{\"s_number\":\"DHT22\",\"t\":%.2f,\"humidity\":%.2f,"
+                "{\"s_number\":\"DHT22\",\"t\":%s,\"humidity\":%s,"
                 "\"valid\":%s,"
-                "\"ut\":%.2f,\"lt\":%.2f,"
+                "\"ut\":%s,\"lt\":%s,"
                 "\"action_ut\":\"%s\",\"action_lt\":\"%s\","
-                "\"upphumid\":%.2f,\"humlolim\":%.2f,"
+                "\"upphumid\":%s,\"humlolim\":%s,"
                 "\"actuphum\":\"%s\",\"actlowhum\":\"%s\","
                 "\"info\":\"%s\"}"
                 "]}",
                 first_pin ? "" : ",",
                 dht22[j].id, dht22[j].pin, dht22[j].typsensr,
                 dht22[j].numsens, dht22[j].onoff,
-                dht22[j].temp, dht22[j].humid,
+                s_t, s_h,
                 dht22[j].valid ? "true" : "false",
-                dht22[j].upt,   dht22[j].lowt,
+                s_ut, s_lt,
                 dht22[j].actup, dht22[j].actlow,
-                dht22[j].uph,   dht22[j].lowh,
+                s_uh, s_lh,
                 dht22[j].actuh, dht22[j].actlh,
                 esc_info);
             first_pin = false;
@@ -1969,11 +1918,10 @@ void web_init(struct mg_mgr *mgr) {
     // Подключение упакованной файловой системы
     mg_mem_files = mg_packed_files;
 
-    // Формируем URL для HTTP, HTTPS и MQTT
-    char http_url[32], https_url[32], mqtt_url[32];
+    // Формируем URL для HTTP и HTTPS
+    char http_url[32], https_url[32];
     snprintf(http_url, sizeof(http_url), "http://0.0.0.0:%s", HTTP_PORT);
     snprintf(https_url, sizeof(https_url), "https://0.0.0.0:%s", HTTPS_PORT);
-    snprintf(mqtt_url, sizeof(mqtt_url), "mqtt://0.0.0.0:%s", MQTT_PORT);
 
     // Запуск HTTP-сервера
     struct mg_connection *http_conn = mg_http_listen(mgr, http_url, (mg_event_handler_t)fn, NULL);
@@ -1983,24 +1931,39 @@ void web_init(struct mg_mgr *mgr) {
         MG_ERROR(("Failed to start HTTP server on %s", http_url));
     }
 
-    // Запуск HTTPS-сервера с маркером HTTPS_MARKER (только если HTTPS включен)
+    // Запуск HTTPS-сервера (только если HTTPS включен и сертификаты загружены)
     if (SetSettings.usehttps == 1) {
-        struct mg_connection *https_conn = mg_http_listen(mgr, https_url, (mg_event_handler_t)fn, HTTPS_MARKER);
-        if (https_conn) {
-            MG_INFO(("HTTPS server started on %s, conn=%p", https_url, (void *)https_conn));
+        /* Предзагрузка TLS-сертификатов ОДИН раз — до accept, без файлового I/O в mg_mgr_poll */
+        uint32_t t_cert = HAL_GetTick();
+        bool cert_ok = https_get_tls_cert(s_tls_cert, sizeof(s_tls_cert));
+        bool key_ok  = https_get_tls_key(s_tls_key, sizeof(s_tls_key));
+        printf("[TLS] cert+key preloaded: %lu ms\r\n", (unsigned long)(HAL_GetTick() - t_cert));
+
+        if (!cert_ok || !key_ok) {
+            MG_ERROR(("Failed to load TLS cert/key — HTTPS disabled"));
+            s_tls_loaded = false;
+        } else if (strstr(s_tls_cert, "-----BEGIN CERTIFICATE-----") == NULL ||
+                   strstr(s_tls_cert, "-----END CERTIFICATE-----") == NULL) {
+            MG_ERROR(("Invalid certificate format — HTTPS disabled"));
+            s_tls_loaded = false;
+        } else if (strstr(s_tls_key, "-----BEGIN EC PRIVATE KEY-----") == NULL ||
+                   strstr(s_tls_key, "-----END EC PRIVATE KEY-----") == NULL) {
+            MG_ERROR(("Invalid key format — HTTPS disabled"));
+            s_tls_loaded = false;
         } else {
-            MG_ERROR(("Failed to start HTTPS server on %s", https_url));
+            s_tls_loaded = true;
+        }
+
+        if (s_tls_loaded) {
+            struct mg_connection *https_conn = mg_http_listen(mgr, https_url, (mg_event_handler_t)fn, HTTPS_MARKER);
+            if (https_conn) {
+                MG_INFO(("HTTPS server started on %s, conn=%p", https_url, (void *)https_conn));
+            } else {
+                MG_ERROR(("Failed to start HTTPS server on %s", https_url));
+            }
         }
     } else {
         MG_INFO(("HTTPS disabled in settings, skipping listener on %s", https_url));
-    }
-
-    // Запуск MQTT-сервера (если требуется)
-    struct mg_connection *mqtt_conn = mg_mqtt_listen(mgr, mqtt_url, (mg_event_handler_t)fn, NULL);
-    if (mqtt_conn) {
-        MG_INFO(("MQTT server started on %s, conn=%p", mqtt_url, (void *)mqtt_conn));
-    } else {
-        MG_ERROR(("Failed to start MQTT server on %s", mqtt_url));
     }
 
     // Добавление таймеров

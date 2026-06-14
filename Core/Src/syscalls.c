@@ -43,14 +43,29 @@ char *__env[1] = {0};
 char **environ = __env;
 
 /*
- * _sbrk: Standard linear STM32 implementation.
- * It allocates from the linker-defined heap area instead of FreeRTOS heap,
- * because newlib's sbrk strictly requires physically contiguous memory!
+ * _sbrk: диагностическая версия с рабочим аллокатором.
+ *
+ *   s_sbrk_called  — счётчик вызовов (должен быть < 10 после старта)
+ *   s_sbrk_last_incr — размер последнего запроса
+ *
+ * Аллокатор работает штатно (выделяет память из линкер-определённой кучи),
+ * но считает каждый вызов. После прошивки проверить в отладчике:
+ * s_sbrk_called < 10 → норма.
+ *
+ * configASSERT убран — _malloc_r вызывает _sbrk несколько раз
+ * за одну аллокацию (инициализация + выделение), однократный лимит
+ * ломает первый же printf().
  */
+unsigned long s_sbrk_called = 0; // s_sbrk_called = 18 после часа работы системы!
+unsigned long s_sbrk_last_incr = 0;
+
 void *_sbrk(ptrdiff_t incr) {
   extern uint8_t _end;
   extern uint8_t _estack;
   extern uint32_t _Min_Stack_Size;
+
+  s_sbrk_called++;
+  s_sbrk_last_incr = (unsigned long)incr;
 
   const uint32_t stack_limit = (uint32_t)&_estack - (uint32_t)&_Min_Stack_Size;
   const uint8_t *max_heap = (uint8_t *)stack_limit;
@@ -75,6 +90,20 @@ void *_sbrk(ptrdiff_t incr) {
 
   __set_PRIMASK(primask);
   return (void *)prev_heap_end;
+}
+
+/*
+ * __smakebuf_r: запрет newlib-буферизации stdio.
+ * Без этой заглушки ЛЮБОЙ printf() вызывает __smakebuf_r → _malloc_r →
+ * _sbrk, а при завершении _free_r. Установка __SNBF (unbuffered) заставляет
+ * printf писать посимвольно через _write(), полностью исключая malloc/free.
+ */
+struct _reent;
+void __smakebuf_r(struct _reent *r, FILE *fp) {
+    (void)r;
+    fp->_flags |= __SNBF;
+    fp->_bf._base = (unsigned char *)fp->_nbuf;
+    fp->_bf._size = 1;
 }
 
 /* Functions */
