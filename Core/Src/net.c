@@ -8,9 +8,11 @@
 #include "main.h"
 #include "compat_ota.h"
 #include "fmt_float.h"
+#include <stdlib.h>   // rand()
 
 struct user {
-  const char *name, *pass, *access_token;
+  const char *name, *pass;
+  char access_token[33];  // генерируется при логине, не константа
 };
 
 // Settings
@@ -84,17 +86,40 @@ static void timer_sntp_fn(void *param) {  // SNTP timer function. Sync up time
   mg_sntp_connect(param, "udp://time.google.com:123", sfn, NULL);
 }
 
+/* ── One active session ── */
+static struct user   *s_active_user       = NULL;  // кто сейчас залогинен
+static uint32_t       s_session_last_seen = 0;
+#define SESSION_TIMEOUT_MS 30000U
+
+static void session_generate_token(struct user *u) {
+  static bool srand_done = false;
+  if (!srand_done) {
+    extern RNG_HandleTypeDef hrng;
+    uint32_t rnd;
+    if (HAL_RNG_GenerateRandomNumber(&hrng, &rnd) == HAL_OK)
+      srand((unsigned) rnd);
+    else
+      srand((unsigned) HAL_GetTick());
+    srand_done = true;
+  }
+  static const char hex[] = "0123456789abcdef";
+  for (int i = 0; i < 32; i++)
+    u->access_token[i] = hex[rand() % 16];
+  u->access_token[32] = '\0';
+}
+
+static bool session_is_active(void) {
+  if (s_active_user == NULL) return false;
+  return (HAL_GetTick() - s_session_last_seen) < SESSION_TIMEOUT_MS;
+}
+
 // Parse HTTP requests, return authenticated user or NULL
 //static struct user *authenticate(struct mg_http_message *hm) {
 struct user *authenticate(struct mg_http_message *hm) {
-  // In production, make passwords strong and tokens randomly generated
-  // In this example, user list is kept in RAM. In production, it can
-  // be backed by file, database, or some other method.
   static struct user users[] = {
-      {SetSettings.adm_name, SetSettings.adm_pswd, "admin_token"},
-      {"Zerg", "Sworm", "user1_token"},
-//      {"user2", "user2", "user2_token"},
-      {NULL, NULL, NULL},
+      {SetSettings.adm_name, SetSettings.adm_pswd, ""},
+      {"Zerg", "Sworm", ""},
+      {NULL, NULL, ""},
   };
   char user[64], pass[64];
   struct user *u, *result = NULL;
@@ -102,13 +127,23 @@ struct user *authenticate(struct mg_http_message *hm) {
   MG_VERBOSE(("user [%s] pass [%s]", user, pass));
 
   if (user[0] != '\0' && pass[0] != '\0') {
-    // Both user and password is set, search by user/password
+    // Логин по user+pass
     for (u = users; result == NULL && u->name != NULL; u++)
-      if (strcmp(user, u->name) == 0 && strcmp(pass, u->pass) == 0) result = u;
-  } else if (user[0] == '\0') {
-    // Only password is set, search by token
+      if (strcmp(user, u->name) == 0 && strcmp(pass, u->pass) == 0)
+        result = u;
+  } else if (user[0] == '\0' && pass[0] != '\0') {
+    // Токен из куки
     for (u = users; result == NULL && u->name != NULL; u++)
-      if (strcmp(pass, u->access_token) == 0) result = u;
+      if (u->access_token[0] != '\0' &&
+          strcmp(pass, u->access_token) == 0)
+        result = u;
+    if (result != NULL) {
+      // Токен найден — проверяем что это именно активная сессия
+      if (!session_is_active() || s_active_user != result) {
+        return NULL;  // сессия истекла или вытеснена другим логином
+      }
+      s_session_last_seen = HAL_GetTick();  // продлеваем
+    }
   }
   return result;
 }
@@ -127,6 +162,23 @@ static bool require_post_json(struct mg_connection *c, struct mg_http_message *h
 }
 
 void handle_login(struct mg_connection *c, struct user *u) {
+  // Если активна чужая сессия — логируем вытеснение
+  if (session_is_active() && s_active_user != u) {
+    MG_INFO(("Session of [%s] forcibly taken over by [%s]",
+             s_active_user->name, u->name));
+  }
+  // Если тот же пользователь входит повторно (другой браузер) —
+  // старый токен инвалидируется, новый браузер получает новый токен
+  if (session_is_active() && s_active_user == u) {
+    MG_INFO(("User [%s] logged in again — previous session invalidated",
+             u->name));
+  }
+
+  // Генерируем новый токен — старый токен (в другом браузере) умирает
+  session_generate_token(u);
+  s_active_user       = u;
+  s_session_last_seen = HAL_GetTick();
+
   char cookie[256];
   mg_snprintf(cookie, sizeof(cookie),
               "Set-Cookie: access_token=%s; Path=/; "
@@ -136,11 +188,17 @@ void handle_login(struct mg_connection *c, struct user *u) {
 }
 
 void handle_logout(struct mg_connection *c) {
+  if (s_active_user != NULL) {
+    MG_INFO(("User [%s] logged out", s_active_user->name));
+    s_active_user->access_token[0] = '\0';  // инвалидируем токен
+  }
+  s_active_user       = NULL;
+  s_session_last_seen = 0;
   char cookie[256];
   mg_snprintf(cookie, sizeof(cookie),
               "Set-Cookie: access_token=; Path=/; "
               "Expires=Thu, 01 Jan 1970 00:00:00 UTC; "
-              "%sHttpOnly; Max-Age=0; \r\n",
+              "%sHttpOnly; Max-Age=0;\r\n",
               c->is_tls ? "Secure; " : "");
   mg_http_reply(c, 200, cookie, "true\n");
 }
@@ -340,16 +398,16 @@ static void tls_hs_track_start(unsigned long conn_id) {
 	}
 }
 
-static uint64_t tls_hs_track_finish(unsigned long conn_id) {
-	for (int i = 0; i < TLS_HS_TRACK_MAX; i++) {
-		if (s_tls_hs_track[i].conn_id == conn_id) {
-			uint64_t elapsed = mg_millis() - s_tls_hs_track[i].accept_ms;
-			s_tls_hs_track[i].conn_id = 0;
-			return elapsed;
-		}
-	}
-	return 0;
-}
+//static uint64_t tls_hs_track_finish(unsigned long conn_id) {
+//	for (int i = 0; i < TLS_HS_TRACK_MAX; i++) {
+//		if (s_tls_hs_track[i].conn_id == conn_id) {
+//			uint64_t elapsed = mg_millis() - s_tls_hs_track[i].accept_ms;
+//			s_tls_hs_track[i].conn_id = 0;
+//			return elapsed;
+//		}
+//	}
+//	return 0;
+//}
 
 static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
                            volatile uint32_t *ver);
@@ -385,36 +443,50 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		break;
 
     case MG_EV_ACCEPT: {
-        // Считаем активные соединения и закрываем старые idle
-        int cnt = 0;
-        uint32_t now = HAL_GetTick();
+        // Лимит: 3 активных веб-соединения. Handshake-соединения не
+        // ограничены — браузеру нужно 3+ параллельных для загрузки
+        // HTML + JS + CSS при первом открытии HTTPS-страницы.
+        int cnt_active = 0;       // установленные (не в handshake)
+        int cnt_hs     = 0;       // в процессе TLS handshake
         struct mg_connection *oldest_idle = NULL;
-        uint32_t oldest_time = now;
+        uint32_t oldest_time = UINT32_MAX;
 
         for (struct mg_connection *t = c->mgr->conns; t; t = t->next) {
             if (t == c) continue;
-            if ((uintptr_t)t->fn_data == CONN_TYPE_HTTP ||
-                (uintptr_t)t->fn_data == CONN_TYPE_HTTPS) {
-                cnt++;
-                // Ищем самое старое idle соединение (нет данных в буфере)
-                if (t->send.len == 0 && t->recv.len == 0) {
-                    // Используем data[0..3] как timestamp последнего запроса
-                    uint32_t last_used = *(uint32_t*)t->data;
-                    if (last_used < oldest_time) {
-                        oldest_time = last_used;
-                        oldest_idle = t;
-                    }
+            if ((uintptr_t)t->fn_data != CONN_TYPE_HTTP &&
+                (uintptr_t)t->fn_data != CONN_TYPE_HTTPS) continue;
+
+            if (t->is_tls_hs) {
+                cnt_hs++;          // в handshake — не трогаем, только считаем
+                continue;
+            }
+
+            cnt_active++;
+
+            // Кандидат на вытеснение: idle, буферы пусты, был хотя бы 1 запрос
+            uint32_t last_used = *(uint32_t *)t->data;
+            if (t->send.len == 0 && t->recv.len == 0 && last_used > 0) {
+                if (last_used < oldest_time) {
+                    oldest_time  = last_used;
+                    oldest_idle  = t;
                 }
             }
         }
 
-        // Если соединений слишком много — закрыть самое старое idle
-        if (cnt > 3 && oldest_idle != NULL &&
-            (now - oldest_time) > 500) {  // старше 500 мс
-            MG_INFO(("Closing idle conn %lu (age %lu ms)",
-                     oldest_idle->id, now - oldest_time));
-            mg_close_conn(oldest_idle);
+        if (cnt_active >= 3) { // было 3
+            if (oldest_idle != NULL) {
+                MG_INFO(("Evict idle conn %lu to free slot", oldest_idle->id));
+                mg_close_conn(oldest_idle);
+            } else {
+                MG_INFO(("Rejected conn %lu: %d active + %d hs, no idle",
+                         c->id, cnt_active, cnt_hs));
+                printf("[NET] REJECT conn %lu: active=%d hs=%d\r\n",
+                               c->id, cnt_active, cnt_hs);
+                mg_close_conn(c);
+                return;
+            }
         }
+
         s_active_conns++;
         unsigned int local_port = mg_ntohs(c->loc.port);
         char buf_rem[32];
@@ -451,7 +523,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
             MG_INFO(("HTTPS connection accepted on port %s", HTTPS_PORT));
 /***************************************************************************/
             if (SetSettings.usehttps == 1) {
-                uint32_t t_start = HAL_GetTick();
+//                uint32_t t_start = HAL_GetTick();
                 tls_hs_track_start(c->id);
 
                 /* Сертификаты уже загружены в web_init() — никакого файлового I/O */
@@ -462,34 +534,34 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
                     return;
                 }
 
-                printf("[TLS] cert+key from cache\r\n");
+                // printf("[TLS] cert+key from cache\r\n");
 
                 struct mg_tls_opts opts = {
                     .cert = mg_str(s_tls_cert),
                     .key  = mg_str(s_tls_key),
                 };
-                uint32_t t_init = HAL_GetTick();
+//                uint32_t t_init = HAL_GetTick();
                 mg_tls_init(c, &opts);
-                printf("[TLS] mg_tls_init(cert=%u,key=%u): %lu ms\r\n",
-                       (unsigned)opts.cert.len, (unsigned)opts.key.len,
-                       (unsigned long)(HAL_GetTick() - t_init));
+                // printf("[TLS] mg_tls_init(cert=%u,key=%u): %lu ms\r\n",
+                //        (unsigned)opts.cert.len, (unsigned)opts.key.len,
+                //        (unsigned long)(HAL_GetTick() - t_init));
 
                 if (c->tls == NULL) {
                     MG_ERROR(("Error: TLS initialization failed"));
                     mg_close_conn(c);
                     return;
                 }
-                printf("[TLS] ACCEPT total init: %lu ms (conn %lu)\r\n",
-                       (unsigned long)(HAL_GetTick() - t_start), (unsigned long)c->id);
+                // printf("[TLS] ACCEPT total init: %lu ms (conn %lu)\r\n",
+                //        (unsigned long)(HAL_GetTick() - t_start), (unsigned long)c->id);
             }
         }
     }
     break;
 
     case MG_EV_TLS_HS: {
-        uint64_t hs_elapsed = tls_hs_track_finish(c->id);
-        printf("[TLS] handshake complete: %llu ms (conn %lu)\r\n",
-               (unsigned long long)hs_elapsed, (unsigned long)c->id);
+//        uint64_t hs_elapsed = tls_hs_track_finish(c->id);
+        // printf("[TLS] handshake complete: %llu ms (conn %lu)\r\n",
+        //        (unsigned long long)hs_elapsed, (unsigned long)c->id);
     }
     break;
 /***************************************************************************/
@@ -501,9 +573,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		if (mg_match(hm->uri, mg_str("/api/#"), NULL)) {
 			req_api++;
 		}
-		printf("[HTTP] %s req #%lu: %.*s (conn %lu)\r\n",
-		       c->is_tls ? "HTTPS" : "HTTP", (unsigned long)req_total,
-		       (int)hm->uri.len, hm->uri.buf, (unsigned long)c->id);
+		// printf("[HTTP] %s req #%lu: %.*s (conn %lu)\r\n",
+		//        c->is_tls ? "HTTPS" : "HTTP", (unsigned long)req_total,
+		//        (int)hm->uri.len, hm->uri.buf, (unsigned long)c->id);
 		MG_DEBUG(("%lu %s msg: %.*s", c->id, c->is_tls ? "HTTPS" : "HTTP", (int) hm->uri.len, hm->uri.buf));
 
 		// Проверка авторизации для API
@@ -522,7 +594,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			bool is_css = mg_match(hm->uri, mg_str("*.css"), NULL) ||
 			              mg_match(hm->uri, mg_str("/assets/*.css"), NULL);
 			snprintf(extra_headers, sizeof(extra_headers),
-			         "Cache-Control: %s\r\nConnection: close\r\n%s",
+			         "Cache-Control: %s\r\nConnection: keep-alive\r\n%s",
 			         (is_js || is_css) ? "max-age=31536000" : "no-cache, no-store, must-revalidate",
 			         (is_js || is_css) ? "Content-Encoding: gzip\r\n" : "");
 			struct mg_http_serve_opts opts = {0};
@@ -530,7 +602,8 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			opts.fs = &mg_fs_packed;
 			opts.extra_headers = extra_headers;
 			mg_http_serve_dir(c, ev_data, &opts);
-			c->is_draining = 1;
+			keep_alive = true;
+			// c->is_draining = 1;
 		}  else {
 			MG_INFO(("%lu Not root path, proceeding to API handling", c->id));
 
@@ -683,15 +756,15 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/encoder/get"), NULL)) {
 				req_encoder++;
 				MG_INFO(("%lu Processing /api/encoder/get", c->id));
-				uint32_t t1 = HAL_GetTick();
+//				uint32_t t1 = HAL_GetTick();
 				handle_encoder_get(c);
-				printf("[NET] encoder_get=%lu ms\r\n", (unsigned long)(HAL_GetTick() - t1));
+				// printf("[NET] encoder_get=%lu ms\r\n", (unsigned long)(HAL_GetTick() - t1));
 			} else if (mg_match(hm->uri, mg_str("/api/encoder/set"), NULL)) {
 				req_encoder++;
 				MG_INFO(("%lu Processing /api/encoder/set", c->id));
-				uint32_t t1 = HAL_GetTick();
+//				uint32_t t1 = HAL_GetTick();
 				handle_encoder_set(c, hm);
-				printf("[NET] encoder_set=%lu ms\r\n", (unsigned long)(HAL_GetTick() - t1));
+				// printf("[NET] encoder_set=%lu ms\r\n", (unsigned long)(HAL_GetTick() - t1));
 			} else if (mg_match(hm->uri, mg_str("/api/pid/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/pid/get", c->id));
 				handle_pid_get(c);
@@ -791,7 +864,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				              mg_match(hm->uri, mg_str("/assets/*.css"), NULL);
                 snprintf(extra_headers, sizeof(extra_headers),
                          "Cache-Control: %s\r\n"
-                         "Connection: close\r\n"
+                         "Connection: keep-alive\r\n"
                          "%s",
                          (is_js || is_css) ? "max-age=31536000" : "no-cache, no-store, must-revalidate",
                          (is_js || is_css) ? "Content-Encoding: gzip\r\n" : "");
@@ -805,12 +878,13 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 #endif
 				opts.extra_headers = extra_headers;
 				mg_http_serve_dir(c, ev_data, &opts);
-                c->is_draining = 1;  // close after static
+                keep_alive = true;
+                // c->is_draining = 1;  // close after static
 				MG_INFO(("%lu Static content served", c->id));
 			}
 		}
         if (!keep_alive) c->is_draining = 1;
-		printf("[HTTP] req done: %lu ms (conn %lu, %s)\r\n", (unsigned long)(HAL_GetTick() - t_req_start), (unsigned long)c->id, c->is_tls ? "HTTPS" : "HTTP");
+		// printf("[HTTP] req done: %lu ms (conn %lu, %s)\r\n", (unsigned long)(HAL_GetTick() - t_req_start), (unsigned long)c->id, c->is_tls ? "HTTPS" : "HTTP");
 			MG_DEBUG(("%lu req done", c->id));
 		break;
 	}
@@ -839,8 +913,8 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
             uintptr_t conn_type = (uintptr_t)c->fn_data;
             if (conn_type != CONN_TYPE_HTTP && conn_type != CONN_TYPE_HTTPS) {
                 if (c->send.len > 16384) {
-                    printf("[NET] WARN: conn %lu send buf=%u, force close\r\n",
-                           (unsigned long)c->id, (unsigned)c->send.len);
+                    // printf("[NET] WARN: conn %lu send buf=%u, force close\r\n",
+                    //        (unsigned long)c->id, (unsigned)c->send.len);
                     c->is_draining = 1;
                 }
             }

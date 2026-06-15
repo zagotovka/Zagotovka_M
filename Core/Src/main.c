@@ -2999,7 +2999,7 @@ static void heap_diagnostic(void)
         printf("USB queue peak:     %lu / 16\r\n", usb_peak);
         printf("Mongoose conns peak: %lu\r\n", mg_conn_peak);
         printf("Mongoose gap peak:   %lu ms (starvation cnt: %lu)\r\n", mg_poll_gap_peak, (unsigned long)mg_poll_gap_over_50ms_cnt);
-        printf("HTTP Requests:      Total=%lu, API=%lu, Encoder=%lu\r\n",
+        printf("HTTP(s) Requests:   Total=%lu, API=%lu, Encoder=%lu\r\n",
                (unsigned long)req_total, (unsigned long)req_api, (unsigned long)req_encoder);
         printf("=========================\r\n");
 
