@@ -125,6 +125,14 @@ async function _tick() {
           _registered.delete(key);
           _keys = Array.from(_registered.keys());
         }
+      } else if (r.status === 403) {
+        // session expired - propagate to callback
+        try {
+          const err = await r.json();
+          if (err && err.error === 'session_expired') {
+            entry.callback({ __session_expired: true });
+          }
+        } catch (_) { /* not JSON, ignore */ }
       }
     } catch (err) {
       clearTimeout(timeoutId);

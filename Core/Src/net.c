@@ -610,7 +610,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			/* ── State slice polling endpoints (Keep-Alive) ── */
 			if (mg_match(hm->uri, mg_str("/api/state/*"), NULL)) {
 				if (u == NULL) {
-					mg_http_reply(c, 403, "Connection: close\r\n", "Not Authorised\n");
+					mg_http_reply(c, 403, "Connection: close\r\n", "{\"error\":\"session_expired\"}\n");
 					c->is_draining = 1;
 				} else if (mg_match(hm->uri, mg_str("/api/state/sensors"), NULL)) {
 					if (!check_etag_304(c, hm, &g_ver_sensors)) handle_sensors_chunked(c);
@@ -637,14 +637,14 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
 			/* ── Unified /api/pins (ETag + 304, chunked JSON, all pin types) ── */
 			if (mg_match(hm->uri, mg_str("/api/pins"), NULL)) {
-				if (u == NULL) { mg_http_reply(c, 403, "Connection: close\r\n", "Not Authorised\n"); }
+				if (u == NULL) { mg_http_reply(c, 403, "Connection: close\r\n", "{\"error\":\"session_expired\"}\n"); }
 				else { handle_get_pins(c, hm); }
 				keep_alive = true;
 				break;
 			}
 			/* ── /api/pid (ETag + 304, chunked) â PID is a separate subsystem ── */
 			if (mg_match(hm->uri, mg_str("/api/pid"), NULL)) {
-				if (u == NULL) { mg_http_reply(c, 403, "Connection: close\r\n", "Not Authorised\n"); }
+				if (u == NULL) { mg_http_reply(c, 403, "Connection: close\r\n", "{\"error\":\"session_expired\"}\n"); }
 				else if (!check_etag_304(c, hm, &g_ver_pid)) { handle_pid_chunked(c); }
 				keep_alive = true;
 				break;
@@ -696,7 +696,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			    handle_logout(c);
 			} else if (mg_match(hm->uri, mg_str("/api/#"), NULL) && u == NULL) {
 			    MG_ERROR(("%lu Unauthorized API request: %.*s", c->id, (int) hm->uri.len, hm->uri.buf));
-			    mg_http_reply(c, 403, "Connection: close\r\n", "Not Authorised\n");
+			    mg_http_reply(c, 403, "Connection: close\r\n", "{\"error\":\"session_expired\"}\n");
 
                 c->is_draining = 1;
 			} else if (mg_match(hm->uri, mg_str("/api/debug"), NULL)) {

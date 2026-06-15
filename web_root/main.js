@@ -103,7 +103,7 @@ const NavLink = ({ title, href, ids }) =>
 const DelLink = ({ title, href, ids, onclicks }) =>
   html`<a href="${href}" class="" id="${ids}" onclick="${onclicks}">${title}<///>`;
 
-function Header({ logout, user, setShowSidebar, showSidebar }) {
+function Header({ logout, user, setShowSidebar, showSidebar, sessionExpired }) {
   const [now, setNow] = useState(new Date());
   const commonData = useContext(StateContext);
 
@@ -143,7 +143,9 @@ function Header({ logout, user, setShowSidebar, showSidebar }) {
 
   return html`
     <div
-      class="bg-white/40 backdrop-blur-md border-b border-white/40 shadow-sm sticky top-0 z-[48] w-full py-2 ${showSidebar
+      class="${sessionExpired
+      ? 'bg-red-500/90 border-b border-red-400 text-white shadow-lg'
+      : 'bg-white/40 backdrop-blur-md border-b border-white/40 shadow-sm'} sticky top-0 z-[48] w-full py-2 ${showSidebar
       ? 'pl-72'
       : ''} transition-all duration-300 transform"
     >
@@ -156,13 +158,13 @@ function Header({ logout, user, setShowSidebar, showSidebar }) {
           <${Icons.bars3} class="h-6" />
         </button>
         <div class="flex flex-1 justify-center items-center">
-          <span class="text-sm text-slate-600">
+          <span class="text-sm ${sessionExpired ? 'text-white' : 'text-slate-600'}">
             Дата: ${formatDate(now)}<span style="margin-left: 8px;"></span
             >Время: ${formatTime(now)}
           </span>
         </div>
         <div class="flex flex-1 justify-center items-center">
-          <span class="text-sm text-slate-600"
+          <span class="text-sm ${sessionExpired ? 'text-white' : 'text-slate-600'}"
             >STM32 дата:
             ${stm32Time ? formatDate(stm32Time) : ' 00.00.0000'}<span
               style="margin-left: 8px;"
@@ -171,7 +173,7 @@ function Header({ logout, user, setShowSidebar, showSidebar }) {
           </span>
         </div>
         <div class="flex items-center gap-x-4 lg:gap-x-6">
-          <span class="text-sm text-slate-400">logged in as: ${user}</span>
+          <span class="text-sm ${sessionExpired ? 'text-red-100' : 'text-slate-400'}">logged in as: ${user}</span>
           <div
             class="hidden lg:block lg:h-4 lg:w-px lg:bg-slate-200/60"
             aria-hidden="true"
@@ -917,6 +919,7 @@ const App = function ({ }) {
   const [user, setUser] = useState('');
   const [showSidebar, setShowSidebar] = useState(true);
   const [commonData, setCommonData] = useState(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const logout = () => fetch('api/logout').then((r) => setUser(''));
   const login = (r) =>
@@ -943,6 +946,10 @@ const App = function ({ }) {
   useEffect(() => {
     if (!user) return;
     registerPoll('common', '/api/state/common', (data) => {
+      if (data && data.__session_expired) {
+        setSessionExpired(true);
+        return;
+      }
       if (data) setCommonData(data);
     });
     return () => unregisterPoll('common');
@@ -965,6 +972,7 @@ const App = function ({ }) {
       user=${user}
       showSidebar=${showSidebar}
       setShowSidebar=${setShowSidebar}
+      sessionExpired=${sessionExpired}
     />
     <div
       class="${showSidebar && 'pl-72'} transition-all duration-300 transform"
