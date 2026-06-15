@@ -714,7 +714,6 @@ int main(void)
 
   /* MPU Configuration--------------------------------------------------------*/
   MPU_Config();
-
   /* Барьеры после MPU_Config — гарантируют, что MPU активна до кеша */
   __DSB();
   __ISB();
@@ -3197,20 +3196,14 @@ void MPU_Config(void)
   /* Disables the MPU */
   HAL_MPU_Disable();
 
-  /*--- Region 0: Вся AXI SRAM 0x20020000..0x2007FFFF (384 KB) ---
-   * Normal memory, Non-cacheable, Non-shareable.
-   * Покрывает ВСЮ AXI SRAM (SRAM1 368KB + SRAM2 16KB).
-   * FreeRTOS heap, .bss, стеки задач — всё здесь.
-   * MPU требует size = power-of-2, BaseAddress кратен size.
-   * Используем 512KB от 0x20000000 и отключаем sub-region 0
-   * (0x20000000-0x2001FFFF = DTCM, не нуждается в MPU).
-   */
+  /** Initializes and configures the Region and the memory to be protected
+  */
   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
   MPU_InitStruct.Number = MPU_REGION_NUMBER0;
   MPU_InitStruct.BaseAddress = 0x20000000;
   MPU_InitStruct.Size = MPU_REGION_SIZE_512KB;
-  MPU_InitStruct.SubRegionDisable = 0x0;  /* Все sub-regions включены */
-  MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL1; /* TEX=001, C=0, B=0 → Normal, Non-cacheable */
+  MPU_InitStruct.SubRegionDisable = 0x0;
+  MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL1;
   MPU_InitStruct.AccessPermission = MPU_REGION_FULL_ACCESS;
   MPU_InitStruct.DisableExec = MPU_INSTRUCTION_ACCESS_DISABLE;
   MPU_InitStruct.IsShareable = MPU_ACCESS_NOT_SHAREABLE;
@@ -3218,7 +3211,6 @@ void MPU_Config(void)
   MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
-
   /* Enables the MPU */
   HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
 

@@ -409,8 +409,8 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
         }
 
         // Если соединений слишком много — закрыть самое старое idle
-        if (cnt > 8 && oldest_idle != NULL &&
-            (now - oldest_time) > 1000) {  // старше 1 сек
+        if (cnt > 3 && oldest_idle != NULL &&
+            (now - oldest_time) > 500) {  // старше 500 мс
             MG_INFO(("Closing idle conn %lu (age %lu ms)",
                      oldest_idle->id, now - oldest_time));
             mg_close_conn(oldest_idle);
@@ -422,7 +422,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
         MG_INFO(("Accept: local %M remote %M", mg_print_ip_port, &c->loc, mg_print_ip_port, &c->rem));
 
-        /* ── Блокировка внешних сканеров при выключенном HTTPS ── */
+        /* ── Блокировка внешних сканеров при ОТКлюченном HTTPS ── */
         if (local_port == atoi(HTTP_PORT) && !c->rem.is_ip6) {
             if (SetSettings.usehttps != 1) {
                 /* ip4 в network byte order, mg_ntohl преобразует в host byte order */
@@ -511,6 +511,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		MG_DEBUG(("%lu Auth: user=%p", c->id, (void*) u));
 
 		struct mg_str uri = hm->uri;
+		bool keep_alive = false;
 
 		// Обработка корневого пути (/)
 		if (uri.len == 1 && strncmp(uri.buf, "/", uri.len) == 0) {
@@ -557,7 +558,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				} else {
 					mg_http_reply(c, 404, "", "");
 				}
-				/* Keep-Alive: each handler manages its own is_draining */
+				keep_alive = true;
 				break;
 			}
 
@@ -565,28 +566,33 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			if (mg_match(hm->uri, mg_str("/api/pins"), NULL)) {
 				if (u == NULL) { mg_http_reply(c, 403, "Connection: close\r\n", "Not Authorised\n"); }
 				else { handle_get_pins(c, hm); }
+				keep_alive = true;
 				break;
 			}
 			/* ── /api/pid (ETag + 304, chunked) â PID is a separate subsystem ── */
 			if (mg_match(hm->uri, mg_str("/api/pid"), NULL)) {
 				if (u == NULL) { mg_http_reply(c, 403, "Connection: close\r\n", "Not Authorised\n"); }
 				else if (!check_etag_304(c, hm, &g_ver_pid)) { handle_pid_chunked(c); }
+				keep_alive = true;
 				break;
 			}
 			/* ── Keep-Alive GET poll endpoints (reuse connection, no TLS storm) ── */
 			if (mg_match(hm->uri, mg_str("/api/select/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/select/get", c->id));
 				handle_select_get(c);
+				keep_alive = true;
 				break;
 			}
 			if (mg_match(hm->uri, mg_str("/api/cron/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/cron/get", c->id));
 				handle_timers_get(c);
+				keep_alive = true;
 				break;
 			}
 			if (mg_match(hm->uri, mg_str("/api/mysett/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/mysett/get", c->id));
 				handle_mysett_get(c);
+				keep_alive = true;
 				break;
 			}
 			// Обработка API-запросов
@@ -803,7 +809,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				MG_INFO(("%lu Static content served", c->id));
 			}
 		}
-        c->is_draining = 1;  // embedded: always close after one request
+        if (!keep_alive) c->is_draining = 1;
 		printf("[HTTP] req done: %lu ms (conn %lu, %s)\r\n", (unsigned long)(HAL_GetTick() - t_req_start), (unsigned long)c->id, c->is_tls ? "HTTPS" : "HTTP");
 			MG_DEBUG(("%lu req done", c->id));
 		break;
