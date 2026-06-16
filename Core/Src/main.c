@@ -1527,7 +1527,7 @@ void StartWebServerTask(void *argument)
 {
   /* USER CODE BEGIN StartWebServerTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
-  mg_log_set(MG_LL_NONE); // Установлен уровень логирования INFO для отладки
+  mg_log_set(MG_LL_ERROR); // Установи уровень логирования 'MG_LL_INFO' для отладки.
   if (!quick_network_check()) { // Проверка подключен LAN провод или нет.
     printf("Network link down - Web server not started");
     vTaskDelete(NULL);

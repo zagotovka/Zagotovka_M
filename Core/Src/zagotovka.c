@@ -541,7 +541,7 @@ void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm) {
   }
 }
 void handle_switch_get(struct mg_connection *c) {
-  handle_switches_chunked(c);
+  handle_switches(c);
 }
 void gen_switch_json(const struct dbPinsInfo *pins_info,
                      const struct dbPinsConf *pins_conf, int num_pins,
@@ -714,7 +714,7 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
 }
 /*******************************************************************************************************************/
 void handle_button_get(struct mg_connection *c) {
-  handle_buttons_chunked(c);
+  handle_buttons(c);
 }
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -930,7 +930,7 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
 }
 
 void handle_encoder_get(struct mg_connection *c) {
-  handle_encoders_chunked(c);
+  handle_encoders(c);
 }
 
 void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm) {

@@ -365,17 +365,16 @@ void handle_device_eraselast(struct mg_connection *c) {
   mg_http_reply(c, 200, s_json_header, "true\n");
 }
 // Определяем типы соединений
-#define CONN_TYPE_HTTP  1
-#define CONN_TYPE_HTTPS 2
-#define CONN_TYPE_MQTT  3
+#define CONN_TYPE_HTTP     1
+#define CONN_TYPE_HTTPS    2
+#define CONN_TYPE_MQTT     3
+#define CONN_TYPE_LISTENER 0xFF  // уникальное значение, не пересекается с HTTP/HTTPS/MQTT
 
 // Rate limiter для /api/login: блокировка на 30 сек после 5 неудачных попыток
 #define LOGIN_MAX_FAILS   5
 #define LOGIN_BLOCK_MS    30000
 static uint32_t s_login_fail_count  = 0;
 static uint32_t s_login_block_until = 0;
-
-static void *HTTPS_MARKER = (void *) 1; // Маркер для HTTPS-соединений
 
 /* TLS handshake timing tracking (per-connection) */
 #define TLS_HS_TRACK_MAX 4
@@ -411,17 +410,17 @@ static void tls_hs_track_start(unsigned long conn_id) {
 
 static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
                            volatile uint32_t *ver);
-void handle_buttons_chunked(struct mg_connection *c);
-void handle_switches_chunked(struct mg_connection *c);
-void handle_encoders_chunked(struct mg_connection *c);
+void handle_buttons(struct mg_connection *c);
+void handle_switches(struct mg_connection *c);
+void handle_encoders(struct mg_connection *c);
 static void handle_get_pins(struct mg_connection *c, struct mg_http_message *hm);
-static void handle_pid_chunked(struct mg_connection *c);
-static void handle_security_chunked(struct mg_connection *c);
-static void handle_sensors_chunked(struct mg_connection *c);
-static void handle_common_chunked(struct mg_connection *c);
-static void handle_onewire_chunked(struct mg_connection *c);
+static void handle_pid(struct mg_connection *c);
+static void handle_security(struct mg_connection *c);
+static void handle_sensors(struct mg_connection *c);
+static void handle_common(struct mg_connection *c);
+static void handle_onewire(struct mg_connection *c);
 
-// Shared buffer for all chunked JSON handlers — mongoose + FreeRTOS event loop
+// Shared buffer for all Content-Length JSON handlers — mongoose + FreeRTOS event loop
 // is single-threaded, only one handler runs at a time.  Saves ~36 KB vs separate buffers.
 char g_body[16384];
 
@@ -613,21 +612,21 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 					mg_http_reply(c, 403, "Connection: close\r\n", "{\"error\":\"session_expired\"}\n");
 					c->is_draining = 1;
 				} else if (mg_match(hm->uri, mg_str("/api/state/sensors"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_sensors)) handle_sensors_chunked(c);
+					if (!check_etag_304(c, hm, &g_ver_sensors)) handle_sensors(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/common"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_common)) handle_common_chunked(c);
+					if (!check_etag_304(c, hm, &g_ver_common)) handle_common(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/pid"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_pid)) handle_pid_chunked(c);
+					if (!check_etag_304(c, hm, &g_ver_pid)) handle_pid(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/onewire"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_onewire)) handle_onewire_chunked(c);
+					if (!check_etag_304(c, hm, &g_ver_onewire)) handle_onewire(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/button"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_button)) handle_buttons_chunked(c);
+					if (!check_etag_304(c, hm, &g_ver_button)) handle_buttons(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/security"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_security)) handle_security_chunked(c);
+					if (!check_etag_304(c, hm, &g_ver_security)) handle_security(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/switch"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_switch)) handle_switches_chunked(c);
+					if (!check_etag_304(c, hm, &g_ver_switch)) handle_switches(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/encoder"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_encoder)) handle_encoders_chunked(c);
+					if (!check_etag_304(c, hm, &g_ver_encoder)) handle_encoders(c);
 				} else {
 					mg_http_reply(c, 404, "", "");
 				}
@@ -642,10 +641,10 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				keep_alive = true;
 				break;
 			}
-			/* ── /api/pid (ETag + 304, chunked) â PID is a separate subsystem ── */
+			/* ── /api/pid (ETag + 304, Content-Length) — PID is a separate subsystem ── */
 			if (mg_match(hm->uri, mg_str("/api/pid"), NULL)) {
 				if (u == NULL) { mg_http_reply(c, 403, "Connection: close\r\n", "{\"error\":\"session_expired\"}\n"); }
-				else if (!check_etag_304(c, hm, &g_ver_pid)) { handle_pid_chunked(c); }
+				else if (!check_etag_304(c, hm, &g_ver_pid)) { handle_pid(c); }
 				keep_alive = true;
 				break;
 			}
@@ -897,8 +896,13 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		break;
 
 	case MG_EV_CLOSE:
+		if (c->is_listening) {
+			MG_ERROR(("%lu LISTENER CLOSED! port=%d TLS=%d",
+			          c->id, (int)mg_ntohs(c->loc.port), c->is_tls));
+		}
 		if (s_active_conns > 0) s_active_conns--;
-		MG_INFO(("%lu Connection closed (TLS: %d)", c->id, c->is_tls));
+		MG_INFO(("%lu Connection closed (TLS: %d, listening: %d)",
+		         c->id, c->is_tls, c->is_listening));
 		break;
  
 	case MG_EV_ERROR:
@@ -911,11 +915,22 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		/* Send buffer watchdog: для MQTT */
         {
             uintptr_t conn_type = (uintptr_t)c->fn_data;
-            if (conn_type != CONN_TYPE_HTTP && conn_type != CONN_TYPE_HTTPS) {
+            if (conn_type != CONN_TYPE_HTTP &&
+                conn_type != CONN_TYPE_HTTPS &&
+                conn_type != CONN_TYPE_LISTENER) {
                 if (c->send.len > 16384) {
-                    // printf("[NET] WARN: conn %lu send buf=%u, force close\r\n",
-                    //        (unsigned long)c->id, (unsigned)c->send.len);
                     c->is_draining = 1;
+                }
+            }
+
+            /* TLS idle watchdog: принудительно закрываем зависшие TLS соединения */
+            if (c->is_tls && !c->is_listening && conn_type == CONN_TYPE_HTTPS) {
+                uint32_t last_used = *(uint32_t *)c->data;
+                uint32_t now = (uint32_t)mg_millis();
+                if (last_used > 0 && (now - last_used) > 15000 && c->send.len == 0) {
+                    MG_INFO(("%lu TLS idle watchdog: force close (idle %lu ms)",
+                             c->id, (unsigned long)(now - last_used)));
+                    mg_close_conn(c);
                 }
             }
         }
@@ -1361,7 +1376,7 @@ static void handle_get_pins(struct mg_connection *c,
 
 /* ─── /api/state/button (Keep-Alive polling) ─── */
 /* ─── /api/state/button (Keep-Alive polling) ─── */
-void handle_buttons_chunked(struct mg_connection *c) {
+void handle_buttons(struct mg_connection *c) {
 
     int pos = 0;
 
@@ -1417,7 +1432,7 @@ void handle_buttons_chunked(struct mg_connection *c) {
 }
 
 /* ─── /api/state/switch (Keep-Alive polling) ─── */
-void handle_switches_chunked(struct mg_connection *c) {
+void handle_switches(struct mg_connection *c) {
 
     int pos = 0;
 
@@ -1487,7 +1502,7 @@ void handle_switches_chunked(struct mg_connection *c) {
 }
 
 /* ─── /api/state/encoder (Keep-Alive polling) ─── */
-void handle_encoders_chunked(struct mg_connection *c) {
+void handle_encoders(struct mg_connection *c) {
 
     int pos = 0;
 
@@ -1603,7 +1618,7 @@ void handle_encoders_chunked(struct mg_connection *c) {
 }
 
 /* ─── /api/state/pid (Keep-Alive polling) ─── */
-static void handle_pid_chunked(struct mg_connection *c) {
+static void handle_pid(struct mg_connection *c) {
 
     int pos = 0;
 
@@ -1675,7 +1690,7 @@ static void handle_pid_chunked(struct mg_connection *c) {
 }
 
 /* ─── /api/state/security (Keep-Alive polling) ─── */
-static void handle_security_chunked(struct mg_connection *c) {
+static void handle_security(struct mg_connection *c) {
 
     int pos = 0;
 
@@ -1735,7 +1750,7 @@ static void handle_security_chunked(struct mg_connection *c) {
 }
 
 /* ─── /api/state/sensors (Keep-Alive polling) ─── */
-static void handle_sensors_chunked(struct mg_connection *c) {
+static void handle_sensors(struct mg_connection *c) {
 
     int pos = 0;
 
@@ -1807,7 +1822,7 @@ close_ds18b20:
 }
 
 /* ─── /api/state/common ─── */
-static void handle_common_chunked(struct mg_connection *c) {
+static void handle_common(struct mg_connection *c) {
     char b[320];
     char tbuf[256];
     char extra[160];
@@ -1827,7 +1842,7 @@ static void handle_common_chunked(struct mg_connection *c) {
 }
 
 /* ─── /api/state/onewire (Keep-Alive polling) ─── */
-static void handle_onewire_chunked(struct mg_connection *c) {
+static void handle_onewire(struct mg_connection *c) {
 
     int pos = 0;
 
@@ -2004,7 +2019,7 @@ void web_init(struct mg_mgr *mgr) {
     snprintf(https_url, sizeof(https_url), "https://0.0.0.0:%s", HTTPS_PORT);
 
     // Запуск HTTP-сервера
-    struct mg_connection *http_conn = mg_http_listen(mgr, http_url, (mg_event_handler_t)fn, NULL);
+    struct mg_connection *http_conn = mg_http_listen(mgr, http_url, (mg_event_handler_t)fn, (void *)CONN_TYPE_LISTENER);
     if (http_conn) {
         MG_INFO(("HTTP server started on %s, conn=%p", http_url, (void *)http_conn));
     } else {
@@ -2035,7 +2050,7 @@ void web_init(struct mg_mgr *mgr) {
         }
 
         if (s_tls_loaded) {
-            struct mg_connection *https_conn = mg_http_listen(mgr, https_url, (mg_event_handler_t)fn, HTTPS_MARKER);
+            struct mg_connection *https_conn = mg_http_listen(mgr, https_url, (mg_event_handler_t)fn, (void *)CONN_TYPE_LISTENER);
             if (https_conn) {
                 MG_INFO(("HTTPS server started on %s, conn=%p", https_url, (void *)https_conn));
             } else {
