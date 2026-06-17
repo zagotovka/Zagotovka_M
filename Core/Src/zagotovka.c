@@ -26,7 +26,7 @@
 #include "fmt_float.h"
 
 /* Shared static buffer from net.c — mongoose event loop is single-threaded */
-extern char g_body[16384];
+extern char *g_body;  // allocated in FreeRTOS heap, size = G_BODY_SIZE (net.h)
 extern bool s_tls_loaded;  /* TLS cert+key preload cache, invalidated on cert/key update */
 
 #define PI 3.14159265358979323846
@@ -3185,7 +3185,7 @@ void gen_onewire_json(char *buffer, int buffer_size) {
 
 /* ─── /api/onewire/get ─── */
 void handle_onewire_get(struct mg_connection *c) {
-  gen_onewire_json(g_body, sizeof(g_body));
+  gen_onewire_json(g_body, G_BODY_SIZE);
   size_t len = strlen(g_body);
   mg_printf(c, "HTTP/1.1 200 OK\r\n%sContent-Length: %d\r\n\r\n", s_json_header, (int)len);
   mg_send(c, g_body, len);
@@ -3570,7 +3570,7 @@ void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm) {
 }
 /* ─── /api/temp/get ─── */
 void handle_temp_get(struct mg_connection *c) {
-  pars_temp_sensors(g_body, sizeof(g_body));
+  pars_temp_sensors(g_body, G_BODY_SIZE);
   size_t len = strlen(g_body);
   mg_printf(c, "HTTP/1.1 200 OK\r\n%sContent-Length: %d\r\n\r\n", s_json_header, (int)len);
   mg_send(c, g_body, len);
@@ -4236,7 +4236,7 @@ void handle_security_set(struct mg_connection *c, struct mg_http_message *hm) {
                   "{\"status\":false,\"message\":\"Empty request body\"}");
     return;
   }
-  if (len >= sizeof(g_body)) {
+  if (len >= G_BODY_SIZE) {
     mg_http_reply(c, 413, s_json_header,
                   "{\"status\":false,\"message\":\"Payload too large\"}");
     return;
@@ -6514,7 +6514,7 @@ void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm) {
     mg_http_reply(c, 400, s_json_header, "{\"error\":\"empty body\"}");
     return;
   }
-  if (hm->body.len >= sizeof(g_body)) {
+  if (hm->body.len >= G_BODY_SIZE) {
     mg_http_reply(c, 413, s_json_header, "{\"error\":\"payload too large\"}");
     return;
   }

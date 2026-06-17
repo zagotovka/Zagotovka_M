@@ -5,6 +5,12 @@
 #define MG_TLS MG_TLS_BUILTIN // HTTPS
 // #define TLS_TWOWAY // Двусторонняя аутентификация
 
+/* Использовать AES-128-GCM вместо CHACHA20_POLY1305.
+   AES-128-GCM на STM32F быстрее: меньше размер ключа (16 vs 32 байта),
+   проще раунды шифрования, меньше CPU load на handshake и передачу данных.
+   Разница особенно заметна при двух одновременных TLS-соединениях. */
+#define MG_ENABLE_CHACHA20 0
+
 #define MG_ENABLE_CUSTOM_RANDOM 1
 #define MG_ARCH MG_ARCH_NEWLIB
 #define MG_ENABLE_TCPIP 1

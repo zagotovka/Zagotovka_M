@@ -397,16 +397,25 @@ static void tls_hs_track_start(unsigned long conn_id) {
 	}
 }
 
-//static uint64_t tls_hs_track_finish(unsigned long conn_id) {
-//	for (int i = 0; i < TLS_HS_TRACK_MAX; i++) {
-//		if (s_tls_hs_track[i].conn_id == conn_id) {
-//			uint64_t elapsed = mg_millis() - s_tls_hs_track[i].accept_ms;
-//			s_tls_hs_track[i].conn_id = 0;
-//			return elapsed;
-//		}
-//	}
-//	return 0;
-//}
+static uint32_t tls_hs_get_age_ms(unsigned long conn_id) {
+	for (int i = 0; i < TLS_HS_TRACK_MAX; i++) {
+		if (s_tls_hs_track[i].conn_id == conn_id) {
+			return (uint32_t)(mg_millis() - s_tls_hs_track[i].accept_ms);
+		}
+	}
+	return 0;  // не найдено — считаем что только начался
+}
+
+static uint64_t tls_hs_track_finish(unsigned long conn_id) {
+	for (int i = 0; i < TLS_HS_TRACK_MAX; i++) {
+		if (s_tls_hs_track[i].conn_id == conn_id) {
+			uint64_t elapsed = mg_millis() - s_tls_hs_track[i].accept_ms;
+			s_tls_hs_track[i].conn_id = 0;
+			return elapsed;
+		}
+	}
+	return 0;
+}
 
 static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
                            volatile uint32_t *ver);
@@ -422,7 +431,8 @@ static void handle_onewire(struct mg_connection *c);
 
 // Shared buffer for all Content-Length JSON handlers — mongoose + FreeRTOS event loop
 // is single-threaded, only one handler runs at a time.  Saves ~36 KB vs separate buffers.
-char g_body[16384];
+// Allocated in FreeRTOS heap (web_init) to save 16 KB of .bss (AXI SRAM is tight).
+char *g_body;
 
 /* ── Лимит активных соединений ── */
 #define MAX_CONNS  8
@@ -442,12 +452,28 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		break;
 
     case MG_EV_ACCEPT: {
-        // Лимит: 3 активных веб-соединения. Handshake-соединения не
-        // ограничены — браузеру нужно 3+ параллельных для загрузки
-        // HTML + JS + CSS при первом открытии HTTPS-страницы.
+        // ПЕРВЫМ ДЕЛОМ — определяем тип соединения до любого цикла.
+        // Примечание: баг отсутствует (t==c guard в цикле), но явное назначение
+        // fn_data здесь устраняет дублирование кода и future-proof на случай
+        // если guard когда-либо уберут. Listener имеет CONN_TYPE_LISTENER=0xFF —
+        // в цикл подсчёта не попадёт.
+        unsigned int local_port = mg_ntohs(c->loc.port);
+        if (local_port == atoi(HTTP_PORT)) {
+            c->fn_data = (void *)CONN_TYPE_HTTP;
+        } else if (local_port == atoi(HTTPS_PORT)) {
+            c->fn_data = (void *)CONN_TYPE_HTTPS;
+        }
+
+        // Лимиты соединений:
+        // cnt_active + cnt_hs >= 5 — вытесняем idle или отвергаем
+        //   (2 браузера × 2 Keep-Alive + 1 запасной = 5)
+        // cnt_hs >= 2 — доп. лимит на одновременные handshake:
+        //   вытесняем только ЗАВИСШИЙ (>1000 мс), свежий не трогаем
+        // Целевой пик: 2 listeners + 1 MQTT + 2 hs + 3 active = 8
         int cnt_active = 0;       // установленные (не в handshake)
         int cnt_hs     = 0;       // в процессе TLS handshake
         struct mg_connection *oldest_idle = NULL;
+        struct mg_connection *oldest_hs   = NULL;  // кандидат на вытеснение среди hs
         uint32_t oldest_time = UINT32_MAX;
 
         for (struct mg_connection *t = c->mgr->conns; t; t = t->next) {
@@ -456,9 +482,14 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
                 (uintptr_t)t->fn_data != CONN_TYPE_HTTPS) continue;
 
             if (t->is_tls_hs) {
-                cnt_hs++;          // в handshake — не трогаем, только считаем
+                if (t->is_closing || t->is_draining) continue;  // умирающие не считаем
+                cnt_hs++;
+                // Берём первый попавшийся как кандидата (timestamp в data ещё 0 до HTTP msg)
+                if (oldest_hs == NULL) oldest_hs = t;
                 continue;
             }
+
+            if (t->is_closing || t->is_draining) continue;
 
             cnt_active++;
 
@@ -472,22 +503,51 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
             }
         }
 
-        if (cnt_active >= 3) { // было 3
+        // Общий лимит: active + handshake.
+        // Раньше active и hs считались раздельно → hs-соединения,
+        // завершив handshake, переходили в active без проверки общего
+        // лимита. active накапливались (active=3 в логах) — баг.
+        // Теперь общий лимит не даёт накопиться больше 5.
+        if (cnt_active + cnt_hs >= 5) {
             if (oldest_idle != NULL) {
-                MG_INFO(("Evict idle conn %lu to free slot", oldest_idle->id));
-                mg_close_conn(oldest_idle);
+                MG_INFO(("Evict idle conn %lu to free slot (deferred close)", oldest_idle->id));
+                oldest_idle->is_draining = 1;
+                oldest_idle->is_closing  = 1;
             } else {
                 MG_INFO(("Rejected conn %lu: %d active + %d hs, no idle",
                          c->id, cnt_active, cnt_hs));
                 printf("[NET] REJECT conn %lu: active=%d hs=%d\r\n",
                                c->id, cnt_active, cnt_hs);
-                mg_close_conn(c);
+                c->is_draining = 1;
+                c->is_closing  = 1;
+                return;
+            }
+        }
+
+        // Доп. лимит на одновременные handshake: не более 2.
+        // Два параллельных x25519 (~400 мс каждый) уже дают exec=826 мс.
+        // Больше 2 — вытесняем только ЗАВИСШИЙ handshake (>1000 мс).
+        // Свежий не трогаем — мгновенное вытеснение на середине handshake
+        // обрывает x25519 (CPU насмарку) и провоцирует шторм переподключений.
+        // Пик: 2 listeners + 1 MQTT + 2 hs + 2 active = 7 max
+        if (cnt_hs >= 2) {
+            uint32_t hs_age = (oldest_hs != NULL)
+                            ? tls_hs_get_age_ms(oldest_hs->id) : 0;
+            if (oldest_hs != NULL && hs_age > 1000) {
+                MG_INFO(("Evict STALE hs conn %lu (age=%lu ms, cnt_hs=%d)",
+                         oldest_hs->id, (unsigned long)hs_age, cnt_hs));
+                oldest_hs->is_draining = 1;
+                oldest_hs->is_closing  = 1;
+            } else {
+                MG_INFO(("Rejected conn %lu: hs in progress (age=%lu ms, cnt_hs=%d)",
+                         c->id, (unsigned long)hs_age, cnt_hs));
+                c->is_draining = 1;
+                c->is_closing  = 1;
                 return;
             }
         }
 
         s_active_conns++;
-        unsigned int local_port = mg_ntohs(c->loc.port);
         char buf_rem[32];
         mg_snprintf(buf_rem, sizeof(buf_rem), "%M", mg_print_ip_port, &c->rem);
 
@@ -506,61 +566,51 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
                             (b0 == 127);
                 if (!priv) {
                     printf("[NET] rejected external conn from %s (HTTPS disabled)\r\n", buf_rem);
-                    mg_close_conn(c);
+                    c->is_draining = 1;
+                    c->is_closing  = 1;
                     return;
                 }
             }
         }
 
-        if (local_port == atoi(HTTP_PORT)) {
-            c->fn_data = (void *)CONN_TYPE_HTTP;
-            MG_INFO(("HTTP connection accepted on port %s", HTTP_PORT));
-        }
-        else if (local_port == atoi(HTTPS_PORT)) {
-            c->fn_data = (void *)CONN_TYPE_HTTPS;
-            /* is_tls и is_tls_hs выставляет mg_tls_init() — здесь не трогаем */
+        /* ── TLS init для HTTPS ── */
+        if (local_port == atoi(HTTPS_PORT)) {
             MG_INFO(("HTTPS connection accepted on port %s", HTTPS_PORT));
-/***************************************************************************/
             if (SetSettings.usehttps == 1) {
-//                uint32_t t_start = HAL_GetTick();
                 tls_hs_track_start(c->id);
 
                 /* Сертификаты уже загружены в web_init() — никакого файлового I/O */
                 if (!s_tls_loaded ||
                     s_tls_cert[0] == '\0' || s_tls_key[0] == '\0') {
                     MG_ERROR(("TLS cert/key not preloaded"));
-                    mg_close_conn(c);
+                    c->is_draining = 1;
+                    c->is_closing  = 1;
                     return;
                 }
-
-                // printf("[TLS] cert+key from cache\r\n");
 
                 struct mg_tls_opts opts = {
                     .cert = mg_str(s_tls_cert),
                     .key  = mg_str(s_tls_key),
                 };
-//                uint32_t t_init = HAL_GetTick();
                 mg_tls_init(c, &opts);
-                // printf("[TLS] mg_tls_init(cert=%u,key=%u): %lu ms\r\n",
-                //        (unsigned)opts.cert.len, (unsigned)opts.key.len,
-                //        (unsigned long)(HAL_GetTick() - t_init));
 
                 if (c->tls == NULL) {
                     MG_ERROR(("Error: TLS initialization failed"));
-                    mg_close_conn(c);
+                    c->is_draining = 1;
+                    c->is_closing  = 1;
                     return;
                 }
-                // printf("[TLS] ACCEPT total init: %lu ms (conn %lu)\r\n",
-                //        (unsigned long)(HAL_GetTick() - t_start), (unsigned long)c->id);
             }
+        } else {
+            MG_INFO(("HTTP connection accepted on port %s", HTTP_PORT));
         }
     }
     break;
 
     case MG_EV_TLS_HS: {
-//        uint64_t hs_elapsed = tls_hs_track_finish(c->id);
-        // printf("[TLS] handshake complete: %llu ms (conn %lu)\r\n",
-        //        (unsigned long long)hs_elapsed, (unsigned long)c->id);
+        uint64_t hs_elapsed = tls_hs_track_finish(c->id);
+        MG_INFO(("TLS handshake complete: %llu ms (conn %lu)",
+                 (unsigned long long)hs_elapsed, (unsigned long)c->id));
     }
     break;
 /***************************************************************************/
@@ -901,6 +951,8 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			          c->id, (int)mg_ntohs(c->loc.port), c->is_tls));
 		}
 		if (s_active_conns > 0) s_active_conns--;
+		// Освобождаем слот трекинга handshake, если соединение было в процессе
+		tls_hs_track_finish(c->id);
 		MG_INFO(("%lu Connection closed (TLS: %d, listening: %d)",
 		         c->id, c->is_tls, c->is_listening));
 		break;
@@ -923,14 +975,22 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
                 }
             }
 
-            /* TLS idle watchdog: принудительно закрываем зависшие TLS соединения */
-            if (c->is_tls && !c->is_listening && conn_type == CONN_TYPE_HTTPS) {
+            /* Idle watchdog для HTTP и HTTPS: помечаем зависшие соединения
+             * для закрытия в цикле mg_mgr_poll. Прямой вызов mg_close_conn
+             * здесь опасен — после возврата в mg_mgr_poll будет use-after-free.
+             * HTTP  без TLS: браузер держит keep-alive, но может уйти без FIN.
+             * HTTPS с TLS:  то же самое + возможны зависшие handshake. */
+            if (!c->is_listening &&
+                (conn_type == CONN_TYPE_HTTP || conn_type == CONN_TYPE_HTTPS)) {
                 uint32_t last_used = *(uint32_t *)c->data;
                 uint32_t now = (uint32_t)mg_millis();
-                if (last_used > 0 && (now - last_used) > 15000 && c->send.len == 0) {
-                    MG_INFO(("%lu TLS idle watchdog: force close (idle %lu ms)",
-                             c->id, (unsigned long)(now - last_used)));
-                    mg_close_conn(c);
+                if (last_used > 0 && (now - last_used) > 8000 && c->send.len == 0) {
+                    MG_INFO(("%lu %s idle watchdog: force close (idle %lu ms)",
+                             c->id,
+                             conn_type == CONN_TYPE_HTTPS ? "HTTPS" : "HTTP",
+                             (unsigned long)(now - last_used)));
+                    c->is_draining = 1;
+                    c->is_closing = 1;
                 }
             }
         }
@@ -1381,7 +1441,7 @@ void handle_buttons(struct mg_connection *c) {
     int pos = 0;
 
     /* ── Заголовок JSON ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
         "{\"lang\":\"%s\",\"buttons\":[", SetSettings.lang);
 
     bool first = true;
@@ -1390,7 +1450,7 @@ void handle_buttons(struct mg_connection *c) {
     for (int i = 0; i < NUMPIN; i++) {
         if (PinsConf[i].topin != 1) continue;
 
-        int remaining = (int)sizeof(g_body) - pos;
+        int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 700) {  // 700 — максимум одной кнопки (3 строки × 200 + фикс.)
             MG_ERROR(("buttons: OVERFLOW at pin %d, pos=%d remaining=%d",
                       i, pos, remaining));
@@ -1403,7 +1463,7 @@ void handle_buttons(struct mg_connection *c) {
         json_escape_str(esc_lp,   PinsConf[i].lpress, sizeof(esc_lp));
         json_escape_str(esc_info, PinsConf[i].info,   sizeof(esc_info));
 
-        pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
             "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
             "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
@@ -1417,10 +1477,10 @@ void handle_buttons(struct mg_connection *c) {
     }
 
     /* ── Закрываем JSON ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos, "]}");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
 
     /* ── Лог для контроля ── */
-    MG_DEBUG(("buttons: len=%d buf=%d", pos, (int)sizeof(g_body)));
+    MG_DEBUG(("buttons: len=%d buf=%d", pos, (int)G_BODY_SIZE));
 
     /* ── Ответ с Content-Length → Keep-Alive работает ── */
     char extra[128];
@@ -1437,7 +1497,7 @@ void handle_switches(struct mg_connection *c) {
     int pos = 0;
 
     /* ── Заголовок JSON ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
         "{\"lang\":\"%s\",\"switches\":[", SetSettings.lang);
 
     bool first = true;
@@ -1446,7 +1506,7 @@ void handle_switches(struct mg_connection *c) {
     for (int i = 0; i < NUMPIN; i++) {
         if (PinsConf[i].topin != 3) continue;
 
-        int remaining = (int)sizeof(g_body) - pos;
+        int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 150) {
             MG_ERROR(("switches: OVERFLOW at pin %d, pos=%d remaining=%d",
                       i, pos, remaining));
@@ -1456,7 +1516,7 @@ void handle_switches(struct mg_connection *c) {
         char esc_info[64];
         json_escape_str(esc_info, PinsConf[i].info, sizeof(esc_info));
 
-        pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
             "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
             first ? "" : ",",
@@ -1467,18 +1527,18 @@ void handle_switches(struct mg_connection *c) {
     }
 
     /* ── Массив pintopin ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos, "],\"pintopin\":[");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "],\"pintopin\":[");
     first = true;
 
     for (int i = 0; i < NUMPINLINKS; i++) {
-        int remaining = (int)sizeof(g_body) - pos;
+        int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 80) {
             MG_ERROR(("switches: OVERFLOW at pintopin %d, pos=%d remaining=%d",
                       i, pos, remaining));
             break;
         }
 
-        pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
             first ? "" : ",",
             PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins);
@@ -1487,10 +1547,10 @@ void handle_switches(struct mg_connection *c) {
     }
 
     /* ── Закрываем JSON ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos, "]}");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
 
     /* ── Лог для контроля ── */
-    MG_DEBUG(("switches: len=%d buf=%d", pos, (int)sizeof(g_body)));
+    MG_DEBUG(("switches: len=%d buf=%d", pos, (int)G_BODY_SIZE));
 
     /* ── Ответ с Content-Length → Keep-Alive работает ── */
     char extra[128];
@@ -1507,7 +1567,7 @@ void handle_encoders(struct mg_connection *c) {
     int pos = 0;
 
     /* ── Заголовок JSON ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
         "{\"lang\":\"%s\",\"encoders\":[", SetSettings.lang);
 
     bool first = true;
@@ -1560,14 +1620,14 @@ void handle_encoders(struct mg_connection *c) {
         json_escape_str(esc_info, PinsConf[i].info, sizeof(esc_info));
 
         /* ── Проверка остатка буфера перед записью слота ── */
-        int remaining = (int)sizeof(g_body) - pos;
+        int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 400) {  // 400 — максимум одного encoder-слота с pinact
             MG_ERROR(("encoders: OVERFLOW at pin %d, pos=%d remaining=%d",
                       i, pos, remaining));
             break;
         }
 
-        pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\","
             "\"encoderb\":%d,\"encdrbpin\":\"%s\","
             "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,\"ponr\":%d,"
@@ -1583,18 +1643,18 @@ void handle_encoders(struct mg_connection *c) {
     }
 
     /* ── Массив pintopin ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos, "],\"pintopin\":[");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "],\"pintopin\":[");
     first = true;
 
     for (int i = 0; i < NUMPINLINKS; i++) {
-        int remaining = (int)sizeof(g_body) - pos;
+        int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 80) {
             MG_ERROR(("encoders: OVERFLOW at pintopin %d, pos=%d remaining=%d",
                       i, pos, remaining));
             break;
         }
 
-        pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
             first ? "" : ",",
             PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins);
@@ -1603,10 +1663,10 @@ void handle_encoders(struct mg_connection *c) {
     }
 
     /* ── Закрываем JSON ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos, "]}");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
 
     /* ── Лог для контроля ── */
-    MG_DEBUG(("encoders: len=%d buf=%d", pos, (int)sizeof(g_body)));
+    MG_DEBUG(("encoders: len=%d buf=%d", pos, (int)G_BODY_SIZE));
 
     /* ── Ответ с Content-Length → Keep-Alive работает ── */
     char extra[128];
@@ -1623,7 +1683,7 @@ static void handle_pid(struct mg_connection *c) {
     int pos = 0;
 
     /* ── Заголовок JSON ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
         "{\"lang\":\"%s\",\"pidline\":%d,\"pid\":[",
         SetSettings.lang, SetSettings.pidline);
 
@@ -1644,7 +1704,7 @@ static void handle_pid(struct mg_connection *c) {
         json_escape_str(esc_info, PidConf[i].info, sizeof(esc_info));
 
         /* Проверка — остаток буфера перед записью слота */
-        int remaining = (int)sizeof(g_body) - pos;
+        int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 350) {  // 350 — максимум одного PID-слота
             MG_ERROR(("pid: OVERFLOW at slot %d, pos=%d remaining=%d",
                       i, pos, remaining));
@@ -1653,7 +1713,7 @@ static void handle_pid(struct mg_connection *c) {
 
         char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[i].tmpset, 1);
         char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), PidConf[i].tmpcur, 1);
-        pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"id\":%d,\"pins\":\"%s\",\"pinact\":{\"%s\":%d},"
             "\"selsens\":\"%s\",\"sernum\":\"%s\",\"presets\":\"%u\","
             "\"tmpset\":\"%s\",\"tmpcur\":\"%s\","
@@ -1675,10 +1735,10 @@ static void handle_pid(struct mg_connection *c) {
     }
 
     /* ── Закрываем JSON ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos, "]}");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
 
     /* ── Лог для контроля ── */
-    MG_DEBUG(("pid: len=%d buf=%d", pos, (int)sizeof(g_body)));
+    MG_DEBUG(("pid: len=%d buf=%d", pos, (int)G_BODY_SIZE));
 
     /* ── Ответ с Content-Length → Keep-Alive работает ── */
     char extra[128];
@@ -1698,7 +1758,7 @@ static void handle_security(struct mg_connection *c) {
     char esc_info[64];
     json_escape_str(esc_info, PinsConf[1].info, sizeof(esc_info));
 
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
         "{\"lang\":\"%s\",\"sim800l\":%d,\"tel\":\"%s\","
         "\"info\":\"%s\",\"onoff\":%d,\"pins\":[",
         SetSettings.lang, SetSettings.sim800l, SetSettings.tel,
@@ -1710,7 +1770,7 @@ static void handle_security(struct mg_connection *c) {
     for (int i = 0; i < NUMPIN; i++) {
         if (PinsConf[i].topin != 10) continue;
 
-        int remaining = (int)sizeof(g_body) - pos;
+        int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 200) {
             MG_ERROR(("security: OVERFLOW at pin %d, pos=%d remaining=%d",
                       i, pos, remaining));
@@ -1723,7 +1783,7 @@ static void handle_security(struct mg_connection *c) {
         char esc_info2[64];
         json_escape_str(esc_info2, PinsConf[i].info, sizeof(esc_info2));
 
-        pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
             "\"action\":\"%s\",\"send_sms\":\"%s\","
             "\"info\":\"%s\",\"onoff\":%d}",
@@ -1735,10 +1795,10 @@ static void handle_security(struct mg_connection *c) {
     }
 
     /* ── Закрываем JSON ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos, "]}");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
 
     /* ── Лог для контроля ── */
-    MG_DEBUG(("security: len=%d buf=%d", pos, (int)sizeof(g_body)));
+    MG_DEBUG(("security: len=%d buf=%d", pos, (int)G_BODY_SIZE));
 
     /* ── Ответ с Content-Length → Keep-Alive работает ── */
     char extra[128];
@@ -1755,7 +1815,7 @@ static void handle_sensors(struct mg_connection *c) {
     int pos = 0;
 
     /* ── Массив ds18b20 ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos, "{\"ds18b20\":[");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "{\"ds18b20\":[");
 
     bool first = true;
 
@@ -1764,7 +1824,7 @@ static void handle_sensors(struct mg_connection *c) {
         for (int j = 0; j < ds18b20[i].numsens && j < MAX_DS18B20_PER_PIN; j++) {
             if (!ds18b20[i].sensors[j].valid) continue;
 
-            int remaining = (int)sizeof(g_body) - pos;
+            int remaining = (int)G_BODY_SIZE - pos;
             if (remaining < 80) {
                 MG_ERROR(("sensors: OVERFLOW at DS18B20 [%d][%d], pos=%d remaining=%d",
                           i, j, pos, remaining));
@@ -1773,7 +1833,7 @@ static void handle_sensors(struct mg_connection *c) {
 
             const uint8_t *a = ds18b20[i].sensors[j].addr;
             char s_t[16]; fmt_float(s_t, sizeof(s_t), ds18b20[i].sensors[j].temp, 2);
-            pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
                 "%s{\"addr\":\"%02X%02X%02X%02X%02X%02X%02X%02X\",\"temp\":%s}",
                 first ? "" : ",",
                 a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7],
@@ -1784,13 +1844,13 @@ static void handle_sensors(struct mg_connection *c) {
 
 close_ds18b20:
     /* ── Массив dht22 ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos, "],\"dht22\":[");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "],\"dht22\":[");
     first = true;
 
     for (int i = 0; i < MAX_DHT22_P; i++) {
         if (dht22[i].typsensr != 2 || !dht22[i].valid) continue;
 
-        int remaining = (int)sizeof(g_body) - pos;
+        int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 60) {
             MG_ERROR(("sensors: OVERFLOW at DHT22 [%d], pos=%d remaining=%d",
                       i, pos, remaining));
@@ -1799,7 +1859,7 @@ close_ds18b20:
 
         char s_t[16]; fmt_float(s_t, sizeof(s_t), dht22[i].temp, 2);
         char s_h[16]; fmt_float(s_h, sizeof(s_h), dht22[i].humid, 2);
-        pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"id\":%d,\"temp\":%s,\"humidity\":%s}",
             first ? "" : ",",
             dht22[i].id, s_t, s_h);
@@ -1807,10 +1867,10 @@ close_ds18b20:
     }
 
     /* ── Закрываем JSON ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos, "]}");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
 
     /* ── Лог для контроля ── */
-    MG_DEBUG(("sensors: len=%d buf=%d", pos, (int)sizeof(g_body)));
+    MG_DEBUG(("sensors: len=%d buf=%d", pos, (int)G_BODY_SIZE));
 
     /* ── Ответ с Content-Length → Keep-Alive работает ── */
     char extra[128];
@@ -1847,7 +1907,7 @@ static void handle_onewire(struct mg_connection *c) {
     int pos = 0;
 
     /* ── Заголовок JSON ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
         "{\"lang\":\"%s\",\"pins\":[", SetSettings.lang);
 
     bool first_pin = true;
@@ -1864,13 +1924,13 @@ static void handle_onewire(struct mg_connection *c) {
             if (ds18b20[j].id != i || ds18b20[j].typsensr != 1) continue;
             snsr_fnd = true;
 
-            int remaining = (int)sizeof(g_body) - pos;
+            int remaining = (int)G_BODY_SIZE - pos;
             if (remaining < 128) {
                 MG_ERROR(("onewire: OVERFLOW before DS18B20 pin %d, pos=%d", i, pos));
                 goto close_json;
             }
 
-            pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
                 "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":%d,"
                 "\"numsens\":%d,\"onoff\":%d,\"sensors\":[",
                 first_pin ? "" : ",",
@@ -1881,7 +1941,7 @@ static void handle_onewire(struct mg_connection *c) {
             bool first_sens = true;
             for (int k = 0; k < ds18b20[j].numsens && k < MAX_DS18B20_PER_PIN; k++) {
 
-                remaining = (int)sizeof(g_body) - pos;
+                remaining = (int)G_BODY_SIZE - pos;
                 if (remaining < 250) {
                     MG_ERROR(("onewire: OVERFLOW at DS18B20 sensor %d pin %d, pos=%d",
                               k, i, pos));
@@ -1894,7 +1954,7 @@ static void handle_onewire(struct mg_connection *c) {
                 char s_t[16];   fmt_float(s_t,  sizeof(s_t),  ds18b20[j].sensors[k].temp, 4);
                 char s_ut[16];  fmt_float(s_ut, sizeof(s_ut), ds18b20[j].sensors[k].upt,  2);
                 char s_lt[16];  fmt_float(s_lt, sizeof(s_lt), ds18b20[j].sensors[k].lowt, 2);
-                pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+                pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
                     "%s{\"s_number\":\"%02X%02X%02X%02X%02X%02X%02X%02X\","
                     "\"t\":%s,\"valid\":%s,"
                     "\"ut\":%s,\"lt\":%s,"
@@ -1913,7 +1973,7 @@ static void handle_onewire(struct mg_connection *c) {
                 first_sens = false;
             }
 
-            pos += snprintf(g_body + pos, sizeof(g_body) - pos, "]}");
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
         }
 
         /* ── DHT22 ── */
@@ -1921,7 +1981,7 @@ static void handle_onewire(struct mg_connection *c) {
             if (dht22[j].id != i || dht22[j].typsensr != 2) continue;
             snsr_fnd = true;
 
-            int remaining = (int)sizeof(g_body) - pos;
+            int remaining = (int)G_BODY_SIZE - pos;
             if (remaining < 400) {
                 MG_ERROR(("onewire: OVERFLOW before DHT22 pin %d, pos=%d", i, pos));
                 goto close_json;
@@ -1936,7 +1996,7 @@ static void handle_onewire(struct mg_connection *c) {
             char s_lt[16]; fmt_float(s_lt, sizeof(s_lt), dht22[j].lowt,  2);
             char s_uh[16]; fmt_float(s_uh, sizeof(s_uh), dht22[j].uph,   2);
             char s_lh[16]; fmt_float(s_lh, sizeof(s_lh), dht22[j].lowh,  2);
-            pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
                 "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":%d,"
                 "\"numsens\":%d,\"onoff\":%d,\"sensors\":["
                 "{\"s_number\":\"DHT22\",\"t\":%s,\"humidity\":%s,"
@@ -1962,12 +2022,12 @@ static void handle_onewire(struct mg_connection *c) {
 
         /* ── Пин без сенсоров ── */
         if (!snsr_fnd) {
-            int remaining = (int)sizeof(g_body) - pos;
+            int remaining = (int)G_BODY_SIZE - pos;
             if (remaining < 100) {
                 MG_ERROR(("onewire: OVERFLOW before no-sensor pin %d, pos=%d", i, pos));
                 goto close_json;
             }
-            pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
                 "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":0,"
                 "\"numsens\":0,\"info\":\"No active sensors found\",\"onoff\":0}",
                 first_pin ? "" : ",",
@@ -1978,17 +2038,17 @@ static void handle_onewire(struct mg_connection *c) {
 
     /* ── OneWire пинов нет вообще ── */
     if (!owfound) {
-        pos += snprintf(g_body + pos, sizeof(g_body) - pos,
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "{\"id\":0,\"pin\":\"N/A\",\"typsensr\":0,"
             "\"numsens\":0,\"info\":\"No OneWire pins found\",\"onoff\":0}");
     }
 
 close_json:
     /* ── Закрываем JSON ── */
-    pos += snprintf(g_body + pos, sizeof(g_body) - pos, "]}");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
 
     /* ── Лог для контроля ── */
-    MG_DEBUG(("onewire: len=%d buf=%d", pos, (int)sizeof(g_body)));
+    MG_DEBUG(("onewire: len=%d buf=%d", pos, (int)G_BODY_SIZE));
 
     /* ── Ответ с Content-Length → Keep-Alive работает ── */
     char extra[128];
@@ -2009,6 +2069,13 @@ close_json:
 void web_init(struct mg_mgr *mgr) {
     // Инициализация настроек устройства
     s_settings.device_name = (char *)default_name;
+
+    // Allocate shared JSON buffer in FreeRTOS heap (saves 16KB of .bss)
+    g_body = pvPortMalloc(G_BODY_SIZE);
+    if (g_body == NULL) {
+        MG_ERROR(("OOM: g_body allocation failed"));
+        return;
+    }
 
     // Подключение упакованной файловой системы
     mg_mem_files = mg_packed_files;
