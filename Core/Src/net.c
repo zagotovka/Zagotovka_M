@@ -711,6 +711,12 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				keep_alive = true;
 				break;
 			}
+			if (mg_match(hm->uri, mg_str("/api/onewire/get"), NULL)) {
+				MG_INFO(("%lu Processing /api/onewire/get", c->id));
+				handle_onewire_get(c);
+				keep_alive = true;
+				break;
+			}
 			if (mg_match(hm->uri, mg_str("/api/mysett/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/mysett/get", c->id));
 				handle_mysett_get(c);
@@ -853,9 +859,6 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/security/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/security/set", c->id));
 				handle_security_set(c, hm);
-			} else if (mg_match(hm->uri, mg_str("/api/onewire/get"), NULL)) {
-				MG_INFO(("%lu Processing /api/onewire/get", c->id));
-				handle_onewire_get(c);
 			} else if (mg_match(hm->uri, mg_str("/api/sensor/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/sensor/set", c->id));
 				handle_sensor_set(c, hm);

@@ -101,27 +101,6 @@ function TabCron({ }) {
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => { initGlobalTooltip(); }, []);
 
-  const refresh = () =>
-    fetch('/api/cron/get', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((r) => {
-        if (r !== null && r !== undefined && Array.isArray(r.timers)) {
-          setCron(r.timers);
-          setLanguage(r.lang || 'ru');
-          if (typeof r.numline === 'number') {
-            setNumline(r.numline);
-            setVisibleCrons(r.numline);
-          }
-        } else {
-          console.error('Unexpected API response structure:', r);
-          setCron([]);
-        }
-      })
-      .catch((error) => {
-        console.error('Error fetching cron data:', error);
-        setCron([]);
-      });
-
   useEffect(() => {
     let active = true;
 
@@ -142,15 +121,6 @@ function TabCron({ }) {
       unregisterPoll('cron');
     };
   }, []);
-
-  const isFirstNumlineMount = useRef(true);
-  useEffect(() => {
-    if (isFirstNumlineMount.current) {
-      isFirstNumlineMount.current = false;
-      return;
-    }
-    sendNumlineToStm32(numline);
-  }, [numline]);
 
   const sendNumlineToStm32 = (value) => {
     isPendingOnOff.current = true;
@@ -173,6 +143,7 @@ function TabCron({ }) {
       const newVisibleCrons = visibleCrons + 1;
       setVisibleCrons(newVisibleCrons);
       setNumline(newVisibleCrons);
+      sendNumlineToStm32(newVisibleCrons);
     }
   };
 
@@ -181,6 +152,7 @@ function TabCron({ }) {
       const newVisibleCrons = visibleCrons - 1;
       setVisibleCrons(newVisibleCrons);
       setNumline(newVisibleCrons);
+      sendNumlineToStm32(newVisibleCrons);
     }
   };
 

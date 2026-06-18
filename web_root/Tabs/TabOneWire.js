@@ -229,20 +229,6 @@ const TabOneWire = () => {
 
   useEffect(() => { initGlobalTooltip(); }, []);
 
-  const refresh = () => {
-    fetch('/api/onewire/get')
-      .then((r) => r.json())
-      .then((data) => {
-        setLanguage(data.lang || 'ru');
-        setOneWire(data.pins || []);
-        setError(null);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setOneWire([]);
-      });
-  };
-
   const updateSensorData = (data) => {
     if (!data) return;
     setOneWire((prevState) => prevState.map((device) => {
@@ -262,20 +248,23 @@ const TabOneWire = () => {
     }));
   };
 
+  const refresh = () => {
+    registerPoll('onewire_init', '/api/onewire/get', function(data) {
+      setLanguage(data.lang || 'ru');
+      setOneWire(data.pins || []);
+      setError(null);
+      
+      // ── Загрузка показаний + polling через pollQueue (одно соединение, без нового handshake) ──
+      registerPoll('sensors', '/api/state/sensors', function(sData) {
+        if (sData !== null && sData !== undefined) updateSensorData(sData);
+      }, { immediate: true });
+    }, { immediate: true, oneShot: true });
+  };
+
   useEffect(() => {
-    let active = true;
-
-    // ── Начальная загрузка конфига (onewire/get — одноразово) ──
     refresh();
-
-    // ── Загрузка показаний + polling через pollQueue (одно соединение, без нового handshake) ──
-    registerPoll('sensors', '/api/state/sensors', function(data) {
-      if (!active) return;
-      if (data !== null && data !== undefined) updateSensorData(data);
-    }, { immediate: true });
-
     return function() {
-      active = false;
+      unregisterPoll('onewire_init');
       unregisterPoll('sensors');
     };
   }, []);

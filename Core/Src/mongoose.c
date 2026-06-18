@@ -15000,6 +15000,12 @@ static int mg_tls_server_recv_finish(struct mg_connection *c) {
   if (mg_tls_recv_record(c) < 0) {
     return -1;
   }
+  if (tls->content_type == MG_TLS_ALERT) {
+    recv_buf = &c->rtls.buf[tls->recv_offset];
+    uint8_t level = recv_buf[0], desc = (tls->recv_len > 1) ? recv_buf[1] : 0;
+    mg_error(c, "received TLS Alert: level=%d, desc=%d", level, desc);
+    return -1;
+  }
   recv_buf = &c->rtls.buf[tls->recv_offset];
   if (recv_buf[0] != MG_TLS_FINISHED) {
     mg_error(c, "expected Finish but got msg 0x%02x", recv_buf[0]);

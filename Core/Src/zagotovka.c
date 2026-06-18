@@ -1269,6 +1269,7 @@ void handle_timers_get(struct mg_connection *c) {
     "HTTP/1.1 200 OK\r\n"
     "Content-Type: application/json\r\n"
     "Transfer-Encoding: chunked\r\n"
+    "Connection: keep-alive\r\n"
     "Cache-Control: no-cache\r\n"
     "\r\n");
 
@@ -3187,7 +3188,7 @@ void gen_onewire_json(char *buffer, int buffer_size) {
 void handle_onewire_get(struct mg_connection *c) {
   gen_onewire_json(g_body, G_BODY_SIZE);
   size_t len = strlen(g_body);
-  mg_printf(c, "HTTP/1.1 200 OK\r\n%sContent-Length: %d\r\n\r\n", s_json_header, (int)len);
+  mg_printf(c, "HTTP/1.1 200 OK\r\n%sConnection: keep-alive\r\nContent-Length: %d\r\n\r\n", s_json_header, (int)len);
   mg_send(c, g_body, len);
   c->is_resp = 0;
 }
