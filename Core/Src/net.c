@@ -2074,6 +2074,10 @@ void web_init(struct mg_mgr *mgr) {
     s_settings.device_name = (char *)default_name;
 
     // Allocate shared JSON buffer in FreeRTOS heap (saves 16KB of .bss)
+    if (g_body != NULL) {
+        vPortFree(g_body);  // Free previous buffer on re-init
+        g_body = NULL;
+    }
     g_body = pvPortMalloc(G_BODY_SIZE);
     if (g_body == NULL) {
         MG_ERROR(("OOM: g_body allocation failed"));

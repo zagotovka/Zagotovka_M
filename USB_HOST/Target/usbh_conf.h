@@ -29,6 +29,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "FreeRTOS.h"
+#include "task.h"
+#include <string.h>
 #include "main.h"
 
 #include "stm32f7xx.h"
@@ -111,10 +114,10 @@
 /* Memory management macros */
 
 /** Alias for memory allocation. */
-#define USBH_malloc         malloc
+#define USBH_malloc         pvPortMalloc
 
 /** Alias for memory release. */
-#define USBH_free           free
+#define USBH_free           vPortFree
 
 /** Alias for memory set. */
 #define USBH_memset         memset

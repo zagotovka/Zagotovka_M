@@ -104,7 +104,6 @@ time_t moontime = (time_t)-1;
 int year;
 uint8_t month; // 1-12
 uint8_t day;   // 1-31
-char str[40] = {0};
 char g_ip_addr[16] = "0.0.0.0";
 char g_mac_addr[18] = "00:00:00:00:00:00";
 /* USER CODE END PM */
@@ -363,13 +362,19 @@ uint64_t mg_millis(void) {
     // Proper 64-bit extension of 32-bit HAL_GetTick.
     // HAL_GetTick wraps at ~49.7 days; we track wraps in a 64-bit accumulator.
     // Called frequently enough (every mg_mgr_poll) to never miss a wrap.
+    // Protected by critical section: called from CronTask (Normal) and
+    // WebServerTask/Mongoose (AboveNormal) — without protection, preemption
+    // between read and write of last_tick/ms64 causes time jumps.
     static uint32_t last_tick;
     static uint64_t ms64;
+    taskENTER_CRITICAL();
     uint32_t now = HAL_GetTick();
     uint32_t delta = now - last_tick;  // Safe modulo-2^32 subtraction
     ms64 += delta;
     last_tick = now;
-    return ms64;
+    uint64_t result = ms64;
+    taskEXIT_CRITICAL();
+    return result;
 }
 
 /*
@@ -1910,7 +1915,7 @@ void StartCronTask(void *argument)
   init_offline_time();
   static lwdtc_cron_ctx_t cron_ctxs[MAXSIZE];
   int i = 0;
-  char str[40] = {0};
+  char str[sizeof(dbCrontxt[0].activ)] = {0};
   int cfg_tasks = MAXSIZE; // Количество возможно настроенных cron задач
   time_t base_timestamp;
   static uint8_t t_printd = 0;
@@ -1930,14 +1935,15 @@ void StartCronTask(void *argument)
   /* Infinite loop */
   for (;;) {
     if (s_boot_timestamp != 0) {
-      cronetime = (time_t)(s_boot_timestamp / 1000) + (mg_millis() / 1000) +
-                  (time_t)(SetSettings.timezone * 3600);
-
       if (!onlineFlg) { // Оффлайн режим:
         cronetime = base_timestamp + (mg_millis() / 1000);
       } else { // Онлайн режим: используем время от NTP
+        float tz;
+        taskENTER_CRITICAL();
+        tz = SetSettings.timezone;
+        taskEXIT_CRITICAL();
         cronetime = (time_t)(s_boot_timestamp / 1000) + (mg_millis() / 1000) +
-                    (time_t)(SetSettings.timezone * 3600);
+                    (time_t)(tz * 3600);
       }
 
       if (!t_printd && cronetime != 0) {
@@ -1991,10 +1997,19 @@ void StartCronTask(void *argument)
         // Обработка задач с фиксированным временем
         i = 0;
         while (i < cfg_tasks) {
-          if (cronetime >= dbCrontxt[i].ptime && dbCrontxt[i].ptime != 0) {
-            strcpy(str, dbCrontxt[i].activ);
-            parse_string(str, cronetime_old, i, 1);
+          time_t ptime;
+          taskENTER_CRITICAL();
+          ptime = dbCrontxt[i].ptime;
+          taskEXIT_CRITICAL();
+
+          if (cronetime >= ptime && ptime != 0) {
+            taskENTER_CRITICAL();
+            strncpy(str, dbCrontxt[i].activ, sizeof(str) - 1);
+            str[sizeof(str) - 1] = '\0';
             dbCrontxt[i].ptime = 0;
+            taskEXIT_CRITICAL();
+
+            parse_string(str, cronetime_old, i, 1);
           }
           i++;
         }
@@ -2002,7 +2017,11 @@ void StartCronTask(void *argument)
         i = 0;
         while (i < LWDTC_ARRAYSIZE(cron_ctxs)) {
           if (lwdtc_cron_is_valid_for_time(&timez_copy, cron_ctxs, &i) == lwdtcOK) {
-            strcpy(str, dbCrontxt[i].activ);
+            taskENTER_CRITICAL();
+            strncpy(str, dbCrontxt[i].activ, sizeof(str) - 1);
+            str[sizeof(str) - 1] = '\0';
+            taskEXIT_CRITICAL();
+
             parse_string(str, cronetime_old, i, 0);
           }
           i++;
@@ -2531,11 +2550,18 @@ void StartServiceTask(void *argument)
 	        /* ── Timer onoff — останавливаем fade, PWM не трогаем ── */
 	        bool timer_on = false;
 	        for (int t = 0; t < MAXSIZE; t++) {
-	            if (dbCrontxt[t].onoff == 1) {
-	                /* Проверяем что этот cron управляет именно этим PWM */
-	                char tmp[sizeof(dbCrontxt[t].activ)];
+	            uint8_t t_onoff;
+	            char tmp[sizeof(dbCrontxt[0].activ)];
+	            taskENTER_CRITICAL();
+	            t_onoff = dbCrontxt[t].onoff;
+	            if (t_onoff == 1) {
 	                strncpy(tmp, dbCrontxt[t].activ, sizeof(tmp) - 1);
 	                tmp[sizeof(tmp) - 1] = '\0';
+	            }
+	            taskEXIT_CRITICAL();
+
+	            if (t_onoff == 1) {
+	                /* Проверяем что этот cron управляет именно этим PWM */
 	                char needle[12];
 	                snprintf(needle, sizeof(needle), "pwm:%d,", i);
 	                if (strstr(tmp, needle) != NULL) {

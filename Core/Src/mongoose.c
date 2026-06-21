@@ -7138,7 +7138,7 @@ static struct mg_connection *accept_conn(struct mg_connection *lsn,
   c->loc.port = lsn->loc.port;
   if ((l2addr = get_return_l2addr(lsn->mgr->ifp, &c->rem, false, pkt)) ==
       NULL) {
-    free(c);      // safety net for lousy networks, not actually needed
+    mg_free(c);   // safety net for lousy networks, not actually needed
     return NULL;  // as path has already been checked at SYN (sending SYN+ACK)
   }
   memcpy(s->mac, l2addr, sizeof(s->mac));
@@ -12463,7 +12463,8 @@ static char *mg_ssi(const char *path, const char *root, int depth) {
   return (char *) b.buf;
 
 fail:
-  fclose(fp);
+  if (fp != NULL) fclose(fp);
+  mg_iobuf_free(&b);
   return NULL;
 }
 
@@ -16278,7 +16279,9 @@ void mg_tls_init(struct mg_connection *c, const struct mg_tls_opts *opts) {
   // server CA certificate, store serial number
   if (opts->ca.len > 0) {
     if (mg_parse_pem(opts->ca, mg_str_s("CERTIFICATE"), &tls->ca_der) < 0) {
-      MG_ERROR(("Failed to load certificate"));
+      MG_ERROR(("Failed to load CA certificate"));
+      mg_tls_free(c);
+      mg_error(c, "tls CA cert");
       return;
     }
     if (!c->is_client) tls->is_twoway = true;  // server + CA: two-way auth
@@ -16286,6 +16289,7 @@ void mg_tls_init(struct mg_connection *c, const struct mg_tls_opts *opts) {
 
   if (opts->cert.buf == NULL) {
     MG_VERBOSE(("No certificate provided"));
+    mg_tls_free(c);
     return;
   }
 
@@ -16307,6 +16311,8 @@ void mg_tls_init(struct mg_connection *c, const struct mg_tls_opts *opts) {
       if (mg_parse_pem(opts->cert, mg_str_s("CERTIFICATE"), &tls->cert_der) <
           0) {
         MG_ERROR(("Failed to load certificate"));
+        mg_tls_free(c);
+        mg_error(c, "tls cert");
         return;
       }
     }
@@ -16321,16 +16327,24 @@ void mg_tls_init(struct mg_connection *c, const struct mg_tls_opts *opts) {
   if (mg_parse_pem(opts->key, mg_str_s("EC PRIVATE KEY"), &key) == 0) {
     if (key.len < 39) {
       MG_ERROR(("EC private key too short"));
+      mg_tls_free(c);
+      mg_error(c, "tls EC key");
       return;
     }
     // expect ASN.1 SEQUENCE=[INTEGER=1, BITSTRING of 32 bytes, ...]
     // 30 nn 02 01 01 04 20 [key] ...
     if (key.buf[0] != 0x30 || (key.buf[1] & 0x80) != 0) {
       MG_ERROR(("EC private key: ASN.1 bad sequence"));
+      mg_tls_free(c);
+      mg_error(c, "tls EC key ASN.1");
       return;
     }
     if (memcmp(key.buf + 2, "\x02\x01\x01\x04\x20", 5) != 0) {
       MG_ERROR(("EC private key: ASN.1 bad data"));
+      mg_free((void *) key.buf);
+      mg_tls_free(c);
+      mg_error(c, "tls EC key ASN.1 data");
+      return;
     }
     memmove(tls->ec_key, key.buf + 7, 32);
     mg_free((void *) key.buf);

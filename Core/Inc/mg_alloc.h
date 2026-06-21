@@ -19,8 +19,14 @@ static inline void mg_free(void *ptr) {
   if (ptr != NULL) vPortFree(ptr);
 }
 
+#include <limits.h>  /* SIZE_MAX */
+
 static inline void *mg_calloc(size_t count, size_t size) {
-  size_t total = count * size;
+  size_t total;
+  if (count > 0 && size > SIZE_MAX / count) {
+    return NULL;  /* Multiplication would overflow */
+  }
+  total = count * size;
   void *p = pvPortMalloc(total);
   if (p != NULL) memset(p, 0, total);
   return p;

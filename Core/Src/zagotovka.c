@@ -1436,28 +1436,38 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
   }
   int id = id_item->valueint;
   // Обновление полей структуры dbCrontxt
+  struct dbCron temp_cron;
+  taskENTER_CRITICAL();
+  temp_cron = dbCrontxt[id];
+  taskEXIT_CRITICAL();
+
   cJSON *cron_item = cJSON_GetObjectItem(root, "cron");
   if (cJSON_IsString(cron_item)) {
-    strncpy(dbCrontxt[id].cron, cron_item->valuestring,
-            sizeof(dbCrontxt[id].cron) - 1);
-    dbCrontxt[id].cron[sizeof(dbCrontxt[id].cron) - 1] = '\0';
+    strncpy(temp_cron.cron, cron_item->valuestring,
+            sizeof(temp_cron.cron) - 1);
+    temp_cron.cron[sizeof(temp_cron.cron) - 1] = '\0';
   }
   cJSON *activ_item = cJSON_GetObjectItem(root, "activ");
   if (cJSON_IsString(activ_item)) {
-    strncpy(dbCrontxt[id].activ, activ_item->valuestring,
-            sizeof(dbCrontxt[id].activ) - 1);
-    dbCrontxt[id].activ[sizeof(dbCrontxt[id].activ) - 1] = '\0';
+    strncpy(temp_cron.activ, activ_item->valuestring,
+            sizeof(temp_cron.activ) - 1);
+    temp_cron.activ[sizeof(temp_cron.activ) - 1] = '\0';
   }
   cJSON *info_item = cJSON_GetObjectItem(root, "info");
   if (cJSON_IsString(info_item)) {
-    strncpy(dbCrontxt[id].info, info_item->valuestring,
-            sizeof(dbCrontxt[id].info) - 1);
-    dbCrontxt[id].info[sizeof(dbCrontxt[id].info) - 1] = '\0';
+    strncpy(temp_cron.info, info_item->valuestring,
+            sizeof(temp_cron.info) - 1);
+    temp_cron.info[sizeof(temp_cron.info) - 1] = '\0';
   }
   cJSON *onoff_item = cJSON_GetObjectItem(root, "onoff");
   if (cJSON_IsNumber(onoff_item)) {
-    dbCrontxt[id].onoff = (uint8_t)onoff_item->valueint;
+    temp_cron.onoff = (uint8_t)onoff_item->valueint;
   }
+
+  taskENTER_CRITICAL();
+  dbCrontxt[id] = temp_cron;
+  taskEXIT_CRITICAL();
+
   cJSON_Delete(root);
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
