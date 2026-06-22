@@ -1,4 +1,4 @@
-name: Create new release on 'Zagotovka_M.bin' update
+name: Create Release
 
 permissions:
   contents: write
@@ -6,10 +6,8 @@ permissions:
 
 on:
   push:
-    branches:
-      - main  # Изменил нужную ветку!
-    paths:
-      - 'Proshivka/Zagotovka_M.bin'
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
   create-release:
@@ -18,21 +16,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Get latest version from README
+      - name: Get version from tag
         id: get_version
         run: |
-          # Точный поиск версии в таблице
-          VERSION=$(awk '/\| Версия \| Дата/{flag=1; next} /\|$/{flag=0} flag && /\| [0-9]+\.[0-9]+\.[0-9]+/{print $2}' README.md | sort -V | tail -n 1)
-          echo "Extracted version: $VERSION"
+          VERSION=${GITHUB_REF#refs/tags/v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Verify VERSION file matches tag
+        run: |
+          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+          TAG_VERSION=${{ steps.get_version.outputs.version }}
+          if [ "$FILE_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌ Mismatch: VERSION file=$FILE_VERSION, tag=$TAG_VERSION"
+            exit 1
+          fi
+          echo "✅ Version verified: $TAG_VERSION"
+
       - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
           name: Release ${{ steps.get_version.outputs.version }}
-          body: New release Zagotovka_M.bin ${{ github.event.head_commit.timestamp }}
+          body: "Релиз ${{ steps.get_version.outputs.version }}"
           draft: false
           prerelease: false
           files: Proshivka/Zagotovka_M.bin
