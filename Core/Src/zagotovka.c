@@ -1436,37 +1436,56 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
   }
   int id = id_item->valueint;
   // Обновление полей структуры dbCrontxt
-  struct dbCron temp_cron;
-  taskENTER_CRITICAL();
-  temp_cron = dbCrontxt[id];
-  taskEXIT_CRITICAL();
+  char temp_cron[35];
+  char temp_activ[255];
+  char temp_info[30];
+  uint8_t temp_onoff = 0;
+
+  bool has_cron = false;
+  bool has_activ = false;
+  bool has_info = false;
+  bool has_onoff = false;
 
   cJSON *cron_item = cJSON_GetObjectItem(root, "cron");
   if (cJSON_IsString(cron_item)) {
-    strncpy(temp_cron.cron, cron_item->valuestring,
-            sizeof(temp_cron.cron) - 1);
-    temp_cron.cron[sizeof(temp_cron.cron) - 1] = '\0';
+    strncpy(temp_cron, cron_item->valuestring, sizeof(temp_cron) - 1);
+    temp_cron[sizeof(temp_cron) - 1] = '\0';
+    has_cron = true;
   }
   cJSON *activ_item = cJSON_GetObjectItem(root, "activ");
   if (cJSON_IsString(activ_item)) {
-    strncpy(temp_cron.activ, activ_item->valuestring,
-            sizeof(temp_cron.activ) - 1);
-    temp_cron.activ[sizeof(temp_cron.activ) - 1] = '\0';
+    strncpy(temp_activ, activ_item->valuestring, sizeof(temp_activ) - 1);
+    temp_activ[sizeof(temp_activ) - 1] = '\0';
+    has_activ = true;
   }
   cJSON *info_item = cJSON_GetObjectItem(root, "info");
   if (cJSON_IsString(info_item)) {
-    strncpy(temp_cron.info, info_item->valuestring,
-            sizeof(temp_cron.info) - 1);
-    temp_cron.info[sizeof(temp_cron.info) - 1] = '\0';
+    strncpy(temp_info, info_item->valuestring, sizeof(temp_info) - 1);
+    temp_info[sizeof(temp_info) - 1] = '\0';
+    has_info = true;
   }
   cJSON *onoff_item = cJSON_GetObjectItem(root, "onoff");
   if (cJSON_IsNumber(onoff_item)) {
-    temp_cron.onoff = (uint8_t)onoff_item->valueint;
+    temp_onoff = (uint8_t)onoff_item->valueint;
+    has_onoff = true;
   }
 
-  taskENTER_CRITICAL();
-  dbCrontxt[id] = temp_cron;
-  taskEXIT_CRITICAL();
+  if (has_cron || has_activ || has_info || has_onoff) {
+    taskENTER_CRITICAL();
+    if (has_cron) {
+      memcpy(dbCrontxt[id].cron, temp_cron, sizeof(dbCrontxt[id].cron));
+    }
+    if (has_activ) {
+      memcpy(dbCrontxt[id].activ, temp_activ, sizeof(dbCrontxt[id].activ));
+    }
+    if (has_info) {
+      memcpy(dbCrontxt[id].info, temp_info, sizeof(dbCrontxt[id].info));
+    }
+    if (has_onoff) {
+      dbCrontxt[id].onoff = temp_onoff;
+    }
+    taskEXIT_CRITICAL();
+  }
 
   cJSON_Delete(root);
   if (my_DgnTaskHandle)
@@ -4547,12 +4566,15 @@ void process_ds18b20(OneWire_t *OneWire, uint8_t owflag, uint8_t pin) {
     DS18B20_StartAll(OneWire);
     uint32_t start_time = HAL_GetTick();
     bool conversion_ok = false;
-    while ((HAL_GetTick() - start_time) < _DS18B20_CONVERT_TIMEOUT_MS) {
-      osDelay(10);
+    while (1) {
       if (DS18B20_AllDone(OneWire)) {
         conversion_ok = true;
         break;
       }
+      if ((HAL_GetTick() - start_time) >= _DS18B20_CONVERT_TIMEOUT_MS) {
+        break;
+      }
+      osDelay(10);
     }
 
     if (!conversion_ok) {

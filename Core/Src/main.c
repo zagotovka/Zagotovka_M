@@ -186,14 +186,14 @@ osThreadId_t ds18b20TaskHandle;
 const osThreadAttr_t ds18b20Task_attributes = {
   .name = "ds18b20Task",
   .stack_size = 768 * 4,
-  .priority = (osPriority_t) osPriorityBelowNormal,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for dht22Task */
 osThreadId_t dht22TaskHandle;
 const osThreadAttr_t dht22Task_attributes = {
   .name = "dht22Task",
   .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityBelowNormal,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ServiceTask */
 osThreadId_t ServiceTaskHandle;
