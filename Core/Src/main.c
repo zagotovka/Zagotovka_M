@@ -186,7 +186,7 @@ osThreadId_t ds18b20TaskHandle;
 const osThreadAttr_t ds18b20Task_attributes = {
   .name = "ds18b20Task",
   .stack_size = 768 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .priority = (osPriority_t) osPriorityAboveNormal,
 };
 /* Definitions for dht22Task */
 osThreadId_t dht22TaskHandle;
@@ -365,6 +365,7 @@ uint64_t mg_millis(void) {
     // Protected by critical section: called from CronTask (Normal) and
     // WebServerTask/Mongoose (AboveNormal) — without protection, preemption
     // between read and write of last_tick/ms64 causes time jumps.
+//	uint32_t t_enter = HAL_GetTick();  // или DWT->CYCCNT для мкс точности
     static uint32_t last_tick;
     static uint64_t ms64;
     taskENTER_CRITICAL();
@@ -373,7 +374,11 @@ uint64_t mg_millis(void) {
     ms64 += delta;
     last_tick = now;
     uint64_t result = ms64;
+//    uint32_t t_exit = HAL_GetTick();
     taskEXIT_CRITICAL();
+//    if (t_exit != t_enter) {
+//        printf("[WARN] CronTask critical section held %lu ms!\n", t_exit - t_enter);
+//    }
     return result;
 }
 
@@ -1992,8 +1997,8 @@ void StartCronTask(void *argument)
             last_min = timez_copy.tm_min;
         }
 
-        //				printf("CronTask: today's date:
-        //%02d.%02d.%d\n", day, month, year);
+        // printf("CronTask: today's date:
+        // %02d.%02d.%d\n", day, month, year);
         // Обработка задач с фиксированным временем
         i = 0;
         while (i < cfg_tasks) {
@@ -2004,10 +2009,10 @@ void StartCronTask(void *argument)
 
           if (cronetime >= ptime && ptime != 0) {
             taskENTER_CRITICAL();
-            strncpy(str, dbCrontxt[i].activ, sizeof(str) - 1);
-            str[sizeof(str) - 1] = '\0';
+            memcpy(str, dbCrontxt[i].activ, sizeof(str) - 1);
             dbCrontxt[i].ptime = 0;
             taskEXIT_CRITICAL();
+            str[sizeof(str) - 1] = '\0';  // снаружи CS
 
             parse_string(str, cronetime_old, i, 1);
           }
@@ -2018,9 +2023,9 @@ void StartCronTask(void *argument)
         while (i < LWDTC_ARRAYSIZE(cron_ctxs)) {
           if (lwdtc_cron_is_valid_for_time(&timez_copy, cron_ctxs, &i) == lwdtcOK) {
             taskENTER_CRITICAL();
-            strncpy(str, dbCrontxt[i].activ, sizeof(str) - 1);
-            str[sizeof(str) - 1] = '\0';
+            memcpy(str, dbCrontxt[i].activ, sizeof(str) - 1);
             taskEXIT_CRITICAL();
+            str[sizeof(str) - 1] = '\0';  // снаружи CS
 
             parse_string(str, cronetime_old, i, 0);
           }

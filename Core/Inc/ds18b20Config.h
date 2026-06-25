@@ -18,7 +18,7 @@ extern TIM_HandleTypeDef htim1;
 //#define	_DS18B20_GPIO								SENSOR_GPIO_Port
 //#define	_DS18B20_PIN								SENSOR_Pin
 
-#define	_DS18B20_CONVERT_TIMEOUT_MS					1000//5000
+#define	_DS18B20_CONVERT_TIMEOUT_MS					3000//5000
 #if (_DS18B20_USE_FREERTOS==1)
 #define	_DS18B20_UPDATE_INTERVAL_MS					0// 10000	//  (((	if==0  >> Ds18b20_ManualConvert()  )))    ((( if>0  >>>> Auto refresh )))
 #endif
