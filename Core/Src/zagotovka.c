@@ -4946,7 +4946,7 @@ uint8_t DHT22_Read(uint8_t index) {
 
 void process_dht22(uint8_t indx) {
   uint32_t tnow = HAL_GetTick();
-  if (tnow - dht22[indx].lastread < 500) { // Рекомендованно 2000!
+  if (tnow - dht22[indx].lastread < 2000) { // 2с: снижает вероятность в 4 раза попадания в окно ETH DMA
     return;
   }
   dht22[indx].lastread = tnow;
@@ -4955,39 +4955,56 @@ void process_dht22(uint8_t indx) {
    * bit-banging transaction. DHT22_Start/DHT22_Read use per-bit
    * taskENTER_CRITICAL() for sub-100us timing precision — between bits
    * interrupts are enabled, giving ETH DMA/SysTick their service windows. */
-  vTaskSuspendAll();
 
-  uint8_t response;
+  /* Retry: до 3 попыток чтения при checksum error.
+   * Пауза 10мс между попытками — датчик успевает восстановиться. */
+#define DHT22_MAX_RETRIES 3 // Количество попыток
+  uint8_t response = 0;
   uint8_t data[5] = {0};
-  response = DHT22_Start(indx);
-  if (response) {
-    for (uint8_t i = 0; i < 5; i++) {
-      data[i] = DHT22_Read(indx);
+  bool checksum_ok = false;
+
+  for (uint8_t attempt = 0; attempt < DHT22_MAX_RETRIES && !checksum_ok; attempt++) {
+    if (attempt > 0) {
+      osDelay(10); // Пауза между повторными попытками
+    }
+
+    vTaskSuspendAll();
+
+    response = DHT22_Start(indx);
+    if (response) {
+      for (uint8_t i = 0; i < 5; i++) {
+        data[i] = DHT22_Read(indx);
+      }
+    }
+
+    xTaskResumeAll();
+
+    if (response &&
+        (data[4] == ((data[0] + data[1] + data[2] + data[3]) & 0xFF))) {
+      checksum_ok = true;
     }
   }
 
-  xTaskResumeAll();
-
   /* Обработка данных — ВНЕ критической секции */
-  if (response) {
-    if (data[4] == ((data[0] + data[1] + data[2] + data[3]) & 0xFF)) {
-      dht22[indx].humid = ((data[0] << 8) | data[1]) / 10.0f;
+  if (checksum_ok) {
+    dht22[indx].humid = ((data[0] << 8) | data[1]) / 10.0f;
 
-      int16_t temp = (data[2] & 0x7F) << 8 | data[3];
-      if (data[2] & 0x80) {
-        temp = -temp;
-      }
-      dht22[indx].temp = temp / 10.0f;
-      dht22[indx].valid = true;
-      dht22[indx].errflag = false;
-      check_dht22_changes(indx); // Проверка изменений temp для mqtt
-    } else {
-      if (!dht22[indx].errflag) {
-        printf("DHT22_%d: Checksum error\r\n", indx);
-        dht22[indx].errflag = true;
-      }
-      dht22[indx].valid = false;
+    int16_t temp = (data[2] & 0x7F) << 8 | data[3];
+    if (data[2] & 0x80) {
+      temp = -temp;
     }
+    dht22[indx].temp = temp / 10.0f;
+    dht22[indx].valid = true;
+    dht22[indx].errflag = false;
+    check_dht22_changes(indx); // Проверка изменений temp для mqtt
+  } else if (response) {
+    /* Датчик ответил, но checksum не прошёл после всех попыток */
+    if (!dht22[indx].errflag) {
+      printf("DHT22_%d: Checksum error (all %d attempts failed)\r\n", indx,
+             DHT22_MAX_RETRIES);
+      dht22[indx].errflag = true;
+    }
+    dht22[indx].valid = false;
   } else {
     if (!dht22[indx].errflag) {
       dht22[indx].errflag = true;
