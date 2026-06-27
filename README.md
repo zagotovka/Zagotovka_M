@@ -29,7 +29,7 @@ npm run start
 ## Информация для разработчиков бэкенда
 - STM32CubeIDE Version: 1.15.1
 - FREERTOS Version: V10.2.1 CMSIS_V2
-- Mongoose Version: 7.13
+- Mongoose Version: 7.21
 
 ### Информация для электриков: <a href="https://youtu.be/dl3f8Jo28ps"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/a7eb1218174d5f78254775de943bdcde/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
 Для данного проекта схема, которая использует распределительные коробки, не подходит!
@@ -133,3 +133,4 @@ d. <a href="https://easyeda.com/editor#id=|125ff34d97324d308c97b01793449de7|1bc6
 | 1.0.0  | 11-01-2025 | Первый стабильный релиз.|
 | 1.0.1  | 3-02-2025 | Исправлены баги в «StartCronTask» и «ModalEditSensor».|
 | 1.1.1  | 4-04-2025 | Реализована поддержка HTTPS (добавлен HTTPS-сервер)|
+| 2.0.0  | 27-06-2026 | Обновлен веб-интерфейс и Mongoose (7.13→7.21), внедрены SMS-управление и ограничение сессий с индикацией, добавлены PID-контроллер, ШИМ-таймер и оптимизирован код. |
