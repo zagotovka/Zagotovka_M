@@ -6,7 +6,7 @@
  */
 
 #include "setings.h"
-#include "cJSON.h"
+
 #include "db.h"
 #include "ds18b20Config.h"
 #include "fatfs.h"
@@ -31,7 +31,7 @@ bool g_log_filter_from_file = false; // Флаг: log_filter_mask был про�
 
 extern osMessageQueueId_t mqttQueueHandle;
 extern struct dbSettings SetSettings;
-extern struct dbCron dbCrontxt[MAXSIZE];
+extern struct dbCron dbCrontxt[NUMTASK];
 extern struct dbPinsInfo PinsInfo[NUMPIN];
 extern struct dbPinsConf PinsConf[NUMPIN];
 extern struct dbPinToPin PinsLinks[NUMPINLINKS];
@@ -704,7 +704,7 @@ void GetCronConfig() {
   //    printf("Memory cleared\r\n");
 
   while ((fresult = f_read(&USBHFile, &currentChar, 1, &bytesRead)) == FR_OK &&
-         bytesRead > 0 && currentIndex < MAXSIZE) {
+         bytesRead > 0 && currentIndex < NUMTASK) {
     if (currentChar == '"') {
       inString = !inString;
       if (!inString) {
@@ -823,7 +823,7 @@ void SetCronConfig() {
     return;
   }
   f_write(&USBHFile, "[", 1, &bytesWritten); // Write opening bracket for array
-  for (int i = 0; i < MAXSIZE; i++) {
+  for (int i = 0; i < NUMTASK; i++) {
     f_write(&USBHFile, "{", 1,
             &bytesWritten); // Write opening bracket for object
     writeField(&USBHFile, buffer, "cron", "\"%s\"", dbCrontxt[i].cron);
@@ -834,7 +834,7 @@ void SetCronConfig() {
     snprintf(buffer, JSON_BUF_SIZE, "\"info\":\"%s\"", dbCrontxt[i].info);
     f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
     // Write closing bracket for object
-    if (i < MAXSIZE - 1) {
+    if (i < NUMTASK - 1) {
       f_write(&USBHFile, "},", 2,
               &bytesWritten); // Add comma if not last object
     } else {
@@ -1349,40 +1349,27 @@ void GetPinToPin() {
 
   memset(PinsLinks, 0, sizeof(PinsLinks)); // Очищаем массив связей
 
-  cJSON *root = cJSON_Parse(buf);
-  vPortFree(buf);
-  if (!root) {
-    printf("ERROR: JSON parse failed for pintopin.ini: %s\r\n", cJSON_GetErrorPtr());
-    return;
-  }
+  struct mg_str arr = mg_str_n(buf, strlen(buf));
 
-  if (cJSON_IsArray(root)) {
-    int count = cJSON_GetArraySize(root);
-    if (count > NUMPINLINKS) count = NUMPINLINKS; // Защита от переполнения
-
-    for (int i = 0; i < count; i++) {
-      cJSON *item = cJSON_GetArrayItem(root, i);
-      if (!cJSON_IsObject(item)) continue;
-
-      cJSON *idin = cJSON_GetObjectItem(item, "idin");
-      cJSON *idout = cJSON_GetObjectItem(item, "idout");
-      cJSON *pins = cJSON_GetObjectItem(item, "pins");
-
-      if (cJSON_IsNumber(idin) && cJSON_IsNumber(idout)) {
-         PinsLinks[i].idin = idin->valueint;
-         PinsLinks[i].idout = idout->valueint;
-      }
-      if (cJSON_IsString(pins) && pins->valuestring != NULL) {
-         strncpy(PinsLinks[i].pins, pins->valuestring, sizeof(PinsLinks[i].pins) - 1);
-         PinsLinks[i].pins[sizeof(PinsLinks[i].pins) - 1] = '\0';
-      }
+  int i = 0;
+  size_t pos = 0;
+  struct mg_str key, elem;
+  while (i < NUMPINLINKS && (pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
+    long idin = mg_json_get_long(elem, "$.idin", 0);
+    long idout = mg_json_get_long(elem, "$.idout", 0);
+    PinsLinks[i].idin = (short)idin;
+    PinsLinks[i].idout = (short)idout;
+    char *pins = mg_json_get_str(elem, "$.pins");
+    if (pins) {
+      strncpy(PinsLinks[i].pins, pins, sizeof(PinsLinks[i].pins) - 1);
+      PinsLinks[i].pins[sizeof(PinsLinks[i].pins) - 1] = '\0';
+      mg_free(pins);
     }
-    printf("GetPinToPin() loaded successfully!\r\n");
-  } else {
-    printf("ERROR: pintopin.ini is not a JSON array!\r\n");
+    i++;
   }
-
-  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  vPortFree(buf);
+  printf("GetPinToPin() loaded successfully!\r\n");
+  if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 }
 
 // Записываем данные в файл "pintopin.ini", создавая его если его нет.
@@ -2061,9 +2048,9 @@ void SetOneWireConfig() {
   UINT byteswritten;
   const uint8_t CHUNK_SIZE =
       1; // Обработка по одному сенсору за раз для экономии памяти
-  char buf[1536];
-  char *out_str = buf;
+  static char buf[1536];
   bool first_pin = true;
+  int len = 0;
 
   //    printf("Starting chunked SetOneWireConfig\n");
 
@@ -2100,29 +2087,12 @@ void SetOneWireConfig() {
         goto cleanup;
     }
     first_pin = false;
-    //        printf("Processing DS18B20 pin %s with %d sensors\n",
-    //        ds18b20[i].pin, ds18b20[i].numsens);
-    // Create and write pin object header
-    cJSON *pin_obj = cJSON_CreateObject();
-    if (!pin_obj)
-      continue;
-    if (!(cJSON_AddNumberToObject(pin_obj, "id", ds18b20[i].id) &&
-          cJSON_AddStringToObject(pin_obj, "pin", ds18b20[i].pin) &&
-          cJSON_AddNumberToObject(pin_obj, "typsensr", 1) &&
-          cJSON_AddNumberToObject(pin_obj, "numsens", ds18b20[i].numsens) &&
-          cJSON_AddNumberToObject(pin_obj, "onoff", ds18b20[i].onoff))) {
-      cJSON_Delete(pin_obj);
-      continue;
-    }
-    if (!cJSON_PrintPreallocated(pin_obj, buf, sizeof(buf), 0)) {
-      cJSON_Delete(pin_obj);
-      continue;
-    }
-    cJSON_Delete(pin_obj);
+    len = snprintf(buf, sizeof(buf),
+        "{\"id\":%d,\"pin\":\"%s\",\"typsensr\":1,\"numsens\":%d,\"onoff\":%d",
+        ds18b20[i].id, ds18b20[i].pin, ds18b20[i].numsens, ds18b20[i].onoff);
+    if (len <= 0 || len >= (int)sizeof(buf)) continue;
 
-    // Remove closing brace to add sensors array
-    out_str[strlen(out_str) - 1] = '\0';
-    fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
+    fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
     if (fresult != FR_OK)
       goto cleanup;
     // Start sensors array
@@ -2146,38 +2116,21 @@ void SetOneWireConfig() {
             goto cleanup;
         }
         first_sensor = false;
-        cJSON *sensor_obj = cJSON_CreateObject();
-        if (!sensor_obj)
-          continue;
         char sensor_addr_str[17];
         for (int k = 0; k < 8; k++) {
           sprintf(sensor_addr_str + (k * 2), "%02X",
                   ds18b20[i].sensors[j].addr[k]);
         }
-        if (!(cJSON_AddStringToObject(sensor_obj, "s_number",
-                                      sensor_addr_str) &&
-              cJSON_AddNumberToObject(sensor_obj, "t", 0.0) &&
-              cJSON_AddBoolToObject(sensor_obj, "valid", false) &&
-              cJSON_AddNumberToObject(sensor_obj, "ut",
-                                      ds18b20[i].sensors[j].upt) &&
-              cJSON_AddNumberToObject(sensor_obj, "lt",
-                                      ds18b20[i].sensors[j].lowt) &&
-              cJSON_AddStringToObject(sensor_obj, "action_ut",
-                                      ds18b20[i].sensors[j].actup) &&
-              cJSON_AddStringToObject(sensor_obj, "action_lt",
-                                      ds18b20[i].sensors[j].actlow) &&
-              cJSON_AddStringToObject(sensor_obj, "info",
-                                      ds18b20[i].sensors[j].info))) {
-          cJSON_Delete(sensor_obj);
-          continue;
-        }
-        if (!cJSON_PrintPreallocated(sensor_obj, buf, sizeof(buf), 0)) {
-          cJSON_Delete(sensor_obj);
-          continue;
-        }
-        cJSON_Delete(sensor_obj);
+        len = snprintf(buf, sizeof(buf),
+            "{\"s_number\":\"%s\",\"t\":0.00,\"valid\":false,"
+            "\"ut\":%.2f,\"lt\":%.2f,"
+            "\"action_ut\":\"%s\",\"action_lt\":\"%s\",\"info\":\"%s\"}",
+            sensor_addr_str, ds18b20[i].sensors[j].upt, ds18b20[i].sensors[j].lowt,
+            ds18b20[i].sensors[j].actup, ds18b20[i].sensors[j].actlow,
+            ds18b20[i].sensors[j].info);
+        if (len <= 0 || len >= (int)sizeof(buf)) continue;
 
-        fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
+        fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
         if (fresult != FR_OK)
           goto cleanup;
       }
@@ -2207,26 +2160,12 @@ void SetOneWireConfig() {
       }
       first_pin = false;
       // Create pin object
-      cJSON *pin_obj = cJSON_CreateObject();
-      if (!pin_obj)
-        continue;
-      if (!(cJSON_AddNumberToObject(pin_obj, "id", dht22[j].id) &&
-            cJSON_AddStringToObject(pin_obj, "pin", dht22[j].pin) &&
-            cJSON_AddNumberToObject(pin_obj, "typsensr", 2) &&
-            cJSON_AddNumberToObject(pin_obj, "numsens", 1) &&
-            cJSON_AddNumberToObject(pin_obj, "onoff", dht22[j].onoff))) {
-        cJSON_Delete(pin_obj);
-        continue;
-      }
-      if (!cJSON_PrintPreallocated(pin_obj, buf, sizeof(buf), 0)) {
-        cJSON_Delete(pin_obj);
-        continue;
-      }
-      cJSON_Delete(pin_obj);
+      len = snprintf(buf, sizeof(buf),
+          "{\"id\":%d,\"pin\":\"%s\",\"typsensr\":2,\"numsens\":1,\"onoff\":%d",
+          dht22[j].id, dht22[j].pin, dht22[j].onoff);
+      if (len <= 0 || len >= (int)sizeof(buf)) continue;
 
-      // Remove closing brace to add sensors array
-      out_str[strlen(out_str) - 1] = '\0';
-      fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
+      fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
       if (fresult != FR_OK)
         goto cleanup;
       // Start sensors array
@@ -2235,32 +2174,19 @@ void SetOneWireConfig() {
       if (fresult != FR_OK)
         goto cleanup;
       // Create DHT22 sensor object
-      cJSON *sensor_obj = cJSON_CreateObject();
-      if (!sensor_obj)
-        goto cleanup;
-      if (!(cJSON_AddStringToObject(sensor_obj, "s_number", "DHT22") &&
-            cJSON_AddNumberToObject(sensor_obj, "t", 0.00) &&
-            cJSON_AddNumberToObject(sensor_obj, "humidity", 0.00) &&
-            cJSON_AddBoolToObject(sensor_obj, "valid", false) &&
-            cJSON_AddNumberToObject(sensor_obj, "ut", dht22[j].upt) &&
-            cJSON_AddNumberToObject(sensor_obj, "lt", dht22[j].lowt) &&
-            cJSON_AddStringToObject(sensor_obj, "action_ut", dht22[j].actup) &&
-            cJSON_AddStringToObject(sensor_obj, "action_lt", dht22[j].actlow) &&
-            cJSON_AddNumberToObject(sensor_obj, "upphumid", dht22[j].uph) &&
-            cJSON_AddNumberToObject(sensor_obj, "humlolim", dht22[j].lowh) &&
-            cJSON_AddStringToObject(sensor_obj, "actuphum", dht22[j].actuh) &&
-            cJSON_AddStringToObject(sensor_obj, "actlowhum", dht22[j].actlh) &&
-            cJSON_AddStringToObject(sensor_obj, "info", dht22[j].info))) {
-        cJSON_Delete(sensor_obj);
-        goto cleanup;
-      }
-      if (!cJSON_PrintPreallocated(sensor_obj, buf, sizeof(buf), 0)) {
-        cJSON_Delete(sensor_obj);
-        goto cleanup;
-      }
-      cJSON_Delete(sensor_obj);
+      len = snprintf(buf, sizeof(buf),
+          "{\"s_number\":\"DHT22\",\"t\":0.00,\"humidity\":0.00,\"valid\":false,"
+          "\"ut\":%.2f,\"lt\":%.2f,"
+          "\"action_ut\":\"%s\",\"action_lt\":\"%s\","
+          "\"upphumid\":%.2f,\"humlolim\":%.2f,"
+          "\"actuphum\":\"%s\",\"actlowhum\":\"%s\",\"info\":\"%s\"}",
+          dht22[j].upt, dht22[j].lowt,
+          dht22[j].actup, dht22[j].actlow,
+          dht22[j].uph, dht22[j].lowh,
+          dht22[j].actuh, dht22[j].actlh, dht22[j].info);
+      if (len <= 0 || len >= (int)sizeof(buf)) goto cleanup;
 
-      fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
+      fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
       if (fresult != FR_OK)
         goto cleanup;
       // Close sensors array and pin object
@@ -2318,100 +2244,65 @@ void GetPidConfig() {
   buf[bytesRead] = '\0';
 
   /* Парсим JSON */
-  cJSON *root = cJSON_Parse(buf);
-  vPortFree(buf);
-  if (!root) {
-    printf("ERROR: pid.ini JSON parse failed\r\n");
-    return;
-  }
+  struct mg_str body = mg_str_n(buf, strlen(buf));
 
-  cJSON *j_arr = cJSON_GetObjectItem(root, "pid");
-  if (!j_arr || !cJSON_IsArray(j_arr)) {
-    cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  int arr_ofs = mg_json_get(body, "$.pid", NULL);
+  if (arr_ofs < 0) {
+    vPortFree(buf);
+    if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
+  struct mg_str arr = mg_str_n(body.buf + arr_ofs, body.len - (size_t)arr_ofs);
 
   memset(PidConf, 0, sizeof(PidConf));
 
   int idx = 0;
-  cJSON *item;
-  cJSON_ArrayForEach(item, j_arr) {
-    if (idx >= PID_MAX_SLOTS) break;
+  size_t pos = 0;
+  struct mg_str key, elem;
+  while (idx < PID_MAX_SLOTS && (pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
+    PidConf[idx].pwm_pin_id = (uint8_t)mg_json_get_long(elem, "$.pwm_pin_id", 0);
+    PidConf[idx].selsens = (PidSensorType_e)mg_json_get_long(elem, "$.selsens", 0);
+    PidConf[idx].sensor_pin_id = (uint8_t)mg_json_get_long(elem, "$.sensor_pin_id", 0);
 
-    cJSON *j;
-    j = cJSON_GetObjectItem(item, "pwm_pin_id");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].pwm_pin_id = (uint8_t)j->valueint;
-
-    j = cJSON_GetObjectItem(item, "selsens");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].selsens = (PidSensorType_e)j->valueint;
-
-    j = cJSON_GetObjectItem(item, "sensor_pin_id");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].sensor_pin_id = (uint8_t)j->valueint;
-
-    j = cJSON_GetObjectItem(item, "sernum");
-    if (j && cJSON_IsString(j)) {
-      strncpy(PidConf[idx].sernum, j->valuestring, sizeof(PidConf[idx].sernum) - 1);
+    char *sernum = mg_json_get_str(elem, "$.sernum");
+    if (sernum) {
+      strncpy(PidConf[idx].sernum, sernum, sizeof(PidConf[idx].sernum) - 1);
+      mg_free(sernum);
     }
 
-    j = cJSON_GetObjectItem(item, "sensor_sub_idx");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].sensor_sub_idx = (uint8_t)j->valueint;
+    PidConf[idx].sensor_sub_idx = (uint8_t)mg_json_get_long(elem, "$.sensor_sub_idx", 0);
+    PidConf[idx].preset = (uint8_t)mg_json_get_long(elem, "$.preset", 0);
 
-    j = cJSON_GetObjectItem(item, "preset");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].preset = (uint8_t)j->valueint;
-
-    j = cJSON_GetObjectItem(item, "tmpset");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].tmpset = (float)j->valuedouble;
-
-    j = cJSON_GetObjectItem(item, "Kp");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].Kp = (float)j->valuedouble;
-
-    j = cJSON_GetObjectItem(item, "Ki");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].Ki = (float)j->valuedouble;
-
-    j = cJSON_GetObjectItem(item, "Kd");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].Kd = (float)j->valuedouble;
-
-    j = cJSON_GetObjectItem(item, "bias");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].bias = (float)j->valuedouble;
-
-    j = cJSON_GetObjectItem(item, "Ts_ms");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].Ts_ms = (uint16_t)j->valueint;
-
-    j = cJSON_GetObjectItem(item, "lambda_factor");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].lambda_factor = (float)j->valuedouble;
-
-    j = cJSON_GetObjectItem(item, "pwm_start");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].pwm_start = (uint8_t)j->valueint;
-
-    j = cJSON_GetObjectItem(item, "pwm_max");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].pwm_max = (uint8_t)j->valueint;
-
-    j = cJSON_GetObjectItem(item, "temp_max");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].temp_max = (float)j->valuedouble;
-
-    j = cJSON_GetObjectItem(item, "temp_min");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].temp_min = (float)j->valuedouble;
-
-    j = cJSON_GetObjectItem(item, "pause_sec");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].pause_sec = (uint16_t)j->valueint;
-
-    j = cJSON_GetObjectItem(item, "tau");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].tau = (float)j->valuedouble;
-
-    j = cJSON_GetObjectItem(item, "K_gain");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].K_gain = (float)j->valuedouble;
-
-    j = cJSON_GetObjectItem(item, "info");
-    if (j && cJSON_IsString(j)) {
-      strncpy(PidConf[idx].info, j->valuestring, sizeof(PidConf[idx].info) - 1);
+    { double d;
+      if (mg_json_get_num(elem, "$.tmpset", &d)) PidConf[idx].tmpset = (float)d;
+      if (mg_json_get_num(elem, "$.Kp", &d)) PidConf[idx].Kp = (float)d;
+      if (mg_json_get_num(elem, "$.Ki", &d)) PidConf[idx].Ki = (float)d;
+      if (mg_json_get_num(elem, "$.Kd", &d)) PidConf[idx].Kd = (float)d;
+      if (mg_json_get_num(elem, "$.bias", &d)) PidConf[idx].bias = (float)d;
+      if (mg_json_get_num(elem, "$.lambda_factor", &d)) PidConf[idx].lambda_factor = (float)d;
+      if (mg_json_get_num(elem, "$.temp_max", &d)) PidConf[idx].temp_max = (float)d;
+      if (mg_json_get_num(elem, "$.temp_min", &d)) PidConf[idx].temp_min = (float)d;
+      if (mg_json_get_num(elem, "$.tau", &d)) PidConf[idx].tau = (float)d;
+      if (mg_json_get_num(elem, "$.K_gain", &d)) PidConf[idx].K_gain = (float)d;
     }
 
-    j = cJSON_GetObjectItem(item, "onoff");
-    if (j && cJSON_IsNumber(j)) PidConf[idx].onoff = (uint8_t)j->valueint;
+    PidConf[idx].Ts_ms = (uint16_t)mg_json_get_long(elem, "$.Ts_ms", 0);
+    PidConf[idx].pwm_start = (uint8_t)mg_json_get_long(elem, "$.pwm_start", 0);
+    PidConf[idx].pwm_max = (uint8_t)mg_json_get_long(elem, "$.pwm_max", 0);
+    PidConf[idx].pause_sec = (uint16_t)mg_json_get_long(elem, "$.pause_sec", 0);
+
+    char *info = mg_json_get_str(elem, "$.info");
+    if (info) {
+      strncpy(PidConf[idx].info, info, sizeof(PidConf[idx].info) - 1);
+      mg_free(info);
+    }
+
+    PidConf[idx].onoff = (uint8_t)mg_json_get_long(elem, "$.onoff", 0);
 
     idx++;
   }
-  cJSON_Delete(root); if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  vPortFree(buf);
+  if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
   printf("[PID] Loaded %d slots from pid.ini\r\n", idx);
 }
 
@@ -2419,8 +2310,8 @@ void GetPidConfig() {
 void SetPidConfig() {
   FRESULT fresult;
   UINT byteswritten;
-  char buf[1536];
-  char *out_str = buf;
+  static char buf[1536];
+  int len = 0;
 
   fresult = f_open(&USBHFile, (const TCHAR *)"pid.ini",
                    FA_CREATE_ALWAYS | FA_WRITE);
@@ -2446,42 +2337,27 @@ void SetPidConfig() {
     }
     first = false;
 
-    cJSON *obj = cJSON_CreateObject();
-    if (!obj) continue;
+    len = snprintf(buf, sizeof(buf),
+        "{\"pwm_pin_id\":%d,\"selsens\":%d,\"sensor_pin_id\":%d,"
+        "\"sernum\":\"%s\",\"sensor_sub_idx\":%d,\"preset\":%d,"
+        "\"tmpset\":%.2f,\"Kp\":%.4f,\"Ki\":%.6f,\"Kd\":%.4f,\"bias\":%.4f,"
+        "\"Ts_ms\":%d,\"lambda_factor\":%.2f,"
+        "\"pwm_start\":%d,\"pwm_max\":%d,"
+        "\"temp_max\":%.2f,\"temp_min\":%.2f,\"pause_sec\":%d,"
+        "\"tau\":%.2f,\"K_gain\":%.4f,"
+        "\"info\":\"%s\",\"onoff\":%d}",
+        PidConf[i].pwm_pin_id, (int)PidConf[i].selsens, PidConf[i].sensor_pin_id,
+        PidConf[i].sernum, PidConf[i].sensor_sub_idx, PidConf[i].preset,
+        PidConf[i].tmpset, PidConf[i].Kp, PidConf[i].Ki, PidConf[i].Kd, PidConf[i].bias,
+        PidConf[i].Ts_ms, PidConf[i].lambda_factor,
+        PidConf[i].pwm_start, PidConf[i].pwm_max,
+        PidConf[i].temp_max, PidConf[i].temp_min, PidConf[i].pause_sec,
+        PidConf[i].tau, PidConf[i].K_gain,
+        PidConf[i].info, PidConf[i].onoff);
+    if (len <= 0 || len >= (int)sizeof(buf)) continue;
 
-    cJSON_AddNumberToObject(obj, "pwm_pin_id", PidConf[i].pwm_pin_id);
-    cJSON_AddNumberToObject(obj, "selsens", (int)PidConf[i].selsens);
-    cJSON_AddNumberToObject(obj, "sensor_pin_id", PidConf[i].sensor_pin_id);
-    cJSON_AddStringToObject(obj, "sernum", PidConf[i].sernum);
-    cJSON_AddNumberToObject(obj, "sensor_sub_idx", PidConf[i].sensor_sub_idx);
-    cJSON_AddNumberToObject(obj, "preset", PidConf[i].preset);
-    cJSON_AddNumberToObject(obj, "tmpset", PidConf[i].tmpset);
-    cJSON_AddNumberToObject(obj, "Kp", PidConf[i].Kp);
-    cJSON_AddNumberToObject(obj, "Ki", PidConf[i].Ki);
-    cJSON_AddNumberToObject(obj, "Kd", PidConf[i].Kd);
-    cJSON_AddNumberToObject(obj, "bias", PidConf[i].bias);
-    cJSON_AddNumberToObject(obj, "Ts_ms", PidConf[i].Ts_ms);
-    cJSON_AddNumberToObject(obj, "lambda_factor", PidConf[i].lambda_factor);
-    cJSON_AddNumberToObject(obj, "pwm_start", PidConf[i].pwm_start);
-    cJSON_AddNumberToObject(obj, "pwm_max", PidConf[i].pwm_max);
-    cJSON_AddNumberToObject(obj, "temp_max", PidConf[i].temp_max);
-    cJSON_AddNumberToObject(obj, "temp_min", PidConf[i].temp_min);
-    cJSON_AddNumberToObject(obj, "pause_sec", PidConf[i].pause_sec);
-    cJSON_AddNumberToObject(obj, "tau", PidConf[i].tau);
-    cJSON_AddNumberToObject(obj, "K_gain", PidConf[i].K_gain);
-    cJSON_AddStringToObject(obj, "info", PidConf[i].info);
-    cJSON_AddNumberToObject(obj, "onoff", PidConf[i].onoff);
-
-    if (!cJSON_PrintPreallocated(obj, buf, sizeof(buf), 0)) {
-      cJSON_Delete(obj);
-      continue;
-    }
-    cJSON_Delete(obj);
-
-    if (out_str) {
-      fresult = f_write(&USBHFile, out_str, strlen(out_str), &byteswritten);
-      if (fresult != FR_OK) goto cleanup;
-    }
+    fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
+    if (fresult != FR_OK) goto cleanup;
   }
 
   /* Закрываем массив и объект */

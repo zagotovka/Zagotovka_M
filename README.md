@@ -136,3 +136,4 @@ This project uses semantic versioning. The version number follows the MAJOR.MINO
 | 1.0.1   | 3-02-2025 | Fixed bugs in "StartCronTask" and "ModalEditSensor".|
 | 1.1.1   | 4-04-2025 | Added HTTPS support (HTTPS server implementation)|
 | 2.0.0   | 27.06.2026 | Updated web interface and Mongoose library (7.13 → 7.21); added: SMS control, session limiting with indication, PID controller, PWM timer, desired encoder PWM frequency setting (0.05 Hz — 2 MHz); optimized and refactored code |
+| 2.0.1 | 30.06.2026 | Replaced cJSON with Mongoose's built-in JSON API, heap optimization, and MQTT fix |

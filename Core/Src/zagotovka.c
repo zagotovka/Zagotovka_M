@@ -349,108 +349,89 @@ void handle_select_set(struct mg_connection *c, struct mg_http_message *hm) {
 }
 void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
                        uint8_t num_pins) {
-  cJSON *json = cJSON_Parse(json_string);
-  if (json == NULL) {
-    const char *error_ptr = cJSON_GetErrorPtr();
-    if (error_ptr != NULL) {
-      printf("Error before: %s\n", error_ptr);
-    }
-    return;
+  struct mg_str body = mg_str_n(json_string, strlen(json_string));
+
+  char *lang = mg_json_get_str(body, "$.lang");
+  if (lang) {
+    strncpy(SetSettings.lang, lang, sizeof(SetSettings.lang) - 1);
+    SetSettings.lang[sizeof(SetSettings.lang) - 1] = '\0';
+    mg_free(lang);
   }
-  // Получаем значения lang и gps
-  cJSON *jlang = cJSON_GetObjectItemCaseSensitive(json, "lang");
-  if (cJSON_IsString(jlang) && jlang->valuestring != NULL) {
-    strncpy(SetSettings.lang, jlang->valuestring, sizeof(SetSettings.lang) - 1);
-  }
-  cJSON *jgps = cJSON_GetObjectItemCaseSensitive(json, "sim800l");
-  if (cJSON_IsNumber(jgps)) {
-    SetSettings.sim800l = jgps->valueint;
-  }
-  // Получаем массив data
-  cJSON *data = cJSON_GetObjectItemCaseSensitive(json, "data");
-  if (data == NULL || !cJSON_IsArray(data)) {
-    cJSON_Delete(json);
+  SetSettings.sim800l = (uint8_t)mg_json_get_long(body, "$.sim800l", 0);
+
+  int arr_ofs = mg_json_get(body, "$.data", NULL);
+  if (arr_ofs < 0) {
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
-  // Обрабатываем каждый элемент массива data
-  cJSON *item;
+  struct mg_str arr = mg_str_n(json_string + arr_ofs,
+                               strlen(json_string) - (size_t)arr_ofs);
+
+  size_t pos = 0;
   int i = 0;
-  cJSON_ArrayForEach(item, data) {
-    if (i >= num_pins)
-      break;
-    cJSON *jtopin = cJSON_GetObjectItemCaseSensitive(item, "topin");
-    if (cJSON_IsNumber(jtopin)) {
-      PinsConf[i].topin = jtopin->valueint;
-    } else {
-      PinsConf[i].topin = 0; // Значение по умолчанию
-    }
+  struct mg_str key, elem;
+  while (i < num_pins && (pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
+    PinsConf[i].topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
     i++;
   }
-  cJSON_Delete(json);
+
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
-  uint8_t usbnum = 1; // Сохраянем в "pins.ini"
+  uint8_t usbnum = 1;
   xQueueSend(usbQueueHandle, &usbnum, 0);
-  usbnum = 2; // Сохраянем в "setings.ini"
+  usbnum = 2;
   xQueueSend(usbQueueHandle, &usbnum, 0);
 }
 
 void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
                       int num_pins) {
-  cJSON *json = cJSON_Parse(json_string);
-  if (json == NULL) {
-    const char *error_ptr = cJSON_GetErrorPtr();
-    if (error_ptr != NULL) {
-      printf("Error before: %s\n", error_ptr);
-    }
+  struct mg_str body = mg_str_n(json_string, strlen(json_string));
+
+  long id_val = mg_json_get_long(body, "$.id", -1);
+  long onoff_val = mg_json_get_long(body, "$.onoff", -1);
+
+  if (id_val < 0 || onoff_val < 0) {
+    printf("Invalid JSON format\n");
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
 
-  cJSON *id_item   = cJSON_GetObjectItemCaseSensitive(json, "id");
-  cJSON *onoff_item = cJSON_GetObjectItemCaseSensitive(json, "onoff");
+  onoffid = (int32_t)id_val;
+  uint8_t onoff = (uint8_t)onoff_val;
 
-  if (cJSON_IsNumber(id_item) && cJSON_IsNumber(onoff_item)) {
-    onoffid = id_item->valueint;
-    uint8_t onoff = onoff_item->valueint;
+  if (onoffid >= 0 && onoffid < num_pins) {
+    PinsConf[onoffid].onoff = onoff;
+    printf("Updated pin %" PRId32 ": onoff = %d\n", onoffid, onoff);
 
-    if (onoffid >= 0 && onoffid < num_pins) {
-      PinsConf[onoffid].onoff = (uint8_t)onoff;
-      printf("Updated pin %" PRId32 ": onoff = %d\n", onoffid, onoff);
-
-      for (uint8_t a = 0; a < NUMPINLINKS; a++) {
-        if (PinsLinks[a].idin == (int)onoffid) {
-          uint8_t idpwm = PinsLinks[a].idout;
-          if (PinsConf[idpwm].topin == 5) {
-            if (is_pin_in_autotune(idpwm)) continue;
-            uint32_t pulse = 0;
-            if (onoff != 0) {
-              pulse = (uint32_t)((uint64_t)PinsConf[idpwm].dvalue *
-                                 PinsConf[idpwm].pwmmax / 100ULL);
-            }
-            __HAL_TIM_SET_COMPARE(&htim[idpwm], PinsInfo[idpwm].tim_channel, pulse);
-            printf("onoff->PWM pin %d: pulse=%lu\n", idpwm, (unsigned long)pulse);
+    for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+      if (PinsLinks[a].idin == (int)onoffid) {
+        uint8_t idpwm = PinsLinks[a].idout;
+        if (PinsConf[idpwm].topin == 5) {
+          if (is_pin_in_autotune(idpwm)) continue;
+          uint32_t pulse = 0;
+          if (onoff != 0) {
+            pulse = (uint32_t)((uint64_t)PinsConf[idpwm].dvalue *
+                               PinsConf[idpwm].pwmmax / 100ULL);
           }
+          __HAL_TIM_SET_COMPARE(&htim[idpwm], PinsInfo[idpwm].tim_channel, pulse);
+          printf("onoff->PWM pin %d: pulse=%lu\n", idpwm, (unsigned long)pulse);
         }
       }
-
-      /*********************************************************/
-      mqtt_queue_send_safe(8, (uint8_t)onoffid, 0, 0);
-      /*********************************************************/
-
-      int usbnum = 1;
-      xQueueSend(usbQueueHandle, &usbnum, 0);
-
-    } else {                       // ← закрывает if (onoffid >= 0 && onoffid < num_pins)
-      printf("Invalid id: %" PRId32 "\n", onoffid);
     }
 
-  } else {                         // ← закрывает if (cJSON_IsNumber)
-    printf("Invalid JSON format\n");
+    /*********************************************************/
+    mqtt_queue_send_safe(8, (uint8_t)onoffid, 0, 0);
+    /*********************************************************/
+
+    int usbnum = 1;
+    xQueueSend(usbQueueHandle, &usbnum, 0);
+
+  } else {
+    printf("Invalid id: %" PRId32 "\n", onoffid);
   }
 
-  cJSON_Delete(json);
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
 }
@@ -589,67 +570,76 @@ void gen_switch_json(const struct dbPinsInfo *pins_info,
 /*******************************************************************************************************************/
 void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
                        const struct dbPinsInfo *PinsInfo, int count) {
-  cJSON *root = cJSON_Parse(json);
-  if (!root) {
-    printf("Error parsing JSON\n");
-    return;
-  }
-  cJSON *id_item = cJSON_GetObjectItem(root, "id");
-  if (!cJSON_IsNumber(id_item)) {
+  struct mg_str body = mg_str_n(json, strlen(json));
+
+  long id_val = mg_json_get_long(body, "$.id", -1);
+  if (id_val < 0) {
     printf("Error: 'id' is not a number or not found\r\n");
-    cJSON_Delete(root);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
-  uint8_t id = id_item->valueint;
-  if (id < 0 || id >= count) {
+  uint8_t id = (uint8_t)id_val;
+  if (id >= count) {
     printf("switch ID out of bounds %d\r\n", id);
-    cJSON_Delete(root);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
-  if (strstr(json, "\"ptype\"") != NULL) {
-    //		printf("We got json from 'Edit switch' - %s\n", json);
-    cJSON *ptype_item = cJSON_GetObjectItem(root, "ptype"); // Парсинг ptype
-    if (cJSON_IsString(ptype_item)) {
-      PinsConf[id].ptype = (uint8_t)atoi(ptype_item->valuestring);
-    } else if (cJSON_IsNumber(ptype_item)) {
-      PinsConf[id].ptype = (uint8_t)ptype_item->valueint;
+  if (mg_json_get(body, "$.ptype", NULL) >= 0) {
+    long ptype_val = mg_json_get_long(body, "$.ptype", -1);
+    if (ptype_val >= 0) {
+      PinsConf[id].ptype = (uint8_t)ptype_val;
     }
-    cJSON *info_item = cJSON_GetObjectItem(root, "info"); // Парсинг info
-    if (cJSON_IsString(info_item)) {
-      strncpy(PinsConf[id].info, info_item->valuestring,
-              sizeof(PinsConf[id].info) - 1);
+    char *info = mg_json_get_str(body, "$.info");
+    if (info) {
+      strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
       PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
+      mg_free(info);
     }
-    cJSON *onoff_item = cJSON_GetObjectItem(root, "onoff"); // Парсинг onoff
-    if (cJSON_IsNumber(onoff_item)) {
-      PinsConf[id].onoff = (uint8_t)onoff_item->valueint;
-    }
+    PinsConf[id].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[id].onoff);
     int usbnum = 1;
     xQueueSend(usbQueueHandle, &usbnum, 0);
-  } else if (strstr(json, "\"setrpins\"") != NULL) {
-    //		printf("We got json from 'Edit Connection' - %s\n", json);
-    cJSON *pins_item = cJSON_GetObjectItem(root, "pins"); // Парсинг pins
-    if (cJSON_IsString(pins_item)) {
-      strncpy(PinsLinks[id].pins, pins_item->valuestring,
-              sizeof(PinsLinks[id].pins) - 1);
+  } else if (mg_json_get(body, "$.setrpins", NULL) >= 0) {
+    char *pins = mg_json_get_str(body, "$.pins");
+    if (pins) {
+      strncpy(PinsLinks[id].pins, pins, sizeof(PinsLinks[id].pins) - 1);
       PinsLinks[id].pins[sizeof(PinsLinks[id].pins) - 1] = '\0';
+      mg_free(pins);
     }
-    cJSON *pinact_item =
-        cJSON_GetObjectItem(root, "pinact"); // Обработка "pinact"
-    if (cJSON_IsObject(pinact_item)) {
-      cJSON *pin_item = NULL;
-      cJSON_ArrayForEach(pin_item, pinact_item) {
-        if (cJSON_IsString(pin_item)) {
-          uint8_t pin_id = atoi(pin_item->string);
-          const char *pin_value = pin_item->valuestring;
+    int pa_ofs = mg_json_get(body, "$.pinact", NULL);
+    if (pa_ofs >= 0) {
+      struct mg_str pa = mg_str_n(json + pa_ofs, strlen(json) - (size_t)pa_ofs);
+      size_t pos = 0;
+      struct mg_str key, val;
+      while ((pos = mg_json_next(pa, pos, &key, &val)) > 0) {
+        if (val.len > 0 && key.len > 0) {
+          // mg_json_next возвращает ключ с кавычками — убираем их
+          const char *kbuf = key.buf;
+          size_t klen_raw = key.len;
+          if (klen_raw >= 2 && kbuf[0] == '"' && kbuf[klen_raw - 1] == '"') {
+            kbuf++;
+            klen_raw -= 2;
+          }
+          char keybuf[16];
+          size_t klen = klen_raw < sizeof(keybuf) - 1 ? klen_raw : sizeof(keybuf) - 1;
+          memcpy(keybuf, kbuf, klen);
+          keybuf[klen] = '\0';
+          uint8_t pin_id = (uint8_t)atoi(keybuf);
+          char valbuf[16];
+          // Значение тоже может содержать кавычки (строковый пин)
+          const char *vbuf = val.buf;
+          size_t vlen_raw = val.len;
+          if (vlen_raw >= 2 && vbuf[0] == '"' && vbuf[vlen_raw - 1] == '"') {
+            vbuf++;
+            vlen_raw -= 2;
+          }
+          size_t vlen = vlen_raw < sizeof(valbuf) - 1 ? vlen_raw : sizeof(valbuf) - 1;
+          memcpy(valbuf, vbuf, vlen);
+          valbuf[vlen] = '\0';
 
-          // Поиск свободного места или существующей записи в PinsLinks
-          short findex = -1; // free_index
-          short eindex = -1; // existing_index
+          short findex = -1;
+          short eindex = -1;
           for (short i = 0; i < NUMPINLINKS; i++) {
             if (PinsLinks[i].idin == id && PinsLinks[i].idout == pin_id) {
               eindex = i;
@@ -659,29 +649,23 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
               findex = i;
             }
           }
-          // Обновление или добавление записи в PinsLinks
-          int indextu = (eindex != -1) ? eindex : findex; // index_to_use
+          int indextu = (eindex != -1) ? eindex : findex;
           if (indextu != -1) {
             PinsLinks[indextu].idin = id;
             PinsLinks[indextu].idout = pin_id;
             strncpy(PinsLinks[indextu].pins, PinsInfo[pin_id].pins,
                     sizeof(PinsLinks[indextu].pins) - 1);
             PinsLinks[indextu].pins[sizeof(PinsLinks[indextu].pins) - 1] = '\0';
-            //						printf("Updated
-            // PinsLinks[%d]: idin=%d, idout=%d, pins=%s \r\n", indextu,
-            // PinsLinks[indextu].idin, PinsLinks[indextu].idout,
-            // PinsLinks[indextu].pins);
           } else {
             printf("No free space in PinsLinks array. Last checked: findex=%d, "
                    "eindex=%d\r\n",
                    findex, eindex);
           }
 
-          // Обновление PinsConf
           for (int j = 0; j < PINPAIRS; j++) {
             if (PinsConf[id].pinact[j].pin[0] == '\0') {
               PinsConf[id].pinact[j].id = pin_id;
-              strncpy(PinsConf[id].pinact[j].pin, pin_value,
+              strncpy(PinsConf[id].pinact[j].pin, valbuf,
                       sizeof(PinsConf[id].pinact[j].pin) - 1);
               PinsConf[id]
                   .pinact[j]
@@ -695,22 +679,14 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
     int usbnum = 4;
     xQueueSend(usbQueueHandle, &usbnum, 0);
   } else {
-    // Неизвестный тип JSON
     printf("Unknown JSON type received: %s\n", json);
   }
 
-  cJSON_Delete(root);
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
 
-  // Вывод обновленных значений PinsConf
-  //	printf("UPDATED pin ID[%d]: ", id);
   for (int j = 0; j < PINPAIRS && PinsConf[id].pinact[j].pin[0] != '\0'; j++) {
-    //		printf("pinact[%d]=%s, ", PinsConf[id].pinact[j].id,
-    // PinsConf[id].pinact[j].pin);
   }
-  //	printf("ptype=%d, info=%s, onoff=%d, pins=%s \r\n", PinsConf[id].ptype,
-  // PinsConf[id].info, PinsConf[id].onoff, PinsLinks[id].pins);
 }
 /*******************************************************************************************************************/
 void handle_button_get(struct mg_connection *c) {
@@ -776,96 +752,93 @@ void gen_button_json(const struct dbPinsInfo *pins_info,
 }
 void parse_button_json(char *json, struct dbPinsConf *PinsConf,
                        const struct dbPinsInfo *PinsInfo, int count) {
-  cJSON *root = cJSON_Parse(json);
-  if (!root) {
-    printf("Error parsing JSON\n");
-    return;
-  }
-  cJSON *id_item = cJSON_GetObjectItem(root, "id");
-  if (!cJSON_IsNumber(id_item)) {
+  struct mg_str body = mg_str_n(json, strlen(json));
+
+  long id_val = mg_json_get_long(body, "$.id", -1);
+  if (id_val < 0) {
     printf("Error: 'id' is not a number or not found\n");
-    cJSON_Delete(root);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
-  int id = id_item->valueint;
+  int id = (int)id_val;
   if (id < 0 || id >= count) {
     printf("button ID out of bounds %d\r\n", id);
-    cJSON_Delete(root);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
-  cJSON *setrpins_item =
-      cJSON_GetObjectItem(root, "setrpins"); // This is the second type of JSON
 
-  if (setrpins_item) {
-    if (cJSON_IsString(setrpins_item)) {
-      // Process setrpins if needed
-    }
-    cJSON *pinact_item = cJSON_GetObjectItem(root, "pinact");
-    if (cJSON_IsObject(pinact_item)) {
-      //			printf("We got json from 'Edit Connection' -
-      //%s\n", json);
-      cJSON *pins_item = cJSON_GetObjectItem(root, "pins"); // Парсинг pins
-      if (cJSON_IsString(pins_item)) {
-        strncpy(PinsLinks[id].pins, pins_item->valuestring,
-                sizeof(PinsLinks[id].pins) - 1);
+  if (mg_json_get(body, "$.setrpins", NULL) >= 0) {
+    int pa_ofs = mg_json_get(body, "$.pinact", NULL);
+    if (pa_ofs >= 0) {
+      char *pins = mg_json_get_str(body, "$.pins");
+      if (pins) {
+        strncpy(PinsLinks[id].pins, pins, sizeof(PinsLinks[id].pins) - 1);
         PinsLinks[id].pins[sizeof(PinsLinks[id].pins) - 1] = '\0';
+        mg_free(pins);
       }
-      cJSON *pinact_item =
-          cJSON_GetObjectItem(root, "pinact"); // Обработка "pinact"
-      if (cJSON_IsObject(pinact_item)) {
-        cJSON *pin_item = NULL;
-        cJSON_ArrayForEach(pin_item, pinact_item) {
-          if (cJSON_IsString(pin_item)) {
-            int pin_id = atoi(pin_item->string);
-            const char *pin_value = pin_item->valuestring;
+      struct mg_str pa = mg_str_n(json + pa_ofs, strlen(json) - (size_t)pa_ofs);
+      size_t pos = 0;
+      struct mg_str key, val;
+      while ((pos = mg_json_next(pa, pos, &key, &val)) > 0) {
+        if (val.len > 0 && key.len > 0) {
+          const char *kbuf = key.buf;
+          size_t klen_raw = key.len;
+          if (klen_raw >= 2 && kbuf[0] == '"' && kbuf[klen_raw - 1] == '"') {
+            kbuf++;
+            klen_raw -= 2;
+          }
+          char keybuf[16];
+          size_t klen = klen_raw < sizeof(keybuf) - 1 ? klen_raw : sizeof(keybuf) - 1;
+          memcpy(keybuf, kbuf, klen);
+          keybuf[klen] = '\0';
+          int pin_id = atoi(keybuf);
+          char valbuf[16];
+          const char *vbuf = val.buf;
+          size_t vlen_raw = val.len;
+          if (vlen_raw >= 2 && vbuf[0] == '"' && vbuf[vlen_raw - 1] == '"') {
+            vbuf++;
+            vlen_raw -= 2;
+          }
+          size_t vlen = vlen_raw < sizeof(valbuf) - 1 ? vlen_raw : sizeof(valbuf) - 1;
+          memcpy(valbuf, vbuf, vlen);
+          valbuf[vlen] = '\0';
 
-            // Поиск свободного места или существующей записи в PinsLinks
-            short findex = -1; // free_index
-            short eindex = -1; // existing_index
-            for (short i = 0; i < NUMPINLINKS; i++) {
-              if (PinsLinks[i].idin == id && PinsLinks[i].idout == pin_id) {
-                eindex = i;
-                break;
-              }
-              if (findex == -1 && PinsLinks[i].idin == 0) {
-                findex = i;
-              }
+          short findex = -1;
+          short eindex = -1;
+          for (short i = 0; i < NUMPINLINKS; i++) {
+            if (PinsLinks[i].idin == id && PinsLinks[i].idout == pin_id) {
+              eindex = i;
+              break;
             }
-
-            // Обновление или добавление записи в PinsLinks
-            int indextu = (eindex != -1) ? eindex : findex; // index_to_use
-            if (indextu != -1) {
-              PinsLinks[indextu].idin = id;
-              PinsLinks[indextu].idout = pin_id;
-              strncpy(PinsLinks[indextu].pins, PinsInfo[pin_id].pins,
-                      sizeof(PinsLinks[indextu].pins) - 1);
-              PinsLinks[indextu].pins[sizeof(PinsLinks[indextu].pins) - 1] =
-                  '\0';
-              //							printf("Updated
-              // PinsLinks[%d]: idin=%d, idout=%d, pins=%s \r\n", indextu,
-              // PinsLinks[indextu].idin, PinsLinks[indextu].idout,
-              // PinsLinks[indextu].pins);
-            } else {
-              printf("No free space in PinsLinks array. Last checked: "
-                     "findex=%d, eindex=%d\r\n",
-                     findex, eindex);
+            if (findex == -1 && PinsLinks[i].idin == 0) {
+              findex = i;
             }
+          }
 
-            // Обновление PinsConf
-            for (int j = 0; j < PINPAIRS; j++) {
-              if (PinsConf[id].pinact[j].pin[0] == '\0') {
-                PinsConf[id].pinact[j].id = pin_id;
-                strncpy(PinsConf[id].pinact[j].pin, pin_value,
-                        sizeof(PinsConf[id].pinact[j].pin) - 1);
-                PinsConf[id]
-                    .pinact[j]
-                    .pin[sizeof(PinsConf[id].pinact[j].pin) - 1] = '\0';
-                break;
-              }
+          int indextu = (eindex != -1) ? eindex : findex;
+          if (indextu != -1) {
+            PinsLinks[indextu].idin = id;
+            PinsLinks[indextu].idout = pin_id;
+            strncpy(PinsLinks[indextu].pins, PinsInfo[pin_id].pins,
+                    sizeof(PinsLinks[indextu].pins) - 1);
+            PinsLinks[indextu].pins[sizeof(PinsLinks[indextu].pins) - 1] = '\0';
+          } else {
+            printf("No free space in PinsLinks array. Last checked: "
+                   "findex=%d, eindex=%d\r\n",
+                   findex, eindex);
+          }
+
+          for (int j = 0; j < PINPAIRS; j++) {
+            if (PinsConf[id].pinact[j].pin[0] == '\0') {
+              PinsConf[id].pinact[j].id = pin_id;
+              strncpy(PinsConf[id].pinact[j].pin, valbuf,
+                      sizeof(PinsConf[id].pinact[j].pin) - 1);
+              PinsConf[id]
+                  .pinact[j]
+                  .pin[sizeof(PinsConf[id].pinact[j].pin) - 1] = '\0';
+              break;
             }
           }
         }
@@ -874,57 +847,49 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
       xQueueSend(usbQueueHandle, &usbnum, 0);
     }
   } else {
-    cJSON *ptype_item = cJSON_GetObjectItem(root, "ptype");
-    if (cJSON_IsString(ptype_item)) {
-      PinsConf[id].ptype = (uint8_t)atoi(ptype_item->valuestring);
-    } else if (cJSON_IsNumber(ptype_item)) {
-      PinsConf[id].ptype = (uint8_t)ptype_item->valueint;
+    long ptype_val = mg_json_get_long(body, "$.ptype", -1);
+    if (ptype_val >= 0) {
+      PinsConf[id].ptype = (uint8_t)ptype_val;
     }
-    cJSON *sclick_item = cJSON_GetObjectItem(root, "sclick");
-    if (cJSON_IsString(sclick_item)) {
-      strncpy(PinsConf[id].sclick, sclick_item->valuestring,
-              sizeof(PinsConf[id].sclick) - 1);
+    char *sclick = mg_json_get_str(body, "$.sclick");
+    if (sclick) {
+      strncpy(PinsConf[id].sclick, sclick, sizeof(PinsConf[id].sclick) - 1);
       PinsConf[id].sclick[sizeof(PinsConf[id].sclick) - 1] = '\0';
+      mg_free(sclick);
     }
-    cJSON *dclick_item = cJSON_GetObjectItem(root, "dclick");
-    if (cJSON_IsString(dclick_item)) {
-      strncpy(PinsConf[id].dclick, dclick_item->valuestring,
-              sizeof(PinsConf[id].dclick) - 1);
+    char *dclick = mg_json_get_str(body, "$.dclick");
+    if (dclick) {
+      strncpy(PinsConf[id].dclick, dclick, sizeof(PinsConf[id].dclick) - 1);
       PinsConf[id].dclick[sizeof(PinsConf[id].dclick) - 1] = '\0';
+      mg_free(dclick);
     }
-    cJSON *lpress_item = cJSON_GetObjectItem(root, "lpress");
-    if (cJSON_IsString(lpress_item)) {
-      strncpy(PinsConf[id].lpress, lpress_item->valuestring,
-              sizeof(PinsConf[id].lpress) - 1);
+    char *lpress = mg_json_get_str(body, "$.lpress");
+    if (lpress) {
+      strncpy(PinsConf[id].lpress, lpress, sizeof(PinsConf[id].lpress) - 1);
       PinsConf[id].lpress[sizeof(PinsConf[id].lpress) - 1] = '\0';
+      mg_free(lpress);
     }
-    cJSON *info_item = cJSON_GetObjectItem(root, "info");
-    if (cJSON_IsString(info_item)) {
-      strncpy(PinsConf[id].info, info_item->valuestring,
-              sizeof(PinsConf[id].info) - 1);
+    char *info = mg_json_get_str(body, "$.info");
+    if (info) {
+      strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
       PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
+      mg_free(info);
     }
-    cJSON *onoff_item = cJSON_GetObjectItem(root, "onoff");
-    if (cJSON_IsNumber(onoff_item)) {
-      PinsConf[id].onoff = (uint8_t)onoff_item->valueint;
-    }
+    PinsConf[id].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[id].onoff);
     usbnum = 1;
     xQueueSend(usbQueueHandle, &usbnum, 0);
-    //		printf("RESULT - PinsConf[id].ptype:%d PinsConf[id].sclick:%d
-    // PinsConf[id].dclick:%s PinsConf[id].lpress:%s PinsConf[id].info:%s
-    // PinsConf[id].onoff:%d \r\n ", PinsConf[id].ptype, PinsConf[id].sclick,
-    // PinsConf[id].dclick, PinsConf[id].lpress, PinsConf[id].info,
-    // PinsConf[id].onoff);
   }
 
-  cJSON *pins_item = cJSON_GetObjectItem(root, "pins");
-  if (cJSON_IsString(pins_item)) {
-    if (strcmp(PinsInfo[id].pins, pins_item->valuestring) != 0) {
-      printf("Warning: Pins in JSON (%s) do not match PinsInfo (%s)\n",
-             pins_item->valuestring, PinsInfo[id].pins);
+  {
+    char *pins_val = mg_json_get_str(body, "$.pins");
+    if (pins_val) {
+      if (strcmp(PinsInfo[id].pins, pins_val) != 0) {
+        printf("Warning: Pins in JSON (%s) do not match PinsInfo (%s)\n",
+               pins_val, PinsInfo[id].pins);
+      }
+      mg_free(pins_val);
     }
   }
-  cJSON_Delete(root);
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
 }
@@ -1063,59 +1028,47 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
 void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
                         struct dbPinToPin *PinsLinks,
                         struct dbPinsInfo *PinsInfo, uint8_t count) {
-  cJSON *root = cJSON_Parse(json);
+  struct mg_str body = mg_str_n(json, strlen(json));
   uint8_t usbnum = 255;
-  if (!root) {
-    printf("Error parsing JSON\n");
-    return;
-  }
-  cJSON *id_item = cJSON_GetObjectItem(root, "id");
-  if (!cJSON_IsNumber(id_item)) {
+
+  long id_val = mg_json_get_long(body, "$.id", -1);
+  if (id_val < 0) {
     printf("Error: 'id' is not a number or not found\n");
-    cJSON_Delete(root);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
-  int id = id_item->valueint;
+  int id = (int)id_val;
   if (id < 0 || id >= count) {
     printf("encoder ID out of bounds %d\r\n", id);
-    cJSON_Delete(root);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
-  cJSON *topin_item = cJSON_GetObjectItem(root, "topin");
-  cJSON *dvalue_item_chk = cJSON_GetObjectItem(root, "dvalue");
-  cJSON *pwm_item_chk = cJSON_GetObjectItem(root, "pwm");
-  cJSON *pwmmax_item_chk = cJSON_GetObjectItem(root, "pwmmax");
-  // Type 2 (Edit): есть topin И числовые dvalue/pwm/pwmmax
-  // Type 1 (Connection): нет topin — без этой проверки блок целиком
-  // пропускался!
-  bool is_edit_type = topin_item && (cJSON_IsNumber(dvalue_item_chk) ||
-                                     cJSON_IsNumber(pwm_item_chk) ||
-                                     cJSON_IsNumber(pwmmax_item_chk));
+
+  bool has_topin = mg_json_get(body, "$.topin", NULL) >= 0;
+  bool has_dvalue = mg_json_get(body, "$.dvalue", NULL) >= 0;
+  bool has_pwm = mg_json_get(body, "$.pwm", NULL) >= 0;
+  bool has_pwmmax = mg_json_get(body, "$.pwmmax", NULL) >= 0;
+  bool is_edit_type = has_topin && (has_dvalue || has_pwm || has_pwmmax);
+
   if (is_edit_type) {
-    // ── TYPE 2: Edit Encoder (есть topin + числовые dvalue/pwm/pwmmax)
-    // ────────
-    cJSON *pins_item = cJSON_GetObjectItem(root, "pins");
-    if (cJSON_IsString(pins_item)) {
-      strncpy(PinsInfo[id].pins, pins_item->valuestring,
-              sizeof(PinsInfo[id].pins) - 1);
+    char *pins = mg_json_get_str(body, "$.pins");
+    if (pins) {
+      strncpy(PinsInfo[id].pins, pins, sizeof(PinsInfo[id].pins) - 1);
       PinsInfo[id].pins[sizeof(PinsInfo[id].pins) - 1] = '\0';
+      mg_free(pins);
     }
-    if (cJSON_IsNumber(topin_item)) {
-      PinsConf[id].topin = (uint8_t)topin_item->valueint;
-    }
-    // Найдем связанный PWM-пин и установим его pwm/pwmmax
-    cJSON *dvalue_item = cJSON_GetObjectItem(root, "dvalue");
-    cJSON *pwm_item = cJSON_GetObjectItem(root, "pwm");
+    PinsConf[id].topin = (uint8_t)mg_json_get_long(body, "$.topin", PinsConf[id].topin);
+
+    long dvalue_json = mg_json_get_long(body, "$.dvalue", -1);
+    long pwm_json = mg_json_get_long(body, "$.pwm", -1);
     for (uint8_t j = 0; j < count; j++) {
-      if (PinsConf[j].topin == 5) { // Это PWM
+      if (PinsConf[j].topin == 5) {
         for (short k = 0; k < NUMPINLINKS; k++) {
           if (PinsLinks[k].idin == id && PinsLinks[k].idout == j) {
-            if (is_pin_in_autotune(j)) break; /* AutoTune lock */
-            if (cJSON_IsNumber(dvalue_item) && cJSON_IsNumber(pwm_item)) {
+            if (is_pin_in_autotune(j)) break;
+            if (dvalue_json >= 0 && pwm_json >= 0) {
               uint64_t timer_clk_mhz;
               if (PinsInfo[j].tim == TIM1 || PinsInfo[j].tim == TIM8 ||
                   PinsInfo[j].tim == TIM9 || PinsInfo[j].tim == TIM10 ||
@@ -1124,7 +1077,7 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
               } else {
                 timer_clk_mhz = 108000000ULL * 1000ULL;
               }
-              uint32_t target_freq = (uint32_t)pwm_item->valueint;
+              uint32_t target_freq = (uint32_t)pwm_json;
               if (target_freq == 0 || target_freq > timer_clk_mhz)
                 target_freq = 10000000;
               PinsConf[j].pwm = target_freq;
@@ -1140,18 +1093,13 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
               }
               PinsConf[j].pwmmax = period;
 
-              // dvalue из JSON - это ПРОЦЕНТ 0-100
-              int new_dvalue = dvalue_item->valueint;
-              if (new_dvalue < 0)
-                new_dvalue = 0;
-              if (new_dvalue > 100)
-                new_dvalue = 100;
+              int new_dvalue = (int)dvalue_json;
+              if (new_dvalue < 0) new_dvalue = 0;
+              if (new_dvalue > 100) new_dvalue = 100;
               PinsConf[j].dvalue = new_dvalue;
 
-              // Применяем prescaler и period
               __HAL_TIM_SET_PRESCALER(&htim[j], prescaler);
               __HAL_TIM_SET_AUTORELOAD(&htim[j], period);
-              // Применяем скважность: CCR = dvalue% * period / 100
               uint32_t pulse_json =
                   (uint32_t)((uint64_t)new_dvalue * period / 100ULL);
               __HAL_TIM_SET_COMPARE(&htim[j], PinsInfo[j].tim_channel,
@@ -1168,20 +1116,14 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
         }
       }
     }
-    cJSON *ponr_item = cJSON_GetObjectItem(root, "ponr");
-    if (cJSON_IsNumber(ponr_item)) {
-      PinsConf[id].ponr = (uint8_t)ponr_item->valueint;
-    }
-    cJSON *info_item = cJSON_GetObjectItem(root, "info");
-    if (cJSON_IsString(info_item)) {
-      strncpy(PinsConf[id].info, info_item->valuestring,
-              sizeof(PinsConf[id].info) - 1);
+    PinsConf[id].ponr = (uint8_t)mg_json_get_long(body, "$.ponr", PinsConf[id].ponr);
+    char *info = mg_json_get_str(body, "$.info");
+    if (info) {
+      strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
       PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
+      mg_free(info);
     }
-    cJSON *onoff_item = cJSON_GetObjectItem(root, "onoff");
-    if (cJSON_IsNumber(onoff_item)) {
-      PinsConf[id].onoff = (uint8_t)onoff_item->valueint;
-    }
+    PinsConf[id].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[id].onoff);
     printf("Type 2 (Edit): id=%d, pins=%s, topin=%d, ponr=%d, info=%s, "
            "onoff=%d\r\n",
            id, PinsInfo[id].pins, PinsConf[id].topin, PinsConf[id].ponr,
@@ -1190,64 +1132,74 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
     xQueueSend(usbQueueHandle, &usbnum, 0);
 
   } else {
-    // ── TYPE 1: Connection modal (нет topin — раньше блок целиком
-    // пропускался!) ─
-    cJSON *pins_item = cJSON_GetObjectItem(root, "pins");
-    if (cJSON_IsString(pins_item)) {
-      strncpy(PinsInfo[id].pins, pins_item->valuestring,
-              sizeof(PinsInfo[id].pins) - 1);
+    char *pins = mg_json_get_str(body, "$.pins");
+    if (pins) {
+      strncpy(PinsInfo[id].pins, pins, sizeof(PinsInfo[id].pins) - 1);
       PinsInfo[id].pins[sizeof(PinsInfo[id].pins) - 1] = '\0';
+      mg_free(pins);
     }
 
-    cJSON *encoderb_item = cJSON_GetObjectItem(root, "encoderb");
-    if (cJSON_IsNumber(encoderb_item)) {
-      PinsConf[id].encoderb = (uint8_t)encoderb_item->valueint;
-    }
+    PinsConf[id].encoderb = (uint8_t)mg_json_get_long(body, "$.encoderb", PinsConf[id].encoderb);
 
-    cJSON *encdrbpin_item = cJSON_GetObjectItem(root, "encdrbpin");
-    if (cJSON_IsString(encdrbpin_item)) {
-      strncpy(PinsConf[id].encbpin, encdrbpin_item->valuestring,
-              sizeof(PinsConf[id].encbpin) - 1);
+    char *encdrbpin = mg_json_get_str(body, "$.encdrbpin");
+    if (encdrbpin) {
+      strncpy(PinsConf[id].encbpin, encdrbpin, sizeof(PinsConf[id].encbpin) - 1);
       PinsConf[id].encbpin[sizeof(PinsConf[id].encbpin) - 1] = '\0';
+      mg_free(encdrbpin);
     }
 
-    cJSON *pinact_item = cJSON_GetObjectItem(root, "pinact");
-    if (cJSON_IsObject(pinact_item)) {
-      cJSON *pin;
-      cJSON_ArrayForEach(pin, pinact_item) {
-        const char *key = pin->string;
-        uint8_t value = (uint8_t)pin->valueint;
-
-        bool found = false;
-        for (uint8_t i = 0; i < NUMPINLINKS; i++) {
-          if (PinsLinks[i].idin == id && PinsLinks[i].idout == value) {
-            strncpy(PinsLinks[i].pins, key, sizeof(PinsLinks[i].pins) - 1);
-            PinsLinks[i].pins[sizeof(PinsLinks[i].pins) - 1] = '\0';
-            found = true;
-            printf("Updated PinsLinks: idin=%d, idout=%d, pins=%s\r\n",
-                   PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins);
-            break;
+    int pa_ofs = mg_json_get(body, "$.pinact", NULL);
+    if (pa_ofs >= 0) {
+      struct mg_str pa = mg_str_n(json + pa_ofs, strlen(json) - (size_t)pa_ofs);
+      size_t pos = 0;
+      struct mg_str key, val;
+      while ((pos = mg_json_next(pa, pos, &key, &val)) > 0) {
+        if (key.len > 0 && val.len > 0) {
+          // mg_json_next возвращает ключ с кавычками — убираем их
+          const char *kbuf = key.buf;
+          size_t klen_raw = key.len;
+          if (klen_raw >= 2 && kbuf[0] == '"' && kbuf[klen_raw - 1] == '"') {
+            kbuf++;
+            klen_raw -= 2;
           }
-        }
-        if (!found) {
-          int free_i = -1;
+          char keybuf[16];
+          size_t klen = klen_raw < sizeof(keybuf) - 1 ? klen_raw : sizeof(keybuf) - 1;
+          memcpy(keybuf, kbuf, klen);
+          keybuf[klen] = '\0';
+          uint8_t value = (uint8_t)mg_json_get_long(
+              mg_str_n(val.buf, val.len), "$", 0);
+
+          bool found = false;
           for (uint8_t i = 0; i < NUMPINLINKS; i++) {
-            if (PinsLinks[i].idin == 0 && PinsLinks[i].idout == 0) {
-              free_i = i;
+            if (PinsLinks[i].idin == id && PinsLinks[i].idout == value) {
+              strncpy(PinsLinks[i].pins, keybuf, sizeof(PinsLinks[i].pins) - 1);
+              PinsLinks[i].pins[sizeof(PinsLinks[i].pins) - 1] = '\0';
+              found = true;
+              printf("Updated PinsLinks: idin=%d, idout=%d, pins=%s\r\n",
+                     PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins);
               break;
             }
           }
-          if (free_i != -1) {
-            PinsLinks[free_i].idin = id;
-            PinsLinks[free_i].idout = value;
-            strncpy(PinsLinks[free_i].pins, key,
-                    sizeof(PinsLinks[free_i].pins) - 1);
-            PinsLinks[free_i].pins[sizeof(PinsLinks[free_i].pins) - 1] = '\0';
-            printf("Added PinsLinks: idin=%d, idout=%d, pins=%s\r\n",
-                   PinsLinks[free_i].idin, PinsLinks[free_i].idout,
-                   PinsLinks[free_i].pins);
-          } else {
-            printf("No free space in PinsLinks!\r\n");
+          if (!found) {
+            int free_i = -1;
+            for (uint8_t i = 0; i < NUMPINLINKS; i++) {
+              if (PinsLinks[i].idin == 0 && PinsLinks[i].idout == 0) {
+                free_i = i;
+                break;
+              }
+            }
+            if (free_i != -1) {
+              PinsLinks[free_i].idin = id;
+              PinsLinks[free_i].idout = value;
+              strncpy(PinsLinks[free_i].pins, keybuf,
+                      sizeof(PinsLinks[free_i].pins) - 1);
+              PinsLinks[free_i].pins[sizeof(PinsLinks[free_i].pins) - 1] = '\0';
+              printf("Added PinsLinks: idin=%d, idout=%d, pins=%s\r\n",
+                     PinsLinks[free_i].idin, PinsLinks[free_i].idout,
+                     PinsLinks[free_i].pins);
+            } else {
+              printf("No free space in PinsLinks!\r\n");
+            }
           }
         }
       }
@@ -1259,7 +1211,6 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
     usbnum = 4;
     xQueueSend(usbQueueHandle, &usbnum, 0);
   }
-  cJSON_Delete(root);
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
 }
@@ -1277,7 +1228,7 @@ void handle_timers_get(struct mg_connection *c) {
     "{\"lang\":\"%s\",\"numline\":%d,\"timers\":[",
     SetSettings.lang, SetSettings.numline);
 
-  for (int i = 0; i < MAXSIZE; i++) {
+  for (int i = 0; i < NUMTASK; i++) {
     struct dbCron cron;
     taskENTER_CRITICAL();
     cron = dbCrontxt[i];
@@ -1306,7 +1257,7 @@ void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm) {
 
   if (hm->body.len > 0) {
     char response[256];
-    parse_timers_json(hm->body.buf, dbCrontxt, MAXSIZE);
+    parse_timers_json(hm->body.buf, dbCrontxt, NUMTASK);
     snprintf(
         response, sizeof(response),
         "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
@@ -1323,42 +1274,20 @@ void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm) {
   }
 }
 
-static int cjson_get_int(cJSON *json, const char *name, int default_val) {
-  cJSON *item = cJSON_GetObjectItem(json, name);
-  if (cJSON_IsNumber(item)) {
-    return item->valueint;
-  } else if (cJSON_IsString(item)) {
-    return atoi(item->valuestring);
-  }
-  return default_val;
-}
-
 void parse_numline_json(char *json_string, struct dbSettings *SetSettings) {
   if (json_string == NULL || SetSettings == NULL) {
     fprintf(stderr, "Invalid input parameters\n");
     return;
   }
-  cJSON *root = cJSON_Parse(json_string); // Парсинг JSON
-  if (root == NULL) {
-    const char *error_ptr = cJSON_GetErrorPtr();
-    if (error_ptr != NULL) {
-      fprintf(stderr, "JSON parsing error near: %s\n", error_ptr);
-    } else {
-      fprintf(stderr, "JSON parsing error, but error pointer is NULL\n");
-    }
-    return;
-  }
-  int numline = cjson_get_int(root, "numline", -1);
-  if (numline > 0 && numline <= MAXSIZE) {
+  struct mg_str body = mg_str_n(json_string, strlen(json_string));
+  long numline = mg_json_get_long(body, "$.numline", -1);
+  if (numline > 0 && numline <= NUMTASK) {
     SetSettings->numline = (uint8_t)numline;
   } else if (numline == -1) {
     fprintf(stderr, "Missing or invalid 'numline' in JSON\n");
   }
-  cJSON_Delete(root);
   if (my_DgnTaskHandle)
-    xTaskNotifyGive(
-        my_DgnTaskHandle); // Освобождение памяти, выделенной для JSON-объекта
-  //    printf("parse_numline_json: numline=%u\n", SetSettings->numline);
+    xTaskNotifyGive(my_DgnTaskHandle);
   usbnum = 2;
   xQueueSend(usbQueueHandle, &usbnum, 0);
 }
@@ -1409,33 +1338,21 @@ void gen_timer_json(const struct dbCron *dbCrontxt, int num_timers,
   //    printf("Generated timer JSON:\n%s\n", buffer);
 }
 void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
-  // Проверка входных данных
   if (json_string == NULL || dbCrontxt == NULL || count <= 0) {
     fprintf(stderr, "Invalid input parameters\n");
     return;
   }
-  //    printf("Received JSON string: %s\n", json_string);
-  cJSON *root = cJSON_Parse(json_string);
-  if (root == NULL) {
-    const char *error_ptr = cJSON_GetErrorPtr();
-    if (error_ptr != NULL) {
-      fprintf(stderr, "JSON parsing error near: %s\n", error_ptr);
-    } else {
-      fprintf(stderr, "JSON parsing error, but error pointer is NULL\n");
-    }
-    return;
-  }
-  cJSON *id_item = cJSON_GetObjectItem(root, "id");
-  if (!cJSON_IsNumber(id_item) || id_item->valueint < 0 ||
-      id_item->valueint >= MAXSIZE) {
+  struct mg_str body = mg_str_n(json_string, strlen(json_string));
+
+  long id_val = mg_json_get_long(body, "$.id", -1);
+  if (id_val < 0 || id_val >= NUMTASK) {
     fprintf(stderr, "Invalid or missing 'id' in JSON\n");
-    cJSON_Delete(root);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
-  int id = id_item->valueint;
-  // Обновление полей структуры dbCrontxt
+  int id = (int)id_val;
+
   char temp_cron[35];
   char temp_activ[255];
   char temp_info[30];
@@ -1446,27 +1363,29 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
   bool has_info = false;
   bool has_onoff = false;
 
-  cJSON *cron_item = cJSON_GetObjectItem(root, "cron");
-  if (cJSON_IsString(cron_item)) {
-    strncpy(temp_cron, cron_item->valuestring, sizeof(temp_cron) - 1);
+  char *cron_str = mg_json_get_str(body, "$.cron");
+  if (cron_str) {
+    strncpy(temp_cron, cron_str, sizeof(temp_cron) - 1);
     temp_cron[sizeof(temp_cron) - 1] = '\0';
     has_cron = true;
+    mg_free(cron_str);
   }
-  cJSON *activ_item = cJSON_GetObjectItem(root, "activ");
-  if (cJSON_IsString(activ_item)) {
-    strncpy(temp_activ, activ_item->valuestring, sizeof(temp_activ) - 1);
+  char *activ_str = mg_json_get_str(body, "$.activ");
+  if (activ_str) {
+    strncpy(temp_activ, activ_str, sizeof(temp_activ) - 1);
     temp_activ[sizeof(temp_activ) - 1] = '\0';
     has_activ = true;
+    mg_free(activ_str);
   }
-  cJSON *info_item = cJSON_GetObjectItem(root, "info");
-  if (cJSON_IsString(info_item)) {
-    strncpy(temp_info, info_item->valuestring, sizeof(temp_info) - 1);
+  char *info_str = mg_json_get_str(body, "$.info");
+  if (info_str) {
+    strncpy(temp_info, info_str, sizeof(temp_info) - 1);
     temp_info[sizeof(temp_info) - 1] = '\0';
     has_info = true;
+    mg_free(info_str);
   }
-  cJSON *onoff_item = cJSON_GetObjectItem(root, "onoff");
-  if (cJSON_IsNumber(onoff_item)) {
-    temp_onoff = (uint8_t)onoff_item->valueint;
+  if (mg_json_get(body, "$.onoff", NULL) >= 0) {
+    temp_onoff = (uint8_t)mg_json_get_long(body, "$.onoff", 0);
     has_onoff = true;
   }
 
@@ -1487,19 +1406,10 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
     taskEXIT_CRITICAL();
   }
 
-  cJSON_Delete(root);
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
   usbnum = 3;
   xQueueSend(usbQueueHandle, &usbnum, 0);
-
-  //    printf("RESULT, parse_timers_json: id=%d, cron=%s, activ=%s, info=%s,
-  //    onoff=%u\n",
-  //           id,
-  //           dbCrontxt[id].cron,
-  //           dbCrontxt[id].activ,
-  //           dbCrontxt[id].info,
-  //           dbCrontxt[id].onoff);
 }
 
 /* ──── emit_escaped_blob: ключ + строка с экранированием \n \" \\ ──── */
@@ -1780,35 +1690,29 @@ void handle_logfilter(struct mg_connection *c, struct mg_http_message *hm) {
 
   if (mg_strcasecmp(hm->method, mg_str("POST")) == 0) {
     if (hm->body.len > 0) {
-      cJSON *root = cJSON_ParseWithLength(hm->body.buf, hm->body.len);
-      if (root != NULL) {
-        uint32_t current_mask = logger_get_mask();
-        cJSON *mask_item = cJSON_GetObjectItemCaseSensitive(root, "mask");
-        if (cJSON_IsNumber(mask_item)) {
-          current_mask = (uint32_t)mask_item->valueint;
-        } else {
-          // Попробуем распарсить категориальные настройки
-          cJSON *cats = cJSON_GetObjectItemCaseSensitive(root, "categories");
-          if (cats != NULL) {
-            const char* cat_keys[] = {"SYSTEM", "MQTT", "NET", "GSM", "SCHEDULER", "SENSORS", "PID", "SETTINGS", "ETH", "PHY"};
-            LogCategory_t cat_vals[] = {LOG_CAT_SYSTEM, LOG_CAT_MQTT, LOG_CAT_NET, LOG_CAT_GSM, LOG_CAT_SCHEDULER, LOG_CAT_SENSORS, LOG_CAT_PID, LOG_CAT_SETTINGS, LOG_CAT_ETH, LOG_CAT_PHY};
-            for (int i = 0; i < 10; i++) {
-              cJSON *cat_item = cJSON_GetObjectItemCaseSensitive(cats, cat_keys[i]);
-              if (cat_item != NULL) {
-                if (cJSON_IsTrue(cat_item) || (cJSON_IsNumber(cat_item) && cat_item->valueint != 0)) {
-                  current_mask |= (1u << cat_vals[i]);
-                } else {
-                  current_mask &= ~(1u << cat_vals[i]);
-                }
-              }
+      struct mg_str body = mg_str_n(hm->body.buf, hm->body.len);
+      uint32_t current_mask = logger_get_mask();
+      if (mg_json_get(body, "$.mask", NULL) >= 0) {
+        current_mask = (uint32_t)mg_json_get_long(body, "$.mask", current_mask);
+      } else if (mg_json_get(body, "$.categories", NULL) >= 0) {
+        const char* cat_keys[] = {"SYSTEM", "MQTT", "NET", "GSM", "SCHEDULER", "SENSORS", "PID", "SETTINGS", "ETH", "PHY"};
+        LogCategory_t cat_vals[] = {LOG_CAT_SYSTEM, LOG_CAT_MQTT, LOG_CAT_NET, LOG_CAT_GSM, LOG_CAT_SCHEDULER, LOG_CAT_SENSORS, LOG_CAT_PID, LOG_CAT_SETTINGS, LOG_CAT_ETH, LOG_CAT_PHY};
+        for (int i = 0; i < 10; i++) {
+          char path[64];
+          snprintf(path, sizeof(path), "$.categories.%s", cat_keys[i]);
+          bool cat_val = false;
+          if (mg_json_get_bool(body, path, &cat_val)) {
+            if (cat_val) {
+              current_mask |= (1u << cat_vals[i]);
+            } else {
+              current_mask &= ~(1u << cat_vals[i]);
             }
           }
         }
-        logger_set_mask(current_mask);
-        SetSettingsConfig();  // Сохраняем в settings.ini для персистентности
-        mqtt_publish_logfilter_status();
-        cJSON_Delete(root);
       }
+      logger_set_mask(current_mask);
+      SetSettingsConfig();
+      mqtt_publish_logfilter_status();
     }
   }
 
@@ -2340,439 +2244,201 @@ bool is_c_like_format(const char *value) {
   return (strstr(value, "\\n") != NULL && strstr(value, "\"") != NULL);
 }
 void parse_mysett_json(char *json_string, struct dbSettings *settings) {
-  cJSON *json = cJSON_Parse(json_string);
-  if (json == NULL) {
-    const char *error_ptr = cJSON_GetErrorPtr();
-    if (error_ptr != NULL) {
-      fprintf(stderr, "JSON parsing error: %s\n", error_ptr);
-    }
-    return;
-  }
+  struct mg_str body = mg_str_n(json_string, strlen(json_string));
 
-  // Обработка полей структуры dbSettings (ваш исходный код)
-  cJSON *sunrise = cJSON_GetObjectItemCaseSensitive(json, "sunrise");
-  if (cJSON_IsString(sunrise) && (sunrise->valuestring != NULL)) {
-    strncpy(settings->sunrise, sunrise->valuestring,
-            sizeof(settings->sunrise) - 1);
-    settings->sunrise[sizeof(settings->sunrise) - 1] = '\0';
-  }
+  { char *_v = mg_json_get_str(body, "$.sunrise");
+    if (_v) { strncpy(settings->sunrise, _v, sizeof(settings->sunrise) - 1);
+    settings->sunrise[sizeof(settings->sunrise) - 1] = '\0'; mg_free(_v); } }
+  { char *_v = mg_json_get_str(body, "$.sunset");
+    if (_v) { strncpy(settings->sunset, _v, sizeof(settings->sunset) - 1);
+    settings->sunset[sizeof(settings->sunset) - 1] = '\0'; mg_free(_v); } }
+  { char *_v = mg_json_get_str(body, "$.dlength");
+    if (_v) { strncpy(settings->dlength, _v, sizeof(settings->dlength) - 1);
+    settings->dlength[sizeof(settings->dlength) - 1] = '\0'; mg_free(_v); } }
+  { char *_v = mg_json_get_str(body, "$.adm_name");
+    if (_v) { strncpy(settings->adm_name, _v, sizeof(settings->adm_name) - 1);
+    settings->adm_name[sizeof(settings->adm_name) - 1] = '\0'; mg_free(_v); } }
+  { char *_v = mg_json_get_str(body, "$.adm_pswd");
+    if (_v) { strncpy(settings->adm_pswd, _v, sizeof(settings->adm_pswd) - 1);
+    settings->adm_pswd[sizeof(settings->adm_pswd) - 1] = '\0'; mg_free(_v); } }
+  { char *_v = mg_json_get_str(body, "$.lang");
+    if (_v) { strncpy(settings->lang, _v, sizeof(settings->lang) - 1);
+    settings->lang[sizeof(settings->lang) - 1] = '\0'; mg_free(_v); } }
 
-  cJSON *sunset = cJSON_GetObjectItemCaseSensitive(json, "sunset");
-  if (cJSON_IsString(sunset) && (sunset->valuestring != NULL)) {
-    strncpy(settings->sunset, sunset->valuestring,
-            sizeof(settings->sunset) - 1);
-    settings->sunset[sizeof(settings->sunset) - 1] = '\0';
-  }
+  settings->timezone = mg_json_get_long(body, "$.timezone", (long)settings->timezone);
+  { double d; if (mg_json_get_num(body, "$.lon_de", &d)) settings->lon_de = d; }
+  { double d; if (mg_json_get_num(body, "$.lat_de", &d)) settings->lat_de = d; }
+  settings->onsunrise = (short)mg_json_get_long(body, "$.onsunrise", settings->onsunrise);
+  settings->onsunset = (short)mg_json_get_long(body, "$.onsunset", settings->onsunset);
 
-  cJSON *dlength = cJSON_GetObjectItemCaseSensitive(json, "dlength");
-  if (cJSON_IsString(dlength) && (dlength->valuestring != NULL)) {
-    strncpy(settings->dlength, dlength->valuestring,
-            sizeof(settings->dlength) - 1);
-    settings->dlength[sizeof(settings->dlength) - 1] = '\0';
-  }
+  { char *_v = mg_json_get_str(body, "$.sunrise_pins");
+    if (_v) { strncpy(settings->srise_pins, _v, sizeof(settings->srise_pins) - 1);
+    settings->srise_pins[sizeof(settings->srise_pins) - 1] = '\0'; mg_free(_v); } }
 
-  cJSON *adm_name = cJSON_GetObjectItemCaseSensitive(json, "adm_name");
-  if (cJSON_IsString(adm_name) && (adm_name->valuestring != NULL)) {
-    strncpy(settings->adm_name, adm_name->valuestring,
-            sizeof(settings->adm_name) - 1);
-    settings->adm_name[sizeof(settings->adm_name) - 1] = '\0';
-  }
+  { char *_v = mg_json_get_str(body, "$.sunset_pins");
+    if (_v) { strncpy(settings->sset_pins, _v, sizeof(settings->sset_pins) - 1);
+    settings->sset_pins[sizeof(settings->sset_pins) - 1] = '\0'; mg_free(_v); } }
 
-  cJSON *adm_pswd = cJSON_GetObjectItemCaseSensitive(json, "adm_pswd");
-  if (cJSON_IsString(adm_pswd) && (adm_pswd->valuestring != NULL)) {
-    strncpy(settings->adm_pswd, adm_pswd->valuestring,
-            sizeof(settings->adm_pswd) - 1);
-    settings->adm_pswd[sizeof(settings->adm_pswd) - 1] = '\0';
-  }
+  settings->check_ip = (short)mg_json_get_long(body, "$.check_ip", settings->check_ip);
+  settings->check_mqtt = (short)mg_json_get_long(body, "$.check_mqtt", settings->check_mqtt);
 
-  cJSON *lang = cJSON_GetObjectItemCaseSensitive(json, "lang");
-  if (cJSON_IsString(lang) && (lang->valuestring != NULL)) {
-    strncpy(settings->lang, lang->valuestring, sizeof(settings->lang) - 1);
-    settings->lang[sizeof(settings->lang) - 1] = '\0';
-  }
+  { char *_v = mg_json_get_str(body, "$.token");
+    if (_v) { strncpy(settings->token, _v, sizeof(settings->token) - 1);
+    settings->token[sizeof(settings->token) - 1] = '\0'; mg_free(_v); } }
+  { char *_v = mg_json_get_str(body, "$.mqtt_hst");
+    if (_v) { strncpy(settings->mqtt_hst, _v, sizeof(settings->mqtt_hst) - 1);
+    settings->mqtt_hst[sizeof(settings->mqtt_hst) - 1] = '\0'; mg_free(_v); } }
 
-  cJSON *timezone = cJSON_GetObjectItemCaseSensitive(json, "timezone");
-  if (cJSON_IsNumber(timezone)) {
-    settings->timezone = timezone->valueint;
-  }
+  settings->mqtt_prt = mg_json_get_long(body, "$.mqtt_prt", settings->mqtt_prt);
 
-  cJSON *lon_de = cJSON_GetObjectItemCaseSensitive(json, "lon_de");
-  if (cJSON_IsNumber(lon_de)) {
-    settings->lon_de = lon_de->valuedouble;
-  }
+  { char *_v = mg_json_get_str(body, "$.mqtt_clt");
+    if (_v) { strncpy(settings->mqtt_clt, _v, sizeof(settings->mqtt_clt) - 1);
+    settings->mqtt_clt[sizeof(settings->mqtt_clt) - 1] = '\0'; mg_free(_v); } }
+  { char *_v = mg_json_get_str(body, "$.mqtt_usr");
+    if (_v) { strncpy(settings->mqtt_usr, _v, sizeof(settings->mqtt_usr) - 1);
+    settings->mqtt_usr[sizeof(settings->mqtt_usr) - 1] = '\0'; mg_free(_v); } }
+  { char *_v = mg_json_get_str(body, "$.mqtt_pswd");
+    if (_v) { strncpy(settings->mqtt_pswd, _v, sizeof(settings->mqtt_pswd) - 1);
+    settings->mqtt_pswd[sizeof(settings->mqtt_pswd) - 1] = '\0'; mg_free(_v); } }
+  { char *_v = mg_json_get_str(body, "$.txmqttop");
+    if (_v) { strncpy(settings->txmqttop, _v, sizeof(settings->txmqttop) - 1);
+    settings->txmqttop[sizeof(settings->txmqttop) - 1] = '\0'; mg_free(_v); } }
+  { char *_v = mg_json_get_str(body, "$.rxmqttop");
+    if (_v) { strncpy(settings->rxmqttop, _v, sizeof(settings->rxmqttop) - 1);
+    settings->rxmqttop[sizeof(settings->rxmqttop) - 1] = '\0'; mg_free(_v); } }
 
-  cJSON *lat_de = cJSON_GetObjectItemCaseSensitive(json, "lat_de");
-  if (cJSON_IsNumber(lat_de)) {
-    settings->lat_de = lat_de->valuedouble;
-  }
+  { char *_v = mg_json_get_str(body, "$.offdate");
+    if (_v) { int day=0,month=0,year=0; sscanf(_v, "%d.%d.%d", &day, &month, &year);
+    if (day>=1&&day<=31) settings->mday=(uint8_t)day;
+    if (month>=1&&month<=12) settings->mon=(uint8_t)month;
+    if (year>=24&&year<=99) settings->year=(uint8_t)year;
+    mg_free(_v); } }
 
-  cJSON *onsunrise = cJSON_GetObjectItemCaseSensitive(json, "onsunrise");
-  if (cJSON_IsNumber(onsunrise)) {
-    settings->onsunrise = (short)onsunrise->valueint;
-  }
+  { char *_v = mg_json_get_str(body, "$.offtime");
+    if (_v) { int hour=0,min=0,sec=0; sscanf(_v, "%d:%d:%d", &hour, &min, &sec);
+    if (hour>=0&&hour<=23) settings->hour=(uint8_t)hour;
+    if (min>=0&&min<=59) settings->min=(uint8_t)min;
+    if (sec>=0&&sec<=59) settings->sec=(uint8_t)sec;
+    mg_free(_v); } }
 
-  cJSON *onsunset = cJSON_GetObjectItemCaseSensitive(json, "onsunset");
-  if (cJSON_IsNumber(onsunset)) {
-    settings->onsunset = (short)onsunset->valueint;
-  }
+  settings->usehttps = (short)mg_json_get_long(body, "$.usehttps", settings->usehttps);
 
-  cJSON *sunrise_pins = cJSON_GetObjectItemCaseSensitive(json, "sunrise_pins");
-  if (cJSON_IsString(sunrise_pins) && (sunrise_pins->valuestring != NULL)) {
-    strncpy(settings->srise_pins, sunrise_pins->valuestring,
-            sizeof(settings->srise_pins) - 1);
-    settings->srise_pins[sizeof(settings->srise_pins) - 1] = '\0';
-  }
-
-  cJSON *sunset_pins = cJSON_GetObjectItemCaseSensitive(json, "sunset_pins");
-  if (cJSON_IsString(sunset_pins) && (sunset_pins->valuestring != NULL)) {
-    strncpy(settings->sset_pins, sunset_pins->valuestring,
-            sizeof(settings->sset_pins) - 1);
-    settings->sset_pins[sizeof(settings->sset_pins) - 1] = '\0';
-  }
-
-  cJSON *check_ip = cJSON_GetObjectItemCaseSensitive(json, "check_ip");
-  if (cJSON_IsNumber(check_ip)) {
-    settings->check_ip = check_ip->valueint;
-  }
-
-  cJSON *check_mqtt = cJSON_GetObjectItemCaseSensitive(json, "check_mqtt");
-  if (cJSON_IsNumber(check_mqtt)) {
-    settings->check_mqtt = check_mqtt->valueint;
-  }
-
-  cJSON *log_filter_mask = cJSON_GetObjectItemCaseSensitive(json, "log_filter_mask");
-  if (cJSON_IsNumber(log_filter_mask)) {
-    settings->log_filter_mask = (uint32_t)log_filter_mask->valueint;
-    logger_set_mask(settings->log_filter_mask);
-  }
-
-  cJSON *ip_addr = cJSON_GetObjectItemCaseSensitive(json, "ip_addr");
-  if (cJSON_IsString(ip_addr) && (ip_addr->valuestring != NULL)) {
-    unsigned int a, b, c, d;
-    if (sscanf(ip_addr->valuestring, "%u.%u.%u.%u", &a, &b, &c, &d) == 4 &&
-        a <= 255 && b <= 255 && c <= 255 && d <= 255) {
-      settings->ip_addr0 = (uint8_t)a;
-      settings->ip_addr1 = (uint8_t)b;
-      settings->ip_addr2 = (uint8_t)c;
-      settings->ip_addr3 = (uint8_t)d;
-    } else {
-      MG_ERROR(("Invalid IP address: %s", ip_addr->valuestring));
-    }
-  }
-
-  cJSON *sb_mask = cJSON_GetObjectItemCaseSensitive(json, "sb_mask");
-  if (cJSON_IsString(sb_mask) && (sb_mask->valuestring != NULL)) {
-    unsigned int a, b, c, d;
-    if (sscanf(sb_mask->valuestring, "%u.%u.%u.%u", &a, &b, &c, &d) == 4 &&
-        a <= 255 && b <= 255 && c <= 255 && d <= 255) {
-      settings->sb_mask0 = (uint8_t)a;
-      settings->sb_mask1 = (uint8_t)b;
-      settings->sb_mask2 = (uint8_t)c;
-      settings->sb_mask3 = (uint8_t)d;
-    } else {
-      MG_ERROR(("Invalid subnet mask: %s", sb_mask->valuestring));
-    }
-  }
-
-  cJSON *gateway = cJSON_GetObjectItemCaseSensitive(json, "gateway");
-  if (cJSON_IsString(gateway) && (gateway->valuestring != NULL)) {
-    unsigned int a, b, c, d;
-    if (sscanf(gateway->valuestring, "%u.%u.%u.%u", &a, &b, &c, &d) == 4 &&
-        a <= 255 && b <= 255 && c <= 255 && d <= 255) {
-      settings->gateway0 = (uint8_t)a;
-      settings->gateway1 = (uint8_t)b;
-      settings->gateway2 = (uint8_t)c;
-      settings->gateway3 = (uint8_t)d;
-    } else {
-      MG_ERROR(("Invalid gateway address: %s", gateway->valuestring));
-    }
-  }
-
-  cJSON *token = cJSON_GetObjectItemCaseSensitive(json, "token");
-  if (cJSON_IsString(token) && (token->valuestring != NULL)) {
-    strncpy(settings->token, token->valuestring, sizeof(settings->token) - 1);
-    settings->token[sizeof(settings->token) - 1] = '\0';
-  }
-
-  cJSON *mqtt_hst = cJSON_GetObjectItemCaseSensitive(json, "mqtt_hst");
-  if (cJSON_IsString(mqtt_hst) && (mqtt_hst->valuestring != NULL)) {
-    strncpy(settings->mqtt_hst, mqtt_hst->valuestring,
-            sizeof(settings->mqtt_hst) - 1);
-    settings->mqtt_hst[sizeof(settings->mqtt_hst) - 1] = '\0';
-  }
-
-  cJSON *mqtt_prt = cJSON_GetObjectItemCaseSensitive(json, "mqtt_prt");
-  if (cJSON_IsNumber(mqtt_prt)) {
-    settings->mqtt_prt = mqtt_prt->valueint;
-  }
-
-  cJSON *mqtt_clt = cJSON_GetObjectItemCaseSensitive(json, "mqtt_clt");
-  if (cJSON_IsString(mqtt_clt) && (mqtt_clt->valuestring != NULL)) {
-    strncpy(settings->mqtt_clt, mqtt_clt->valuestring,
-            sizeof(settings->mqtt_clt) - 1);
-    settings->mqtt_clt[sizeof(settings->mqtt_clt) - 1] = '\0';
-  }
-
-  cJSON *mqtt_usr = cJSON_GetObjectItemCaseSensitive(json, "mqtt_usr");
-  if (cJSON_IsString(mqtt_usr) && (mqtt_usr->valuestring != NULL)) {
-    strncpy(settings->mqtt_usr, mqtt_usr->valuestring,
-            sizeof(settings->mqtt_usr) - 1);
-    settings->mqtt_usr[sizeof(settings->mqtt_usr) - 1] = '\0';
-  }
-
-  cJSON *mqtt_pswd = cJSON_GetObjectItemCaseSensitive(json, "mqtt_pswd");
-  if (cJSON_IsString(mqtt_pswd) && (mqtt_pswd->valuestring != NULL)) {
-    strncpy(settings->mqtt_pswd, mqtt_pswd->valuestring,
-            sizeof(settings->mqtt_pswd) - 1);
-    settings->mqtt_pswd[sizeof(settings->mqtt_pswd) - 1] = '\0';
-  }
-
-  cJSON *txmqttop = cJSON_GetObjectItemCaseSensitive(json, "txmqttop");
-  if (cJSON_IsString(txmqttop) && (txmqttop->valuestring != NULL)) {
-    strncpy(settings->txmqttop, txmqttop->valuestring,
-            sizeof(settings->txmqttop) - 1);
-    settings->txmqttop[sizeof(settings->txmqttop) - 1] = '\0';
-  }
-
-  cJSON *rxmqttop = cJSON_GetObjectItemCaseSensitive(json, "rxmqttop");
-  if (cJSON_IsString(rxmqttop) && (rxmqttop->valuestring != NULL)) {
-    strncpy(settings->rxmqttop, rxmqttop->valuestring,
-            sizeof(settings->rxmqttop) - 1);
-    settings->rxmqttop[sizeof(settings->rxmqttop) - 1] = '\0';
-  }
-
-  cJSON *offdate =
-      cJSON_GetObjectItemCaseSensitive(json, "offdate"); // OFFLINE MODE date
-  if (cJSON_IsString(offdate) && (offdate->valuestring != NULL)) {
-    char *date_str = offdate->valuestring;
-    int day = 0, month = 0, year = 0;
-
-    sscanf(date_str, "%d.%d.%d", &day, &month, &year);
-    if (day >= 1 && day <= 31)
-      settings->mday = (uint8_t)day;
-    if (month >= 1 && month <= 12)
-      settings->mon = (uint8_t)month;
-    if (year >= 24 && year <= 99)
-      settings->year = (uint8_t)year;
-  }
-
-  cJSON *offtime =
-      cJSON_GetObjectItemCaseSensitive(json, "offtime"); // OFFLINE MODE time
-  if (cJSON_IsString(offtime) && (offtime->valuestring != NULL)) {
-    char *time_str = offtime->valuestring;
-    int hour = 0, min = 0, sec = 0;
-
-    sscanf(time_str, "%d:%d:%d", &hour, &min, &sec);
-    if (hour >= 0 && hour <= 23)
-      settings->hour = (uint8_t)hour;
-    if (min >= 0 && min <= 59)
-      settings->min = (uint8_t)min;
-    if (sec >= 0 && sec <= 59)
-      settings->sec = (uint8_t)sec;
-  }
-
-  cJSON *usehttps = cJSON_GetObjectItemCaseSensitive(json, "usehttps");
-  if (cJSON_IsNumber(usehttps)) {
-    settings->usehttps = usehttps->valueint;
-    //		printf("+++settings->usehttps = %d",settings->usehttps);
-  }
-  //---------------- HTTPS settings section -----------------------------
-  /*
-   Парсит JSON-данные с помощью cJSON.
-   Извлекаем строки tls_ca, tls_key и tls_cert.
-   Декодируем их с помощью json_decode_string, чтобы удалить экранированные
-   символы и кавычки. Сохраняем декодированные данные в структуру
-   HTTPSsettings с помощью функций https_set_tls_ca, https_set_tls_key и
-   https_set_tls_cert.
-   */
-  // Получаем текущие настройки
   const HTTPSsettings *current = get_valid_settings();
   if (current == NULL) {
-    // Если нет валидных настроек, создаем настройки по умолчанию
     reset_to_defaults();
-    current = get_valid_settings(); // Получаем созданные настройки по умолчанию
+    current = get_valid_settings();
     if (current == NULL) {
       fprintf(stderr, "Error: Failed to create default settings\n");
-      cJSON_Delete(json);
       if (my_DgnTaskHandle)
         xTaskNotifyGive(my_DgnTaskHandle);
       return;
     }
   }
 
-  // Копируем текущие настройки во временный буфер
   memcpy(writebuf, current, sizeof(HTTPSsettings));
   HTTPSsettings *new_settings = (HTTPSsettings *)writebuf;
 
-  char decoded_buffer[1024];
+  static char decoded_buffer[1024];
   bool settings_changed = false;
 
-  // Извлекаем и декодируем данные сертификатов и ключей
-  cJSON *tls_ca_json = cJSON_GetObjectItemCaseSensitive(json, "tls_ca");
-  if (cJSON_IsString(tls_ca_json) && (tls_ca_json->valuestring != NULL)) {
-    if (!is_template_value(
-            tls_ca_json->valuestring)) { // Игнорируем шаблонные значения
+  char *tls_ca_val = mg_json_get_str(body, "$.tls_ca");
+  if (tls_ca_val) {
+    if (!is_template_value(tls_ca_val)) {
       memset(decoded_buffer, 0, sizeof(decoded_buffer));
-      if (!json_decode_string(tls_ca_json->valuestring, decoded_buffer,
-                              sizeof(decoded_buffer))) {
+      if (!json_decode_string(tls_ca_val, decoded_buffer, sizeof(decoded_buffer))) {
         fprintf(stderr, "Error: Failed to decode tls_ca\n");
       } else {
-        // Проверяем, отличается ли новое значение от текущего
         if (strcmp(new_settings->tls_ca, decoded_buffer) != 0) {
-          strncpy(new_settings->tls_ca, decoded_buffer,
-                  sizeof(new_settings->tls_ca) - 1);
+          strncpy(new_settings->tls_ca, decoded_buffer, sizeof(new_settings->tls_ca) - 1);
           new_settings->tls_ca[sizeof(new_settings->tls_ca) - 1] = '\0';
           settings_changed = true;
           printf("tls_ca updated with new data.\n");
-        } else {
-          printf("tls_ca not changed (same as current).\n");
-        }
+        } else { printf("tls_ca not changed (same as current).\n"); }
       }
-    } else {
-      printf("tls_ca not changed (template value).\n");
-    }
+    } else { printf("tls_ca not changed (template value).\n"); }
+    mg_free(tls_ca_val);
   }
 
-  cJSON *tls_key_json = cJSON_GetObjectItemCaseSensitive(json, "tls_key");
-  if (cJSON_IsString(tls_key_json) && (tls_key_json->valuestring != NULL)) {
-    if (!is_template_value(
-            tls_key_json->valuestring)) { // Игнорируем шаблонные значения
+  char *tls_key_val = mg_json_get_str(body, "$.tls_key");
+  if (tls_key_val) {
+    if (!is_template_value(tls_key_val)) {
       memset(decoded_buffer, 0, sizeof(decoded_buffer));
-      if (!json_decode_string(tls_key_json->valuestring, decoded_buffer,
-                              sizeof(decoded_buffer))) {
+      if (!json_decode_string(tls_key_val, decoded_buffer, sizeof(decoded_buffer))) {
         fprintf(stderr, "Error: Failed to decode tls_key\n");
       } else {
-        // Проверяем, отличается ли новое значение от текущего
         if (strcmp(new_settings->tls_key, decoded_buffer) != 0) {
-          strncpy(new_settings->tls_key, decoded_buffer,
-                  sizeof(new_settings->tls_key) - 1);
+          strncpy(new_settings->tls_key, decoded_buffer, sizeof(new_settings->tls_key) - 1);
           new_settings->tls_key[sizeof(new_settings->tls_key) - 1] = '\0';
           settings_changed = true;
           printf("tls_key updated with new data.\n");
-        } else {
-          printf("tls_key not changed (same as current).\n");
-        }
+        } else { printf("tls_key not changed (same as current).\n"); }
       }
-    } else {
-      printf("tls_key not changed (template value).\n");
-    }
+    } else { printf("tls_key not changed (template value).\n"); }
+    mg_free(tls_key_val);
   }
-  /*
-  Если значение поля tls_cert соответствует формату C/C++ константы, оно
-  декодируется и сохраняется в структуру. Если значение не соответствует
-  формату C/C++ константы (скорее всего, были сгенерированы функцией
-  gen_mysett_json()), оно игнорируется, и выводится сообщение о том, что
-  данные не изменились.
-  */
-  cJSON *tls_cert_json = cJSON_GetObjectItemCaseSensitive(json, "tls_cert");
-  if (cJSON_IsString(tls_cert_json) && (tls_cert_json->valuestring != NULL)) {
-    const char *tls_cert_value = tls_cert_json->valuestring;
-    if (strlen(tls_cert_value) ==
-        0) { // Когда пользователь хочет очистить поле.
+
+  char *tls_cert_val = mg_json_get_str(body, "$.tls_cert");
+  if (tls_cert_val) {
+    if (strlen(tls_cert_val) == 0) {
       if (strlen(new_settings->tls_cert) != 0) {
         new_settings->tls_cert[0] = '\0';
         settings_changed = true;
         printf("tls_cert updated to empty string.\n");
-      } else {
-        printf("tls_cert not changed (already empty).\n");
-      }
+      } else { printf("tls_cert not changed (already empty).\n"); }
     }
-    if (!is_template_value(tls_cert_value) &&
-        is_c_like_format(tls_cert_value)) {
-      // Если значение в формате C/C++ константы и не шаблонное, обрабатываем
-      // его
+    if (!is_template_value(tls_cert_val) && is_c_like_format(tls_cert_val)) {
       memset(decoded_buffer, 0, sizeof(decoded_buffer));
-      if (!json_decode_string(tls_cert_value, decoded_buffer,
-                              sizeof(decoded_buffer))) {
+      if (!json_decode_string(tls_cert_val, decoded_buffer, sizeof(decoded_buffer))) {
         fprintf(stderr, "Error: Failed to decode tls_cert\n");
       } else {
-        // Проверяем, отличается ли новое значение от текущего
         if (strcmp(new_settings->tls_cert, decoded_buffer) != 0) {
-          strncpy(new_settings->tls_cert, decoded_buffer,
-                  sizeof(new_settings->tls_cert) - 1);
+          strncpy(new_settings->tls_cert, decoded_buffer, sizeof(new_settings->tls_cert) - 1);
           new_settings->tls_cert[sizeof(new_settings->tls_cert) - 1] = '\0';
           settings_changed = true;
           printf("tls_cert updated with new data.\n");
-        } else {
-          printf("tls_cert not changed (same as current).\n");
-        }
+        } else { printf("tls_cert not changed (same as current).\n"); }
       }
-    } else {
-      // Если значение шаблонное или не в формате C/C++ константы, игнорируем
-      // его
-      printf("tls_cert not changed (template value or not in C format).\n");
-    }
+    } else { printf("tls_cert not changed (template value or not in C format).\n"); }
+    mg_free(tls_cert_val);
   }
 
-  cJSON *telegram_token =
-      cJSON_GetObjectItemCaseSensitive(json, "telegram_token");
-  if (cJSON_IsString(telegram_token) && (telegram_token->valuestring != NULL)) {
-    if (!is_template_value(
-            telegram_token->valuestring)) { // Игнорируем шаблонные значения
+  char *tg_token_val = mg_json_get_str(body, "$.telegram_token");
+  if (tg_token_val) {
+    if (!is_template_value(tg_token_val)) {
       memset(decoded_buffer, 0, sizeof(decoded_buffer));
-      if (!json_decode_string(telegram_token->valuestring, decoded_buffer,
-                              sizeof(decoded_buffer))) {
+      if (!json_decode_string(tg_token_val, decoded_buffer, sizeof(decoded_buffer))) {
         fprintf(stderr, "Error: Failed to decode telegram_token\n");
       } else {
-        // Проверяем, отличается ли новое значение от текущего
         if (strcmp(new_settings->telegram_token, decoded_buffer) != 0) {
-          strncpy(new_settings->telegram_token, decoded_buffer,
-                  sizeof(new_settings->telegram_token) - 1);
-          new_settings
-              ->telegram_token[sizeof(new_settings->telegram_token) - 1] = '\0';
+          strncpy(new_settings->telegram_token, decoded_buffer, sizeof(new_settings->telegram_token) - 1);
+          new_settings->telegram_token[sizeof(new_settings->telegram_token) - 1] = '\0';
           settings_changed = true;
           printf("telegram_token updated with new data.\n");
-        } else {
-          printf("telegram_token not changed (same as current).\n");
-        }
+        } else { printf("telegram_token not changed (same as current).\n"); }
       }
-    } else {
-      printf("telegram_token not changed (template value).\n");
-    }
+    } else { printf("telegram_token not changed (template value).\n"); }
+    mg_free(tg_token_val);
   }
 
-  // Обработка остальных HTTPS-настроек, не требующих декодирования
-  cJSON *domain_json = cJSON_GetObjectItemCaseSensitive(json, "domain");
-  if (cJSON_IsString(domain_json) && (domain_json->valuestring != NULL)) {
-    // Проверяем, отличается ли новое значение от текущего
-    if (strcmp(new_settings->domain, domain_json->valuestring) != 0) {
-      strncpy(new_settings->domain, domain_json->valuestring,
-              sizeof(new_settings->domain) - 1);
+  char *domain_val = mg_json_get_str(body, "$.domain");
+  if (domain_val) {
+    if (strcmp(new_settings->domain, domain_val) != 0) {
+      strncpy(new_settings->domain, domain_val, sizeof(new_settings->domain) - 1);
       new_settings->domain[sizeof(new_settings->domain) - 1] = '\0';
       settings_changed = true;
       printf("domain updated with new data.\n");
-    } else {
-      printf("domain not changed (same as current).\n");
-    }
+    } else { printf("domain not changed (same as current).\n"); }
+    mg_free(domain_val);
   }
 
-  // Можно добавить обработку других полей, если они есть в JSON
-  cJSON *port_json = cJSON_GetObjectItemCaseSensitive(json, "port");
-  if (cJSON_IsNumber(port_json)) {
-    new_settings->port = port_json->valueint;
-  }
+  new_settings->port = (uint16_t)mg_json_get_long(body, "$.port", new_settings->port);
+  new_settings->timeout = (uint32_t)mg_json_get_long(body, "$.timeout", new_settings->timeout);
+  new_settings->retry_cnt = (uint8_t)mg_json_get_long(body, "$.retry_cnt", new_settings->retry_cnt);
+  new_settings->connection_mode = (uint8_t)mg_json_get_long(body, "$.connection_mode", new_settings->connection_mode);
 
-  cJSON *timeout_json = cJSON_GetObjectItemCaseSensitive(json, "timeout");
-  if (cJSON_IsNumber(timeout_json)) {
-    new_settings->timeout = timeout_json->valueint;
-  }
-
-  cJSON *retry_cnt_json = cJSON_GetObjectItemCaseSensitive(json, "retry_cnt");
-  if (cJSON_IsNumber(retry_cnt_json)) {
-    new_settings->retry_cnt = retry_cnt_json->valueint;
-  }
-
-  cJSON *connection_mode_json =
-      cJSON_GetObjectItemCaseSensitive(json, "connection_mode");
-  if (cJSON_IsNumber(connection_mode_json)) {
-    new_settings->connection_mode = connection_mode_json->valueint;
-  }
-
-  cJSON_Delete(json);
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
 
-  // Записываем обновленные настройки во флеш
   if (settings_changed) {
     if (update_and_write_settings(new_settings)) {
       printf("HTTPS settings successfully updated\n");
@@ -2793,101 +2459,96 @@ void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm,
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
 
-  if (hm->body.len > 0) {
-    cJSON *root = cJSON_ParseWithLength(hm->body.buf, hm->body.len);
-    if (root) {
-      cJSON *id_item = cJSON_GetObjectItem(root, "id");
-      cJSON *pin_item = cJSON_GetObjectItem(root, "pin");
-      if (cJSON_IsNumber(id_item) && cJSON_IsString(pin_item)) {
-        uint8_t id = id_item->valueint;
-        const char *pin_str = pin_item->valuestring;
-
-        char *bracket_pos = strchr(pin_str, '(');
-        if (bracket_pos != NULL) {
-          *bracket_pos = '\0';
-        }
-
-        if (id >= 0 && id < NUMPIN) {
-          int found = 0;
-          for (int i = 0; i < PINPAIRS; i++) {
-            if (bracket_pos != NULL) {
-              *bracket_pos = '\0';
-            }
-            if (strcmp(PinsConf[id].pinact[i].pin, pin_str) == 0) {
-              for (int j = i; j < PINPAIRS; j++) {
-                PinsConf[id].pinact[j] = PinsConf[id].pinact[j + 1];
-              }
-              memset(&PinsConf[id].pinact[9], 0, sizeof(PinAction));
-              found = 1;
-              break;
-            }
-          }
-
-          for (int i = 0; i < NUMPINLINKS; i++) {
-            if (PinsLinks[i].idin == id &&
-                strcmp(PinsLinks[i].pins, pin_str) == 0) {
-              PinsLinks[i].idin = 0;
-              PinsLinks[i].idout = 0;
-              strcpy(PinsLinks[i].pins, "");
-              found = 2;
-
-              uint8_t usbnum = 4;
-              xQueueSend(usbQueueHandle, &usbnum, 0);
-              break;
-            }
-          }
-
-          if (found == 2) {
-            printf("We deleted a pin with ID = %s from pinact[%d] and updated "
-                   "PinsLinks! \r\n",
-                   pin_str, id);
-            MG_INFO(("Response headers for connection %ld:", c->id));
-            log_headers(extra_headers);
-            mg_http_reply(c, 200, extra_headers,
-                          "{\"status\":true,\"message\":\"Pin deleted "
-                          "successfully and PinsLinks updated\"}");
-          } else if (found == 1) {
-            printf("We deleted a pin with ID = %s from pinact[%d], but didn't "
-                   "find it in PinsLinks!\n",
-                   pin_str, id);
-            MG_INFO(("Response headers for connection %ld:", c->id));
-            log_headers(extra_headers);
-            mg_http_reply(c, 200, extra_headers,
-                          "{\"status\":true,\"message\":\"Pin deleted "
-                          "successfully, but not found in PinsLinks\"}");
-          } else {
-            MG_INFO(("Response headers for connection %ld:", c->id));
-            log_headers(extra_headers);
-            mg_http_reply(c, 404, extra_headers,
-                          "{\"status\":false,\"message\":\"Pin not found\"}");
-          }
-        } else {
-          MG_INFO(("Response headers for connection %ld:", c->id));
-          log_headers(extra_headers);
-          mg_http_reply(c, 400, extra_headers,
-                        "{\"status\":false,\"message\":\"Invalid ID\"}");
-        }
-      } else {
-        MG_INFO(("Response headers for connection %ld:", c->id));
-        log_headers(extra_headers);
-        mg_http_reply(c, 400, extra_headers,
-                      "{\"status\":false,\"message\":\"Invalid JSON format\"}");
-      }
-      cJSON_Delete(root);
-      if (my_DgnTaskHandle)
-        xTaskNotifyGive(my_DgnTaskHandle);
-    } else {
-      MG_INFO(("Response headers for connection %ld:", c->id));
-      log_headers(extra_headers);
-      mg_http_reply(c, 400, extra_headers,
-                    "{\"status\":false,\"message\":\"Invalid JSON\"}");
-    }
-  } else {
+  if (hm->body.len == 0) {
     MG_INFO(("Response headers for connection %ld:", c->id));
     log_headers(extra_headers);
     mg_http_reply(c, 400, extra_headers,
                   "{\"status\":false,\"message\":\"Empty request body\"}");
+    return;
   }
+
+  struct mg_str body = mg_str_n(hm->body.buf, hm->body.len);
+  long id_val = mg_json_get_long(body, "$.id", -1);
+  char *pin_str = mg_json_get_str(body, "$.pin");
+
+  if (id_val < 0 || !pin_str) {
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 400, extra_headers,
+                  "{\"status\":false,\"message\":\"Invalid JSON format\"}");
+    if (pin_str) mg_free(pin_str);
+    if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    return;
+  }
+
+  uint8_t id = (uint8_t)id_val;
+  char *bracket_pos = strchr(pin_str, '(');
+  if (bracket_pos != NULL) {
+    *bracket_pos = '\0';
+  }
+
+  if (id >= NUMPIN) {
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 400, extra_headers,
+                  "{\"status\":false,\"message\":\"Invalid ID\"}");
+    mg_free(pin_str);
+    if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    return;
+  }
+
+  int found = 0;
+  for (int i = 0; i < PINPAIRS; i++) {
+    if (bracket_pos != NULL) {
+      *bracket_pos = '\0';
+    }
+    if (strcmp(PinsConf[id].pinact[i].pin, pin_str) == 0) {
+      for (int j = i; j < PINPAIRS; j++) {
+        PinsConf[id].pinact[j] = PinsConf[id].pinact[j + 1];
+      }
+      memset(&PinsConf[id].pinact[PINPAIRS - 1], 0, sizeof(PinAction));
+      found = 1;
+      break;
+    }
+  }
+
+  for (int i = 0; i < NUMPINLINKS; i++) {
+    if (PinsLinks[i].idin == id &&
+        strcmp(PinsLinks[i].pins, pin_str) == 0) {
+      PinsLinks[i].idin = 0;
+      PinsLinks[i].idout = 0;
+      strcpy(PinsLinks[i].pins, "");
+      found = 2;
+      uint8_t usbnum = 4;
+      xQueueSend(usbQueueHandle, &usbnum, 0);
+      break;
+    }
+  }
+
+  if (found == 2) {
+    printf("We deleted a pin with ID = %s from pinact[%d] and updated PinsLinks!\r\n", pin_str, id);
+    uint8_t usbnum = 1;
+    xQueueSend(usbQueueHandle, &usbnum, 0);
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 200, extra_headers,
+                  "{\"status\":true,\"message\":\"Pin and connection deleted successfully\"}");
+  } else if (found == 1) {
+    uint8_t usbnum = 1;
+    xQueueSend(usbQueueHandle, &usbnum, 0);
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 200, extra_headers,
+                  "{\"status\":true,\"message\":\"Pin deleted successfully, but not found in PinsLinks\"}");
+  } else {
+    MG_INFO(("Response headers for connection %ld:", c->id));
+    log_headers(extra_headers);
+    mg_http_reply(c, 404, extra_headers,
+                  "{\"status\":false,\"message\":\"Pin not found\"}");
+  }
+
+  mg_free(pin_str);
+  if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 }
 void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
   char id_str[10], value_str[10], token[11];
@@ -3226,239 +2887,194 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
   if (jstr == NULL)
     return false;
 
-  cJSON *json = cJSON_Parse(jstr);
-  if (json == NULL) {
-    const char *errptr = cJSON_GetErrorPtr();
-    if (errptr != NULL) {
-      fprintf(stderr, "Error parsing JSON: %s\n", errptr);
-    }
-    return false;
-  }
-  // Проверяем все необходимые поля
-  cJSON *id = cJSON_GetObjectItemCaseSensitive(json, "id");
-  cJSON *pin = cJSON_GetObjectItemCaseSensitive(json, "pin");
-  cJSON *type = cJSON_GetObjectItemCaseSensitive(json, "typsensor");
-  cJSON *numdev = cJSON_GetObjectItemCaseSensitive(json, "numdevices");
-  cJSON *onoff = cJSON_GetObjectItemCaseSensitive(json, "onoff");
-  // Проверяем наличие и типы обязательных полей
-  if (!cJSON_IsNumber(id) || !cJSON_IsString(pin) || !cJSON_IsNumber(type) ||
-      !cJSON_IsNumber(onoff)) {
+  struct mg_str body = mg_str_n(jstr, strlen(jstr));
+
+  if (mg_json_get(body, "$.id", NULL) < 0 ||
+      mg_json_get(body, "$.pin", NULL) < 0 ||
+      mg_json_get(body, "$.typsensor", NULL) < 0 ||
+      mg_json_get(body, "$.onoff", NULL) < 0) {
     fprintf(stderr, "Error: missing or invalid required fields\n");
-    cJSON_Delete(json);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return false;
   }
-  uint8_t sensrtpe = (uint8_t)type->valueint;
-  uint8_t sensr_id = (uint8_t)id->valueint;
+  uint8_t sensrtpe = (uint8_t)mg_json_get_long(body, "$.typsensor", 0);
+  uint8_t sensr_id = (uint8_t)mg_json_get_long(body, "$.id", 0);
+  char *pin_str = mg_json_get_str(body, "$.pin");
+  if (!pin_str) {
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
+    return false;
+  }
+  long onoff_val = mg_json_get_long(body, "$.onoff", 0);
+  long numdev_val = mg_json_get_long(body, "$.numdevices", 0);
+
   if (sensrtpe == 1) { // DS18B20
     int free_slot = -1;
     int existing_id_slot = -1;
-    // Сначала ищем существующие записи
     for (uint8_t i = 0; i < MAX_DS18B20_P; i++) {
       if (ds18b20[i].typsensr == 0 && free_slot == -1) {
-        free_slot = i; // Запоминаем первый свободный слот
+        free_slot = i;
       }
       if (ds18b20[i].typsensr == sensrtpe) {
         if (ds18b20[i].id == sensr_id) {
-          existing_id_slot = i; // Нашли запись с таким же ID
-          break;                // Приоритет у совпадения по ID
+          existing_id_slot = i;
+          break;
         }
       }
     }
-    // Определяем, какой слот использовать
     int target_slot;
     if (existing_id_slot != -1) {
-      target_slot = existing_id_slot; // Используем слот с совпадающим ID
+      target_slot = existing_id_slot;
     } else if (free_slot != -1) {
-      target_slot = free_slot; // Используем свободный слот
+      target_slot = free_slot;
     } else {
       fprintf(stderr, "Error: no free slots for DS18B20\n");
-      cJSON_Delete(json);
+      mg_free(pin_str);
       if (my_DgnTaskHandle)
         xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
-    // Записываем данные в выбранный слот
     ds18b20[target_slot].id = sensr_id;
-    strncpy(ds18b20[target_slot].pin, pin->valuestring,
+    strncpy(ds18b20[target_slot].pin, pin_str,
             sizeof(ds18b20[target_slot].pin) - 1);
     ds18b20[target_slot].pin[sizeof(ds18b20[target_slot].pin) - 1] = '\0';
     ds18b20[target_slot].typsensr = sensrtpe;
-    ds18b20[target_slot].onoff = (uint8_t)onoff->valueint;
-    ds18b20[target_slot].numsens =
-        cJSON_IsNumber(numdev) ? (uint8_t)numdev->valueint : 0;
+    ds18b20[target_slot].onoff = (uint8_t)onoff_val;
+    ds18b20[target_slot].numsens = (uint8_t)numdev_val;
 
-    // Добавляем отправку в очередь USB для DS18B20
     uint8_t usbnum = 5;
     xQueueSend(usbQueueHandle, &usbnum, 0);
 
-    cJSON_Delete(json);
+    mg_free(pin_str);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return true;
   } else if (sensrtpe == 2) { // DHT22
     int free_slot = -1;
     int existing_id_slot = -1;
-    // Сначала ищем существующие записи
     for (uint8_t i = 0; i < MAX_DHT22_P; i++) {
       if (dht22[i].typsensr == 0 && free_slot == -1) {
-        free_slot = i; // Запоминаем первый свободный слот
+        free_slot = i;
       }
       if (dht22[i].typsensr == sensrtpe) {
         if (dht22[i].id == sensr_id) {
-          existing_id_slot = i; // Нашли запись с таким же ID
-          break;                // Приоритет у совпадения по ID
+          existing_id_slot = i;
+          break;
         }
       }
     }
-    // Определяем, какой слот использовать
     int target_slot;
     if (existing_id_slot != -1) {
-      target_slot = existing_id_slot; // Используем слот с совпадающим ID
+      target_slot = existing_id_slot;
     } else if (free_slot != -1) {
-      target_slot = free_slot; // Используем свободный слот
+      target_slot = free_slot;
     } else {
       fprintf(stderr, "Error: no free slots for DHT22\n");
-      cJSON_Delete(json);
+      mg_free(pin_str);
       if (my_DgnTaskHandle)
         xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
-    // Записываем данные в выбранный слот
     dht22[target_slot].id = sensr_id;
-    strncpy(dht22[target_slot].pin, pin->valuestring,
+    strncpy(dht22[target_slot].pin, pin_str,
             sizeof(dht22[target_slot].pin) - 1);
     dht22[target_slot].pin[sizeof(dht22[target_slot].pin) - 1] = '\0';
     dht22[target_slot].typsensr = sensrtpe;
-    dht22[target_slot].numsens =
-        cJSON_IsNumber(numdev) ? (uint8_t)numdev->valueint : 0;
-    dht22[target_slot].onoff = (uint8_t)onoff->valueint;
+    dht22[target_slot].numsens = (uint8_t)numdev_val;
+    dht22[target_slot].onoff = (uint8_t)onoff_val;
 
     uint8_t usbnum = 5;
     xQueueSend(usbQueueHandle, &usbnum, 0);
 
-    cJSON_Delete(json);
+    mg_free(pin_str);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return true;
   }
-  // Если тип датчика неизвестен
   fprintf(stderr, "Error: unknown sensor type\n");
-  cJSON_Delete(json);
+  mg_free(pin_str);
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
   return false;
 }
 
 bool parse_sensor_json(const char *json_string) {
-  cJSON *json = cJSON_Parse(json_string);
-  if (json == NULL) {
-    const char *error_ptr = cJSON_GetErrorPtr();
-    if (error_ptr != NULL) {
-      fprintf(stderr, "JSON parsing error: %s\n", error_ptr);
-    }
-    return false;
-  }
+  struct mg_str body = mg_str_n(json_string, strlen(json_string));
 
-  cJSON *sensorNumber = cJSON_GetObjectItemCaseSensitive(json, "sensorNumber");
+  char *sensorNumber = mg_json_get_str(body, "$.sensorNumber");
   if (!sensorNumber) {
-    sensorNumber = cJSON_GetObjectItemCaseSensitive(json, "s_number");
+    sensorNumber = mg_json_get_str(body, "$.s_number");
   }
-  if (!cJSON_IsString(sensorNumber)) {
+  if (!sensorNumber) {
     fprintf(stderr, "Error: Invalid or missing sensorNumber/s_number\n");
-    cJSON_Delete(json);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return false;
   }
 
-  //    printf("Searching for sensor with address: %s\n",
-  //    sensorNumber->valuestring);
-
-  if (strcmp(sensorNumber->valuestring, "DHT22") == 0) {
-    // Обработка DHT22 датчиков
-    cJSON *pin_id = cJSON_GetObjectItemCaseSensitive(json, "id");
-    if (!cJSON_IsNumber(pin_id)) {
+  if (strcmp(sensorNumber, "DHT22") == 0) {
+    long pin_id_val = mg_json_get_long(body, "$.id", -1);
+    if (pin_id_val < 0) {
       fprintf(stderr, "Error: Invalid or missing id for DHT22\n");
-      cJSON_Delete(json);
+      mg_free(sensorNumber);
       if (my_DgnTaskHandle)
         xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
-    cJSON *pinName = cJSON_GetObjectItemCaseSensitive(json, "pins");
-    if (!cJSON_IsString(pinName)) {
+    char *pinName = mg_json_get_str(body, "$.pins");
+    if (!pinName) {
       fprintf(stderr, "Error: Invalid or missing pin for DHT22\n");
-      cJSON_Delete(json);
+      mg_free(sensorNumber);
       if (my_DgnTaskHandle)
         xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
 
-    // Ищем нужный DHT22 датчик
     dht22_pin_t *t_dht22 = NULL;
     for (int i = 0; i < MAX_DHT22_P; i++) {
-      if (dht22[i].id == pin_id->valueint &&
-          strcmp(dht22[i].pin, pinName->valuestring) == 0) {
+      if (dht22[i].id == pin_id_val &&
+          strcmp(dht22[i].pin, pinName) == 0) {
         t_dht22 = &dht22[i];
-        printf("Found DHT22 on Pin %s with ID:%d\n", pinName->valuestring,
-               dht22[i].id);
+        printf("Found DHT22 on Pin %s with ID:%d\n", pinName, dht22[i].id);
         break;
       }
     }
+    mg_free(pinName);
 
     if (!t_dht22) {
-      fprintf(stderr, "Error: DHT22 with id %d and pin %s not found\n",
-              pin_id->valueint, pinName->valuestring);
-      cJSON_Delete(json);
+      fprintf(stderr, "Error: DHT22 with id %ld not found\n", pin_id_val);
+      mg_free(sensorNumber);
       if (my_DgnTaskHandle)
         xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
 
-    // Обновление параметров DHT22
-    cJSON *ut = cJSON_GetObjectItemCaseSensitive(json, "ut");
-    if (cJSON_IsNumber(ut))
-      t_dht22->upt = (float)ut->valuedouble;
+    double dval;
+    if (mg_json_get_num(body, "$.ut", &dval)) t_dht22->upt = (float)dval;
+    if (mg_json_get_num(body, "$.lt", &dval)) t_dht22->lowt = (float)dval;
+    if (mg_json_get_num(body, "$.upphumid", &dval)) t_dht22->uph = (float)dval;
+    if (mg_json_get_num(body, "$.humlolim", &dval)) t_dht22->lowh = (float)dval;
 
-    cJSON *lt = cJSON_GetObjectItemCaseSensitive(json, "lt");
-    if (cJSON_IsNumber(lt))
-      t_dht22->lowt = (float)lt->valuedouble;
+    char *acut = mg_json_get_str(body, "$.action_ut");
+    if (!acut) acut = mg_json_get_str(body, "$.actup");
+    if (acut) { strncpy(t_dht22->actup, acut, sizeof(t_dht22->actup) - 1); mg_free(acut); }
 
-    cJSON *uh = cJSON_GetObjectItemCaseSensitive(json, "upphumid");
-    if (cJSON_IsNumber(uh))
-      t_dht22->uph = (float)uh->valuedouble;
+    char *aclt = mg_json_get_str(body, "$.action_lt");
+    if (!aclt) aclt = mg_json_get_str(body, "$.actlow");
+    if (aclt) { strncpy(t_dht22->actlow, aclt, sizeof(t_dht22->actlow) - 1); mg_free(aclt); }
 
-    cJSON *lh = cJSON_GetObjectItemCaseSensitive(json, "humlolim");
-    if (cJSON_IsNumber(lh))
-      t_dht22->lowh = (float)lh->valuedouble;
+    char *acuh = mg_json_get_str(body, "$.actuphum");
+    if (acuh) { strncpy(t_dht22->actuh, acuh, sizeof(t_dht22->actuh) - 1); mg_free(acuh); }
 
-    cJSON *acut = cJSON_GetObjectItemCaseSensitive(json, "action_ut");
-    if (!acut)
-      acut = cJSON_GetObjectItemCaseSensitive(json, "actup");
-    if (cJSON_IsString(acut))
-      strncpy(t_dht22->actup, acut->valuestring, sizeof(t_dht22->actup) - 1);
+    char *aclh = mg_json_get_str(body, "$.actlowhum");
+    if (aclh) { strncpy(t_dht22->actlh, aclh, sizeof(t_dht22->actlh) - 1); mg_free(aclh); }
 
-    cJSON *aclt = cJSON_GetObjectItemCaseSensitive(json, "action_lt");
-    if (!aclt)
-      aclt = cJSON_GetObjectItemCaseSensitive(json, "actlow");
-    if (cJSON_IsString(aclt))
-      strncpy(t_dht22->actlow, aclt->valuestring, sizeof(t_dht22->actlow) - 1);
+    char *info = mg_json_get_str(body, "$.info");
+    if (info) { strncpy(t_dht22->info, info, sizeof(t_dht22->info) - 1); mg_free(info); }
 
-    cJSON *acuh = cJSON_GetObjectItemCaseSensitive(json, "actuphum");
-    if (cJSON_IsString(acuh))
-      strncpy(t_dht22->actuh, acuh->valuestring, sizeof(t_dht22->actuh) - 1);
-
-    cJSON *aclh = cJSON_GetObjectItemCaseSensitive(json, "actlowhum");
-    if (cJSON_IsString(aclh))
-      strncpy(t_dht22->actlh, aclh->valuestring, sizeof(t_dht22->actlh) - 1);
-
-    cJSON *info = cJSON_GetObjectItemCaseSensitive(json, "info");
-    if (cJSON_IsString(info))
-      strncpy(t_dht22->info, info->valuestring, sizeof(t_dht22->info) - 1);
-
+    mg_free(sensorNumber);
   } else {
-    // Обработка DS18B20 датчиков
     ds18b20_pin_t *t_ds18b20 = NULL;
     int sensor_index = -1;
 
@@ -3469,7 +3085,7 @@ bool parse_sensor_json(const char *json_string) {
           sprintf(sensor_addr_str + (k * 2), "%02X",
                   ds18b20[i].sensors[j].addr[k]);
         }
-        if (strcasecmp(sensor_addr_str, sensorNumber->valuestring) == 0) {
+        if (strcasecmp(sensor_addr_str, sensorNumber) == 0) {
           t_ds18b20 = &ds18b20[i];
           sensor_index = j;
           printf("Match found! Pin: %s, Sensor index: %d\n", t_ds18b20->pin,
@@ -3477,52 +3093,52 @@ bool parse_sensor_json(const char *json_string) {
           break;
         }
       }
-      if (t_ds18b20)
-        break;
+      if (t_ds18b20) break;
     }
 
     if (!t_ds18b20 || sensor_index == -1) {
-      fprintf(stderr, "Error: DS18B20 with address %s not found\n",
-              sensorNumber->valuestring);
-      cJSON_Delete(json);
+      fprintf(stderr, "Error: DS18B20 with address %s not found\n", sensorNumber);
+      mg_free(sensorNumber);
       if (my_DgnTaskHandle)
         xTaskNotifyGive(my_DgnTaskHandle);
       return false;
     }
 
-    // Обновление параметров DS18B20
-    cJSON *ut = cJSON_GetObjectItemCaseSensitive(json, "ut");
-    if (cJSON_IsNumber(ut))
-      t_ds18b20->sensors[sensor_index].upt = (float)ut->valuedouble;
+    double dval;
+    if (mg_json_get_num(body, "$.ut", &dval))
+      t_ds18b20->sensors[sensor_index].upt = (float)dval;
+    if (mg_json_get_num(body, "$.lt", &dval))
+      t_ds18b20->sensors[sensor_index].lowt = (float)dval;
 
-    cJSON *lt = cJSON_GetObjectItemCaseSensitive(json, "lt");
-    if (cJSON_IsNumber(lt))
-      t_ds18b20->sensors[sensor_index].lowt = (float)lt->valuedouble;
-
-    cJSON *acut = cJSON_GetObjectItemCaseSensitive(json, "action_ut");
-    if (!acut)
-      acut = cJSON_GetObjectItemCaseSensitive(json, "actup");
-    if (cJSON_IsString(acut))
-      strncpy(t_ds18b20->sensors[sensor_index].actup, acut->valuestring,
+    char *acut = mg_json_get_str(body, "$.action_ut");
+    if (!acut) acut = mg_json_get_str(body, "$.actup");
+    if (acut) {
+      strncpy(t_ds18b20->sensors[sensor_index].actup, acut,
               sizeof(t_ds18b20->sensors[sensor_index].actup) - 1);
+      mg_free(acut);
+    }
 
-    cJSON *aclt = cJSON_GetObjectItemCaseSensitive(json, "action_lt");
-    if (!aclt)
-      aclt = cJSON_GetObjectItemCaseSensitive(json, "actlow");
-    if (cJSON_IsString(aclt))
-      strncpy(t_ds18b20->sensors[sensor_index].actlow, aclt->valuestring,
+    char *aclt = mg_json_get_str(body, "$.action_lt");
+    if (!aclt) aclt = mg_json_get_str(body, "$.actlow");
+    if (aclt) {
+      strncpy(t_ds18b20->sensors[sensor_index].actlow, aclt,
               sizeof(t_ds18b20->sensors[sensor_index].actlow) - 1);
+      mg_free(aclt);
+    }
 
-    cJSON *info = cJSON_GetObjectItemCaseSensitive(json, "info");
-    if (cJSON_IsString(info))
-      strncpy(t_ds18b20->sensors[sensor_index].info, info->valuestring,
+    char *info = mg_json_get_str(body, "$.info");
+    if (info) {
+      strncpy(t_ds18b20->sensors[sensor_index].info, info,
               sizeof(t_ds18b20->sensors[sensor_index].info) - 1);
+      mg_free(info);
+    }
+
+    mg_free(sensorNumber);
   }
 
   uint8_t usbnum = 5;
   xQueueSend(usbQueueHandle, &usbnum, 0);
 
-  cJSON_Delete(json);
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
   return true;
@@ -4211,47 +3827,37 @@ void processPins(
 
 void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
                            const struct dbPinsInfo *PinsInfo, uint8_t count) {
-  cJSON *root = cJSON_Parse(json);
-  if (!root) {
-    printf("Error parsing JSON\n");
-    return;
-  }
-  int id = cjson_get_int(root, "id", -1);
+  struct mg_str body = mg_str_n(json, strlen(json));
+  int id = (int)mg_json_get_long(body, "$.id", -1);
   if (id < 0 || id >= count) {
     printf("button ID out of bounds or not found %d\r\n", id);
-    cJSON_Delete(root);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
-  PinsConf[id].ptype = (uint8_t)cjson_get_int(root, "ptype", PinsConf[id].ptype);
-  cJSON *action_item = cJSON_GetObjectItem(root, "action");
-  if (cJSON_IsString(action_item)) {
-    strncpy(PinsConf[id].sclick, action_item->valuestring,
-            sizeof(PinsConf[id].sclick) - 1);
+  PinsConf[id].ptype = (uint8_t)mg_json_get_long(body, "$.ptype", PinsConf[id].ptype);
+  char *action = mg_json_get_str(body, "$.action");
+  if (action) {
+    strncpy(PinsConf[id].sclick, action, sizeof(PinsConf[id].sclick) - 1);
     PinsConf[id].sclick[sizeof(PinsConf[id].sclick) - 1] = '\0';
+    mg_free(action);
   }
-  cJSON *send_sms_item = cJSON_GetObjectItem(root, "send_sms");
-  if (cJSON_IsString(send_sms_item)) {
-    strncpy(PinsConf[id].send_sms, send_sms_item->valuestring,
-            sizeof(PinsConf[id].send_sms) - 1);
+  char *send_sms = mg_json_get_str(body, "$.send_sms");
+  if (send_sms) {
+    strncpy(PinsConf[id].send_sms, send_sms, sizeof(PinsConf[id].send_sms) - 1);
     PinsConf[id].send_sms[sizeof(PinsConf[id].send_sms) - 1] = '\0';
+    mg_free(send_sms);
   }
-  cJSON *info_item = cJSON_GetObjectItem(root, "info");
-  if (cJSON_IsString(info_item)) {
-    strncpy(PinsConf[id].info, info_item->valuestring,
-            sizeof(PinsConf[id].info) - 1);
+  char *info = mg_json_get_str(body, "$.info");
+  if (info) {
+    strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
     PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
+    mg_free(info);
   }
-  PinsConf[id].onoff = (uint8_t)cjson_get_int(root, "onoff", PinsConf[id].onoff);
+  PinsConf[id].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[id].onoff);
   int usbnum = 1;
   xQueueSend(usbQueueHandle, &usbnum, 0);
-  //	printf("RESULT - PinsConf[id].send_sms = %s PinsConf[id].info = %s
-  // PinsConf[id].onoff = %d \r\n ", PinsConf[id].send_sms, PinsConf[id].info,
-  // PinsConf[id].onoff);
 
-
-  cJSON_Delete(root);
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
 }
@@ -4275,27 +3881,15 @@ void handle_security_set(struct mg_connection *c, struct mg_http_message *hm) {
   memcpy(g_body, hm->body.buf, len);
   g_body[len] = '\0';
 
-  /* ── Определяем тип запроса через cJSON ── */
-  cJSON *root = cJSON_Parse(g_body);
-  if (root) {
-    cJSON *type = cJSON_GetObjectItem(root, "type");
-    if (cJSON_IsString(type)) {
-      if (strcmp(type->valuestring, "sim800l") == 0) {
-        parse_sim800l_json(g_body);
-      } else if (strcmp(type->valuestring, "monitoring") == 0) {
-        parse_monitoring_json(g_body, PinsConf, PinsInfo, NUMPIN);
-      }
-    }
-    cJSON_Delete(root);
-  } else {
-    /* Фолбэк без cJSON */
-    if (strstr(g_body, "\"type\":\"sim800l\"") ||
-        strstr(g_body, "\"type\": \"sim800l\"")) {
+  struct mg_str body = mg_str_n(hm->body.buf, len);
+  char *type = mg_json_get_str(body, "$.type");
+  if (type) {
+    if (strcmp(type, "sim800l") == 0) {
       parse_sim800l_json(g_body);
-    } else if (strstr(g_body, "\"type\":\"monitoring\"") ||
-               strstr(g_body, "\"type\": \"monitoring\"")) {
+    } else if (strcmp(type, "monitoring") == 0) {
       parse_monitoring_json(g_body, PinsConf, PinsInfo, NUMPIN);
     }
+    mg_free(type);
   }
 
   /* ── Ответ ── */
@@ -5601,7 +5195,7 @@ void publish_sensor_batch(struct mg_connection *conn) {
 
 /*** Timer Batch MQTT — состояние пинов всех активных таймеров раз в 1 сек ***/
 /* Размер буфера привязан к MAXSIZE (db.h): каждый таймер ≈80 байт JSON */
-#define TIMER_BATCH_BUF_SIZE  (MAXSIZE * 80 + 256)
+#define TIMER_BATCH_BUF_SIZE  (NUMTASK * 80 + 256)
 
 void send_mqtt_timer_batch(struct mg_connection *conn) {
   if (!conn || conn->is_closing || conn->is_draining) return;
@@ -5622,8 +5216,11 @@ void send_mqtt_timer_batch(struct mg_connection *conn) {
 
   /* 1. Проверяем есть ли хоть один включённый таймер */
   bool any_active = false;
-  for (int i = 0; i < MAXSIZE; i++) {
-    if (dbCrontxt[i].onoff == 1) { any_active = true; break; }
+  for (int i = 0; i < NUMTASK; i++) {
+    taskENTER_CRITICAL();
+    bool active = (dbCrontxt[i].onoff == 1);
+    taskEXIT_CRITICAL();
+    if (active) { any_active = true; break; }
   }
   if (!any_active) return;
 
@@ -5647,22 +5244,26 @@ void send_mqtt_timer_batch(struct mg_connection *conn) {
     }
   }
 
-  for (int i = 0; i < MAXSIZE; i++) {
+  for (int i = 0; i < NUMTASK; i++) {
     int avail = (int)sizeof(tbuf) - off;
     if (avail < 80) break;
 
-    /* Определяем тип: pwm или обычный */
-    bool is_pwm = (strstr(dbCrontxt[i].activ, "pwm:") != NULL);
+    struct dbCron cron_copy;
+    taskENTER_CRITICAL();
+    cron_copy = dbCrontxt[i];
+    taskEXIT_CRITICAL();
+
+    bool is_pwm = (strstr(cron_copy.activ, "pwm:") != NULL);
     const char *pfx = is_pwm ? "pwmtim" : "tim";
 
-    if (dbCrontxt[i].onoff == 0 || dbCrontxt[i].activ[0] == '\0') {
+    if (cron_copy.onoff == 0 || cron_copy.activ[0] == '\0') {
       off += snprintf(tbuf + off, avail, ",\"%s_%d\":[]", pfx, i);
       continue;
     }
 
     /* Парсим activ — локальная копия (strtok модифицирует) */
     char acopy[256];
-    strncpy(acopy, dbCrontxt[i].activ, sizeof(acopy) - 1);
+    strncpy(acopy, cron_copy.activ, sizeof(acopy) - 1);
     acopy[sizeof(acopy) - 1] = '\0';
 
     off += snprintf(tbuf + off, (int)sizeof(tbuf) - off,
@@ -6362,93 +5963,88 @@ void gen_pid_json(char *buffer, int buffer_size) {
 
 /* ──── parse_pid_json: парсит JSON от /api/pid/set ──── */
 void parse_pid_json(const char *json) {
-  cJSON *root = cJSON_Parse(json);
-  if (!root) {
-    printf("[PID] JSON parse error\r\n");
-    return;
-  }
+  struct mg_str body = mg_str_n(json, strlen(json));
 
-  /* id — 1-based */
-  cJSON *j_id = cJSON_GetObjectItem(root, "id");
-  if (!j_id || !cJSON_IsNumber(j_id)) {
-    cJSON_Delete(root);
+  long id_val = mg_json_get_long(body, "$.id", -1);
+  if (id_val < 0) {
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
-  int id = j_id->valueint - 1; /* 0-based */
+  int id = (int)id_val - 1;
   if (id < 0 || id >= PID_MAX_SLOTS) {
-    cJSON_Delete(root);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
 
-  /* pinact → pwm_pin_id */
-  cJSON *j_pinact = cJSON_GetObjectItem(root, "pinact");
-  if (j_pinact && cJSON_IsObject(j_pinact)) {
-    cJSON *child = j_pinact->child;
-    if (child && cJSON_IsNumber(child)) {
-      PidConf[id].pwm_pin_id = (uint8_t)child->valueint;
+  int pa_ofs = mg_json_get(body, "$.pinact", NULL);
+  if (pa_ofs >= 0) {
+    struct mg_str pa = mg_str_n(json + pa_ofs, strlen(json) - (size_t)pa_ofs);
+    size_t pos = 0;
+    struct mg_str key, val;
+    if ((pos = mg_json_next(pa, pos, &key, &val)) > 0) {
+      PidConf[id].pwm_pin_id = (uint8_t)mg_json_get_long(val, "$", 0);
     }
   }
 
-  /* selsens */
-  cJSON *j_selsens = cJSON_GetObjectItem(root, "selsens");
-  if (j_selsens) {
-    int sv = 0;
-    if (cJSON_IsString(j_selsens))
-      sv = atoi(j_selsens->valuestring);
-    else if (cJSON_IsNumber(j_selsens))
-      sv = j_selsens->valueint;
-    PidConf[id].selsens = (PidSensorType_e)sv;
+  if (mg_json_get(body, "$.selsens", NULL) >= 0) {
+    char *sv_str = mg_json_get_str(body, "$.selsens");
+    if (sv_str) {
+      PidConf[id].selsens = (PidSensorType_e)atoi(sv_str);
+      mg_free(sv_str);
+    } else {
+      PidConf[id].selsens = (PidSensorType_e)mg_json_get_long(body, "$.selsens", 0);
+    }
   }
 
-  /* sernum */
-  cJSON *j_sernum = cJSON_GetObjectItem(root, "sernum");
-  if (j_sernum && cJSON_IsString(j_sernum)) {
-    strncpy(PidConf[id].sernum, j_sernum->valuestring,
-            sizeof(PidConf[id].sernum) - 1);
+  char *sernum = mg_json_get_str(body, "$.sernum");
+  if (sernum) {
+    strncpy(PidConf[id].sernum, sernum, sizeof(PidConf[id].sernum) - 1);
     PidConf[id].sernum[sizeof(PidConf[id].sernum) - 1] = '\0';
+    mg_free(sernum);
   }
 
-  /* presets → применяем пресет */
-  cJSON *j_presets = cJSON_GetObjectItem(root, "presets");
-  if (j_presets) {
-    int pv = 0;
-    if (cJSON_IsString(j_presets))
-      pv = atoi(j_presets->valuestring);
-    else if (cJSON_IsNumber(j_presets))
-      pv = j_presets->valueint;
+  if (mg_json_get(body, "$.presets", NULL) >= 0) {
+    char *pv_str = mg_json_get_str(body, "$.presets");
+    long pv = 0;
+    if (pv_str) {
+      pv = atol(pv_str);
+      mg_free(pv_str);
+    } else {
+      pv = mg_json_get_long(body, "$.presets", 0);
+    }
     if (pv > 0 && pv < (int)PID_PRESET_COUNT) {
       apply_pid_preset(id, (uint8_t)pv);
     }
   }
 
-  /* tmpset */
-  cJSON *j_tmpset = cJSON_GetObjectItem(root, "tmpset");
-  if (j_tmpset) {
-    if (cJSON_IsString(j_tmpset))
-      PidConf[id].tmpset = (float)atof(j_tmpset->valuestring);
-    else if (cJSON_IsNumber(j_tmpset))
-      PidConf[id].tmpset = (float)j_tmpset->valuedouble;
+  if (mg_json_get(body, "$.tmpset", NULL) >= 0) {
+    char *ts_str = mg_json_get_str(body, "$.tmpset");
+    if (ts_str) {
+      PidConf[id].tmpset = (float)atof(ts_str);
+      mg_free(ts_str);
+    } else {
+      double dval = 0;
+      if (mg_json_get_num(body, "$.tmpset", &dval)) {
+        PidConf[id].tmpset = (float)dval;
+      } else {
+        PidConf[id].tmpset = (float)mg_json_get_long(body, "$.tmpset", 0);
+      }
+    }
   }
 
-  /* info */
-  cJSON *j_info = cJSON_GetObjectItem(root, "info");
-  if (j_info && cJSON_IsString(j_info)) {
-    strncpy(PidConf[id].info, j_info->valuestring,
-            sizeof(PidConf[id].info) - 1);
+  char *info = mg_json_get_str(body, "$.info");
+  if (info) {
+    strncpy(PidConf[id].info, info, sizeof(PidConf[id].info) - 1);
     PidConf[id].info[sizeof(PidConf[id].info) - 1] = '\0';
+    mg_free(info);
   }
 
-  /* onoff */
-  cJSON *j_onoff = cJSON_GetObjectItem(root, "onoff");
-  if (j_onoff && cJSON_IsNumber(j_onoff)) {
-    PidConf[id].onoff = (uint8_t)j_onoff->valueint;
+  if (mg_json_get(body, "$.onoff", NULL) >= 0) {
+    PidConf[id].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", 0);
   }
 
-  /* Автоопределение sensor_pin_id для DS18B20 по серийнику */
   if (PidConf[id].selsens == PID_SENS_DS18B20 &&
       PidConf[id].sernum[0] != '\0') {
     for (int p = 0; p < MAX_DS18B20_P; p++) {
@@ -6470,10 +6066,7 @@ void parse_pid_json(const char *json) {
     }
   ds_found:;
   }
-  /* Для DHT22 — sensor_pin_id берётся из pwm_pin_id пока (TODO: отдельный
-   * select) */
 
-  cJSON_Delete(root);
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
 
@@ -6486,15 +6079,11 @@ void parse_pid_json(const char *json) {
 
 /* ──── parse_pidline_json: парсит { "pidline": N } ──── */
 void parse_pidline_json(char *json_string, struct dbSettings *settings) {
-  cJSON *root = cJSON_Parse(json_string);
-  if (!root)
-    return;
-  cJSON *j_pidline = cJSON_GetObjectItem(root, "pidline");
-  if (j_pidline && cJSON_IsNumber(j_pidline)) {
-    settings->pidline = (uint8_t)j_pidline->valueint;
-    //        printf("[PID] pidline set to %d\r\n", settings->pidline);
+  struct mg_str body = mg_str_n(json_string, strlen(json_string));
+  long pidline = mg_json_get_long(body, "$.pidline", -1);
+  if (pidline >= 0) {
+    settings->pidline = (uint8_t)pidline;
   }
-  cJSON_Delete(root);
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
 }
@@ -7249,38 +6838,26 @@ void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
   memcpy(buf, hm->body.buf, hm->body.len);
   buf[hm->body.len] = '\0';
 
-  cJSON *root = cJSON_Parse(buf);
-  if (!root) {
-    mg_http_reply(c, 400, "Content-Type: application/json\r\n",
-                  "{\"error\":\"json parse error\"}");
-    return;
-  }
+  struct mg_str body = mg_str_n(buf, strlen(buf));
 
-  cJSON *j_id = cJSON_GetObjectItem(root, "id");
-  cJSON *j_action = cJSON_GetObjectItem(root, "action");
-
-  if (!j_id || !cJSON_IsNumber(j_id)) {
-    cJSON_Delete(root);
-    if (my_DgnTaskHandle)
-      xTaskNotifyGive(my_DgnTaskHandle);
+  long id_val = mg_json_get_long(body, "$.id", -1);
+  if (id_val < 0) {
     mg_http_reply(c, 400, "Content-Type: application/json\r\n",
                   "{\"error\":\"missing id\"}");
     return;
   }
 
-  int id = j_id->valueint - 1; /* 0-based */
+  int id = (int)id_val - 1;
   if (id < 0 || id >= PID_MAX_SLOTS) {
-    cJSON_Delete(root);
-    if (my_DgnTaskHandle)
-      xTaskNotifyGive(my_DgnTaskHandle);
     mg_http_reply(c, 400, "Content-Type: application/json\r\n",
                   "{\"error\":\"invalid id\"}");
     return;
   }
 
   const char *action = "start";
-  if (j_action && cJSON_IsString(j_action)) {
-    action = j_action->valuestring;
+  char *action_str = mg_json_get_str(body, "$.action");
+  if (action_str) {
+    action = action_str;
   }
 
   if (strcmp(action, "stop") == 0) {
@@ -7289,7 +6866,8 @@ void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
     pid_autotune_start(id);
   }
 
-  cJSON_Delete(root);
+  if (action_str) mg_free(action_str);
+
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
   mg_http_reply(c, 200, "Content-Type: application/json\r\n",

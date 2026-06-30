@@ -13,7 +13,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "cJSON.h"
 #include "mongoose.h" // For MQTT
 #include "net.h"
 #include "setings.h"
@@ -36,7 +35,7 @@ extern struct dbSettings SetSettings;
 extern struct tm timez_copy;
 extern struct dbPinsInfo PinsInfo[NUMPIN];
 extern struct dbPinsConf PinsConf[NUMPIN];
-extern struct dbCron dbCrontxt[MAXSIZE];
+extern struct dbCron dbCrontxt[NUMTASK];
 extern struct dbSettings SetSettings;
 extern const char *s_json_header;
 extern struct dbPinToPin PinsLinks[NUMPINLINKS];

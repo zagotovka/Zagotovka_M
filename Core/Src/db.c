@@ -18,7 +18,7 @@ struct dbPinToPin PinsLinks[NUMPINLINKS];
 
 struct dbSettings SetSettings;
 
-struct dbCron dbCrontxt[MAXSIZE];
+struct dbCron dbCrontxt[NUMTASK];
 
 const struct dbPinsInfo PinsInfo[NUMPIN] = {
 		// Total 89 pins

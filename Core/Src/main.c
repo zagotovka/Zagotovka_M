@@ -25,7 +25,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "cJSON.h"
 #include "db.h"
 #include "hal.h"
 #include "mongoose.h"
@@ -143,7 +142,7 @@ UART_HandleTypeDef huart3;
 osThreadId_t ConfigTaskHandle;
 const osThreadAttr_t ConfigTask_attributes = {
   .name = "ConfigTask",
-  .stack_size = 384 * 4,
+  .stack_size = 768 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for WebServerTask */
@@ -259,7 +258,7 @@ const osMessageQueueAttr_t mqttRxQueue_attributes = {
 };
 /* USER CODE BEGIN PV */
 extern struct dbSettings SetSettings;
-extern struct dbCron dbCrontxt[MAXSIZE];
+extern struct dbCron dbCrontxt[NUMTASK];
 extern struct dbPinsConf PinsConf[NUMPIN];
 extern struct dbPinsInfo PinsInfo[NUMPIN];
 extern struct dbPinToPin PinsLinks[NUMPINLINKS];
@@ -274,6 +273,13 @@ static uint32_t mqtt_rx_peak = 0;
 static uint32_t output_peak = 0;
 static uint32_t usb_peak = 0;
 static uint32_t mg_conn_peak = 0;
+static uint32_t mg_conn_cur = 0;
+static uint32_t mg_conn_listeners = 0;
+static uint32_t mg_conn_tls = 0;
+static uint32_t mg_conn_mqtt = 0;
+static uint32_t mg_conn_other = 0;
+static unsigned long s_other_ids[8] = {0};
+static uint32_t s_other_cnt = 0;
 static uint32_t mg_poll_gap_peak = 0;
 volatile uint32_t mg_poll_gap_over_50ms_cnt = 0;
 
@@ -1241,6 +1247,7 @@ typedef struct {
     uint32_t steps_left;
     int      end_duty;
     int      cronindex;
+    uint8_t  saved_pid_duty;   /* pwm_out PID до начала fade */
 } FadeState_t;
 
 static FadeState_t fade_state[NUMPIN] = {0};
@@ -1289,6 +1296,15 @@ void start_pwm_fade(uint8_t pwm_id, uint32_t duration_sec,
     fade_state[pwm_id].end_duty     = end_duty;
     fade_state[pwm_id].cronindex    = cronindex;
 
+    /* Сохраняем pwm_out PID для бесшовной передачи после fade */
+    fade_state[pwm_id].saved_pid_duty = 0;
+    for (int p = 0; p < PID_MAX_SLOTS; p++) {
+      if (PidConf[p].pwm_pin_id == pwm_id) {
+        fade_state[pwm_id].saved_pid_duty = PidConf[p].pwm_out;
+        break;
+      }
+    }
+
     /* Устанавливаем начальное значение немедленно */
     PinsConf[pwm_id].dvalue = start_duty;
     uint32_t pulsef3 =
@@ -1300,7 +1316,7 @@ void start_pwm_fade(uint8_t pwm_id, uint32_t duration_sec,
 /*********************** END PWM Fade **********************************/
 void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
   /* Timer onoff — только управление расписанием */
-  if (cronindex >= 0 && cronindex < MAXSIZE && dbCrontxt[cronindex].onoff == 0) {
+  if (cronindex >= 0 && cronindex < NUMTASK && dbCrontxt[cronindex].onoff == 0) {
     // Просто не запускаем fade/события, PWM не трогаем
     return;
   }
@@ -1392,12 +1408,6 @@ void StartConfigTask(void *argument)
       if (usbflag == 1) {
         osDelay(1000);
         printf("APPLICATION_READY! \r\n");
-
-        /* Перенаправляем cJSON на pvPortMalloc/vPortFree напрямую,
-           минуя newlib _sbrk. Это гарантирует, что cJSON_Delete()
-           возвращает память ПРЯМО в FreeRTOS heap. */
-        cJSON_Hooks cjson_hooks = { pvPortMalloc, vPortFree };
-        cJSON_InitHooks(&cjson_hooks);
 
         FRESULT fresult = f_stat(
             "settings.ini", &finfo); // Проверяем существует ли файл или нет!?
@@ -1670,9 +1680,42 @@ void StartWebServerTask(void *argument)
     /* Диагностика пика соединений Mongoose */
     {
       uint32_t active_conns = 0;
+      uint32_t n_listeners = 0, n_tls = 0, n_mqtt = 0, n_other = 0;
+      unsigned long cur_ids[8] = {0};
       for (struct mg_connection *c = mgr->conns; c != NULL; c = c->next) {
         active_conns++;
+        if (c->is_listening)      n_listeners++;
+        else if (c->is_tls)       n_tls++;
+        else if (c == s_conn)     n_mqtt++;
+        else {
+          if (n_other < 8) cur_ids[n_other] = c->id;
+          n_other++;
+        }
       }
+      /* OTHER детали — при изменении состава (id набора) */
+      bool changed = (n_other != s_other_cnt);
+      if (!changed) {
+        for (uint32_t i = 0; i < n_other && i < 8; i++) {
+          if (cur_ids[i] != s_other_ids[i]) { changed = true; break; }
+        }
+      }
+      if (changed) {
+        for (struct mg_connection *c = mgr->conns; c != NULL; c = c->next) {
+          if (!c->is_listening && !c->is_tls && c != s_conn) {
+            char rem_buf[32];
+            mg_snprintf(rem_buf, sizeof(rem_buf), "%M", mg_print_ip_port, &c->rem);
+            printf("[DIAG] OTHER conn id=%lu rem=%s client=%d\r\n",
+                   c->id, rem_buf, c->is_client);
+          }
+        }
+        memcpy(s_other_ids, cur_ids, sizeof(s_other_ids));
+        s_other_cnt = n_other;
+      }
+      mg_conn_cur = active_conns;
+      mg_conn_listeners = n_listeners;
+      mg_conn_tls = n_tls;
+      mg_conn_mqtt = n_mqtt;
+      mg_conn_other = n_other;
       if (active_conns > mg_conn_peak) {
         mg_conn_peak = active_conns;
       }
@@ -1918,10 +1961,10 @@ void StartCronTask(void *argument)
   /* USER CODE BEGIN StartCronTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
   init_offline_time();
-  static lwdtc_cron_ctx_t cron_ctxs[MAXSIZE];
+  static lwdtc_cron_ctx_t cron_ctxs[NUMTASK];
   int i = 0;
   char str[sizeof(dbCrontxt[0].activ)] = {0};
-  int cfg_tasks = MAXSIZE; // Количество возможно настроенных cron задач
+  int cfg_tasks = NUMTASK; // Количество возможно настроенных cron задач
   time_t base_timestamp;
   static uint8_t t_printd = 0;
 
@@ -1931,7 +1974,7 @@ void StartCronTask(void *argument)
   size_t fail_index = 0;
 
   taskENTER_CRITICAL();
-  if (lwdtc_cron_parse_multi(cron_ctxs, dbCrontxt, MAXSIZE, &fail_index) !=
+  if (lwdtc_cron_parse_multi(cron_ctxs, dbCrontxt, NUMTASK, &fail_index) !=
       lwdtcOK) { // Parse all cron strings
     printf("Failed to parse cron at index %d\r\n", (int)fail_index);
   }
@@ -2554,7 +2597,7 @@ void StartServiceTask(void *argument)
 
 	        /* ── Timer onoff — останавливаем fade, PWM не трогаем ── */
 	        bool timer_on = false;
-	        for (int t = 0; t < MAXSIZE; t++) {
+	        for (int t = 0; t < NUMTASK; t++) {
 	            uint8_t t_onoff;
 	            char tmp[sizeof(dbCrontxt[0].activ)];
 	            taskENTER_CRITICAL();
@@ -2599,7 +2642,15 @@ void StartServiceTask(void *argument)
 	        if (fade_state[i].steps_left == 0) {
 	          d = fade_state[i].end_duty;
 	          fade_state[i].active = false;
-//	          printf("PWM fade done: id=%d final=%d%%\r\n", i, d);
+
+	          /* Бесшовная передача: PID берёт PWM с финального значения fade */
+	          for (int p = 0; p < PID_MAX_SLOTS; p++) {
+	            if (PidConf[p].pwm_pin_id == i) {
+	              PidConf[p].pwm_out = (uint8_t)d;
+	              pid_set_pwm(p, (uint8_t)d);
+	              break;
+	            }
+	          }
 	        }
 
 	        PinsConf[i].dvalue = d;
@@ -2849,6 +2900,10 @@ void StartPIDTask(void *argument)
     for (int i = 0; i < PID_MAX_SLOTS; i++) {
       if (PidConf[i].pwm_pin_id == 0 && PidConf[i].selsens == PID_SENS_NONE) continue;
 
+      /* Если PWM управляется fade (рассвет/закат) — PID не трогает этот пин */
+      uint8_t pwm_id = PidConf[i].pwm_pin_id;
+      if (pwm_id > 0 && pwm_id < NUMPIN && fade_state[pwm_id].active) continue;
+
       uint32_t now = HAL_GetTick();
       if ((now - PidConf[i].last_tick) < PidConf[i].Ts_ms) continue;
       PidConf[i].last_tick = now;
@@ -3028,7 +3083,9 @@ static void heap_diagnostic(void)
         printf("MQTT RX queue peak: %lu / 4\r\n", mqtt_rx_peak);
         printf("Output queue peak:  %lu / 16\r\n", output_peak);
         printf("USB queue peak:     %lu / 16\r\n", usb_peak);
-        printf("Mongoose conns peak: %lu\r\n", mg_conn_peak);
+        printf("Mongoose conns peak: %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu]\r\n",
+               mg_conn_peak, mg_conn_cur,
+               mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other);
         printf("Mongoose gap peak:   %lu ms (starvation cnt: %lu)\r\n", mg_poll_gap_peak, (unsigned long)mg_poll_gap_over_50ms_cnt);
         printf("HTTP(s) Requests:   Total=%lu, API=%lu, Encoder=%lu\r\n",
                (unsigned long)req_total, (unsigned long)req_api, (unsigned long)req_encoder);
@@ -3155,7 +3212,9 @@ void StartDgnTask(void *argument)
 			printf("USB peak:      %lu / 16\r\n", usb_peak);
 
 			printf("\r\n""=== MONGOOSE PEAKS ===\r\n");
-			printf("Conns peak:    %lu\r\n", mg_conn_peak);
+			printf("Conns peak:    %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu]\r\n",
+			       mg_conn_peak, mg_conn_cur,
+			       mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other);
 			printf("Poll gap peak: %lu ms (starvation cnt: %lu)\r\n", mg_poll_gap_peak, (unsigned long)mg_poll_gap_over_50ms_cnt);
 
 			printf("\r\n""=== RUNTIME ===\r\n");

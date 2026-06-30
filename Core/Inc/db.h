@@ -11,12 +11,11 @@
 #define NUMPIN 89 // количество пинов
 #define PID_MAX_SLOTS 24 // макс. число PID-каналов
 #define NUMPINLINKS 100 // количество pin to pin
-#define NUMTASK 30 // кол-во CRON task
+#define NUMTASK 89 // кол-во CRON task
 
 #include "stdio.h"
 #include <stdbool.h>
 #include "stm32f7xx_hal.h"
-#define MAXSIZE 89
 #define PINPAIRS 10 // ПОКА 10 пар {ID:Pin}.
 
 // Определение структуры для хранения пары {ID:Pin}.
