@@ -2,7 +2,7 @@ name: "CodeQL Analysis"
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "Test" ]
   pull_request:
     branches: [ "main" ]
 
@@ -33,19 +33,20 @@ jobs:
 
     - name: Build Code
       run: |
-        find . -name "*.c" | grep -v "node_modules" | while read f; do
+        # Собираем список всех папок с заголовочными файлами (.h) проекта
+        INCLUDES=$(find . -name "*.h" -not -path "*/node_modules/*" -exec dirname {} \; | sort -u | sed 's/^/-I/')
+        
+        # Компилируем файлы, позволяя CodeQL перехватить процесс сборки
+        find . -name "*.c" -not -path "*/node_modules/*" | while read f; do
+          echo "Analyzing: $f"
           arm-none-eabi-gcc -c "$f" \
             -mcpu=cortex-m7 \
             -mfpu=fpv5-d16 \
             -mfloat-abi=hard \
             -DUSE_HAL_DRIVER \
             -DSTM32F767xx \
-            -ICore/Inc \
-            -IDrivers/STM32F7xx_HAL_Driver/Inc \
-            -IDrivers/CMSIS/Device/ST/STM32F7xx/Include \
-            -IDrivers/CMSIS/Include \
-            -IMiddlewares/Third_Party/FreeRTOS/Source/include \
-            -o /dev/null 2>/dev/null || true
+            $INCLUDES \
+            -o /dev/null
         done
 
     - name: Perform CodeQL Analysis
