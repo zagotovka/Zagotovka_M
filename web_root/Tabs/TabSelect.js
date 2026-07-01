@@ -306,84 +306,86 @@ function TabSelect({ }) {
   `;
 
   return html`
-    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative overflow-hidden">
+    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-center items-center">
       <!-- Decorative background glow -->
-      <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none"></div>
-      <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
+      <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
-      <div class="relative z-10">
+      <div class="w-full relative z-10">
         <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
           Select pin(s)
         </div>
 
-        <form onSubmit=${handleSubmit}>
-          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-            <button
-              type="submit"
-              class=${`px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${isButtonDisabled
-                ? 'bg-gray-400 cursor-not-allowed opacity-70 hover:scale-100 hover:shadow-none'
-                : 'bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40'
-              }`}
-              disabled=${isButtonDisabled}
-            >
-              ${isButtonDisabled ? `Please wait ${countdown} sec.` : 'Submit'}
-            </button>
+        <form onSubmit=${handleSubmit} class="flex-grow flex flex-col justify-center items-center w-full">
+          <div class="w-full">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+              <button
+                type="submit"
+                class=${`px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${isButtonDisabled
+                  ? 'bg-gray-400 cursor-not-allowed opacity-70 hover:scale-100 hover:shadow-none'
+                  : 'bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40'
+                }`}
+                disabled=${isButtonDisabled}
+              >
+                ${isButtonDisabled ? `Please wait ${countdown} sec.` : 'Submit'}
+              </button>
 
-            <div class="flex items-center gap-3">
-              <span class="text-slate-600 font-bold uppercase tracking-widest text-2xl drop-shadow-sm">SIM800L</span>
-              <label class="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  class="sr-only peer"
-                  checked=${gpsEnabled}
-                  onChange=${(e) => handleGpsToggle(e.target.checked)}
-                />
-                <div class="w-[42px] h-[22px] bg-slate-200/80 rounded-full peer peer-focus:ring-2 peer-focus:ring-teal-300/50 peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-teal-400 peer-checked:to-cyan-500 shadow-inner"></div>
-              </label>
+              <div class="flex items-center gap-3">
+                <span class="text-slate-600 font-bold uppercase tracking-widest text-2xl drop-shadow-sm">SIM800L</span>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    class="sr-only peer"
+                    checked=${gpsEnabled}
+                    onChange=${(e) => handleGpsToggle(e.target.checked)}
+                  />
+                  <div class="w-[42px] h-[22px] bg-slate-200/80 rounded-full peer peer-focus:ring-2 peer-focus:ring-teal-300/50 peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-teal-400 peer-checked:to-cyan-500 shadow-inner"></div>
+                </label>
+              </div>
             </div>
-          </div>
 
-          ${submissionStatus === 'success' && html`
-            <div class="mb-6 bg-green-50/80 backdrop-blur-sm border border-green-200 text-green-700 px-4 py-3 rounded-xl shadow-sm" role="alert">
-              <strong class="font-bold">Успех! </strong>
-              <span class="block sm:inline">Данные успешно сохранены. Идет запись на USB флешку. Кнопка станет активной через ${countdown} секунд.</span>
-            </div>
-          `}
-          ${submissionStatus === 'error' && html`
-            <div class="mb-6 bg-red-50/80 backdrop-blur-sm border border-red-200 text-red-700 px-4 py-3 rounded-xl shadow-sm" role="alert">
-              <strong class="font-bold">Ошибка!</strong>
-              <span class="block sm:inline">Произошла ошибка при отправке данных. Пожалуйста, попробуйте еще раз через ${countdown} секунд.</span>
-            </div>
-          `}
+            ${submissionStatus === 'success' && html`
+              <div class="mb-6 bg-green-50/80 backdrop-blur-sm border border-green-200 text-green-700 px-4 py-3 rounded-xl shadow-sm" role="alert">
+                <strong class="font-bold">Успех! </strong>
+                <span class="block sm:inline">Данные успешно сохранены. Идет запись на USB флешку. Кнопка станет активной через ${countdown} секунд.</span>
+              </div>
+            `}
+            ${submissionStatus === 'error' && html`
+              <div class="mb-6 bg-red-50/80 backdrop-blur-sm border border-red-200 text-red-700 px-4 py-3 rounded-xl shadow-sm" role="alert">
+                <strong class="font-bold">Ошибка!</strong>
+                <span class="block sm:inline">Произошла ошибка при отправке данных. Пожалуйста, попробуйте еще раз через ${countdown} секунд.</span>
+              </div>
+            `}
 
-          <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner overflow-auto">
-            <div class="overflow-x-auto">
-              <table class="w-full text-left border-collapse whitespace-nowrap">
-                <thead>
-                  <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                    <${Th} title="ID" tooltipIndex=${1} />
-                    <${Th} title="Pin" tooltipIndex=${2} />
-                    <${Th} title="Type(s) of pin(s)" tooltipIndex=${3} center=${true} />
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-white/40">
-                  ${varselect && varselect.map((d) => html`<${ArraySelect} d=${d} />`)}
-                </tbody>
-              </table>
+            <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6 overflow-auto">
+              <div class="overflow-x-auto w-full">
+                <table class="w-full text-left border-collapse whitespace-nowrap">
+                  <thead>
+                    <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                      <${Th} title="ID" tooltipIndex=${1} />
+                      <${Th} title="Pin" tooltipIndex=${2} />
+                      <${Th} title="Type(s) of pin(s)" tooltipIndex=${3} center=${true} />
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-white/40">
+                    ${varselect && varselect.map((d) => html`<${ArraySelect} d=${d} />`)}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
 
-          <div class="mt-6 flex justify-start">
-            <button
-              type="submit"
-              class=${`px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${isButtonDisabled
-                ? 'bg-gray-400 cursor-not-allowed opacity-70 hover:scale-100 hover:shadow-none'
-                : 'bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40'
-              }`}
-              disabled=${isButtonDisabled}
-            >
-              ${isButtonDisabled ? `Please wait ${countdown} sec.` : 'Submit'}
-            </button>
+            <div class="flex justify-end">
+              <button
+                type="submit"
+                class=${`px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${isButtonDisabled
+                  ? 'bg-gray-400 cursor-not-allowed opacity-70 hover:scale-100 hover:shadow-none'
+                  : 'bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40'
+                }`}
+                disabled=${isButtonDisabled}
+              >
+                ${isButtonDisabled ? `Please wait ${countdown} sec.` : 'Submit'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

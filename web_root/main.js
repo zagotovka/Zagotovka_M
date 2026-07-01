@@ -960,8 +960,8 @@ const App = function ({ }) {
     return html`<${Login}
       loginFn=${login}
       logoIcon=${Logo}
-      title="Device Dashboard Login"
-      tipText="To login, use: admin/admin, user1/user1, user2/user2"
+      title="Zagotovka‑M Web Interface Login"
+      tipText="Default: admin / 12345678"
     />`; // If not logged in, show login screen
 
   return html`<${StateContext.Provider} value=${commonData}>

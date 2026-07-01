@@ -19,11 +19,14 @@
  *   }, []);
  */
 
-const _registered = new Map();  // key → { url, callback, etag, oneShot }
+const _registered = new Map();  // key → { url, callback, etag, oneShot, failCount, backoffMs }
 let _active = false;
 let _timer = null;
 let _keys = [];
 let _idx = 0;
+
+const MAX_FAILS = 3;           // остановка после N подряд ошибок
+const BASE_BACKOFF = 2000;     // начальный backoff (мс)
 
 const POLL_INTERVAL = 1000;   // интервал между запросами (мс)
 const FETCH_TIMEOUT = 5000;   // таймаут одного запроса (мс)
@@ -51,7 +54,7 @@ export function registerPoll(key, url, callback, opts = {}) {
     }
   }
 
-  _registered.set(key, { url, callback, etag: null, oneShot: opts.oneShot || false });
+  _registered.set(key, { url, callback, etag: null, oneShot: opts.oneShot || false, failCount: 0, backoffMs: 0 });
   _keys = Array.from(_registered.keys());
   // immediate: этот ключ будет опрошен СЛЕДУЮЩИМ тиком
   if (opts.immediate) {
@@ -120,39 +123,53 @@ async function _tick() {
       else if (r.ok) {
         const data = await r.json();
         entry.callback(data);
+        entry.failCount = 0;
+        entry.backoffMs = 0;
         // oneShot: удаляем после первого успешного ответа
         if (entry.oneShot) {
           _registered.delete(key);
           _keys = Array.from(_registered.keys());
         }
-      } else if (r.status === 403) {
-        // session expired - propagate to callback
-        try {
-          const err = await r.json();
-          if (err && err.error === 'session_expired') {
-            entry.callback({ __session_expired: true });
-          }
-        } catch (_) { /* not JSON, ignore */ }
+      } else if (r.status === 401 || r.status === 403) {
+        // session expired — stop polling this entry immediately
+        entry.callback({ __session_expired: true });
+        _registered.delete(key);
+        _keys = Array.from(_registered.keys());
+        if (_idx >= _keys.length && _keys.length > 0) _idx = 0;
       }
     } catch (err) {
       clearTimeout(timeoutId);
       if (err.name !== 'AbortError') {
         console.warn('[pollQueue] ' + key + ': ' + err.message);
       }
-      if (entry) entry.etag = null;
+      if (entry) {
+        entry.etag = null;
+        entry.failCount = (entry.failCount || 0) + 1;
+        if (entry.failCount >= MAX_FAILS) {
+          console.warn('[pollQueue] ' + key + ': stopped after ' + entry.failCount + ' consecutive errors');
+          _registered.delete(key);
+          _keys = Array.from(_registered.keys());
+          if (_idx >= _keys.length && _keys.length > 0) _idx = 0;
+        } else {
+          entry.backoffMs = Math.min((entry.backoffMs || BASE_BACKOFF) * 2, 30000);
+        }
+      }
     }
   }
 
   _active = false;
 
-  // Переходим к следующему ключу для следующего шага
+  // Определяем задержку: если текущий entry в backoff — используем его
+  const currentEntry = _registered.get(key);
+  const delay = (currentEntry && currentEntry.backoffMs > 0)
+    ? currentEntry.backoffMs
+    : POLL_INTERVAL;
+
   _idx++;
   if (_idx >= _keys.length) {
-    // Закончили полный круг всех эндпоинтов, делаем паузу на POLL_INTERVAL
     _idx = 0;
-    if (_keys.length > 0) _schedule(POLL_INTERVAL); else _clearTimer();
+    if (_keys.length > 0) _schedule(delay); else _clearTimer();
   } else {
-    // В текущем круге остались не опрошенные ключи, опрашиваем следующий немедленно (0 мс)
     if (_keys.length > 0) _schedule(0); else _clearTimer();
   }
 }
