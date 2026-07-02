@@ -60,7 +60,7 @@ function ModalEncoder({
           return;
         }
 
-        const relayPins = response.data.filter((pin) => pin.topin === 2);
+        const relayPins = response.data.filter((pin) => pin.topin === 2 || pin.topin === 11);
         const encoderBPins = response.data.filter((pin) => pin.topin === 9);
         const pwmPins = response.data.filter((pin) => pin.topin === 5);
 

@@ -845,6 +845,15 @@ void SetCronConfig() {
   f_close(&USBHFile);
 }
 
+static void zbee_sanitize_str(char *s, size_t max_len) {
+    for (size_t i = 0; i < max_len && s[i] != '\0'; i++) {
+        unsigned char ch = (unsigned char)s[i];
+        if (ch == '"' || ch == '\\' || ch < 0x20) {
+            s[i] = '_';
+        }
+    }
+}
+
 void GetPinConfig() {
   UINT bytesRead;
   char key[32] = {0};
@@ -954,6 +963,24 @@ void GetPinConfig() {
           PinsConf[currentPin]
               .send_sms[sizeof(PinsConf[currentPin].send_sms) - 1] = '\0';
         }
+        else if (strcmp(key, "zbee_ieee") == 0) {
+            strncpy(PinsConf[currentPin].zbee_ieee, value,
+                    sizeof(PinsConf[currentPin].zbee_ieee) - 1);
+            zbee_sanitize_str(PinsConf[currentPin].zbee_ieee,
+                              sizeof(PinsConf[currentPin].zbee_ieee));
+        }
+        else if (strcmp(key, "zbee_endpoint") == 0)
+            PinsConf[currentPin].zbee_endpoint = (uint8_t)atoi(value);
+        else if (strcmp(key, "zbee_cluster") == 0)
+            PinsConf[currentPin].zbee_cluster = (uint16_t)strtol(value, NULL, 16);
+        else if (strcmp(key, "zbee_attribute") == 0)
+            PinsConf[currentPin].zbee_attribute = (uint16_t)strtol(value, NULL, 16);
+        else if (strcmp(key, "zbee_label") == 0) {
+            strncpy(PinsConf[currentPin].zbee_label, value,
+                    sizeof(PinsConf[currentPin].zbee_label) - 1);
+            zbee_sanitize_str(PinsConf[currentPin].zbee_label,
+                              sizeof(PinsConf[currentPin].zbee_label));
+        }
       }
       //            printf("Finished processing pin at index %d\n", currentPin);
       inObject = false;
@@ -1059,6 +1086,24 @@ void GetPinConfig() {
                   sizeof(PinsConf[currentPin].send_sms) - 1);
           PinsConf[currentPin]
               .send_sms[sizeof(PinsConf[currentPin].send_sms) - 1] = '\0';
+        }
+        else if (strcmp(key, "zbee_ieee") == 0) {
+            strncpy(PinsConf[currentPin].zbee_ieee, value,
+                    sizeof(PinsConf[currentPin].zbee_ieee) - 1);
+            zbee_sanitize_str(PinsConf[currentPin].zbee_ieee,
+                              sizeof(PinsConf[currentPin].zbee_ieee));
+        }
+        else if (strcmp(key, "zbee_endpoint") == 0)
+            PinsConf[currentPin].zbee_endpoint = (uint8_t)atoi(value);
+        else if (strcmp(key, "zbee_cluster") == 0)
+            PinsConf[currentPin].zbee_cluster = (uint16_t)strtol(value, NULL, 16);
+        else if (strcmp(key, "zbee_attribute") == 0)
+            PinsConf[currentPin].zbee_attribute = (uint16_t)strtol(value, NULL, 16);
+        else if (strcmp(key, "zbee_label") == 0) {
+            strncpy(PinsConf[currentPin].zbee_label, value,
+                    sizeof(PinsConf[currentPin].zbee_label) - 1);
+            zbee_sanitize_str(PinsConf[currentPin].zbee_label,
+                              sizeof(PinsConf[currentPin].zbee_label));
         }
       }
       keyIndex = 0;
@@ -1272,6 +1317,41 @@ void SetPinConfig() {
     fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
     if (fresult != FR_OK) {
       printf("Failed to write 'send_sms': %d\n", fresult);
+      f_close(&USBHFile);
+      return;
+    }
+    snprintf(buffer, sizeof(buffer), ",\"zbee_ieee\":\"%s\"", PinsConf[i].zbee_ieee);
+    fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
+    if (fresult != FR_OK) {
+      printf("Failed to write 'zbee_ieee': %d\n", fresult);
+      f_close(&USBHFile);
+      return;
+    }
+    snprintf(buffer, sizeof(buffer), ",\"zbee_endpoint\":%d", PinsConf[i].zbee_endpoint);
+    fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
+    if (fresult != FR_OK) {
+      printf("Failed to write 'zbee_endpoint': %d\n", fresult);
+      f_close(&USBHFile);
+      return;
+    }
+    snprintf(buffer, sizeof(buffer), ",\"zbee_cluster\":\"%04X\"", PinsConf[i].zbee_cluster);
+    fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
+    if (fresult != FR_OK) {
+      printf("Failed to write 'zbee_cluster': %d\n", fresult);
+      f_close(&USBHFile);
+      return;
+    }
+    snprintf(buffer, sizeof(buffer), ",\"zbee_attribute\":\"%04X\"", PinsConf[i].zbee_attribute);
+    fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
+    if (fresult != FR_OK) {
+      printf("Failed to write 'zbee_attribute': %d\n", fresult);
+      f_close(&USBHFile);
+      return;
+    }
+    snprintf(buffer, sizeof(buffer), ",\"zbee_label\":\"%s\"", PinsConf[i].zbee_label);
+    fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
+    if (fresult != FR_OK) {
+      printf("Failed to write 'zbee_label': %d\n", fresult);
       f_close(&USBHFile);
       return;
     }

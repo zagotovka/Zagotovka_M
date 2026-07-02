@@ -43,7 +43,7 @@ function ModalSwitch({
           setPinOptions([]);
           return;
         }
-        const relayPins = response.data.filter((pin) => pin.topin === 2);
+        const relayPins = response.data.filter((pin) => pin.topin === 2 || pin.topin === 11);
         setPinOptions(relayPins);
       })
       .catch((error) => {

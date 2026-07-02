@@ -314,12 +314,27 @@ void handle_select_get(struct mg_connection *c) {
     conf = PinsConf[i];
     taskEXIT_CRITICAL();
 
-    mg_http_printf_chunk(c,
-      "%s{\"id\":%d,\"pins\":\"%s\",\"topin\":%d,"
-      "\"onewire\":%d,\"pwm\":%d,\"i2cdata\":%d,\"i2cclok\":%d}",
-      (i == 0 ? "" : ","),
-      i, info->pins, conf.topin, info->onewire,
-      info->pwm, info->i2cdata, info->i2cclok);
+    if (conf.topin == 11) {
+      mg_http_printf_chunk(c,
+        "%s{\"id\":%d,\"pins\":\"%s\",\"topin\":%d,"
+        "\"onewire\":%d,\"pwm\":%d,\"i2cdata\":%d,\"i2cclok\":%d,"
+        "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
+        "\"zbee_cluster\":%d,\"zbee_attribute\":%d,"
+        "\"zbee_label\":\"%s\"}",
+        (i == 0 ? "" : ","),
+        i, info->pins, conf.topin, info->onewire,
+        info->pwm, info->i2cdata, info->i2cclok,
+        conf.zbee_ieee, conf.zbee_endpoint,
+        conf.zbee_cluster, conf.zbee_attribute,
+        conf.zbee_label);
+    } else {
+      mg_http_printf_chunk(c,
+        "%s{\"id\":%d,\"pins\":\"%s\",\"topin\":%d,"
+        "\"onewire\":%d,\"pwm\":%d,\"i2cdata\":%d,\"i2cclok\":%d}",
+        (i == 0 ? "" : ","),
+        i, info->pins, conf.topin, info->onewire,
+        info->pwm, info->i2cdata, info->i2cclok);
+    }
   }
 
   mg_http_printf_chunk(c, "]}");
@@ -373,6 +388,23 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
   struct mg_str key, elem;
   while (i < num_pins && (pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
     PinsConf[i].topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
+    if (PinsConf[i].topin == 11) {
+      char *zt = mg_json_get_str(elem, "$.zbee_ieee");
+      if (zt) {
+        strncpy(PinsConf[i].zbee_ieee, zt, sizeof(PinsConf[i].zbee_ieee) - 1);
+        PinsConf[i].zbee_ieee[sizeof(PinsConf[i].zbee_ieee) - 1] = '\0';
+        mg_free(zt);
+      }
+      PinsConf[i].zbee_endpoint = (uint8_t)mg_json_get_long(elem, "$.zbee_endpoint", 1);
+      PinsConf[i].zbee_cluster = (uint16_t)mg_json_get_long(elem, "$.zbee_cluster", 0x0006);
+      PinsConf[i].zbee_attribute = (uint16_t)mg_json_get_long(elem, "$.zbee_attribute", 0);
+      char *zl = mg_json_get_str(elem, "$.zbee_label");
+      if (zl) {
+        strncpy(PinsConf[i].zbee_label, zl, sizeof(PinsConf[i].zbee_label) - 1);
+        PinsConf[i].zbee_label[sizeof(PinsConf[i].zbee_label) - 1] = '\0';
+        mg_free(zl);
+      }
+    }
     i++;
   }
 
@@ -3082,7 +3114,7 @@ bool parse_sensor_json(const char *json_string) {
       for (int j = 0; j < ds18b20[i].numsens; j++) {
         char sensor_addr_str[17] = {0};
         for (int k = 0; k < 8; k++) {
-          sprintf(sensor_addr_str + (k * 2), "%02X",
+          sprintf(sensor_addr_str + (k * 2), "%04X",
                   ds18b20[i].sensors[j].addr[k]);
         }
         if (strcasecmp(sensor_addr_str, sensorNumber) == 0) {
@@ -3378,7 +3410,132 @@ void parse_sim800l_json(const char *buffer) {
   //    printf("PinsConf[1].info = '%s'\n", PinsConf[1].info);
   //    printf("PinsConf[1].onoff = %d\n", PinsConf[1].onoff);
 }
+
+// === ZIGBEE v6 ===
+#define ZBEE_CMD_MIN_INTERVAL_MS 250
+static uint32_t s_zbee_last_cmd_tick[NUMPIN] = {0};
+
+static bool zbee_cmd_throttle_ok(int pin_idx) {
+    uint32_t now = HAL_GetTick();
+    bool ok = false;
+    taskENTER_CRITICAL();
+    if (now - s_zbee_last_cmd_tick[pin_idx] >= ZBEE_CMD_MIN_INTERVAL_MS) {
+        s_zbee_last_cmd_tick[pin_idx] = now;
+        ok = true;
+    }
+    taskEXIT_CRITICAL();
+    return ok;
+}
+
+static void mqtt_zigbee_handler(const char *topic, const char *payload) {
+    struct mg_str body = mg_str_n(payload, strlen(payload));
+
+    for (int i = 0; i < NUMPIN; i++) {
+        if (PinsConf[i].topin != 11) continue;
+
+        char expected[80];
+        snprintf(expected, sizeof(expected),
+                 "zigbee2mqtt/data/%s/%d/%04X/%04X",
+                 PinsConf[i].zbee_ieee,
+                 PinsConf[i].zbee_endpoint,
+                 PinsConf[i].zbee_cluster,
+                 PinsConf[i].zbee_attribute);
+        if (strcmp(expected, topic) != 0) continue;
+
+        int toklen = 0;
+        int offset = mg_json_get(body, "$.data.val", &toklen);
+        if (offset < 0) continue;
+
+        const char *raw = payload + offset;
+        int raw_len = toklen;
+
+        if (raw_len >= 2 && raw[0] == '"' && raw[raw_len - 1] == '"') {
+            raw++;
+            raw_len -= 2;
+        }
+
+        printf("[Z2M] pin[%d] ieee='%s' ep=%d cl=%04X val='%.*s'\r\n",
+               i, PinsConf[i].zbee_ieee, PinsConf[i].zbee_endpoint,
+               PinsConf[i].zbee_cluster, raw_len, raw);
+
+        taskENTER_CRITICAL();
+
+        if (PinsConf[i].zbee_cluster == 0x0006) {
+            if (raw_len == 3 && memcmp(raw, "OFF", 3) == 0) {
+                PinsConf[i].state = 0;
+                PinsConf[i].dvalue = 0;
+            } else if (raw_len == 2 && memcmp(raw, "ON", 2) == 0) {
+                PinsConf[i].state = 1;
+                PinsConf[i].dvalue = 254;
+            }
+        } else if (PinsConf[i].zbee_cluster == 0x0008 ||
+                   PinsConf[i].zbee_cluster == 0x0300) {
+            char numbuf[16];
+            int copylen = raw_len < (int)sizeof(numbuf) - 1
+                        ? raw_len : (int)sizeof(numbuf) - 1;
+            memcpy(numbuf, raw, copylen);
+            numbuf[copylen] = '\0';
+            PinsConf[i].dvalue = atoi(numbuf);
+        }
+
+        taskEXIT_CRITICAL();
+    }
+}
+
+void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
+                       uint16_t cluster, uint8_t attribute,
+                       const char *json_cmd) {
+    extern osMessageQueueId_t zbeeCmdQueueHandle;
+    printf("[Z2M] SendZigbeeCommand ieee='%s' ep=%d cl=%04X attr=%04X cmd='%s'\r\n",
+           zbee_ieee, endpoint, cluster, attribute, json_cmd);
+
+    int pin_idx = -1;
+    taskENTER_CRITICAL();
+    for (int i = 0; i < NUMPIN; i++) {
+        if (PinsConf[i].topin == 11 &&
+            strcmp(PinsConf[i].zbee_ieee, zbee_ieee) == 0 &&
+            PinsConf[i].zbee_endpoint == endpoint &&
+            PinsConf[i].zbee_cluster == cluster &&
+            PinsConf[i].zbee_attribute == attribute) {
+            pin_idx = i;
+            break;
+        }
+    }
+    taskEXIT_CRITICAL();
+
+    if (pin_idx < 0) {
+        printf("[Z2M] No zigbee pin for %s/%d/%04X/%04X\r\n",
+               zbee_ieee, endpoint, cluster, attribute);
+        return;
+    }
+
+    if (!zbee_cmd_throttle_ok(pin_idx)) {
+        printf("[Z2M] Throttled cmd to pin[%d]\r\n", pin_idx);
+        return;
+    }
+
+    char set_topic[80];
+    snprintf(set_topic, sizeof(set_topic),
+             "zigbee2mqtt/cmd/%s/%d/%04X",
+             zbee_ieee, endpoint, cluster);
+
+    ZbeeCmdMsg_t cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    strncpy(cmd.topic, set_topic, sizeof(cmd.topic) - 1);
+    strncpy(cmd.payload, json_cmd, sizeof(cmd.payload) - 1);
+
+    if (xQueueSend(zbeeCmdQueueHandle, &cmd, 0) != pdPASS) {
+        printf("[Z2M] ZbeeCmd queue full, dropped: %s\r\n", set_topic);
+    } else {
+        printf("[Z2M] Queued: topic='%s' payload='%s'\r\n", set_topic, json_cmd);
+    }
+}
+
 void mqtt_message_handler(const char *topic, const char *payload) {
+  if (strncmp(topic, "zigbee2mqtt/", 12) == 0) {
+    mqtt_zigbee_handler(topic, payload);
+    return;
+  }
   char command[20];
   int id = -1;
   printf("[MQTT] topic='%s' payload='%s'\r\n", topic, payload);
@@ -3795,26 +3952,17 @@ void Check_SunriseSunset_Actions() {
 }
 void processPins(
     uint8_t i,
-    uint8_t action) { // TODO Будет время откажись от этой логики и от
-                      // process_actions() в пользу action_handler()!!!
-//    printf("[processPins] i=%d action=%d onoff=%d\r\n", i, action, PinsConf[i].onoff);
-  //	printf("processPins called with i=%d, action=%d\r\n", i, action);
-  /* Master Enable: вторая линия защиты — если onoff выключен, блокируем */
+    uint8_t action) {
   if (PinsConf[i].onoff == 0) {
     printf("[processPins] Switch %d DISABLED (master off), action %d blocked\r\n", i, action);
     return;
   }
   for (uint8_t a = 0; a < NUMPINLINKS; a++) {
     if (PinsLinks[a].idin == i) {
-      data_pin_t data_pin = {0}; /* A3: локальная копия */
-      data_pin.id = PinsLinks[a].idout; // ID устройства (пина)
-      data_pin.action = action;         // Действие (0, 1, 2)
-      data_pin.cntrlid =
-          i; // ID переключателя (в данном случае совпадает с ID пина)
-             //			printf("Sending to queue: id=%d,
-             // action=%d,
-             // cntrlid=%d\r\n", data_pin.id, data_pin.action,
-             // data_pin.cntrlid);
+      data_pin_t data_pin = {0};
+      data_pin.id = PinsLinks[a].idout;
+      data_pin.action = action;
+      data_pin.cntrlid = i;
       if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) == pdPASS) {
         //				printf("Successfully sent to
         // queue\r\n");
@@ -4078,7 +4226,7 @@ void init_ds18b20(OneWire_t *OneWire, GPIO_TypeDef *OneWirePort,
       OneWire_GetFullROM(OneWire, pin_index, *temp_cnt - 1);
       //			printf("[DEBUG] Found sensor %d, address: ",
       //*temp_cnt);			for (int j = 0; j < 8; j++) {
-      // printf("%02X ", ds18b20[pin_index].sensors[*temp_cnt - 1].addr[j]);
+      // printf("%04X ", ds18b20[pin_index].sensors[*temp_cnt - 1].addr[j]);
       //			}
       //			printf("\r\n");
       OneWireDevices = OneWire_Next(OneWire);
@@ -4106,7 +4254,7 @@ void init_ds18b20(OneWire_t *OneWire, GPIO_TypeDef *OneWirePort,
       //%d...\r\n", i + 1, pin_id);			printf("[DEBUG] Sensor
       //%d address: ", i + 1);			for (int j = 0; j < 8;
       // j++) {
-      // printf("%02X ", ds18b20[pin_index].sensors[i].addr[j]);  // Обновлено
+      // printf("%04X ", ds18b20[pin_index].sensors[i].addr[j]);  // Обновлено
       //			}
       //			printf("\r\n");
       DS18B20_SetResolution(OneWire,
@@ -6053,7 +6201,7 @@ void parse_pid_json(const char *json) {
       for (int s = 0; s < ds18b20[p].numsens; s++) {
         char addr_str[17];
         for (int k = 0; k < 8; k++) {
-          sprintf(addr_str + (k * 2), "%02X", ds18b20[p].sensors[s].addr[k]);
+          sprintf(addr_str + (k * 2), "%04X", ds18b20[p].sensors[s].addr[k]);
         }
         if (strcmp(addr_str, PidConf[id].sernum) == 0) {
           PidConf[id].sensor_pin_id = ds18b20[p].id;

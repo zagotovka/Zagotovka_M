@@ -256,6 +256,11 @@ osMessageQueueId_t mqttRxQueueHandle;
 const osMessageQueueAttr_t mqttRxQueue_attributes = {
   .name = "mqttRxQueue"
 };
+/* Definitions for zbeeCmdQueue */
+static const osMessageQueueAttr_t zbeeCmd_attributes = {
+  .name = "zbeeCmdQueue"
+};
+osMessageQueueId_t zbeeCmdQueueHandle;
 /* USER CODE BEGIN PV */
 extern struct dbSettings SetSettings;
 extern struct dbCron dbCrontxt[NUMTASK];
@@ -805,6 +810,9 @@ int main(void)
 
   /* creation of mqttRxQueue */
   mqttRxQueueHandle = osMessageQueueNew (4, sizeof(MqttRxMsg_t), &mqttRxQueue_attributes);
+
+  /* creation of zbeeCmdQueue */
+  zbeeCmdQueueHandle = osMessageQueueNew(4, sizeof(ZbeeCmdMsg_t), &zbeeCmd_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -1734,6 +1742,26 @@ void StartWebServerTask(void *argument)
         }
     }
 
+    /* Обработка исходящих Zigbee-команд */
+    {
+        ZbeeCmdMsg_t zcmd;
+        while (xQueueReceive(zbeeCmdQueueHandle, &zcmd, 0) == pdPASS) {
+            if (s_conn != NULL && mqtt_connected_reported) {
+                struct mg_mqtt_opts pub_opts;
+                memset(&pub_opts, 0, sizeof(pub_opts));
+                pub_opts.topic = mg_str(zcmd.topic);
+                pub_opts.message = mg_str(zcmd.payload);
+                pub_opts.qos = s_qos;
+                pub_opts.retain = false;
+                mg_mqtt_pub(s_conn, &pub_opts);
+                printf("[Z2M] MQTT PUB: topic='%s'\r\n", zcmd.topic);
+            } else {
+                printf("[Z2M] MQTT DROP: s_conn=%p connected=%d\r\n",
+                       (void*)s_conn, mqtt_connected_reported);
+            }
+        }
+    }
+
     /* Explicit drain: rapidly clear the queue if disconnected to avoid buildup */
     if (s_conn == NULL || s_conn->is_closing || !mqtt_connected_reported) {
       MqttMessage_t drain;
@@ -1916,29 +1944,31 @@ void StartOutputTask(void *argument)
         }
       }
       if (data_pin.id >= 0 &&
-          data_pin.id < NUMPIN) { // data_pin.id - это ID Devices а не Switch!
-        switch (data_pin.action) {
-        case 0:
-          HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name,
-                            PinsInfo[data_pin.id].hal_pin, GPIO_PIN_RESET);
-          //					printf("case 0: %d-%d  \r\n",
-          //(int) data_pin.id, (int) data_pin.action);
-          break;
-        case 1:
-          HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name,
-                            PinsInfo[data_pin.id].hal_pin, GPIO_PIN_SET);
-          //					printf("case 1: %d-%d  \r\n",
-          //(int) data_pin.id, (int) data_pin.action);
-          break;
-        case 2:
-          HAL_GPIO_TogglePin(PinsInfo[data_pin.id].gpio_name,
-                             PinsInfo[data_pin.id].hal_pin);
-          //					printf("%d-%d  \r\n", (int)
-          // data_pin.id, (int) data_pin.action);
-          break;
-        default:
-          printf("Invalid action: %d\r\n", data_pin.action);
-          break;
+          data_pin.id < NUMPIN) {
+        if (PinsConf[data_pin.id].topin == 11) {
+          const char *cmd = (data_pin.action == 1) ? "ON" : "OFF";
+          SendZigbeeCommand(PinsConf[data_pin.id].zbee_ieee,
+                            PinsConf[data_pin.id].zbee_endpoint,
+                            PinsConf[data_pin.id].zbee_cluster,
+                            PinsConf[data_pin.id].zbee_attribute, cmd);
+        } else {
+          switch (data_pin.action) {
+          case 0:
+            HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name,
+                              PinsInfo[data_pin.id].hal_pin, GPIO_PIN_RESET);
+            break;
+          case 1:
+            HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name,
+                              PinsInfo[data_pin.id].hal_pin, GPIO_PIN_SET);
+            break;
+          case 2:
+            HAL_GPIO_TogglePin(PinsInfo[data_pin.id].gpio_name,
+                               PinsInfo[data_pin.id].hal_pin);
+            break;
+          default:
+            printf("Invalid action: %d\r\n", data_pin.action);
+            break;
+          }
         }
       } else {
         printf("Invalid pin number: %d\r\n", data_pin.id);

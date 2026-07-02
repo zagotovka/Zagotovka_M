@@ -33,7 +33,7 @@ struct dbCron {
 };
 
 struct dbPinsConf {     // Создали структуру с необходимым набором типов элиментов.
-	uint8_t topin;		// Type of pins: NONE - 0; BUTTON - 1; DEVICE - 2; SWITCH - 3; ONEWIRE - 4; PWM - 5; I2C - 6,7; Encoder - 8,9, SECURITY-10;
+	uint8_t topin;		// Type of pins: NONE-0; BUTTON-1; DEVICE-2; SWITCH-3; ONEWIRE-4; PWM-5; I2C-6,7; Encoder-8,9; SECURITY-10; ZIGBEE-11;
 	int pwm;		    // PWM frequency
 	int pwmmax;         // PWM максимальное значение сейчас пока 100
 	uint8_t on;			// Состояние выхода - 1-вкл, 0-выкл. К примеру 'EncoderB'.
@@ -63,6 +63,12 @@ struct dbPinsConf {     // Создали структуру с необходи
 	uint8_t prvstate;   // Значение предыдущего состояния
 	uint32_t deb_tm;    // debounce time
 	uint32_t lasttrg;   // Last trigger time
+	// === ZIGBEE v6 ===
+	char     zbee_ieee[17];       // IEEE адрес, 16 + '\0' (без "0x")
+	uint8_t  zbee_endpoint;       // Endpoint (1-240)
+	uint16_t zbee_cluster;        // Cluster ID: 0x0006=OnOff, 0x0008=Level, 0x0300=Color
+	uint16_t zbee_attribute;      // Attribute ID (16-bit): 0x0000=OnOff state
+	char     zbee_label[30];      // Friendly name для UI (только для отображения)
 };
 
 /* ─── PID Controller ─── */

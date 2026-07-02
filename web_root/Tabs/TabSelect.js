@@ -92,6 +92,7 @@ function TabSelect({ }) {
   const [gpsEnabled, setGpsEnabled] = useState(false);
   const [language, setLanguage] = useState('ru');
   const lastChangeTime = useRef(0);
+  const lastPollData = useRef(null);
 
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => { initGlobalTooltip(); }, []);
@@ -117,6 +118,11 @@ function TabSelect({ }) {
         const initialValues = {};
         data.forEach((d) => {
           initialValues[`topin_${d.id}`] = d.topin.toString();
+          if (d.zbee_ieee !== undefined) initialValues[`zbee_ieee_${d.id}`] = d.zbee_ieee;
+          if (d.zbee_endpoint !== undefined) initialValues[`zbee_endpoint_${d.id}`] = d.zbee_endpoint;
+          if (d.zbee_cluster !== undefined) initialValues[`zbee_cluster_${d.id}`] = d.zbee_cluster.toString(16).padStart(4, '0');
+          if (d.zbee_attribute !== undefined) initialValues[`zbee_attribute_${d.id}`] = d.zbee_attribute.toString(16).padStart(2, '0');
+          if (d.zbee_label !== undefined) initialValues[`zbee_label_${d.id}`] = d.zbee_label;
         });
         setSelectedValues(initialValues);
       });
@@ -124,20 +130,30 @@ function TabSelect({ }) {
   useEffect(() => {
     let active = true;
 
-    // ── Загрузка + polling через pollQueue (одно соединение, без нового handshake) ──
     registerPoll('select', '/api/select/get', function(r) {
       if (!active) return;
-      if (Date.now() - lastChangeTime.current < 8000) return;
+      if (Date.now() - lastChangeTime.current < 30000) return;
       if (r !== null && r !== undefined) {
         const data = r.data || r;
         setSelect(data);
         setGpsEnabled(r.sim800l === 1);
         if (r.lang) setLanguage(r.lang);
-        const initialValues = {};
-        data.forEach(function(d) {
-          initialValues['topin_' + d.id] = d.topin.toString();
-        });
-        setSelectedValues(initialValues);
+        const jsonStr = JSON.stringify(data);
+        if (jsonStr !== lastPollData.current) {
+          lastPollData.current = jsonStr;
+          setSelectedValues(prev => {
+            const next = {};
+            data.forEach(d => {
+              next[`topin_${d.id}`] = d.topin.toString();
+              next[`zbee_ieee_${d.id}`] = prev[`zbee_ieee_${d.id}`] != null ? prev[`zbee_ieee_${d.id}`] : (d.zbee_ieee || '');
+              next[`zbee_endpoint_${d.id}`] = prev[`zbee_endpoint_${d.id}`] != null ? prev[`zbee_endpoint_${d.id}`] : (d.zbee_endpoint || 1);
+              next[`zbee_cluster_${d.id}`] = prev[`zbee_cluster_${d.id}`] != null ? prev[`zbee_cluster_${d.id}`] : (d.zbee_cluster != null ? Number(d.zbee_cluster).toString(16).padStart(4, '0') : '0006');
+              next[`zbee_attribute_${d.id}`] = prev[`zbee_attribute_${d.id}`] != null ? prev[`zbee_attribute_${d.id}`] : (d.zbee_attribute != null ? Number(d.zbee_attribute).toString(16).padStart(2, '0') : '00');
+              next[`zbee_label_${d.id}`] = prev[`zbee_label_${d.id}`] != null ? prev[`zbee_label_${d.id}`] : (d.zbee_label || '');
+            });
+            return next;
+          });
+        }
       }
     }, { immediate: true });
 
@@ -171,14 +187,22 @@ function TabSelect({ }) {
 
     varselect.forEach((d) => {
       const value = formData.get(`topin_${d.id}`);
-      jsonData.data.push({
+      const obj = {
         id: d.id,
         pins: d.pins,
         topin: parseInt(value),
         pwm: d.pwm,
         i2cdata: d.i2cdata,
         i2cclok: d.i2cclok
-      });
+      };
+      if (value === '11') {
+        obj.zbee_ieee = selectedValues[`zbee_ieee_${d.id}`] || '';
+        obj.zbee_endpoint = parseInt(selectedValues[`zbee_endpoint_${d.id}`]) || 1;
+        obj.zbee_cluster = parseInt(selectedValues[`zbee_cluster_${d.id}`], 16) || 0x0006;
+        obj.zbee_attribute = parseInt(selectedValues[`zbee_attribute_${d.id}`], 16) || 0;
+        obj.zbee_label = selectedValues[`zbee_label_${d.id}`] || '';
+      }
+      jsonData.data.push(obj);
     });
 
     setSubmissionStatus('submitting');
@@ -201,6 +225,11 @@ function TabSelect({ }) {
       const updatedValues = {};
       jsonData.data.forEach((item) => {
         updatedValues[`topin_${item.id}`] = item.topin.toString();
+        if (item.zbee_ieee !== undefined) updatedValues[`zbee_ieee_${item.id}`] = item.zbee_ieee;
+        if (item.zbee_endpoint !== undefined) updatedValues[`zbee_endpoint_${item.id}`] = item.zbee_endpoint;
+        if (item.zbee_cluster !== undefined) updatedValues[`zbee_cluster_${item.id}`] = item.zbee_cluster.toString(16).padStart(4, '0');
+        if (item.zbee_attribute !== undefined) updatedValues[`zbee_attribute_${item.id}`] = item.zbee_attribute.toString(16).padStart(2, '0');
+        if (item.zbee_label !== undefined) updatedValues[`zbee_label_${item.id}`] = item.zbee_label;
       });
       setSelectedValues((prevState) => ({ ...prevState, ...updatedValues }));
       lastChangeTime.current = 0;
@@ -215,6 +244,11 @@ function TabSelect({ }) {
   const handleRadioChange = (e) => {
     const { name, value } = e.target;
     setSelectedValues((prevState) => ({ ...prevState, [name]: value }));
+    lastChangeTime.current = Date.now();
+  };
+
+  const handleFieldChange = (id, field, value) => {
+    setSelectedValues(prev => ({ ...prev, [`${field}_${id}`]: value }));
     lastChangeTime.current = Date.now();
   };
 
@@ -300,9 +334,44 @@ function TabSelect({ }) {
           <${RadioOption} id=${d.id} value="8"  label="Enc.OutA" checked=${selectedValues[`topin_${d.id}`] === '8'}  onChange=${handleRadioChange} />
           <${RadioOption} id=${d.id} value="9"  label="Enc.OutB" checked=${selectedValues[`topin_${d.id}`] === '9'}  onChange=${handleRadioChange} />
           <${RadioOption} id=${d.id} value="10" label="Security" disabled=${d.monitoring == 0} checked=${selectedValues[`topin_${d.id}`] === '10'} onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="11" label="Zigbee" checked=${selectedValues[`topin_${d.id}`] === '11'} onChange=${handleRadioChange} />
         </div>
       </td>
     </tr>
+    ${selectedValues[`topin_${d.id}`] === '11' && html`
+    <tr class="bg-slate-50/80">
+      <td colspan="3" class="px-6 py-3">
+        <div class="flex flex-col gap-2">
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input type="text" placeholder="IEEE Address (e.g. 588e81fffe36a343)"
+              maxlength="16"
+              value=${selectedValues[`zbee_ieee_${d.id}`] || ''}
+              onInput=${(e) => {
+                let v = e.target.value.replace(/^0x/i, '');
+                handleFieldChange(d.id, 'zbee_ieee', v);
+              }}
+              class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 flex-1" />
+            <input type="number" placeholder="EP" min="1" max="240"
+              value=${selectedValues[`zbee_endpoint_${d.id}`] || '1'}
+              onInput=${(e) => handleFieldChange(d.id, 'zbee_endpoint', e.target.value)}
+              class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 w-20" />
+            <select value=${selectedValues[`zbee_cluster_${d.id}`] || '0006'}
+              onChange=${(e) => handleFieldChange(d.id, 'zbee_cluster', e.target.value)}
+              class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 w-40">
+              <option value="0006">On/Off (0006)</option>
+              <option value="0008">Level (0008)</option>
+              <option value="0300">Color (0300)</option>
+            </select>
+            <input type="text" placeholder="Label (e.g. Lamp Kuhnya)"
+              maxlength="29"
+              value=${selectedValues[`zbee_label_${d.id}`] || ''}
+              onInput=${(e) => handleFieldChange(d.id, 'zbee_label', e.target.value)}
+              class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 flex-1" />
+          </div>
+        </div>
+      </td>
+    </tr>
+    `}
   `;
 
   return html`

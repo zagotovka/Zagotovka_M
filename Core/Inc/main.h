@@ -151,6 +151,11 @@ typedef struct {
     char topic[64];
     char payload[256];
 } MqttRxMsg_t;
+typedef struct {
+    char topic[80];
+    char payload[64];
+} ZbeeCmdMsg_t;
+
 typedef struct xHeapStats
 {
 	size_t xAvailableHeapSpaceInBytes;

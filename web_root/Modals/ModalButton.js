@@ -61,7 +61,7 @@ const ModalButton = ({
       .then((response) => response.json())
       .then((data) => {
         if (Array.isArray(data)) {
-          setPinOptions(data.filter((pin) => pin.topin === 2));
+          setPinOptions(data.filter((pin) => pin.topin === 2 || pin.topin === 11));
         } else {
           setPinOptions([]);
         }

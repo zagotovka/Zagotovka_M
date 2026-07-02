@@ -66,7 +66,7 @@ const ModalSecurity = ({
       .then((data) => {
         const pins = data.pins || data;
         if (Array.isArray(pins)) {
-          setPinOptions(pins.filter((pin) => pin.topin === 2));
+          setPinOptions(pins.filter((pin) => pin.topin === 2 || pin.topin === 11));
         } else {
           // console.error('Expected array from API, received:', typeof data);
           setPinOptions([]);

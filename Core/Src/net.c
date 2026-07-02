@@ -30,6 +30,8 @@ const char *s_json_header =
     "Content-Type: application/json\r\n"
     "Cache-Control: no-cache\r\n";
 
+extern struct dbPinsConf PinsConf[NUMPIN];
+
 /* ─── Static file header ─── */
 
 
@@ -1120,6 +1122,25 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     mg_mqtt_pub(c, &pub_opts);
     MG_INFO(("%lu PUBLISHED %.*s -> %.*s", c->id, (int) data.len, data.buf, (int) pubt.len, pubt.buf));
     mqtt_publish_logfilter_status();
+
+    for (int i = 0; i < NUMPIN; i++) {
+      if (PinsConf[i].topin == 11 && PinsConf[i].zbee_ieee[0] != '\0') {
+        char zbee_sub_topic[80];
+        snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                 "zigbee2mqtt/data/%s/%d/%04X/%04X",
+                 PinsConf[i].zbee_ieee,
+                 PinsConf[i].zbee_endpoint,
+                 PinsConf[i].zbee_cluster,
+                 PinsConf[i].zbee_attribute);
+        struct mg_mqtt_opts zbee_sub;
+        memset(&zbee_sub, 0, sizeof(zbee_sub));
+        zbee_sub.topic = mg_str(zbee_sub_topic);
+        zbee_sub.qos = s_qos;
+        mg_mqtt_sub(c, &zbee_sub);
+        printf("[MQTT] SUBSCRIBED to '%s' (zigbee pin %d)\r\n",
+               zbee_sub_topic, i);
+      }
+    }
   } else if (ev == MG_EV_MQTT_MSG) {
     // When we get echo response, print it
     struct mg_mqtt_message *mm = (struct mg_mqtt_message *) ev_data;

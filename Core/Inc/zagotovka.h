@@ -228,6 +228,9 @@ void handle_security_set(struct mg_connection *c, struct mg_http_message *hm);
 void parse_sim800l_json(const char *buffer);
 
 void mqtt_message_handler(const char* topic, const char* payload);
+void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
+                       uint16_t cluster, uint8_t attribute,
+                       const char *json_cmd);
 
 void action_handler(uint8_t button_id, const char* action_str, const char* press_type);
 
