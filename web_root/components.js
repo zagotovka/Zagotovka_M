@@ -758,51 +758,61 @@ export function Login({ loginFn, logoIcon, title, tipText }) {
       .then(loginFn)
       .finally((r) => setPass(''));
   };
-  return html` <div
-    class="h-full flex items-center justify-center bg-slate-200"
-  >
-    <div class="border rounded bg-white w-96 p-5">
-      <div class="my-5 py-2 flex items-center justify-center gap-x-4">
-        <${logoIcon} class="h-12 stroke-cyan-600 stroke-1" />
-        <h1 class="font-bold text-xl">${title || 'Login'}<//>
+  return html`
+    <div class="h-full flex items-center justify-center relative overflow-hidden z-0">
+      <!-- Decorative background glow -->
+      <div class="absolute top-0 right-0 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
+      <div class="absolute bottom-0 left-0 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+      <div class="rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl w-96 p-8 relative z-10 flex flex-col items-center">
+        <div class="mb-8 flex flex-col items-center justify-center gap-y-4">
+          <div class="p-3 bg-gradient-to-br from-teal-400/20 to-cyan-500/20 rounded-2xl shadow-inner">
+            <${logoIcon} class="h-16 w-16 stroke-cyan-600 drop-shadow-sm" />
+          </div>
+          <h1 class="font-extrabold text-2xl text-slate-800 drop-shadow-sm tracking-tight text-center">${title || 'Login'}<//>
+        <//>
+
+        <div class="w-full space-y-5">
+          <div>
+            <label class="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">Username</label>
+            <input
+              type="text"
+              autocomplete="current-user"
+              required
+              class="w-full bg-white/60 backdrop-blur-sm border border-white/50 rounded-xl px-4 py-2.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400/50 focus:border-teal-400/50 transition-all shadow-inner disabled:cursor-not-allowed disabled:opacity-50"
+              oninput=${(ev) => setUser(ev.target.value)}
+              value=${user}
+            />
+          <//>
+
+          <div>
+            <label class="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">Password</label>
+            <input
+              type="password"
+              autocomplete="current-password"
+              required
+              class="w-full bg-white/60 backdrop-blur-sm border border-white/50 rounded-xl px-4 py-2.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400/50 focus:border-teal-400/50 transition-all shadow-inner disabled:cursor-not-allowed disabled:opacity-50"
+              oninput=${(ev) => setPass(ev.target.value)}
+              value=${pass}
+              onkeydown=${(ev) => ev.key === 'Enter' && onsubmit(ev)}
+            />
+          <//>
+        <//>
+
+        <div class="mt-8 w-full">
+          <${Button}
+            title="Sign In"
+            icon=${Icons.logout}
+            onclick=${onsubmit}
+            colors="bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
+            cls="w-full py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 flex justify-center"
+          />
+        <//>
+
+        ${tipText ? html`<div class="mt-6 text-center text-slate-500 text-xs font-medium px-4">${tipText}<//>` : ''}
       <//>
-      <div class="my-3">
-        <label class="block text-sm mb-1 dark:text-white">Username</label>
-        <input
-          type="text"
-          autocomplete="current-user"
-          required
-          class="font-normal bg-white rounded border border-gray-300 w-full
-        flex-1 py-0.5 px-2 text-gray-900 placeholder:text-gray-400
-        focus:outline-none sm:text-sm sm:leading-6 disabled:cursor-not-allowed
-        disabled:bg-gray-100 disabled:text-gray-500"
-          oninput=${(ev) => setUser(ev.target.value)}
-          value=${user}
-        />
-      <//>
-      <div class="my-3">
-        <label class="block text-sm mb-1 dark:text-white">Password</label>
-        <input
-          type="password"
-          autocomplete="current-password"
-          required
-          class="font-normal bg-white rounded border border-gray-300 w-full flex-1 py-0.5 px-2 text-gray-900 placeholder:text-gray-400 focus:outline-none sm:text-sm sm:leading-6 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
-          oninput=${(ev) => setPass(ev.target.value)}
-          value=${pass}
-          onkeydown=${(ev) => ev.key === 'Enter' && onsubmit(ev)}
-        />
-      <//>
-      <div class="mt-7">
-        <${Button}
-          title="Sign In"
-          icon=${Icons.logout}
-          onclick=${onsubmit}
-          cls="flex w-full justify-center"
-        />
-      <//>
-      <div class="mt-5 text-slate-400 text-xs">${tipText}<//>
     <//>
-  <//>`;
+  `;
 }
 
 export function Colored({ icon, text, colors }) {
@@ -866,15 +876,15 @@ export function TextValue({
   step,
   mult
 }) {
-  const [bg, setBg] = useState('bg-white');
+  const [status, setStatus] = useState('ok');
   useEffect(() => {
     if (type == 'number') checkval(+min, +max, +value);
   }, []);
   (step ||= '1'), (mult ||= 1);
   const checkval = function (min, max, v) {
-    setBg('bg-white');
-    if (min && v < min) setBg('bg-red-100 border-red-200');
-    if (max && v > max) setBg('bg-red-100 border-red-200');
+    setStatus('ok');
+    if (min && v < min) setStatus('error');
+    if (max && v > max) setStatus('error');
   };
   const m = step.match(/^.+\.(.+)/);
   const digits = m ? m[1].length : 0;
@@ -887,12 +897,18 @@ export function TextValue({
     setfn(v);
   };
   if (type == 'number') value = +(value * mult).toFixed(digits);
+  const wrapClasses =
+    status === 'error'
+      ? 'bg-red-50/80 border-red-300/70 focus-within:ring-2 focus-within:ring-red-300/50 focus-within:border-red-300/70'
+      : 'bg-white/60 border-white/50 focus-within:ring-2 focus-within:ring-teal-400/50 focus-within:border-teal-400/50';
   return html` <div
-    class="flex w-full items-center rounded border shadow-sm ${bg}"
+    class="flex w-full items-center rounded-xl border backdrop-blur-sm shadow-inner transition-all overflow-hidden ${wrapClasses} ${disabled
+      ? 'opacity-50'
+      : ''}"
   >
     ${addonLeft &&
     html`<span
-      class="inline-flex font-normal truncate py-1 border-r bg-slate-100 items-center border-gray-300 px-2 text-gray-500 text-xs"
+      class="inline-flex font-medium truncate py-1.5 border-r border-white/50 bg-white/40 items-center px-2 text-slate-500 text-xs"
       >${addonLeft}<//
     >`}
     <input
@@ -905,12 +921,12 @@ export function TextValue({
       pattern=${pattern}
       onchange=${onchange}
       ...${attr}
-      class="${bg} font-normal text-sm rounded w-full flex-1 py-0.5 px-2 text-gray-700 placeholder:text-gray-400 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 ${myclass}"
+      class="bg-transparent font-medium text-sm w-full flex-1 py-1.5 px-3 text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed ${myclass}"
       placeholder=${placeholder}
     />
     ${addonRight &&
     html`<span
-      class="inline-flex font-normal truncate py-1 border-l bg-slate-100 items-center border-gray-300 px-2 text-gray-500 text-xs overflow-scroll"
+      class="inline-flex font-medium truncate py-1.5 border-l border-white/50 bg-white/40 items-center px-2 text-slate-500 text-xs overflow-scroll"
       style="min-width: 50%;"
       >${addonRight}<//
     >`}
@@ -920,14 +936,31 @@ export function TextValue({
 export function SelectValue({ value, setfn, options, disabled }) {
   const toInt = (x) => (x == parseInt(x) ? parseInt(x) : x);
   const onchange = (ev) => setfn(toInt(ev.target.value));
-  return html` <select
-    onchange=${onchange}
-    class="w-full rounded font-normal border py-0.5 px-1 text-gray-600 focus:outline-none text-sm disabled:cursor-not-allowed"
-    disabled=${disabled}
-  >
-    ${options.map(
-      (v) => html`<option value=${v[0]} selected=${v[0] == value}>${v[1]}<//>`
-    )}
+  return html` <div class="relative w-full">
+    <select
+      onchange=${onchange}
+      class="w-full appearance-none rounded-xl font-medium border border-white/50 bg-white/60 backdrop-blur-sm shadow-inner py-1.5 pl-3 pr-8 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-400/50 focus:border-teal-400/50 transition-all disabled:cursor-not-allowed disabled:opacity-50"
+      disabled=${disabled}
+    >
+      ${options.map(
+        (v) =>
+          html`<option value=${v[0]} selected=${v[0] == value}>${v[1]}<//>`
+      )}
+    <//>
+    <svg
+      class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke-width="2"
+      stroke="currentColor"
+    >
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+      />
+    <//>
   <//>`;
 }
 

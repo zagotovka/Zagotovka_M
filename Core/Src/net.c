@@ -89,6 +89,7 @@ static void timer_sntp_fn(void *param) {  // SNTP timer function. Sync up time
 /* ── One active session ── */
 static struct user   *s_active_user       = NULL;  // кто сейчас залогинен
 static uint32_t       s_session_last_seen = 0;
+static char           s_last_client_ip[40] = {0};  // IP:port предыдущей сессии
 #define SESSION_TIMEOUT_MS 30000U
 
 static void session_generate_token(struct user *u) {
@@ -162,22 +163,40 @@ static bool require_post_json(struct mg_connection *c, struct mg_http_message *h
 }
 
 void handle_login(struct mg_connection *c, struct user *u) {
+  char rem_buf[40];
+  mg_snprintf(rem_buf, sizeof(rem_buf), "%M", mg_print_ip_port, &c->rem);
+
   // Если активна чужая сессия — логируем вытеснение
   if (session_is_active() && s_active_user != u) {
-    MG_INFO(("Session of [%s] forcibly taken over by [%s]",
-             s_active_user->name, u->name));
+    printf("[NET] Session of [%s] forcibly taken over [%s], old_client=%s new_client=%s\r\n",
+           s_active_user->name, u->name, s_last_client_ip, rem_buf);
   }
   // Если тот же пользователь входит повторно (другой браузер) —
   // старый токен инвалидируется, новый браузер получает новый токен
   if (session_is_active() && s_active_user == u) {
-    MG_INFO(("User [%s] logged in again — previous session invalidated",
-             u->name));
+    printf("[NET] User [%s] re-login — session invalidated, old_client=%s new_client=%s\r\n",
+           u->name, s_last_client_ip, rem_buf);
+  } else if (!session_is_active()) {
+    printf("[NET] Login success [%s], client=%s\r\n", u->name, rem_buf);
+  }
+
+  // Принудительно закрыть ВСЕ остальные клиентские TLS-соединения —
+  // single-session: после этого момента валидна только текущая (c).
+  // Любое другое — зомби-хвост старой сессии.
+  for (struct mg_connection *t = c->mgr->conns; t != NULL; t = t->next) {
+    if (t != c && t->is_tls && !t->is_listening && !t->is_closing) {
+      char t_rem[40];
+      mg_snprintf(t_rem, sizeof(t_rem), "%M", mg_print_ip_port, &t->rem);
+      printf("[NET] Stale session conn=%lu client=%s — will expire on next request\r\n",
+             t->id, t_rem);
+    }
   }
 
   // Генерируем новый токен — старый токен (в другом браузере) умирает
   session_generate_token(u);
   s_active_user       = u;
   s_session_last_seen = HAL_GetTick();
+  mg_snprintf(s_last_client_ip, sizeof(s_last_client_ip), "%s", rem_buf);
 
   char cookie[256];
   mg_snprintf(cookie, sizeof(cookie),
@@ -508,6 +527,10 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
         // завершив handshake, переходили в active без проверки общего
         // лимита. active накапливались (active=3 в логах) — баг.
         // Теперь общий лимит не даёт накопиться больше 5.
+        s_active_conns++;
+        char buf_rem[32];
+        mg_snprintf(buf_rem, sizeof(buf_rem), "%M", mg_print_ip_port, &c->rem);
+
         if (cnt_active + cnt_hs >= 5) {
             if (oldest_idle != NULL) {
                 MG_INFO(("Evict idle conn %lu to free slot (deferred close)", oldest_idle->id));
@@ -536,20 +559,20 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
             if (oldest_hs != NULL && hs_age > 1000) {
                 MG_INFO(("Evict STALE hs conn %lu (age=%lu ms, cnt_hs=%d)",
                          oldest_hs->id, (unsigned long)hs_age, cnt_hs));
+                printf("[NET] Evict stale hs conn %lu, age=%lu ms, client=%s\r\n",
+                       oldest_hs->id, (unsigned long)hs_age, buf_rem);
                 oldest_hs->is_draining = 1;
                 oldest_hs->is_closing  = 1;
             } else {
                 MG_INFO(("Rejected conn %lu: hs in progress (age=%lu ms, cnt_hs=%d)",
                          c->id, (unsigned long)hs_age, cnt_hs));
+                printf("[NET] REJECT hs conn=%lu, client=%s, age=%lu ms, cnt_hs=%d\r\n",
+                       c->id, buf_rem, (unsigned long)hs_age, cnt_hs);
                 c->is_draining = 1;
                 c->is_closing  = 1;
                 return;
             }
         }
-
-        s_active_conns++;
-        char buf_rem[32];
-        mg_snprintf(buf_rem, sizeof(buf_rem), "%M", mg_print_ip_port, &c->rem);
 
         MG_INFO(("Accept: local %M remote %M", mg_print_ip_port, &c->loc, mg_print_ip_port, &c->rem));
 
@@ -659,8 +682,13 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			/* ── State slice polling endpoints (Keep-Alive) ── */
 			if (mg_match(hm->uri, mg_str("/api/state/*"), NULL)) {
 				if (u == NULL) {
-					mg_http_reply(c, 403, "Connection: close\r\n", "{\"error\":\"session_expired\"}\n");
-					c->is_draining = 1;
+					mg_printf(c, "HTTP/1.1 403 Forbidden\r\n"
+					             "Content-Type: application/json\r\n"
+					             "Content-Length: 27\r\n"
+					             "\r\n"
+					             "{\"error\":\"session_expired\"}");
+					c->is_resp = 0;
+					return;
 				} else if (mg_match(hm->uri, mg_str("/api/state/sensors"), NULL)) {
 					if (!check_etag_304(c, hm, &g_ver_sensors)) handle_sensors(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/common"), NULL)) {
@@ -686,14 +714,30 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
 			/* ── Unified /api/pins (ETag + 304, chunked JSON, all pin types) ── */
 			if (mg_match(hm->uri, mg_str("/api/pins"), NULL)) {
-				if (u == NULL) { mg_http_reply(c, 403, "Connection: close\r\n", "{\"error\":\"session_expired\"}\n"); }
+				if (u == NULL) {
+					mg_printf(c, "HTTP/1.1 403 Forbidden\r\n"
+					             "Content-Type: application/json\r\n"
+					             "Content-Length: 27\r\n"
+					             "\r\n"
+					             "{\"error\":\"session_expired\"}");
+					c->is_resp = 0;
+					return;
+				}
 				else { handle_get_pins(c, hm); }
 				keep_alive = true;
 				break;
 			}
 			/* ── /api/pid (ETag + 304, Content-Length) — PID is a separate subsystem ── */
 			if (mg_match(hm->uri, mg_str("/api/pid"), NULL)) {
-				if (u == NULL) { mg_http_reply(c, 403, "Connection: close\r\n", "{\"error\":\"session_expired\"}\n"); }
+				if (u == NULL) {
+					mg_printf(c, "HTTP/1.1 403 Forbidden\r\n"
+					             "Content-Type: application/json\r\n"
+					             "Content-Length: 27\r\n"
+					             "\r\n"
+					             "{\"error\":\"session_expired\"}");
+					c->is_resp = 0;
+					return;
+				}
 				else if (!check_etag_304(c, hm, &g_ver_pid)) { handle_pid(c); }
 				keep_alive = true;
 				break;
@@ -751,9 +795,13 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			    handle_logout(c);
 			} else if (mg_match(hm->uri, mg_str("/api/#"), NULL) && u == NULL) {
 			    MG_ERROR(("%lu Unauthorized API request: %.*s", c->id, (int) hm->uri.len, hm->uri.buf));
-			    mg_http_reply(c, 403, "Connection: close\r\n", "{\"error\":\"session_expired\"}\n");
-
-                c->is_draining = 1;
+			    mg_printf(c, "HTTP/1.1 403 Forbidden\r\n"
+			                 "Content-Type: application/json\r\n"
+			                 "Content-Length: 27\r\n"
+			                 "\r\n"
+			                 "{\"error\":\"session_expired\"}");
+			    c->is_resp = 0;
+			    return;
 			} else if (mg_match(hm->uri, mg_str("/api/debug"), NULL)) {
 				MG_INFO(("%lu Processing /api/debug", c->id));
 				handle_debug(c, hm);
@@ -961,7 +1009,11 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		break;
  
 	case MG_EV_ERROR:
-		MG_ERROR(("%lu ERROR: %s", c->id, (char*) ev_data));
+		{
+			char err_rem[40];
+			mg_snprintf(err_rem, sizeof(err_rem), "%M", mg_print_ip_port, &c->rem);
+			printf("[NET] ERROR conn=%lu client=%s: %s\r\n", c->id, err_rem, (char*) ev_data);
+		}
 		break;
  
 	case MG_EV_POLL:
