@@ -119,6 +119,7 @@ extern struct mg_connection * volatile s_conn;
 
 char* get_mqtt_url(void);
 char* get_mqtt_topic(void);
+const char* get_rxzbtop(void);
 void set_mqtt_url(const char* url);
 void set_mqtt_topic(const char* topic);
 
@@ -147,6 +148,9 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf, uin
 
 void handle_switch_get(struct mg_connection *c);
 void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_get(struct mg_connection *c);
+void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm);
+bool zbee_is_valid_ieee(const char *s);
 void gen_switch_json(const struct dbPinsInfo *pins_info,
 		const struct dbPinsConf *pins_conf, int num_pins, char *buffer,
 		int buffer_size);
@@ -337,6 +341,7 @@ extern volatile uint32_t g_ver_switch;
 extern volatile uint32_t g_ver_button;
 extern volatile uint32_t g_ver_security;
 extern volatile uint32_t g_ver_pins;
+extern volatile uint32_t g_ver_zigbee;
 
 /* ─── Mark slice dirty ─── */
 void mark_slice_dirty(volatile uint32_t *ver);

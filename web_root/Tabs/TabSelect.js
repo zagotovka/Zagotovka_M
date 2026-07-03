@@ -83,6 +83,113 @@ function initGlobalTooltip() {
 }
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Модульные компоненты — стабильный identity между ре-рендерами TabSelect.
+// Preact не пересоздаёт DOM-узлы при каждом обновлении state родителя.
+// ---------------------------------------------------------------------------
+const RadioOption = ({ id, value, label, disabled = false, onChange, checked }) => html`
+  <div class="relative">
+    <input
+      id="${id}_${value}"
+      class="sr-only peer"
+      type="radio"
+      name="topin_${id}"
+      value="${value}"
+      checked=${checked}
+      onChange=${onChange}
+      disabled=${disabled}
+      aria-label="${label}"
+    />
+    <label
+      for="${id}_${value}"
+      class="cursor-pointer px-3 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap transition-all duration-300
+             ${disabled ? 'text-gray-400 cursor-not-allowed opacity-60' : 'text-slate-700 hover:bg-black/5'}
+             peer-checked:bg-gradient-to-r peer-checked:from-teal-500 peer-checked:to-cyan-500 peer-checked:text-white peer-checked:shadow-sm"
+    >
+      ${label}
+    </label>
+  </div>
+`;
+
+const Th = ({ title, tooltipIndex, center, getTooltipText }) => html`
+  <th
+    class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
+    style=${center ? 'text-align: center' : ''}
+    data-tip=${getTooltipText('langselect', tooltipIndex)}
+  >
+    ${title}
+  </th>
+`;
+
+const ArraySelect = ({ d, selectedValues, isRowDisabled, handleRadioChange, handleFieldChange }) => {
+  const isPhysicalPin = d.id < 89;
+  const isZigbeePin = d.id >= 89;
+  const currentTopin = selectedValues[`topin_${d.id}`];
+
+  return html`
+  <tr class="${isRowDisabled(d.id)
+      ? 'bg-red-200/50 opacity-50 pointer-events-none'
+      : d.id % 2 === 1
+        ? 'bg-white/80'
+        : 'bg-sky-200/40'
+    } hover:bg-slate-200/80 transition-colors">
+    <td class="px-6 py-2 text-sm text-slate-800">${d.id}</td>
+    <td class="px-6 py-2 text-sm text-slate-800 font-medium">${d.pins}</td>
+    <td class="px-2 py-2">
+      <div class="flex flex-wrap items-center justify-center gap-x-1 gap-y-1">
+        ${isPhysicalPin ? html`
+          <${RadioOption} id=${d.id} value="0"  label="NONE"     checked=${currentTopin === '0'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="3"  label="SWITCH"   checked=${currentTopin === '3'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="1"  label="BUTTON"   checked=${currentTopin === '1'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="2"  label="DEVICE"   checked=${currentTopin === '2'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="4"  label="1-WIRE"   checked=${currentTopin === '4'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="5"  label="PWM"      disabled=${d.pwm == 0} checked=${currentTopin === '5'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="8"  label="Enc.OutA" checked=${currentTopin === '8'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="9"  label="Enc.OutB" checked=${currentTopin === '9'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="10" label="Security" disabled=${d.monitoring == 0} checked=${currentTopin === '10'} onChange=${handleRadioChange} />
+        ` : html`
+          <${RadioOption} id=${d.id} value="0"  label="NONE"     checked=${currentTopin === '0'}  onChange=${handleRadioChange} />
+          <${RadioOption} id=${d.id} value="11" label="Zigbee"   checked=${currentTopin === '11'} onChange=${handleRadioChange} />
+        `}
+      </div>
+    </td>
+  </tr>
+  ${isZigbeePin && currentTopin === '11' && html`
+  <tr class="bg-slate-50/80">
+    <td colspan="3" class="px-6 py-3">
+      <div class="flex flex-col gap-2">
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input type="text" placeholder="IEEE Address (e.g. 588e81fffe36a343)"
+            value=${selectedValues[`zbee_ieee_${d.id}`] || ''}
+            onInput=${(e) => {
+              let v = e.target.value.replace(/^0x/i, '').replace(/[^0-9a-fA-F]/g, '').slice(0, 16);
+              handleFieldChange(d.id, 'zbee_ieee', v);
+            }}
+            class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 flex-1" />
+          <input type="number" placeholder="EP" min="1" max="240"
+            value=${selectedValues[`zbee_endpoint_${d.id}`] || '1'}
+            onInput=${(e) => handleFieldChange(d.id, 'zbee_endpoint', e.target.value)}
+            class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 w-20" />
+          <select value=${selectedValues[`zbee_cluster_${d.id}`] || '0006'}
+            onChange=${(e) => handleFieldChange(d.id, 'zbee_cluster', e.target.value)}
+            class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 w-40">
+            <option value="0006">On/Off (0006)</option>
+            <option value="0008">Level (0008)</option>
+            <option value="0300">Color (0300)</option>
+          </select>
+          <input type="text" placeholder="Label (e.g. Lamp Kuhnya)"
+            maxlength="29"
+            value=${selectedValues[`zbee_label_${d.id}`] || ''}
+            onInput=${(e) => handleFieldChange(d.id, 'zbee_label', e.target.value)}
+            class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 flex-1" />
+        </div>
+      </div>
+    </td>
+  </tr>
+  `}
+`;
+};
+
 function TabSelect({ }) {
   const [varselect, setSelect] = useState(null);
   const [selectedValues, setSelectedValues] = useState({});
@@ -91,6 +198,7 @@ function TabSelect({ }) {
   const [countdown, setCountdown] = useState(3);
   const [gpsEnabled, setGpsEnabled] = useState(false);
   const [language, setLanguage] = useState('ru');
+  const [expandedSections, setExpandedSections] = useState({ physical: false, zigbee: false });
   const lastChangeTime = useRef(0);
   const lastPollData = useRef(null);
 
@@ -186,16 +294,18 @@ function TabSelect({ }) {
     };
 
     varselect.forEach((d) => {
-      const value = formData.get(`topin_${d.id}`);
+      const raw = selectedValues[`topin_${d.id}`] ?? formData.get(`topin_${d.id}`);
+      const parsed = parseInt(raw);
+      const topin = Number.isNaN(parsed) ? d.topin : parsed;
       const obj = {
         id: d.id,
         pins: d.pins,
-        topin: parseInt(value),
+        topin: topin,
         pwm: d.pwm,
         i2cdata: d.i2cdata,
         i2cclok: d.i2cclok
       };
-      if (value === '11') {
+      if (topin === 11) {
         obj.zbee_ieee = selectedValues[`zbee_ieee_${d.id}`] || '';
         obj.zbee_endpoint = parseInt(selectedValues[`zbee_endpoint_${d.id}`]) || 1;
         obj.zbee_cluster = parseInt(selectedValues[`zbee_cluster_${d.id}`], 16) || 0x0006;
@@ -258,15 +368,13 @@ function TabSelect({ }) {
 
   if (!varselect) return '';
 
-  // -------------------------------------------------------------------------
-  // getLangObject / getTooltipText — аналогично другим страницам
-  // -------------------------------------------------------------------------
-  const getLangObject = () => ({
-    langselect: language === 'ru' ? ruLangselect : enLangselect
-  });
+  const toggleSection = (section) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
 
+  // getTooltipText передаётся в Th как prop (зависит от language)
   const getTooltipText = (key, index) => {
-    const langObject = getLangObject();
+    const langObject = { langselect: language === 'ru' ? ruLangselect : enLangselect };
     let tooltipText =
       langObject[key] && langObject[key][index] ? langObject[key][index] : '';
     const words = tooltipText.split(' ');
@@ -276,103 +384,6 @@ function TabSelect({ }) {
     }
     return lines.join('<br>');
   };
-
-  // -------------------------------------------------------------------------
-  // Th — заголовок таблицы с tooltip через data-tip (портал в body)
-  // -------------------------------------------------------------------------
-  const Th = (props) => html`
-    <th
-      class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
-      style=${props.center ? 'text-align: center' : ''}
-      data-tip=${getTooltipText('langselect', props.tooltipIndex)}
-    >
-      ${props.title}
-    </th>
-  `;
-
-  const RadioOption = ({ id, value, label, disabled = false, onChange, checked }) => html`
-    <div class="relative">
-      <input
-        id="${id}_${value}"
-        class="sr-only peer"
-        type="radio"
-        name="topin_${id}"
-        value="${value}"
-        checked=${checked}
-        onChange=${onChange}
-        disabled=${disabled}
-        aria-label="${label}"
-      />
-      <label
-        for="${id}_${value}"
-        class="cursor-pointer px-3 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap transition-all duration-300
-               ${disabled ? 'text-gray-400 cursor-not-allowed opacity-60' : 'text-slate-700 hover:bg-black/5'}
-               peer-checked:bg-gradient-to-r peer-checked:from-teal-500 peer-checked:to-cyan-500 peer-checked:text-white peer-checked:shadow-sm"
-      >
-        ${label}
-      </label>
-    </div>
-  `;
-
-  const ArraySelect = ({ d }) => html`
-    <tr class="${isRowDisabled(d.id)
-        ? 'bg-red-200/50 opacity-50 pointer-events-none'
-        : d.id % 2 === 1
-          ? 'bg-white/80'
-          : 'bg-sky-200/40'
-      } hover:bg-slate-200/80 transition-colors">
-      <td class="px-6 py-2 text-sm text-slate-800">${d.id}</td>
-      <td class="px-6 py-2 text-sm text-slate-800 font-medium">${d.pins}</td>
-      <td class="px-2 py-2">
-        <div class="flex flex-wrap items-center justify-center gap-x-1 gap-y-1">
-          <${RadioOption} id=${d.id} value="0"  label="NONE"     checked=${selectedValues[`topin_${d.id}`] === '0'}  onChange=${handleRadioChange} />
-          <${RadioOption} id=${d.id} value="3"  label="SWITCH"   checked=${selectedValues[`topin_${d.id}`] === '3'}  onChange=${handleRadioChange} />
-          <${RadioOption} id=${d.id} value="1"  label="BUTTON"   checked=${selectedValues[`topin_${d.id}`] === '1'}  onChange=${handleRadioChange} />
-          <${RadioOption} id=${d.id} value="2"  label="DEVICE"   checked=${selectedValues[`topin_${d.id}`] === '2'}  onChange=${handleRadioChange} />
-          <${RadioOption} id=${d.id} value="4"  label="1-WIRE"   checked=${selectedValues[`topin_${d.id}`] === '4'}  onChange=${handleRadioChange} />
-          <${RadioOption} id=${d.id} value="5"  label="PWM"      disabled=${d.pwm == 0} checked=${selectedValues[`topin_${d.id}`] === '5'}  onChange=${handleRadioChange} />
-          <${RadioOption} id=${d.id} value="8"  label="Enc.OutA" checked=${selectedValues[`topin_${d.id}`] === '8'}  onChange=${handleRadioChange} />
-          <${RadioOption} id=${d.id} value="9"  label="Enc.OutB" checked=${selectedValues[`topin_${d.id}`] === '9'}  onChange=${handleRadioChange} />
-          <${RadioOption} id=${d.id} value="10" label="Security" disabled=${d.monitoring == 0} checked=${selectedValues[`topin_${d.id}`] === '10'} onChange=${handleRadioChange} />
-          <${RadioOption} id=${d.id} value="11" label="Zigbee" checked=${selectedValues[`topin_${d.id}`] === '11'} onChange=${handleRadioChange} />
-        </div>
-      </td>
-    </tr>
-    ${selectedValues[`topin_${d.id}`] === '11' && html`
-    <tr class="bg-slate-50/80">
-      <td colspan="3" class="px-6 py-3">
-        <div class="flex flex-col gap-2">
-          <div class="flex flex-col sm:flex-row gap-2">
-            <input type="text" placeholder="IEEE Address (e.g. 588e81fffe36a343)"
-              maxlength="16"
-              value=${selectedValues[`zbee_ieee_${d.id}`] || ''}
-              onInput=${(e) => {
-                let v = e.target.value.replace(/^0x/i, '');
-                handleFieldChange(d.id, 'zbee_ieee', v);
-              }}
-              class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 flex-1" />
-            <input type="number" placeholder="EP" min="1" max="240"
-              value=${selectedValues[`zbee_endpoint_${d.id}`] || '1'}
-              onInput=${(e) => handleFieldChange(d.id, 'zbee_endpoint', e.target.value)}
-              class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 w-20" />
-            <select value=${selectedValues[`zbee_cluster_${d.id}`] || '0006'}
-              onChange=${(e) => handleFieldChange(d.id, 'zbee_cluster', e.target.value)}
-              class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 w-40">
-              <option value="0006">On/Off (0006)</option>
-              <option value="0008">Level (0008)</option>
-              <option value="0300">Color (0300)</option>
-            </select>
-            <input type="text" placeholder="Label (e.g. Lamp Kuhnya)"
-              maxlength="29"
-              value=${selectedValues[`zbee_label_${d.id}`] || ''}
-              onInput=${(e) => handleFieldChange(d.id, 'zbee_label', e.target.value)}
-              class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 flex-1" />
-          </div>
-        </div>
-      </td>
-    </tr>
-    `}
-  `;
 
   return html`
     <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-center items-center">
@@ -431,13 +442,33 @@ function TabSelect({ }) {
                 <table class="w-full text-left border-collapse whitespace-nowrap">
                   <thead>
                     <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                      <${Th} title="ID" tooltipIndex=${1} />
-                      <${Th} title="Pin" tooltipIndex=${2} />
-                      <${Th} title="Type(s) of pin(s)" tooltipIndex=${3} center=${true} />
+                      <${Th} title="ID" tooltipIndex=${1} getTooltipText=${getTooltipText} />
+                      <${Th} title="Pin" tooltipIndex=${2} getTooltipText=${getTooltipText} />
+                      <${Th} title="Type(s) of pin(s)" tooltipIndex=${3} center=${true} getTooltipText=${getTooltipText} />
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-white/40">
-                    ${varselect && varselect.map((d) => html`<${ArraySelect} d=${d} />`)}
+                    ${varselect && html`
+                      <!-- Physical pins section -->
+                      <tr class="bg-gradient-to-r from-slate-100 to-slate-50 cursor-pointer hover:from-slate-200 hover:to-slate-100 transition-colors" onclick=${() => toggleSection('physical')}>
+                        <td colspan="3" class="px-6 py-3 text-lg font-bold text-slate-700">
+                          <span class="mr-2 text-slate-500">${expandedSections.physical ? '▼' : '▶'}</span>
+                          ${language === 'ru' ? 'Физические пины STM32' : 'Physical pins of STM32'}
+                          <span class="ml-2 text-sm font-normal text-slate-500">(${varselect.filter(d => d.id < 89).length})</span>
+                        </td>
+                      </tr>
+                      ${expandedSections.physical && varselect.filter(d => d.id < 89).map((d) => html`<${ArraySelect} d=${d} selectedValues=${selectedValues} isRowDisabled=${isRowDisabled} handleRadioChange=${handleRadioChange} handleFieldChange=${handleFieldChange} />`)}
+                      
+                      <!-- Zigbee virtual pins section -->
+                      <tr class="bg-gradient-to-r from-cyan-100 to-cyan-50 cursor-pointer hover:from-cyan-200 hover:to-cyan-100 transition-colors" onclick=${() => toggleSection('zigbee')}>
+                        <td colspan="3" class="px-6 py-3 text-lg font-bold text-cyan-700">
+                          <span class="mr-2 text-cyan-500">${expandedSections.zigbee ? '▼' : '▶'}</span>
+                          ${language === 'ru' ? 'Виртуальные пины Zigbee' : 'Virtual pins of Zigbee'}
+                          <span class="ml-2 text-sm font-normal text-cyan-500">(${varselect.filter(d => d.id >= 89).length})</span>
+                        </td>
+                      </tr>
+                      ${expandedSections.zigbee && varselect.filter(d => d.id >= 89).map((d) => html`<${ArraySelect} d=${d} selectedValues=${selectedValues} isRowDisabled=${isRowDisabled} handleRadioChange=${handleRadioChange} handleFieldChange=${handleFieldChange} />`)}
+                    `}
                   </tbody>
                 </table>
               </div>

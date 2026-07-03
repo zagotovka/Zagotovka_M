@@ -205,7 +205,7 @@ function TabSwitch({ }) {
     fetch('/api/connection/del', {
       method: 'post',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: id, pin: pinName.trim() })
+      body: JSON.stringify({ id: id, pin: pinName.trim(), idout: idout })
     })
       .then((r) => r.json())
       .then((r) => {

@@ -157,6 +157,7 @@ void SetSettingsConfig() {
   writeField(&USBHFile, buffer, "mqtt_pswd", "\"%s\"", SetSettings.mqtt_pswd);
   writeField(&USBHFile, buffer, "txmqttop", "\"%s\"", SetSettings.txmqttop);
   writeField(&USBHFile, buffer, "rxmqttop", "\"%s\"", SetSettings.rxmqttop);
+  writeField(&USBHFile, buffer, "rxzbtop", "\"%s\"", SetSettings.rxzbtop);
 
   writeField(&USBHFile, buffer, "mqtt_hst", "\"%s\"", SetSettings.mqtt_hst);
 
@@ -249,6 +250,7 @@ void StartSettingsConfig() {
   writeField(&USBHFile, buffer, "mqtt_pswd", "\"\"");
   writeField(&USBHFile, buffer, "txmqttop", "\"%s\"", MQTT_TPC);
   writeField(&USBHFile, buffer, "rxmqttop", "\"\"");
+  writeField(&USBHFile, buffer, "rxzbtop", "\"%s\"", RXZBTOP);
 
   writeField(&USBHFile, buffer, "mqtt_hst", "\"192.168.1.100\"");
 
@@ -277,8 +279,8 @@ void StartSettingsConfig() {
   for (int i = 0; i < 5; i++) {
     writeField(&USBHFile, buffer, "macaddr%d", "%d", i, 0);
   }
-  // Write default log filter mask (0x3FF = all categories enabled)
-  writeField(&USBHFile, buffer, "log_filter_mask", "%d", 0x3FF);
+  // Write default log filter mask (0x7FF = all categories enabled)
+  writeField(&USBHFile, buffer, "log_filter_mask", "%d", 0x7FF);
 
   // Write the last MAC address field without comma
   snprintf(buffer, JSON_BUF_SIZE, "\"macaddr5\":%d", 0);
@@ -463,6 +465,8 @@ void GetSettingsConfig() {
       strncpy(SetSettings.rxmqttop, value, sizeof(SetSettings.rxmqttop) - 1);
       //			printf("Found key: %s, value: %s\r\n", key,
       // value);
+    } else if (strcmp(key, "rxzbtop") == 0) {
+      strncpy(SetSettings.rxzbtop, value, sizeof(SetSettings.rxzbtop) - 1);
     } else if (strcmp(key, "mqtt_hst") == 0) {
       strncpy(SetSettings.mqtt_hst, value, sizeof(SetSettings.mqtt_hst) - 1);
     } else if (strcmp(key, "tel") == 0) {
@@ -2451,5 +2455,166 @@ cleanup:
   mark_slice_dirty(&g_ver_pid);
   f_close(&USBHFile);
   printf("[PID] Config saved to pid.ini\r\n");
+}
+/***********************************************************************************************/
+
+/************************** Zigbee Config *********************************/
+
+bool zbee_is_valid_ieee(const char *s) {
+  if (strlen(s) != 16) return false;
+  for (int i = 0; i < 16; i++) {
+    char c = s[i];
+    if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')))
+      return false;
+  }
+  return true;
+}
+
+void zbee_validate_ieee(char *ieee) {
+  for (int i = 0; i < 16; i++) {
+    if (ieee[i] == '\0') {
+      while (i < 16) { ieee[i] = '0'; i++; }
+      ieee[16] = '\0';
+      break;
+    }
+    if ((ieee[i] < '0' || ieee[i] > '9') && (ieee[i] < 'A' || ieee[i] > 'F') && (ieee[i] < 'a' || ieee[i] > 'f')) {
+      ieee[i] = '0';
+    }
+  }
+}
+
+void GetZigbeeConfig(void) {
+  FILINFO finfo;
+  FRESULT fresult;
+
+  fresult = f_stat("zigbee.ini", &finfo);
+  if (fresult != FR_OK) {
+    printf("zigbee.ini not found, using defaults\r\n");
+    return;
+  }
+  printf("zigbee.ini has size: %lu bytes\r\n", finfo.fsize);
+  if (f_open(&USBHFile, "zigbee.ini", FA_READ) != FR_OK) {
+    printf("ERROR: Cannot open zigbee.ini!\r\n");
+    return;
+  }
+
+  char *buf = pvPortMalloc(finfo.fsize + 1);
+  if (!buf) {
+    printf("ERROR: Out of memory reading zigbee.ini\r\n");
+    f_close(&USBHFile);
+    return;
+  }
+
+  UINT bytesRead;
+  fresult = f_read(&USBHFile, buf, finfo.fsize, &bytesRead);
+  f_close(&USBHFile);
+  if (fresult != FR_OK || bytesRead == 0) {
+    vPortFree(buf);
+    return;
+  }
+  buf[bytesRead] = '\0';
+
+  /* Парсим JSON */
+  struct mg_str body = mg_str_n(buf, strlen(buf));
+
+  int arr_ofs = mg_json_get(body, "$.zigbee", NULL);
+  if (arr_ofs < 0) {
+    vPortFree(buf);
+    if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    return;
+  }
+  struct mg_str arr = mg_str_n(body.buf + arr_ofs, body.len - (size_t)arr_ofs);
+
+  memset(ZigbeeConf, 0, sizeof(ZigbeeConf));
+
+  int idx = 0;
+  size_t pos = 0;
+  struct mg_str key, elem;
+  while (idx < NUMZBEE && (pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
+    char *ieee = mg_json_get_str(elem, "$.ieee");
+    if (ieee) {
+      strncpy(ZigbeeConf[idx].zbee_ieee, ieee, sizeof(ZigbeeConf[idx].zbee_ieee) - 1);
+      zbee_validate_ieee(ZigbeeConf[idx].zbee_ieee);
+      mg_free(ieee);
+    }
+    
+    char *label = mg_json_get_str(elem, "$.label");
+    if (label) {
+      strncpy(ZigbeeConf[idx].zbee_label, label, sizeof(ZigbeeConf[idx].zbee_label) - 1);
+      mg_free(label);
+    }
+
+    char *info = mg_json_get_str(elem, "$.info");
+    if (info) {
+      strncpy(ZigbeeConf[idx].info, info, sizeof(ZigbeeConf[idx].info) - 1);
+      mg_free(info);
+    }
+
+    ZigbeeConf[idx].zbee_endpoint = (uint8_t)mg_json_get_long(elem, "$.ep", 1);
+    ZigbeeConf[idx].zbee_cluster = (uint16_t)mg_json_get_long(elem, "$.cluster", 6);
+    ZigbeeConf[idx].zbee_attribute = (uint16_t)mg_json_get_long(elem, "$.attr", 0);
+    ZigbeeConf[idx].onoff = (uint8_t)mg_json_get_long(elem, "$.onoff", 1);
+    ZigbeeConf[idx].dvalue = (int)mg_json_get_long(elem, "$.dvalue", 0);
+    ZigbeeConf[idx].state = (uint8_t)mg_json_get_long(elem, "$.state", 0);
+    ZigbeeConf[idx].topin = 11; // Always 11 for Zigbee
+
+    idx++;
+  }
+  vPortFree(buf);
+  if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  printf("[ZIGBEE] Loaded %d slots from zigbee.ini\r\n", idx);
+}
+
+void SetZigbeeConfig(void) {
+  FRESULT fresult;
+  UINT byteswritten;
+  static char buf[1024];
+  int len = 0;
+
+  fresult = f_open(&USBHFile, (const TCHAR *)"zigbee.ini",
+                   FA_CREATE_ALWAYS | FA_WRITE);
+  if (fresult != FR_OK) {
+    printf("Error: Could not open zigbee.ini for writing\n");
+    return;
+  }
+
+  const char *start = "{\"zigbee\":[";
+  fresult = f_write(&USBHFile, start, strlen(start), &byteswritten);
+  if (fresult != FR_OK) goto cleanup;
+
+  bool first = true;
+  for (int i = 0; i < NUMZBEE; i++) {
+    // Сохраняем только валидные записи с IEEE-адресом
+    if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
+
+    if (!first) {
+      fresult = f_write(&USBHFile, ",", 1, &byteswritten);
+      if (fresult != FR_OK) goto cleanup;
+    }
+    first = false;
+
+    len = snprintf(buf, sizeof(buf),
+        "{\"ieee\":\"%s\",\"ep\":%d,\"cluster\":%d,\"attr\":%d,"
+        "\"label\":\"%s\",\"onoff\":%d,\"dvalue\":%d,\"state\":%d,\"info\":\"%s\"}",
+        ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint, ZigbeeConf[i].zbee_cluster,
+        ZigbeeConf[i].zbee_attribute, ZigbeeConf[i].zbee_label, ZigbeeConf[i].onoff,
+        ZigbeeConf[i].dvalue, ZigbeeConf[i].state, ZigbeeConf[i].info);
+    if (len <= 0 || len >= (int)sizeof(buf)) continue;
+
+    fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
+    if (fresult != FR_OK) goto cleanup;
+  }
+
+  const char *end = "]}";
+  fresult = f_write(&USBHFile, end, strlen(end), &byteswritten);
+
+cleanup:
+  if (fresult != FR_OK) {
+    printf("Error: Failed to write zigbee.ini (error: %d)\n", fresult);
+  }
+  extern volatile uint32_t g_ver_zigbee;
+  mark_slice_dirty(&g_ver_zigbee);
+  f_close(&USBHFile);
+  printf("[ZIGBEE] Config saved to zigbee.ini\r\n");
 }
 /***********************************************************************************************/

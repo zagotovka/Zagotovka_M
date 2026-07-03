@@ -156,7 +156,8 @@ export const enlangsettings = [
   'Day Length - Duration of daylight, calculated automatically based on coordinates and current date.', // 22
   'Next full moon - Date and time of the next full moon, calculated automatically.', // 23
   'Date - Date for offline mode in dd.mm.yy format. Used when there is no access to the NTP server. Example: 15.03.25', // 24
-  'Time - Time for offline mode in hh:mm:ss format. Used when there is no access to the NTP server. Example: 14:30:00' // 25
+  'Time - Time for offline mode in hh:mm:ss format. Used when there is no access to the NTP server. Example: 14:30:00', // 25
+  'RX Z2M topic - Zigbee2MQTT topic prefix. Default: zigbee2mqtt. The device subscribes to {prefix}/data/... and publishes commands to {prefix}/cmd/.... Example: zigbee2mqtt' // 26
 ];
 
 export const enlangsettingsmap = {

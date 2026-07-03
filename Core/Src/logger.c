@@ -35,7 +35,8 @@ const char* cat_prefixes[] = {
     "[PID] ",
     "[SETTINGS] ",
     "[ETH] ",
-    "[PHY] "
+    "[PHY] ",
+    "[Z2M] "
 };
 
 const char* logger_get_category_name(LogCategory_t cat) {
@@ -50,6 +51,7 @@ const char* logger_get_category_name(LogCategory_t cat) {
         case LOG_CAT_SETTINGS:  return "SETTINGS";
         case LOG_CAT_ETH:       return "ETH";
         case LOG_CAT_PHY:       return "PHY";
+        case LOG_CAT_Z2M:       return "Z2M";
         default:                return "UNKNOWN";
     }
 }

@@ -849,6 +849,12 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/switch/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/switch/set", c->id));
 				handle_switch_set(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/get"), NULL)) {
+				MG_INFO(("%lu Processing /api/zigbee/get", c->id));
+				handle_zigbee_get(c);
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/set"), NULL)) {
+				MG_INFO(("%lu Processing /api/zigbee/set", c->id));
+				handle_zigbee_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/onoff/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/onoff/set", c->id));
 				handle_onoff_set(c, hm);
@@ -1123,22 +1129,23 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     MG_INFO(("%lu PUBLISHED %.*s -> %.*s", c->id, (int) data.len, data.buf, (int) pubt.len, pubt.buf));
     mqtt_publish_logfilter_status();
 
-    for (int i = 0; i < NUMPIN; i++) {
-      if (PinsConf[i].topin == 11 && PinsConf[i].zbee_ieee[0] != '\0') {
+    for (int i = 0; i < NUMZBEE; i++) {
+      if (ZigbeeConf[i].zbee_ieee[0] != '\0') {
         char zbee_sub_topic[80];
         snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
-                 "zigbee2mqtt/data/%s/%d/%04X/%04X",
-                 PinsConf[i].zbee_ieee,
-                 PinsConf[i].zbee_endpoint,
-                 PinsConf[i].zbee_cluster,
-                 PinsConf[i].zbee_attribute);
+                 "%s/data/%s/%d/%04X/%04X",
+                 get_rxzbtop(),
+                 ZigbeeConf[i].zbee_ieee,
+                 ZigbeeConf[i].zbee_endpoint,
+                 ZigbeeConf[i].zbee_cluster,
+                 ZigbeeConf[i].zbee_attribute);
         struct mg_mqtt_opts zbee_sub;
         memset(&zbee_sub, 0, sizeof(zbee_sub));
         zbee_sub.topic = mg_str(zbee_sub_topic);
         zbee_sub.qos = s_qos;
         mg_mqtt_sub(c, &zbee_sub);
-        printf("[MQTT] SUBSCRIBED to '%s' (zigbee pin %d)\r\n",
-               zbee_sub_topic, i);
+        printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n",
+               zbee_sub_topic, NUMPIN + i);
       }
     }
   } else if (ev == MG_EV_MQTT_MSG) {
@@ -1346,13 +1353,22 @@ static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
 const char *json_escape_str(char *dst, const char *src, size_t dst_sz) {
     size_t j = 0;
     for (size_t i = 0; src[i] && j < dst_sz - 1; i++) {
-        switch (src[i]) {
-            case '"':  if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = '"';  } break;
-            case '\\': if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = '\\'; } break;
-            case '\n': if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = 'n';  } break;
-            case '\r': if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = 'r';  } break;
-            case '\t': if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = 't';  } break;
-            default:   dst[j++] = src[i]; break;
+        unsigned char c = (unsigned char)src[i];
+        if (c < 0x20) {
+            /* все контрольные символы 0x00–0x1F → \u00XX */
+            static const char hex[] = "0123456789abcdef";
+            if (j + 6 < dst_sz) {
+                dst[j++] = '\\'; dst[j++] = 'u';
+                dst[j++] = '0';  dst[j++] = '0';
+                dst[j++] = hex[(c >> 4) & 0xF];
+                dst[j++] = hex[c & 0xF];
+            }
+        } else if (c == '"') {
+            if (j + 2 < dst_sz) { dst[j++] = '\\'; dst[j++] = '"'; }
+        } else if (c == '\\') {
+            if (j + 2 < dst_sz) { dst[j++] = '\\'; dst[j++] = '\\'; }
+        } else {
+            dst[j++] = src[i];
         }
     }
     dst[j] = '\0';
@@ -1427,7 +1443,9 @@ static void handle_get_pins(struct mg_connection *c,
         if (t == 0) continue;
 
         char esc_info[128];
+        char esc_pins[16];
         json_escape_str(esc_info, PinsConf[i].info, sizeof(esc_info));
+        json_escape_str(esc_pins, PinsInfo[i].pins, sizeof(esc_pins));
 
         switch (t) {
 
@@ -1441,7 +1459,7 @@ static void handle_get_pins(struct mg_connection *c,
                 "\"ptype\":%d,\"onoff\":%d,"
                 "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
                 "\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].ptype, PinsConf[i].onoff,
                 esc_sc, esc_dc, esc_lp, esc_info);
             break;
@@ -1451,7 +1469,7 @@ static void handle_get_pins(struct mg_connection *c,
             CHUNK_SEND_FMT(c, &first,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"SWITCH\","
                 "\"ptype\":%d,\"onoff\":%d,\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].ptype, PinsConf[i].onoff, esc_info);
             break;
 
@@ -1459,7 +1477,7 @@ static void handle_get_pins(struct mg_connection *c,
             CHUNK_SEND_FMT(c, &first,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"ONEWIRE\","
                 "\"onoff\":%d,\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].onoff, esc_info);
             break;
 
@@ -1468,7 +1486,7 @@ static void handle_get_pins(struct mg_connection *c,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"PWM\","
                 "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,"
                 "\"onoff\":%d,\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].dvalue, PinsConf[i].pwm, PinsConf[i].pwmmax,
                 PinsConf[i].onoff, esc_info);
             break;
@@ -1477,7 +1495,7 @@ static void handle_get_pins(struct mg_connection *c,
             CHUNK_SEND_FMT(c, &first,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"DEVICE\","
                 "\"onoff\":%d,\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].onoff, esc_info);
             break;
 
@@ -1486,7 +1504,7 @@ static void handle_get_pins(struct mg_connection *c,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"ENCODER\","
                 "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,"
                 "\"ponr\":%d,\"onoff\":%d,\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].dvalue, PinsConf[i].pwm, PinsConf[i].pwmmax,
                 PinsConf[i].ponr, PinsConf[i].onoff, esc_info);
             break;
@@ -1495,7 +1513,7 @@ static void handle_get_pins(struct mg_connection *c,
             CHUNK_SEND_FMT(c, &first,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"SECURITY\","
                 "\"ptype\":%d,\"onoff\":%d,\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].ptype, PinsConf[i].onoff, esc_info);
             break;
 
@@ -1534,17 +1552,19 @@ void handle_buttons(struct mg_connection *c) {
         }
 
         char esc_info[64], esc_sc[200], esc_dc[200], esc_lp[200];
+        char esc_pins[16];
         json_escape_str(esc_sc,   PinsConf[i].sclick, sizeof(esc_sc));
         json_escape_str(esc_dc,   PinsConf[i].dclick, sizeof(esc_dc));
         json_escape_str(esc_lp,   PinsConf[i].lpress, sizeof(esc_lp));
         json_escape_str(esc_info, PinsConf[i].info,   sizeof(esc_info));
+        json_escape_str(esc_pins, PinsInfo[i].pins,   sizeof(esc_pins));
 
         pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
             "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
             "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
             first ? "" : ",",
-            PinsConf[i].topin, i, PinsInfo[i].pins,
+            PinsConf[i].topin, i, esc_pins,
             PinsConf[i].ptype,
             esc_sc, esc_dc, esc_lp, esc_info,
             PinsConf[i].onoff);
@@ -1590,13 +1610,15 @@ void handle_switches(struct mg_connection *c) {
         }
 
         char esc_info[64];
+        char esc_pins[16];
         json_escape_str(esc_info, PinsConf[i].info, sizeof(esc_info));
+        json_escape_str(esc_pins, PinsInfo[i].pins, sizeof(esc_pins));
 
         pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
             "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
             first ? "" : ",",
-            PinsConf[i].topin, i, PinsInfo[i].pins,
+            PinsConf[i].topin, i, esc_pins,
             PinsConf[i].ptype, esc_info, PinsConf[i].onoff);
 
         first = false;
@@ -1607,6 +1629,9 @@ void handle_switches(struct mg_connection *c) {
     first = true;
 
     for (int i = 0; i < NUMPINLINKS; i++) {
+        if (PinsLinks[i].idin == 0 && PinsLinks[i].idout == 0)
+            continue;
+
         int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 80) {
             MG_ERROR(("switches: OVERFLOW at pintopin %d, pos=%d remaining=%d",
@@ -1614,10 +1639,13 @@ void handle_switches(struct mg_connection *c) {
             break;
         }
 
+        char esc_pp_pins[16];
+        json_escape_str(esc_pp_pins, PinsLinks[i].pins, sizeof(esc_pp_pins));
+
         pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
             first ? "" : ",",
-            PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins);
+            PinsLinks[i].idin, PinsLinks[i].idout, esc_pp_pins);
 
         first = false;
     }
@@ -1693,7 +1721,11 @@ void handle_encoders(struct mg_connection *c) {
         pinact[pa_off] = '\0';
 
         char esc_info[64];
+        char esc_pins[16];
+        char esc_encb[16];
         json_escape_str(esc_info, PinsConf[i].info, sizeof(esc_info));
+        json_escape_str(esc_pins, PinsInfo[i].pins, sizeof(esc_pins));
+        json_escape_str(esc_encb, encb_pin, sizeof(esc_encb));
 
         /* ── Проверка остатка буфера перед записью слота ── */
         int remaining = (int)G_BODY_SIZE - pos;
@@ -1709,8 +1741,8 @@ void handle_encoders(struct mg_connection *c) {
             "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,\"ponr\":%d,"
             "\"pinact\":{%s},\"info\":\"%s\",\"onoff\":%d}",
             first ? "" : ",",
-            PinsConf[i].topin, i, PinsInfo[i].pins,
-            encoderb_id, encb_pin,
+            PinsConf[i].topin, i, esc_pins,
+            encoderb_id, esc_encb,
             pwm_dvalue, pwm_freq, pwm_max,
             PinsConf[i].ponr,
             pinact, esc_info, PinsConf[i].onoff);
@@ -1723,6 +1755,9 @@ void handle_encoders(struct mg_connection *c) {
     first = true;
 
     for (int i = 0; i < NUMPINLINKS; i++) {
+        if (PinsLinks[i].idin == 0 && PinsLinks[i].idout == 0)
+            continue;
+
         int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 80) {
             MG_ERROR(("encoders: OVERFLOW at pintopin %d, pos=%d remaining=%d",
@@ -1730,10 +1765,13 @@ void handle_encoders(struct mg_connection *c) {
             break;
         }
 
+        char esc_pp_pins[16];
+        json_escape_str(esc_pp_pins, PinsLinks[i].pins, sizeof(esc_pp_pins));
+
         pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
             first ? "" : ",",
-            PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins);
+            PinsLinks[i].idin, PinsLinks[i].idout, esc_pp_pins);
 
         first = false;
     }
@@ -1777,7 +1815,9 @@ static void handle_pid(struct mg_connection *c) {
         }
 
         char esc_info[64];
+        char esc_pname[16];
         json_escape_str(esc_info, PidConf[i].info, sizeof(esc_info));
+        json_escape_str(esc_pname, pin_name, sizeof(esc_pname));
 
         /* Проверка — остаток буфера перед записью слота */
         int remaining = (int)G_BODY_SIZE - pos;
@@ -1796,8 +1836,8 @@ static void handle_pid(struct mg_connection *c) {
             "\"duty\":%d,\"info\":\"%s\",\"onoff\":%d,"
             "\"tune_state\":%u,\"tune_progress\":%u}",
             first ? "" : ",",
-            i + 1, pin_name,
-            pin_name, pin_id,
+            i + 1, esc_pname,
+            esc_pname, pin_id,
             PidConf[i].selsens == 1 ? "1" : "2",
             PidConf[i].sernum,
             PidConf[i].preset,
@@ -1857,15 +1897,20 @@ static void handle_security(struct mg_connection *c) {
         const char *send_sms = PinsConf[i].send_sms[0] ? PinsConf[i].send_sms : "NO";
 
         char esc_info2[64];
+        char esc_pins2[16];
+        char esc_action[64], esc_sms[16];
         json_escape_str(esc_info2, PinsConf[i].info, sizeof(esc_info2));
+        json_escape_str(esc_pins2, PinsInfo[i].pins, sizeof(esc_pins2));
+        json_escape_str(esc_action, action, sizeof(esc_action));
+        json_escape_str(esc_sms, send_sms, sizeof(esc_sms));
 
         pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
             "\"action\":\"%s\",\"send_sms\":\"%s\","
             "\"info\":\"%s\",\"onoff\":%d}",
             first ? "" : ",",
-            PinsConf[i].topin, i, PinsInfo[i].pins, PinsConf[i].ptype,
-            action, send_sms, esc_info2, PinsConf[i].onoff);
+            PinsConf[i].topin, i, esc_pins2, PinsConf[i].ptype,
+            esc_action, esc_sms, esc_info2, PinsConf[i].onoff);
 
         first = false;
     }
@@ -2103,11 +2148,13 @@ static void handle_onewire(struct mg_connection *c) {
                 MG_ERROR(("onewire: OVERFLOW before no-sensor pin %d, pos=%d", i, pos));
                 goto close_json;
             }
+            char esc_ow_pins[16];
+            json_escape_str(esc_ow_pins, PinsInfo[i].pins, sizeof(esc_ow_pins));
             pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
                 "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":0,"
                 "\"numsens\":0,\"info\":\"No active sensors found\",\"onoff\":0}",
                 first_pin ? "" : ",",
-                i, PinsInfo[i].pins);
+                i, esc_ow_pins);
             first_pin = false;
         }
     }

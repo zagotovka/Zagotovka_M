@@ -14,6 +14,25 @@ struct dbPinsConf PinsConf[NUMPIN];
 
 struct dbPinToPin PinsLinks[NUMPINLINKS];
 
+/* ── ZIGBEE PLAN B ── */
+ZigbeeVirtualPin ZigbeeConf[NUMZBEE];
+
+PinView GetPinView(int id) {
+    PinView v = {0};
+    if (id < NUMPIN) {
+        struct dbPinsConf *p = &PinsConf[id];
+        v = (PinView){ p->topin, p->state, p->dvalue, p->info, false, p };
+    } else {
+        int zbi = ZbeeIdx(id);
+        if (zbi >= 0 && zbi < NUMZBEE) {
+            ZigbeeVirtualPin *z = &ZigbeeConf[zbi];
+            v = (PinView){ z->topin, z->state, z->dvalue, z->zbee_label, true, z };
+        }
+    }
+    return v;
+}
+
+
 //struct dbCron CronTask[NUMTASK];
 
 struct dbSettings SetSettings;

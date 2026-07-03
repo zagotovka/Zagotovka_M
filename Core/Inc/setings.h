@@ -52,6 +52,7 @@ void SetPidConfig();
 #define MQTT_PRT 1883
 #define MQTT_QOS 0
 #define MQTT_TPC "Zagotovka"
+#define RXZBTOP "zigbee2mqtt"
 //void writedatatofile(const char* json_input);
 
 #endif /* INC_SETINGS_H_ */

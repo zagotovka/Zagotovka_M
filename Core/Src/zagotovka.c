@@ -141,6 +141,7 @@ volatile uint32_t g_ver_switch  = 1;
 volatile uint32_t g_ver_button  = 1;
 volatile uint32_t g_ver_security = 1;
 volatile uint32_t g_ver_pins     = 1;
+volatile uint32_t g_ver_zigbee   = 1;
 
 void mark_slice_dirty(volatile uint32_t *ver) {
     taskENTER_CRITICAL();
@@ -314,27 +315,30 @@ void handle_select_get(struct mg_connection *c) {
     conf = PinsConf[i];
     taskEXIT_CRITICAL();
 
-    if (conf.topin == 11) {
-      mg_http_printf_chunk(c,
-        "%s{\"id\":%d,\"pins\":\"%s\",\"topin\":%d,"
-        "\"onewire\":%d,\"pwm\":%d,\"i2cdata\":%d,\"i2cclok\":%d,"
-        "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
-        "\"zbee_cluster\":%d,\"zbee_attribute\":%d,"
-        "\"zbee_label\":\"%s\"}",
-        (i == 0 ? "" : ","),
-        i, info->pins, conf.topin, info->onewire,
-        info->pwm, info->i2cdata, info->i2cclok,
-        conf.zbee_ieee, conf.zbee_endpoint,
-        conf.zbee_cluster, conf.zbee_attribute,
-        conf.zbee_label);
-    } else {
-      mg_http_printf_chunk(c,
-        "%s{\"id\":%d,\"pins\":\"%s\",\"topin\":%d,"
-        "\"onewire\":%d,\"pwm\":%d,\"i2cdata\":%d,\"i2cclok\":%d}",
-        (i == 0 ? "" : ","),
-        i, info->pins, conf.topin, info->onewire,
-        info->pwm, info->i2cdata, info->i2cclok);
-    }
+    mg_http_printf_chunk(c,
+      "%s{\"id\":%d,\"pins\":\"%s\",\"topin\":%d,"
+      "\"onewire\":%d,\"pwm\":%d,\"i2cdata\":%d,\"i2cclok\":%d}",
+      (i == 0 ? "" : ","),
+      i, info->pins, conf.topin, info->onewire,
+      info->pwm, info->i2cdata, info->i2cclok);
+  }
+
+  for (int i = 0; i < NUMZBEE; i++) {
+    ZigbeeVirtualPin zb;
+    taskENTER_CRITICAL();
+    zb = ZigbeeConf[i];
+    taskEXIT_CRITICAL();
+    uint8_t topin = (zb.zbee_ieee[0] != '\0') ? 11 : 0;
+    mg_http_printf_chunk(c,
+      ",{\"id\":%d,\"pins\":\"VPIN %d\",\"topin\":%d,"
+      "\"onewire\":0,\"pwm\":0,\"i2cdata\":0,\"i2cclok\":0,"
+      "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
+      "\"zbee_cluster\":%d,\"zbee_attribute\":%d,"
+      "\"zbee_label\":\"%s\"}",
+      NUMPIN + i, i, topin,
+      zb.zbee_ieee, zb.zbee_endpoint,
+      zb.zbee_cluster, zb.zbee_attribute,
+      zb.zbee_label);
   }
 
   mg_http_printf_chunk(c, "]}");
@@ -384,28 +388,32 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
                                strlen(json_string) - (size_t)arr_ofs);
 
   size_t pos = 0;
-  int i = 0;
+  int zbee_count = 0;
   struct mg_str key, elem;
-  while (i < num_pins && (pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
-    PinsConf[i].topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
-    if (PinsConf[i].topin == 11) {
-      char *zt = mg_json_get_str(elem, "$.zbee_ieee");
-      if (zt) {
-        strncpy(PinsConf[i].zbee_ieee, zt, sizeof(PinsConf[i].zbee_ieee) - 1);
-        PinsConf[i].zbee_ieee[sizeof(PinsConf[i].zbee_ieee) - 1] = '\0';
-        mg_free(zt);
+  while ((pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
+    long id = mg_json_get_long(elem, "$.id", -1);
+    if (id >= 0 && id < num_pins) {
+      PinsConf[id].topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
+    } else if (id >= num_pins && zbee_count < NUMZBEE) {
+      int zbi = id - num_pins;
+      char *ieee = mg_json_get_str(elem, "$.zbee_ieee");
+      if (ieee) {
+        strncpy(ZigbeeConf[zbi].zbee_ieee, ieee, sizeof(ZigbeeConf[zbi].zbee_ieee) - 1);
+        ZigbeeConf[zbi].zbee_ieee[sizeof(ZigbeeConf[zbi].zbee_ieee) - 1] = '\0';
+        mg_free(ieee);
       }
-      PinsConf[i].zbee_endpoint = (uint8_t)mg_json_get_long(elem, "$.zbee_endpoint", 1);
-      PinsConf[i].zbee_cluster = (uint16_t)mg_json_get_long(elem, "$.zbee_cluster", 0x0006);
-      PinsConf[i].zbee_attribute = (uint16_t)mg_json_get_long(elem, "$.zbee_attribute", 0);
-      char *zl = mg_json_get_str(elem, "$.zbee_label");
-      if (zl) {
-        strncpy(PinsConf[i].zbee_label, zl, sizeof(PinsConf[i].zbee_label) - 1);
-        PinsConf[i].zbee_label[sizeof(PinsConf[i].zbee_label) - 1] = '\0';
-        mg_free(zl);
+      char *label = mg_json_get_str(elem, "$.zbee_label");
+      if (label) {
+        strncpy(ZigbeeConf[zbi].zbee_label, label, sizeof(ZigbeeConf[zbi].zbee_label) - 1);
+        ZigbeeConf[zbi].zbee_label[sizeof(ZigbeeConf[zbi].zbee_label) - 1] = '\0';
+        mg_free(label);
       }
+      ZigbeeConf[zbi].zbee_endpoint = (uint8_t)mg_json_get_long(elem, "$.zbee_endpoint", 1);
+      ZigbeeConf[zbi].zbee_cluster = (uint16_t)mg_json_get_long(elem, "$.zbee_cluster", 0x0006);
+      ZigbeeConf[zbi].zbee_attribute = (uint16_t)mg_json_get_long(elem, "$.zbee_attribute", 0);
+      ZigbeeConf[zbi].topin = (ZigbeeConf[zbi].zbee_ieee[0] != '\0') ? 11 : 0;
+      zbee_count++;
     }
-    i++;
   }
 
   if (my_DgnTaskHandle)
@@ -414,6 +422,10 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
   xQueueSend(usbQueueHandle, &usbnum, 0);
   usbnum = 2;
   xQueueSend(usbQueueHandle, &usbnum, 0);
+  if (zbee_count > 0) {
+    usbnum = 7;
+    xQueueSend(usbQueueHandle, &usbnum, 0);
+  }
 }
 
 void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
@@ -521,12 +533,18 @@ void handle_pintopin_get(struct mg_connection *c) {
     link = PinsLinks[i];
     taskEXIT_CRITICAL();
 
+    if (link.idin == 0 && link.idout == 0)
+      continue;
+
+    char esc_pp_pins[16];
+    json_escape_str(esc_pp_pins, link.pins, sizeof(esc_pp_pins));
+
     if (elements_added > 0)
       mg_send(c, ",", 1);
 
     int len = snprintf(buf, sizeof(buf),
                        "{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
-                       link.idin, link.idout, link.pins);
+                       link.idin, link.idout, esc_pp_pins);
     mg_http_write_chunk(c, buf, (size_t)len);
     elements_added++;
   }
@@ -685,8 +703,13 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
           if (indextu != -1) {
             PinsLinks[indextu].idin = id;
             PinsLinks[indextu].idout = pin_id;
-            strncpy(PinsLinks[indextu].pins, PinsInfo[pin_id].pins,
-                    sizeof(PinsLinks[indextu].pins) - 1);
+            if (pin_id < NUMPIN) {
+              strncpy(PinsLinks[indextu].pins, PinsInfo[pin_id].pins,
+                      sizeof(PinsLinks[indextu].pins) - 1);
+            } else {
+              strncpy(PinsLinks[indextu].pins, valbuf,
+                      sizeof(PinsLinks[indextu].pins) - 1);
+            }
             PinsLinks[indextu].pins[sizeof(PinsLinks[indextu].pins) - 1] = '\0';
           } else {
             printf("No free space in PinsLinks array. Last checked: findex=%d, "
@@ -853,8 +876,13 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
           if (indextu != -1) {
             PinsLinks[indextu].idin = id;
             PinsLinks[indextu].idout = pin_id;
-            strncpy(PinsLinks[indextu].pins, PinsInfo[pin_id].pins,
-                    sizeof(PinsLinks[indextu].pins) - 1);
+            if (pin_id < NUMPIN) {
+              strncpy(PinsLinks[indextu].pins, PinsInfo[pin_id].pins,
+                      sizeof(PinsLinks[indextu].pins) - 1);
+            } else {
+              strncpy(PinsLinks[indextu].pins, valbuf,
+                      sizeof(PinsLinks[indextu].pins) - 1);
+            }
             PinsLinks[indextu].pins[sizeof(PinsLinks[indextu].pins) - 1] = '\0';
           } else {
             printf("No free space in PinsLinks array. Last checked: "
@@ -1510,10 +1538,10 @@ static void emit_mqtt(struct mg_connection *c,
   int len = snprintf(buf, 512,
       "\"check_mqtt\":%d,\"mqtt_prt\":%d,"
       "\"mqtt_clt\":\"%s\",\"mqtt_usr\":\"%s\",\"mqtt_pswd\":\"%s\","
-      "\"txmqttop\":\"%s\",\"rxmqttop\":\"%s\",\"mqtt_hst\":\"%s\",",
+      "\"txmqttop\":\"%s\",\"rxmqttop\":\"%s\",\"rxzbtop\":\"%s\",\"mqtt_hst\":\"%s\",",
       s->check_mqtt, s->mqtt_prt,
       s->mqtt_clt, s->mqtt_usr, s->mqtt_pswd,
-      s->txmqttop, s->rxmqttop, s->mqtt_hst);
+      s->txmqttop, s->rxmqttop, s->rxzbtop, s->mqtt_hst);
   mg_http_write_chunk(c, buf, (size_t)len);
 }
 
@@ -1917,6 +1945,8 @@ void gen_mysett_json(const struct dbSettings *settings, char *buffer,
                      "\"txmqttop\": \"%s\",\n", settings->txmqttop);
   offset += snprintf(buffer + offset, buffer_size - offset,
                      "\"rxmqttop\": \"%s\",\n", settings->rxmqttop);
+  offset += snprintf(buffer + offset, buffer_size - offset,
+                     "\"rxzbtop\": \"%s\",\n", settings->rxzbtop);
   offset +=
       snprintf(buffer + offset, buffer_size - offset,
                "\"mqtt_hst\": \"%s\",\n", settings->mqtt_hst);
@@ -2338,6 +2368,9 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
   { char *_v = mg_json_get_str(body, "$.rxmqttop");
     if (_v) { strncpy(settings->rxmqttop, _v, sizeof(settings->rxmqttop) - 1);
     settings->rxmqttop[sizeof(settings->rxmqttop) - 1] = '\0'; mg_free(_v); } }
+  { char *_v = mg_json_get_str(body, "$.rxzbtop");
+    if (_v) { strncpy(settings->rxzbtop, _v, sizeof(settings->rxzbtop) - 1);
+    settings->rxzbtop[sizeof(settings->rxzbtop) - 1] = '\0'; mg_free(_v); } }
 
   { char *_v = mg_json_get_str(body, "$.offdate");
     if (_v) { int day=0,month=0,year=0; sscanf(_v, "%d.%d.%d", &day, &month, &year);
@@ -2502,6 +2535,7 @@ void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm,
   struct mg_str body = mg_str_n(hm->body.buf, hm->body.len);
   long id_val = mg_json_get_long(body, "$.id", -1);
   char *pin_str = mg_json_get_str(body, "$.pin");
+  long idout_val = mg_json_get_long(body, "$.idout", -1);
 
   if (id_val < 0 || !pin_str) {
     MG_INFO(("Response headers for connection %ld:", c->id));
@@ -2545,8 +2579,11 @@ void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm,
   }
 
   for (int i = 0; i < NUMPINLINKS; i++) {
-    if (PinsLinks[i].idin == id &&
-        strcmp(PinsLinks[i].pins, pin_str) == 0) {
+    bool match = (PinsLinks[i].idin == id);
+    if (match && idout_val >= 0) {
+      match = (PinsLinks[i].idout == (short)idout_val);
+    }
+    if (match && PinsLinks[i].idin != 0) {
       PinsLinks[i].idin = 0;
       PinsLinks[i].idout = 0;
       strcpy(PinsLinks[i].pins, "");
@@ -3411,35 +3448,41 @@ void parse_sim800l_json(const char *buffer) {
   //    printf("PinsConf[1].onoff = %d\n", PinsConf[1].onoff);
 }
 
-// === ZIGBEE v6 ===
+// === ZIGBEE PLAN B ===
 #define ZBEE_CMD_MIN_INTERVAL_MS 250
-static uint32_t s_zbee_last_cmd_tick[NUMPIN] = {0};
+static uint32_t s_zbee_last_cmd_tick[NUMZBEE] = {0};
 
-static bool zbee_cmd_throttle_ok(int pin_idx) {
+static bool zbee_cmd_throttle_ok(int zbee_idx) {
+    if (zbee_idx < 0 || zbee_idx >= NUMZBEE) return false;
     uint32_t now = HAL_GetTick();
     bool ok = false;
     taskENTER_CRITICAL();
-    if (now - s_zbee_last_cmd_tick[pin_idx] >= ZBEE_CMD_MIN_INTERVAL_MS) {
-        s_zbee_last_cmd_tick[pin_idx] = now;
+    if (now - s_zbee_last_cmd_tick[zbee_idx] >= ZBEE_CMD_MIN_INTERVAL_MS) {
+        s_zbee_last_cmd_tick[zbee_idx] = now;
         ok = true;
     }
     taskEXIT_CRITICAL();
     return ok;
 }
 
+const char* get_rxzbtop(void) {
+    return (SetSettings.rxzbtop[0] != '\0') ? SetSettings.rxzbtop : RXZBTOP;
+}
+
 static void mqtt_zigbee_handler(const char *topic, const char *payload) {
     struct mg_str body = mg_str_n(payload, strlen(payload));
 
-    for (int i = 0; i < NUMPIN; i++) {
-        if (PinsConf[i].topin != 11) continue;
+    for (int i = 0; i < NUMZBEE; i++) {
+        if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
 
         char expected[80];
         snprintf(expected, sizeof(expected),
-                 "zigbee2mqtt/data/%s/%d/%04X/%04X",
-                 PinsConf[i].zbee_ieee,
-                 PinsConf[i].zbee_endpoint,
-                 PinsConf[i].zbee_cluster,
-                 PinsConf[i].zbee_attribute);
+                 "%s/data/%s/%d/%04X/%04X",
+                 get_rxzbtop(),
+                 ZigbeeConf[i].zbee_ieee,
+                 ZigbeeConf[i].zbee_endpoint,
+                 ZigbeeConf[i].zbee_cluster,
+                 ZigbeeConf[i].zbee_attribute);
         if (strcmp(expected, topic) != 0) continue;
 
         int toklen = 0;
@@ -3454,28 +3497,28 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
             raw_len -= 2;
         }
 
-        printf("[Z2M] pin[%d] ieee='%s' ep=%d cl=%04X val='%.*s'\r\n",
-               i, PinsConf[i].zbee_ieee, PinsConf[i].zbee_endpoint,
-               PinsConf[i].zbee_cluster, raw_len, raw);
+        LOG_Z2M("zbee[%d] ieee='%s' ep=%d cl=%04X val='%.*s'\r\n",
+               NUMPIN + i, ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint,
+               ZigbeeConf[i].zbee_cluster, raw_len, raw);
 
         taskENTER_CRITICAL();
 
-        if (PinsConf[i].zbee_cluster == 0x0006) {
+        if (ZigbeeConf[i].zbee_cluster == 0x0006) {
             if (raw_len == 3 && memcmp(raw, "OFF", 3) == 0) {
-                PinsConf[i].state = 0;
-                PinsConf[i].dvalue = 0;
+                ZigbeeConf[i].state = 0;
+                ZigbeeConf[i].dvalue = 0;
             } else if (raw_len == 2 && memcmp(raw, "ON", 2) == 0) {
-                PinsConf[i].state = 1;
-                PinsConf[i].dvalue = 254;
+                ZigbeeConf[i].state = 1;
+                ZigbeeConf[i].dvalue = 254;
             }
-        } else if (PinsConf[i].zbee_cluster == 0x0008 ||
-                   PinsConf[i].zbee_cluster == 0x0300) {
+        } else if (ZigbeeConf[i].zbee_cluster == 0x0008 ||
+                   ZigbeeConf[i].zbee_cluster == 0x0300) {
             char numbuf[16];
             int copylen = raw_len < (int)sizeof(numbuf) - 1
                         ? raw_len : (int)sizeof(numbuf) - 1;
             memcpy(numbuf, raw, copylen);
             numbuf[copylen] = '\0';
-            PinsConf[i].dvalue = atoi(numbuf);
+            ZigbeeConf[i].dvalue = atoi(numbuf);
         }
 
         taskEXIT_CRITICAL();
@@ -3486,38 +3529,38 @@ void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
                        uint16_t cluster, uint8_t attribute,
                        const char *json_cmd) {
     extern osMessageQueueId_t zbeeCmdQueueHandle;
-    printf("[Z2M] SendZigbeeCommand ieee='%s' ep=%d cl=%04X attr=%04X cmd='%s'\r\n",
+    LOG_Z2M("SendZigbeeCommand ieee='%s' ep=%d cl=%04X attr=%04X cmd='%s'\r\n",
            zbee_ieee, endpoint, cluster, attribute, json_cmd);
 
-    int pin_idx = -1;
+    int zbee_idx = -1;
     taskENTER_CRITICAL();
-    for (int i = 0; i < NUMPIN; i++) {
-        if (PinsConf[i].topin == 11 &&
-            strcmp(PinsConf[i].zbee_ieee, zbee_ieee) == 0 &&
-            PinsConf[i].zbee_endpoint == endpoint &&
-            PinsConf[i].zbee_cluster == cluster &&
-            PinsConf[i].zbee_attribute == attribute) {
-            pin_idx = i;
+    for (int i = 0; i < NUMZBEE; i++) {
+        if (ZigbeeConf[i].zbee_ieee[0] != '\0' &&
+            strcmp(ZigbeeConf[i].zbee_ieee, zbee_ieee) == 0 &&
+            ZigbeeConf[i].zbee_endpoint == endpoint &&
+            ZigbeeConf[i].zbee_cluster == cluster &&
+            ZigbeeConf[i].zbee_attribute == attribute) {
+            zbee_idx = i;
             break;
         }
     }
     taskEXIT_CRITICAL();
 
-    if (pin_idx < 0) {
-        printf("[Z2M] No zigbee pin for %s/%d/%04X/%04X\r\n",
+    if (zbee_idx < 0) {
+        LOG_Z2M("No zigbee pin for %s/%d/%04X/%04X\r\n",
                zbee_ieee, endpoint, cluster, attribute);
         return;
     }
 
-    if (!zbee_cmd_throttle_ok(pin_idx)) {
-        printf("[Z2M] Throttled cmd to pin[%d]\r\n", pin_idx);
+    if (!zbee_cmd_throttle_ok(zbee_idx)) {
+        LOG_Z2M("Throttled cmd to zbee[%d]\r\n", NUMPIN + zbee_idx);
         return;
     }
 
     char set_topic[80];
     snprintf(set_topic, sizeof(set_topic),
-             "zigbee2mqtt/cmd/%s/%d/%04X",
-             zbee_ieee, endpoint, cluster);
+             "%s/cmd/%s/%d/%04X",
+             get_rxzbtop(), zbee_ieee, endpoint, cluster);
 
     ZbeeCmdMsg_t cmd;
     memset(&cmd, 0, sizeof(cmd));
@@ -3525,14 +3568,17 @@ void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
     strncpy(cmd.payload, json_cmd, sizeof(cmd.payload) - 1);
 
     if (xQueueSend(zbeeCmdQueueHandle, &cmd, 0) != pdPASS) {
-        printf("[Z2M] ZbeeCmd queue full, dropped: %s\r\n", set_topic);
+        LOG_Z2M("ZbeeCmd queue full, dropped: %s\r\n", set_topic);
     } else {
-        printf("[Z2M] Queued: topic='%s' payload='%s'\r\n", set_topic, json_cmd);
+        LOG_Z2M("Queued: topic='%s' payload='%s'\r\n", set_topic, json_cmd);
     }
 }
 
 void mqtt_message_handler(const char *topic, const char *payload) {
-  if (strncmp(topic, "zigbee2mqtt/", 12) == 0) {
+  const char *zbtop = get_rxzbtop();
+  size_t zbtop_len = strlen(zbtop);
+  if (strncmp(topic, zbtop, zbtop_len) == 0 &&
+      topic[zbtop_len] == '/') {
     mqtt_zigbee_handler(topic, payload);
     return;
   }
@@ -3950,12 +3996,19 @@ void Check_SunriseSunset_Actions() {
     //    printf("DEBUG: Sunset actions are disabled \r\n");
   }
 }
-void processPins(
-    uint8_t i,
-    uint8_t action) {
-  if (PinsConf[i].onoff == 0) {
-    printf("[processPins] Switch %d DISABLED (master off), action %d blocked\r\n", i, action);
-    return;
+void processPins(uint8_t i, uint8_t action) {
+  // Защита от OOB-доступа к PinsConf[] (ZIGBEE PLAN B)
+  if (i < NUMPIN) {
+    if (PinsConf[i].onoff == 0) {
+      printf("[processPins] Switch %d DISABLED (master off), action %d blocked\r\n", i, action);
+      return;
+    }
+  } else {
+    int zbi = ZbeeIdx(i);
+    if (zbi < NUMZBEE && ZigbeeConf[zbi].onoff == 0) {
+      printf("[processPins] Zigbee %d DISABLED (master off), action %d blocked\r\n", i, action);
+      return;
+    }
   }
   for (uint8_t a = 0; a < NUMPINLINKS; a++) {
     if (PinsLinks[a].idin == i) {
@@ -7022,3 +7075,72 @@ void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
                 "{\"status\":\"ok\"}");
 }
 /****************** End Zerg section **************************/
+
+void handle_zigbee_get(struct mg_connection *c) {
+  static char response[2048];
+  
+  int offset = 0;
+  offset += snprintf(response + offset, sizeof(response) - offset,
+                     "{\"lang\":\"%s\",\"ver\":%lu,\"zigbee\":[",
+                     SetSettings.lang, (unsigned long)g_ver_zigbee);
+  
+  bool first = true;
+  for (int i = 0; i < NUMZBEE && offset < (int)sizeof(response); i++) {
+    if (ZigbeeConf[i].zbee_ieee[0] == '\0' && ZigbeeConf[i].onoff == 0) continue; 
+    // We send it if it's active or has an IEEE assigned
+    if (!first) {
+      offset += snprintf(response + offset, sizeof(response) - offset, ",");
+    }
+    first = false;
+    offset += snprintf(response + offset, sizeof(response) - offset,
+                       "{\"id\":%d,\"ieee\":\"%s\",\"ep\":%d,\"cl\":%d,\"attr\":%d,\"onoff\":%d,\"info\":\"%s\"}",
+                       i, ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint,
+                       ZigbeeConf[i].zbee_cluster, ZigbeeConf[i].zbee_attribute,
+                       ZigbeeConf[i].onoff, ZigbeeConf[i].info);
+  }
+  
+  if (offset < (int)sizeof(response)) {
+    snprintf(response + offset, sizeof(response) - offset, "]}");
+  }
+  
+  mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", response);
+}
+
+void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
+  char body[512];
+  snprintf(body, sizeof(body), "%.*s", (int)hm->body.len, hm->body.buf);
+  struct mg_str json = mg_str(body);
+  
+  int id = (int)mg_json_get_long(json, "$.id", -1);
+  if (id >= 0 && id < NUMZBEE) {
+    char *ieee = mg_json_get_str(json, "$.ieee");
+    if (ieee) {
+      if (zbee_is_valid_ieee(ieee)) {
+        strncpy(ZigbeeConf[id].zbee_ieee, ieee, sizeof(ZigbeeConf[id].zbee_ieee) - 1);
+        ZigbeeConf[id].zbee_ieee[sizeof(ZigbeeConf[id].zbee_ieee) - 1] = '\0';
+      }
+      mg_free(ieee);
+    }
+    ZigbeeConf[id].zbee_endpoint = (uint8_t)mg_json_get_long(json, "$.ep", ZigbeeConf[id].zbee_endpoint);
+    ZigbeeConf[id].zbee_cluster = (uint16_t)mg_json_get_long(json, "$.cl", ZigbeeConf[id].zbee_cluster);
+    ZigbeeConf[id].zbee_attribute = (uint16_t)mg_json_get_long(json, "$.attr", ZigbeeConf[id].zbee_attribute);
+    ZigbeeConf[id].onoff = (uint8_t)mg_json_get_long(json, "$.onoff", ZigbeeConf[id].onoff);
+    
+    char *info = mg_json_get_str(json, "$.info");
+    if (info) {
+      strncpy(ZigbeeConf[id].info, info, sizeof(ZigbeeConf[id].info) - 1);
+      ZigbeeConf[id].info[sizeof(ZigbeeConf[id].info) - 1] = '\0';
+      mg_free(info);
+    }
+    
+    mark_slice_dirty(&g_ver_zigbee);
+    
+    extern osMessageQueueId_t usbQueueHandle;
+    uint32_t usbnum = 7;
+    if (usbQueueHandle) xQueueSend(usbQueueHandle, &usbnum, 0);
+    
+    mg_http_reply(c, 200, "Content-Type: application/json\r\n", "{\"status\":true}");
+  } else {
+    mg_http_reply(c, 400, "Content-Type: application/json\r\n", "{\"status\":false,\"message\":\"Invalid ID\"}");
+  }
+}

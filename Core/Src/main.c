@@ -1432,6 +1432,7 @@ void StartConfigTask(void *argument)
           GetOneWireConfig(); // если файл "onewire.ini" существует, открываем
                               // его
           GetPidConfig();     // если файл "pid.ini" существует, открываем его
+          GetZigbeeConfig();  // загружаем конфигурацию Zigbee
 
           InitPin(); // Инициализация пинов
 
@@ -1509,6 +1510,9 @@ void StartConfigTask(void *argument)
           break;
         case 6:
           SetPidConfig(); // Сохранение PID конфигурации в "pid.ini"
+          break;
+        case 7:
+          SetZigbeeConfig(); // Сохранение Zigbee конфигурации в "zigbee.ini"
           break;
         default:
           printf("xQueueReceive get wrong data! \r\n");
@@ -1754,9 +1758,9 @@ void StartWebServerTask(void *argument)
                 pub_opts.qos = s_qos;
                 pub_opts.retain = false;
                 mg_mqtt_pub(s_conn, &pub_opts);
-                printf("[Z2M] MQTT PUB: topic='%s'\r\n", zcmd.topic);
+                LOG_Z2M("MQTT PUB: topic='%s'\r\n", zcmd.topic);
             } else {
-                printf("[Z2M] MQTT DROP: s_conn=%p connected=%d\r\n",
+                LOG_Z2M("MQTT DROP: s_conn=%p connected=%d\r\n",
                        (void*)s_conn, mqtt_connected_reported);
             }
         }
@@ -1943,14 +1947,14 @@ void StartOutputTask(void *argument)
           output_peak = cur_out;
         }
       }
-      if (data_pin.id >= 0 &&
-          data_pin.id < NUMPIN) {
-        if (PinsConf[data_pin.id].topin == 11) {
+      if (data_pin.id >= 0 && data_pin.id < (NUMPIN + NUMZBEE)) {
+        if (IsZigbeePin(data_pin.id)) {
+          int zbi = ZbeeIdx(data_pin.id);
           const char *cmd = (data_pin.action == 1) ? "ON" : "OFF";
-          SendZigbeeCommand(PinsConf[data_pin.id].zbee_ieee,
-                            PinsConf[data_pin.id].zbee_endpoint,
-                            PinsConf[data_pin.id].zbee_cluster,
-                            PinsConf[data_pin.id].zbee_attribute, cmd);
+          SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                            ZigbeeConf[zbi].zbee_endpoint,
+                            ZigbeeConf[zbi].zbee_cluster,
+                            ZigbeeConf[zbi].zbee_attribute, cmd);
         } else {
           switch (data_pin.action) {
           case 0:

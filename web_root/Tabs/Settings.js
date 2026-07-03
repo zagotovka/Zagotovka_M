@@ -96,6 +96,7 @@ const SETTINGS_TIP_IDX = {
   'Password (MQTT)': 12,   // ключ для MQTT-пароля
   'TX topic':        13,
   'RX topic':        14,
+  'RX Z2M topic':    26,
   'HTTPS domain':    15,
   'Private Key':     16,
   'Public Key':      17,
@@ -153,7 +154,8 @@ const LOG_CATEGORIES = [
   { id: 6, key: 'PID',       labelEn: 'PID Controller', labelRu: 'ПИД-регулятор' },
   { id: 7, key: 'SETTINGS',  labelEn: 'Settings',  labelRu: 'Настройки' },
   { id: 8, key: 'ETH',       labelEn: 'Ethernet',  labelRu: 'Ethernet' },
-  { id: 9, key: 'PHY',       labelEn: 'PHY',       labelRu: 'PHY' }
+  { id: 9, key: 'PHY',       labelEn: 'PHY',       labelRu: 'PHY' },
+  { id: 10, key: 'Z2M',      labelEn: 'Z2M',       labelRu: 'Z2M' }
 ];
 
 function Settings({ }) {
@@ -681,7 +683,8 @@ function Settings({ }) {
                   { label: 'User',     key: 'mqtt_usr',  type: 'text',     maxlength: 32 },
                   { label: 'Password', key: 'mqtt_pswd', type: 'password', maxlength: 32, tipLabel: 'Password (MQTT)' },
                   { label: 'TX topic', key: 'txmqttop',  type: 'text',     maxlength: 32 },
-                  { label: 'RX topic', key: 'rxmqttop',  type: 'text',     maxlength: 32 }
+                  { label: 'RX topic', key: 'rxmqttop',  type: 'text',     maxlength: 32 },
+                  { label: 'Z2M topic', key: 'rxzbtop',  type: 'text',     maxlength: 32, tipLabel: 'RX Z2M topic', placeholder: 'zigbee2mqtt' }
                 ].map((item, index) => html`
                   <${FieldRow} label=${item.label} tip=${gt(item.tipLabel || item.label)} index=${index}>
                     <${pageSetting}
@@ -689,6 +692,7 @@ function Settings({ }) {
                       setfn=${(v) => handleChange(item.key, v)}
                       type=${item.type}
                       maxlength=${item.maxlength}
+                      placeholder=${item.placeholder || ''}
                       class=${`w-full px-3 py-2 bg-white/50 border ${errors[item.key] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                       error=${errors[item.key]}
                     />
@@ -967,7 +971,7 @@ function Settings({ }) {
                     ${(settings.lang || 'ru') === 'ru' ? 'Маска логов в RAM:' : 'RAM Log Mask:'}
                   </span>
                   <span class="px-2 py-0.5 bg-cyan-600/10 text-cyan-700 rounded-md font-mono font-bold text-lg">
-                    ${settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0x3FF} (0x${(settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0x3FF).toString(16).toUpperCase()})
+                    ${settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0x7FF} (0x${(settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0x7FF).toString(16).toUpperCase()})
                   </span>
                 </div>
               </div>
@@ -982,7 +986,7 @@ function Settings({ }) {
                     <span class="text-base font-bold text-slate-700 text-center">
                       ${(settings.lang || 'ru') === 'ru' ? 'Активные категории' : 'Active Categories'}
                     </span>
-                    <button type="button" onClick=${() => handleLogMaskChange(0x3FF)}
+                    <button type="button" onClick=${() => handleLogMaskChange(0x7FF)}
                       class="w-full py-3 text-sm font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded-xl hover:bg-teal-100 hover:text-teal-700 transition-all text-center shadow-sm">
                       ${(settings.lang || 'ru') === 'ru' ? 'Включить все' : 'Enable All'}
                     </button>
@@ -995,7 +999,7 @@ function Settings({ }) {
                   <div class="w-3/4 px-6 py-6">
                     <div class="grid grid-cols-4 gap-3">
                       ${LOG_CATEGORIES.map(cat => {
-                        const maskVal = settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0x3FF;
+                        const maskVal = settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0x7FF;
                         const isEnabled = (maskVal & (1 << cat.id)) !== 0;
                         return html`
                           <label class=${`flex items-center gap-3 p-3 rounded-xl border cursor-pointer select-none transition-all duration-300 ${isEnabled ? 'bg-cyan-50/70 border-cyan-300 shadow-[0_2px_10px_rgba(34,211,238,0.15)] scale-[1.02]' : 'bg-slate-50/40 border-slate-200 hover:bg-slate-100/50'}`}>

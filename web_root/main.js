@@ -56,6 +56,7 @@ import { TabSwitch } from './Tabs/TabSwitch.js';
 import { TabButton } from './Tabs/TabButton.js';
 import { TabEncoder } from './Tabs/TabEncoder.js';
 import { TabCron } from './Tabs/TabCron.js';
+import { TabZigbee } from './Tabs/TabZigbee.js';
 import { TabPid } from './Tabs/TabPid.js';
 import { TabOneWire } from './Tabs/TabOneWire.js';
 import { TabSecurity } from './Tabs/TabSecurity.js';
@@ -261,6 +262,12 @@ function Sidebar({ url, show }) {
           title="SIM800L/Security"
           icon=${Icons.cog}
           href="/Security"
+          url=${url}
+        />
+        <${NavLink}
+          title="Zigbee"
+          icon=${Icons.cog}
+          href="/zigbee"
           url=${url}
         />
         <${NavLink}
@@ -990,6 +997,7 @@ const App = function ({ }) {
         <${TabPid} path="pid" />
         <${TabOneWire} path="1wire" />
         <${TabSecurity} path="Security" />
+        <${TabZigbee} path="zigbee" />
         <${Settings} path="settings" />
         <${FirmwareUpdate} path="update" />
       <//>

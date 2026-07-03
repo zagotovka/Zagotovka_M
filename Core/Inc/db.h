@@ -11,7 +11,7 @@
 #define NUMPIN 89 // количество пинов
 #define PID_MAX_SLOTS 24 // макс. число PID-каналов
 #define NUMPINLINKS 100 // количество pin to pin
-#define NUMTASK 89 // кол-во CRON task
+#define NUMTASK 50 // кол-во CRON task
 
 #include "stdio.h"
 #include <stdbool.h>
@@ -218,6 +218,7 @@ struct dbSettings {	// Cтруктура для setting
 	char mqtt_pswd[32]; // MQTT Пароль для авторизации
 	char txmqttop[32];  // Transmit MQTT topic
 	char rxmqttop[32];  // Receive MQTT topic
+	char rxzbtop[32];   // Receive Zigbee2MQTT topic prefix (default "zigbee2mqtt")
 	char mqtt_hst[50];  // Your MQTT broker address or domain name (e.g. "192.168.1.100" or "broker.hivemq.com")
 	// Настройки IP адреса
 	short check_ip;	// check DHCP on/off
@@ -255,6 +256,44 @@ struct dbSettings {	// Cтруктура для setting
 	uint32_t log_filter_mask; // Маска фильтра логов
 };
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  ZIGBEE PLAN B — отдельный массив ZigbeeConf[NUMZBEE]
+ * ═══════════════════════════════════════════════════════════════════════════ */
+#define NUMZBEE 100
+_Static_assert(NUMPIN + NUMZBEE <= 255, "ID space exceeds uint8_t range");
 
+typedef struct {
+    char     zbee_ieee[17];      // IEEE-адрес без "0x", 16 hex + '\0'
+    uint8_t  zbee_endpoint;      // 1-240
+    uint16_t zbee_cluster;       // 0x0006=OnOff, 0x0008=Level, 0x0300=Color
+    uint16_t zbee_attribute;     // 0x0000 и т.д., зависит от кластера
+    char     zbee_label[30];     // Произвольное имя для UI
+    uint8_t  state;              // 0/1 — текущее состояние устройства
+    int      dvalue;             // яркость/hue/etc
+    uint8_t  onoff;              // Master-enable: 1=вкл, 0=выкл
+    char     info[30];           // служебное поле
+    uint8_t  topin;              // всегда 11 (ZIGBEE), для унификации
+} ZigbeeVirtualPin;
+
+extern ZigbeeVirtualPin ZigbeeConf[NUMZBEE];
+
+/* ── Адресация: единое пространство ID ── */
+static inline bool IsZigbeePin(int id) { return id >= NUMPIN; }
+static inline int  ZbeeIdx(int id)     { return id - NUMPIN; }
+
+/* ── PinView — тонкий интерфейс для общих операций ── */
+typedef struct {
+    uint8_t    topin;
+    uint8_t    state;
+    int        dvalue;
+    const char *label;
+    bool       is_zigbee;
+    void      *raw;        // dbPinsConf* либо ZigbeeVirtualPin*
+} PinView;
+
+/* Функции конфигурации zigbee.ini */
+void GetZigbeeConfig(void);
+void SetZigbeeConfig(void);
 
 #endif /* INC_DB_H_ */
+
