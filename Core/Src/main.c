@@ -443,8 +443,8 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic,
     printf("[MQTT] Large publish len=%d on topic %s\r\n", (int)msg_len, full_topic);
   }
 
-  MG_INFO(("%lu PUBLISHED %s -> %.*s", conn->id, msg, (int)pub_opts.topic.len,
-           pub_opts.topic.buf));
+  // printf("[MQTT] %lu PUBLISHED %s -> %.*s\r\n", conn->id, msg, (int)pub_opts.topic.len,
+  //         pub_opts.topic.buf);
 }
 /*********************** End M ******************************/
 
@@ -3092,7 +3092,7 @@ static void heap_diagnostic(void)
         req_encoder != last_req_encoder ||
         req_api != last_req_api) {
 
-        printf("\r\n=== DIAGNOSTIC REPORT ===\r\n");
+        printf("\r\n=== DIAGNOSTIC REPORT [FW:%s] ===\r\n", FW_VERSION);
         if (first_run) {
             printf("FreeRTOS free now:  %u B\r\n", current_free);
             printf("FreeRTOS min ever:  %u B\r\n", current_min);

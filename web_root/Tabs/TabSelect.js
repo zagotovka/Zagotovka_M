@@ -201,6 +201,16 @@ function TabSelect({ }) {
   const [expandedSections, setExpandedSections] = useState({ physical: false, zigbee: false });
   const lastChangeTime = useRef(0);
   const lastPollData = useRef(null);
+  const serverSnapshot = useRef({});
+
+  const buildSnapshotEntry = (d) => ({
+    topin: d.topin.toString(),
+    zbee_ieee: d.zbee_ieee || '',
+    zbee_endpoint: d.zbee_endpoint || 1,
+    zbee_cluster: d.zbee_cluster != null ? Number(d.zbee_cluster).toString(16).padStart(4, '0') : '0006',
+    zbee_attribute: d.zbee_attribute != null ? Number(d.zbee_attribute).toString(16).padStart(2, '0') : '00',
+    zbee_label: d.zbee_label || '',
+  });
 
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => { initGlobalTooltip(); }, []);
@@ -233,6 +243,10 @@ function TabSelect({ }) {
           if (d.zbee_label !== undefined) initialValues[`zbee_label_${d.id}`] = d.zbee_label;
         });
         setSelectedValues(initialValues);
+
+        const snap = {};
+        data.forEach((d) => { snap[d.id] = buildSnapshotEntry(d); });
+        serverSnapshot.current = snap;
       });
 
   useEffect(() => {
@@ -249,6 +263,11 @@ function TabSelect({ }) {
         const jsonStr = JSON.stringify(data);
         if (jsonStr !== lastPollData.current) {
           lastPollData.current = jsonStr;
+
+          const snap = {};
+          data.forEach((d) => { snap[d.id] = buildSnapshotEntry(d); });
+          serverSnapshot.current = snap;
+
           setSelectedValues(prev => {
             const next = {};
             data.forEach(d => {
@@ -286,55 +305,72 @@ function TabSelect({ }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const formData = new FormData(e.target);
-    const jsonData = {
-      lang: language,
-      sim800l: gpsEnabled ? 1 : 0,
-      data: []
-    };
 
+    const changed = [];
     varselect.forEach((d) => {
-      const raw = selectedValues[`topin_${d.id}`] ?? formData.get(`topin_${d.id}`);
-      const parsed = parseInt(raw);
-      const topin = Number.isNaN(parsed) ? d.topin : parsed;
-      const obj = {
-        id: d.id,
-        pins: d.pins,
-        topin: topin,
-        pwm: d.pwm,
-        i2cdata: d.i2cdata,
-        i2cclok: d.i2cclok
-      };
-      if (topin === 11) {
-        obj.zbee_ieee = selectedValues[`zbee_ieee_${d.id}`] || '';
-        obj.zbee_endpoint = parseInt(selectedValues[`zbee_endpoint_${d.id}`]) || 1;
-        obj.zbee_cluster = parseInt(selectedValues[`zbee_cluster_${d.id}`], 16) || 0x0006;
-        obj.zbee_attribute = parseInt(selectedValues[`zbee_attribute_${d.id}`], 16) || 0;
-        obj.zbee_label = selectedValues[`zbee_label_${d.id}`] || '';
+      const snap = serverSnapshot.current[d.id] || {};
+      if (d.id < 89) {
+        const raw = selectedValues[`topin_${d.id}`];
+        const cur = raw !== undefined ? raw : d.topin.toString();
+        if (cur !== snap.topin) {
+          changed.push({ id: d.id, topin: parseInt(cur) });
+        }
+      } else {
+        const cur = {
+          zbee_ieee: selectedValues[`zbee_ieee_${d.id}`] || '',
+          zbee_endpoint: selectedValues[`zbee_endpoint_${d.id}`] || 1,
+          zbee_cluster: selectedValues[`zbee_cluster_${d.id}`] || '0006',
+          zbee_attribute: selectedValues[`zbee_attribute_${d.id}`] || '00',
+          zbee_label: selectedValues[`zbee_label_${d.id}`] || '',
+        };
+        const isDirty =
+          cur.zbee_ieee !== snap.zbee_ieee ||
+          String(cur.zbee_endpoint) !== String(snap.zbee_endpoint) ||
+          cur.zbee_cluster !== snap.zbee_cluster ||
+          cur.zbee_attribute !== snap.zbee_attribute ||
+          cur.zbee_label !== snap.zbee_label;
+        if (isDirty) {
+          changed.push({
+            id: d.id,
+            zbee_ieee: cur.zbee_ieee,
+            zbee_endpoint: parseInt(cur.zbee_endpoint) || 1,
+            zbee_cluster: parseInt(cur.zbee_cluster, 16) || 0x0006,
+            zbee_attribute: parseInt(cur.zbee_attribute, 16) || 0,
+            zbee_label: cur.zbee_label,
+          });
+        }
       }
-      jsonData.data.push(obj);
     });
 
-    setSubmissionStatus('submitting');
     setIsButtonDisabled(true);
     setCountdown(3);
 
-    try {
-      const response = await fetch('/api/select/set', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(jsonData)
-      });
-
-      if (!response.ok) throw new Error('Network response was not ok');
-
-      const data = await response.json();
+    if (changed.length === 0) {
       setSubmissionStatus('success');
-      console.log('Success:', data);
+      return;
+    }
+
+    setSubmissionStatus('submitting');
+
+    try {
+      const CHUNK_SIZE = 20; // ~20 записей ≈ 3КБ, комфортно для mg_iobuf
+      const jsonBase = { lang: language, sim800l: gpsEnabled ? 1 : 0 };
+
+      for (let i = 0; i < changed.length; i += CHUNK_SIZE) {
+        const slice = changed.slice(i, i + CHUNK_SIZE);
+        const response = await fetch('/api/select/set', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...jsonBase, data: slice })
+        });
+        if (!response.ok) throw new Error('Network response was not ok');
+      }
+
+      setSubmissionStatus('success');
 
       const updatedValues = {};
-      jsonData.data.forEach((item) => {
-        updatedValues[`topin_${item.id}`] = item.topin.toString();
+      changed.forEach((item) => {
+        if (item.topin !== undefined) updatedValues[`topin_${item.id}`] = item.topin.toString();
         if (item.zbee_ieee !== undefined) updatedValues[`zbee_ieee_${item.id}`] = item.zbee_ieee;
         if (item.zbee_endpoint !== undefined) updatedValues[`zbee_endpoint_${item.id}`] = item.zbee_endpoint;
         if (item.zbee_cluster !== undefined) updatedValues[`zbee_cluster_${item.id}`] = item.zbee_cluster.toString(16).padStart(4, '0');

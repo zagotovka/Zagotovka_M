@@ -2613,7 +2613,9 @@ cleanup:
     printf("Error: Failed to write zigbee.ini (error: %d)\n", fresult);
   }
   extern volatile uint32_t g_ver_zigbee;
+  extern volatile uint32_t g_ver_select;
   mark_slice_dirty(&g_ver_zigbee);
+  mark_slice_dirty(&g_ver_select);
   f_close(&USBHFile);
   printf("[ZIGBEE] Config saved to zigbee.ini\r\n");
 }

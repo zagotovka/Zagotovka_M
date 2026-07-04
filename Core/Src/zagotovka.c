@@ -142,6 +142,7 @@ volatile uint32_t g_ver_button  = 1;
 volatile uint32_t g_ver_security = 1;
 volatile uint32_t g_ver_pins     = 1;
 volatile uint32_t g_ver_zigbee   = 1;
+volatile uint32_t g_ver_select   = 1;
 
 void mark_slice_dirty(volatile uint32_t *ver) {
     taskENTER_CRITICAL();
@@ -302,7 +303,9 @@ void handle_select_get(struct mg_connection *c) {
     "Content-Type: application/json\r\n"
     "Transfer-Encoding: chunked\r\n"
     "Cache-Control: no-cache\r\n"
-    "\r\n");
+    "ETag: \"%lu\"\r\n"
+    "\r\n",
+    (unsigned long)g_ver_select);
 
   mg_http_printf_chunk(c,
     "{\"lang\":\"%s\",\"sim800l\":%d,\"data\":[",
@@ -317,10 +320,10 @@ void handle_select_get(struct mg_connection *c) {
 
     mg_http_printf_chunk(c,
       "%s{\"id\":%d,\"pins\":\"%s\",\"topin\":%d,"
-      "\"onewire\":%d,\"pwm\":%d,\"i2cdata\":%d,\"i2cclok\":%d}",
+      "\"pwm\":%d}",
       (i == 0 ? "" : ","),
-      i, info->pins, conf.topin, info->onewire,
-      info->pwm, info->i2cdata, info->i2cclok);
+      i, info->pins, conf.topin,
+      info->pwm);
   }
 
   for (int i = 0; i < NUMZBEE; i++) {
@@ -330,12 +333,11 @@ void handle_select_get(struct mg_connection *c) {
     taskEXIT_CRITICAL();
     uint8_t topin = (zb.zbee_ieee[0] != '\0') ? 11 : 0;
     mg_http_printf_chunk(c,
-      ",{\"id\":%d,\"pins\":\"VPIN %d\",\"topin\":%d,"
-      "\"onewire\":0,\"pwm\":0,\"i2cdata\":0,\"i2cclok\":0,"
+      ",{\"id\":%d,\"topin\":%d,"
       "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
       "\"zbee_cluster\":%d,\"zbee_attribute\":%d,"
       "\"zbee_label\":\"%s\"}",
-      NUMPIN + i, i, topin,
+      NUMPIN + i, topin,
       zb.zbee_ieee, zb.zbee_endpoint,
       zb.zbee_cluster, zb.zbee_attribute,
       zb.zbee_label);
@@ -349,7 +351,12 @@ void handle_select_set(struct mg_connection *c, struct mg_http_message *hm) {
       "Connection: close\r\nContent-Type: application/json\r\n";
 
   if (hm->body.len > 0) {
+    unsigned long heap_before = (unsigned long) xPortGetFreeHeapSize();
     parse_select_json(hm->body.buf, PinsConf, NUMPIN);
+    unsigned long heap_after = (unsigned long) xPortGetFreeHeapSize();
+    MG_DEBUG(("select/set body=%lu bytes, heap %lu -> %lu (delta %ld)",
+              (unsigned long) hm->body.len, heap_before, heap_after,
+              (long) heap_before - (long) heap_after));
     char response[256];
     snprintf(
         response, sizeof(response),
@@ -394,8 +401,12 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
     long id = mg_json_get_long(elem, "$.id", -1);
     if (id >= 0 && id < num_pins) {
       PinsConf[id].topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
-    } else if (id >= num_pins && zbee_count < NUMZBEE) {
+    } else if (id >= num_pins) {
       int zbi = id - num_pins;
+      if (zbi < 0 || zbi >= NUMZBEE) {
+        MG_ERROR(("select/set: id=%ld out of ZigbeeConf range (zbi=%d), dropped", id, zbi));
+        continue;
+      }
       char *ieee = mg_json_get_str(elem, "$.zbee_ieee");
       if (ieee) {
         strncpy(ZigbeeConf[zbi].zbee_ieee, ieee, sizeof(ZigbeeConf[zbi].zbee_ieee) - 1);
@@ -415,6 +426,10 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
       zbee_count++;
     }
   }
+
+  MG_DEBUG(("select/set parsed: zbee_count=%d", zbee_count));
+
+  mark_slice_dirty(&g_ver_select);
 
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
@@ -7134,6 +7149,7 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
     }
     
     mark_slice_dirty(&g_ver_zigbee);
+    mark_slice_dirty(&g_ver_select);
     
     extern osMessageQueueId_t usbQueueHandle;
     uint32_t usbnum = 7;

@@ -3,6 +3,7 @@ import { registerPoll, unregisterPoll } from './pollQueue.js';
 import { StateContext } from './context.js';
 
 ('use strict');
+console.log('[Zagotovka] build:', typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'dev');
 import {
   h,
   render,
@@ -212,7 +213,7 @@ function Sidebar({ url, show }) {
       <div
         class="flex h-10 shrink-0 items-center gap-x-4 font-bold text-xl text-slate-500"
       >
-        <${Logo} class="h-full" /> Zagotovka
+        <${Logo} class="h-full" /> Zagotovka <span class="text-xs text-slate-400 font-normal ml-1">${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'dev'}</span>
       <//>
       <div class="flex flex-1 flex-col">
         <${NavLink} title="Dashboard" icon=${Icons.home} href="/" url=${url} />

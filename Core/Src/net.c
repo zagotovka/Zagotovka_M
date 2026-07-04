@@ -397,6 +397,10 @@ void handle_device_eraselast(struct mg_connection *c) {
 static uint32_t s_login_fail_count  = 0;
 static uint32_t s_login_block_until = 0;
 
+/* Лимит тела запроса для JSON API — защита от mg_iobuf_resiz starvation.
+   Firmware upload исключён явно, там body законно большой. */
+#define MAX_API_BODY_SIZE 8192
+
 /* TLS handshake timing tracking (per-connection) */
 #define TLS_HS_TRACK_MAX 4
 static struct {
@@ -638,6 +642,30 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
                  (unsigned long long)hs_elapsed, (unsigned long)c->id));
     }
     break;
+
+    case MG_EV_HTTP_HDRS: {
+        struct mg_http_message *hm = (struct mg_http_message *) ev_data;
+        if (!mg_match(hm->uri, mg_str("/api/firmware/upload"), NULL)) {
+            struct mg_str *cl_hdr = mg_http_get_header(hm, "Content-Length");
+            if (cl_hdr != NULL) {
+                int content_length = 0;
+                if (mg_str_to_num(*cl_hdr, 10, &content_length, sizeof(content_length))) {
+                    if (mg_match(hm->uri, mg_str("/api/select/set"), NULL)) {
+                        MG_DEBUG(("%lu select/set body size=%d", (unsigned long) c->id, content_length));
+                    }
+                }
+                if (content_length > MAX_API_BODY_SIZE) {
+                    MG_ERROR(("%lu Rejecting oversized body: %d bytes (limit %d), uri=%.*s",
+                              (unsigned long) c->id, content_length, MAX_API_BODY_SIZE,
+                              (int) hm->uri.len, hm->uri.buf));
+                    mg_http_reply(c, 413, "Connection: close\r\n",
+                                  "{\"status\":false,\"message\":\"Payload too large\"}");
+                    c->is_draining = 1;
+                }
+            }
+        }
+    }
+    break;
 /***************************************************************************/
 	case MG_EV_HTTP_MSG: {
 		uint32_t t_req_start = HAL_GetTick();
@@ -746,8 +774,10 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			}
 			/* ── Keep-Alive GET poll endpoints (reuse connection, no TLS storm) ── */
 			if (mg_match(hm->uri, mg_str("/api/select/get"), NULL)) {
-				MG_INFO(("%lu Processing /api/select/get", c->id));
-				handle_select_get(c);
+				if (!check_etag_304(c, hm, &g_ver_select)) {
+					MG_INFO(("%lu Processing /api/select/get", c->id));
+					handle_select_get(c);
+				}
 				keep_alive = true;
 				break;
 			}

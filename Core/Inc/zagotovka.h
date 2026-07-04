@@ -22,6 +22,7 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 
+#define FW_VERSION "0.4.2-slim"
 #define BUFFER_SIZE 10000 /* max Button = 9835 символов, это не точно! */
 #define SECURITY_BODY_MAX 4096U /* max body для handle_security_set (heap) */
 #define ENTER_CRITICAL() taskENTER_CRITICAL()
@@ -342,6 +343,7 @@ extern volatile uint32_t g_ver_button;
 extern volatile uint32_t g_ver_security;
 extern volatile uint32_t g_ver_pins;
 extern volatile uint32_t g_ver_zigbee;
+extern volatile uint32_t g_ver_select;
 
 /* ─── Mark slice dirty ─── */
 void mark_slice_dirty(volatile uint32_t *ver);
