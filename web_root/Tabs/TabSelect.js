@@ -316,6 +316,9 @@ function TabSelect({ }) {
           changed.push({ id: d.id, topin: parseInt(cur) });
         }
       } else {
+        const curTopin = selectedValues[`topin_${d.id}`] !== undefined
+          ? selectedValues[`topin_${d.id}`]
+          : d.topin.toString();
         const cur = {
           zbee_ieee: selectedValues[`zbee_ieee_${d.id}`] || '',
           zbee_endpoint: selectedValues[`zbee_endpoint_${d.id}`] || 1,
@@ -324,20 +327,33 @@ function TabSelect({ }) {
           zbee_label: selectedValues[`zbee_label_${d.id}`] || '',
         };
         const isDirty =
+          curTopin !== snap.topin ||
           cur.zbee_ieee !== snap.zbee_ieee ||
           String(cur.zbee_endpoint) !== String(snap.zbee_endpoint) ||
           cur.zbee_cluster !== snap.zbee_cluster ||
           cur.zbee_attribute !== snap.zbee_attribute ||
           cur.zbee_label !== snap.zbee_label;
         if (isDirty) {
-          changed.push({
-            id: d.id,
-            zbee_ieee: cur.zbee_ieee,
-            zbee_endpoint: parseInt(cur.zbee_endpoint) || 1,
-            zbee_cluster: parseInt(cur.zbee_cluster, 16) || 0x0006,
-            zbee_attribute: parseInt(cur.zbee_attribute, 16) || 0,
-            zbee_label: cur.zbee_label,
-          });
+          if (curTopin === '0') {
+            changed.push({
+              id: d.id,
+              topin: 0,
+              zbee_ieee: '',
+              zbee_endpoint: 1,
+              zbee_cluster: 0x0006,
+              zbee_attribute: 0,
+              zbee_label: '',
+            });
+          } else {
+            changed.push({
+              id: d.id,
+              zbee_ieee: cur.zbee_ieee,
+              zbee_endpoint: parseInt(cur.zbee_endpoint) || 1,
+              zbee_cluster: parseInt(cur.zbee_cluster, 16) || 0x0006,
+              zbee_attribute: parseInt(cur.zbee_attribute, 16) || 0,
+              zbee_label: cur.zbee_label,
+            });
+          }
         }
       }
     });

@@ -407,22 +407,32 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
         MG_ERROR(("select/set: id=%ld out of ZigbeeConf range (zbi=%d), dropped", id, zbi));
         continue;
       }
-      char *ieee = mg_json_get_str(elem, "$.zbee_ieee");
-      if (ieee) {
-        strncpy(ZigbeeConf[zbi].zbee_ieee, ieee, sizeof(ZigbeeConf[zbi].zbee_ieee) - 1);
-        ZigbeeConf[zbi].zbee_ieee[sizeof(ZigbeeConf[zbi].zbee_ieee) - 1] = '\0';
-        mg_free(ieee);
+      long zb_topin = mg_json_get_long(elem, "$.topin", -1);
+      if (zb_topin == 0) {
+        ZigbeeConf[zbi].zbee_ieee[0] = '\0';
+        ZigbeeConf[zbi].zbee_label[0] = '\0';
+        ZigbeeConf[zbi].zbee_endpoint = 1;
+        ZigbeeConf[zbi].zbee_cluster = 0x0006;
+        ZigbeeConf[zbi].zbee_attribute = 0;
+        ZigbeeConf[zbi].topin = 0;
+      } else {
+        char *ieee = mg_json_get_str(elem, "$.zbee_ieee");
+        if (ieee) {
+          strncpy(ZigbeeConf[zbi].zbee_ieee, ieee, sizeof(ZigbeeConf[zbi].zbee_ieee) - 1);
+          ZigbeeConf[zbi].zbee_ieee[sizeof(ZigbeeConf[zbi].zbee_ieee) - 1] = '\0';
+          mg_free(ieee);
+        }
+        char *label = mg_json_get_str(elem, "$.zbee_label");
+        if (label) {
+          strncpy(ZigbeeConf[zbi].zbee_label, label, sizeof(ZigbeeConf[zbi].zbee_label) - 1);
+          ZigbeeConf[zbi].zbee_label[sizeof(ZigbeeConf[zbi].zbee_label) - 1] = '\0';
+          mg_free(label);
+        }
+        ZigbeeConf[zbi].zbee_endpoint = (uint8_t)mg_json_get_long(elem, "$.zbee_endpoint", 1);
+        ZigbeeConf[zbi].zbee_cluster = (uint16_t)mg_json_get_long(elem, "$.zbee_cluster", 0x0006);
+        ZigbeeConf[zbi].zbee_attribute = (uint16_t)mg_json_get_long(elem, "$.zbee_attribute", 0);
+        ZigbeeConf[zbi].topin = (ZigbeeConf[zbi].zbee_ieee[0] != '\0') ? 11 : 0;
       }
-      char *label = mg_json_get_str(elem, "$.zbee_label");
-      if (label) {
-        strncpy(ZigbeeConf[zbi].zbee_label, label, sizeof(ZigbeeConf[zbi].zbee_label) - 1);
-        ZigbeeConf[zbi].zbee_label[sizeof(ZigbeeConf[zbi].zbee_label) - 1] = '\0';
-        mg_free(label);
-      }
-      ZigbeeConf[zbi].zbee_endpoint = (uint8_t)mg_json_get_long(elem, "$.zbee_endpoint", 1);
-      ZigbeeConf[zbi].zbee_cluster = (uint16_t)mg_json_get_long(elem, "$.zbee_cluster", 0x0006);
-      ZigbeeConf[zbi].zbee_attribute = (uint16_t)mg_json_get_long(elem, "$.zbee_attribute", 0);
-      ZigbeeConf[zbi].topin = (ZigbeeConf[zbi].zbee_ieee[0] != '\0') ? 11 : 0;
       zbee_count++;
     }
   }
