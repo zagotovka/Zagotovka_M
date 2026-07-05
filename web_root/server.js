@@ -19,7 +19,7 @@ const urlMappings = {
     contentType: 'application/json'
   },
   '/api/select/set': {
-    file: 'json/Select2.json',
+    file: 'json/Select.json',
     contentType: 'application/json'
   },
   '/api/switch/get': {

@@ -142,7 +142,7 @@ void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm);
 
 void handle_pintopin_get(struct mg_connection *c);
 
-void handle_select_get(struct mg_connection *c);
+void handle_select_get(struct mg_connection *c, long offset, long limit);
 void handle_select_set(struct mg_connection *c, struct mg_http_message *hm);
 
 void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf, uint8_t num_pins);
@@ -306,7 +306,7 @@ void handle_firmware_rollback(struct mg_connection *c, struct mg_http_message *h
 void handle_firmware_status(struct mg_connection *c);
 void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm);
 void handle_device_eraselast(struct mg_connection *c);
-void handle_select_get(struct mg_connection *c);
+void handle_select_get(struct mg_connection *c, long offset, long limit);
 void handle_pintopin_get(struct mg_connection *c);
 void handle_select_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_switch_get(struct mg_connection *c);

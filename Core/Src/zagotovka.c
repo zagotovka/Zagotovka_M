@@ -297,7 +297,25 @@ void set_mqtt_topic(const char *topic) {
   s_pub_topic[sizeof(s_pub_topic) - 1] = '\0'; // Ensure null-termination
 }
 
-void handle_select_get(struct mg_connection *c) {
+void handle_select_get(struct mg_connection *c, long offset, long limit) {
+  /* Known limitation v1: compact-position pagination is not atomic.
+     Cross-request race: if a Zigbee slot is added/removed between sequential
+     page requests during a multi-page refresh, compact positions shift,
+     causing duplicates or gaps. Self-corrects on next poll cycle (~3s).
+     Intra-request race: total is counted in a separate loop before emission;
+     if MQTT RX task modifies ZigbeeConf between count and emit, total in
+     header may differ from actual data[] length in the same response.
+     Acceptable for single-user v1; revisit if multi-client editing needed. */
+  if (offset < 0) offset = 0;
+  if (limit <= 0) limit = 30;
+
+  long total = (long)NUMPIN;
+  for (int i = 0; i < NUMZBEE; i++) {
+    taskENTER_CRITICAL();
+    if (ZigbeeConf[i].zbee_ieee[0] != '\0') total++;
+    taskEXIT_CRITICAL();
+  }
+
   mg_printf(c,
     "HTTP/1.1 200 OK\r\n"
     "Content-Type: application/json\r\n"
@@ -308,39 +326,52 @@ void handle_select_get(struct mg_connection *c) {
     (unsigned long)g_ver_select);
 
   mg_http_printf_chunk(c,
-    "{\"lang\":\"%s\",\"sim800l\":%d,\"data\":[",
-    SetSettings.lang, SetSettings.sim800l);
+    "{\"lang\":\"%s\",\"sim800l\":%d,\"total\":%ld,\"offset\":%ld,\"limit\":%ld,\"data\":[",
+    SetSettings.lang, SetSettings.sim800l, total, offset, limit);
 
-  for (int i = 0; i < NUMPIN; i++) {
+  if (offset >= total) {
+    mg_http_printf_chunk(c, "]}");
+    mg_http_write_chunk(c, "", 0);
+    return;
+  }
+
+  long emitted = 0;
+  int first = 1;
+
+  for (long i = 0; i < (long)NUMPIN; i++) {
+    if (emitted >= offset + limit) break;
+    if (emitted < offset) { emitted++; continue; }
     const struct dbPinsInfo *info = &PinsInfo[i];
     struct dbPinsConf conf;
     taskENTER_CRITICAL();
     conf = PinsConf[i];
     taskEXIT_CRITICAL();
-
     mg_http_printf_chunk(c,
-      "%s{\"id\":%d,\"pins\":\"%s\",\"topin\":%d,"
-      "\"pwm\":%d}",
-      (i == 0 ? "" : ","),
-      i, info->pins, conf.topin,
-      info->pwm);
+      "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d,\"pwm\":%d}",
+      (first ? "" : ","), i, info->pins, conf.topin, info->pwm);
+    first = 0;
+    emitted++;
   }
 
-  for (int i = 0; i < NUMZBEE; i++) {
+  for (int i = 0; i < NUMZBEE && emitted < offset + limit; i++) {
     ZigbeeVirtualPin zb;
     taskENTER_CRITICAL();
     zb = ZigbeeConf[i];
     taskEXIT_CRITICAL();
-    uint8_t topin = (zb.zbee_ieee[0] != '\0') ? 11 : 0;
+    if (zb.zbee_ieee[0] == '\0') continue;
+    if (emitted < offset) { emitted++; continue; }
+    uint8_t topin = 11;
     mg_http_printf_chunk(c,
-      ",{\"id\":%d,\"topin\":%d,"
+      "%s{\"id\":%ld,\"topin\":%d,"
       "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
       "\"zbee_cluster\":%d,\"zbee_attribute\":%d,"
       "\"zbee_label\":\"%s\"}",
-      NUMPIN + i, topin,
+      (first ? "" : ","), (long)NUMPIN + i, topin,
       zb.zbee_ieee, zb.zbee_endpoint,
       zb.zbee_cluster, zb.zbee_attribute,
       zb.zbee_label);
+    first = 0;
+    emitted++;
   }
 
   mg_http_printf_chunk(c, "]}");
@@ -469,6 +500,22 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
 
   onoffid = (int32_t)id_val;
   uint8_t onoff = (uint8_t)onoff_val;
+
+  if (onoffid >= NUMPIN && onoffid < NUMPIN + NUMZBEE) {
+    int zbi = onoffid - NUMPIN;
+    ZigbeeConf[zbi].onoff = onoff;
+    printf("Updated zigbee slot %d (id=%" PRId32 "): onoff = %d\n", zbi, onoffid, onoff);
+    if (ZigbeeConf[zbi].zbee_ieee[0] != '\0') {
+      const char *cmd = (onoff != 0) ? "ON" : "OFF";
+      SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                        ZigbeeConf[zbi].zbee_endpoint,
+                        ZigbeeConf[zbi].zbee_cluster,
+                        ZigbeeConf[zbi].zbee_attribute, cmd);
+    }
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
+    return;
+  }
 
   if (onoffid >= 0 && onoffid < num_pins) {
     PinsConf[onoffid].onoff = onoff;
