@@ -15,7 +15,6 @@ export function TabZigbee({}) {
   const dirtyIds = useRef(new Set());
 
   const clusterToDeviceType = (cl) => {
-    if (cl === 0x0300) return 'lamp';
     if (cl === 0x0008) return 'dimmer';
     return 'socket';
   };
@@ -106,7 +105,7 @@ export function TabZigbee({}) {
 
   const handleDeviceUpdate = (updatedDevice) => {
     const snap = serverSnapshot.current[updatedDevice.id] || {};
-    const typeToCluster = { socket: 0x0006, dimmer: 0x0008, lamp: 0x0300 };
+    const typeToCluster = { socket: 0x0006, dimmer: 0x0008 };
     const cluster = typeToCluster[updatedDevice.zbee_device_type] || 0x0006;
 
     const cur = {
@@ -159,7 +158,6 @@ export function TabZigbee({}) {
 
   const getDeviceTypeLabel = (deviceType) => {
     switch (deviceType) {
-      case 'lamp': return '💡 Color Lamp';
       case 'dimmer': return '🔆 Dimmer';
       default: return '🔌 Socket';
     }

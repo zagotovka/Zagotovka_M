@@ -892,12 +892,18 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				MG_INFO(("%lu Processing /api/switch/set", c->id));
 				handle_switch_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/zigbee/get"), NULL)) {
-				MG_INFO(("%lu Processing /api/zigbee/get", c->id));
-				handle_zigbee_get(c);
+				if (!check_etag_304(c, hm, &g_ver_zigbee)) {
+					MG_INFO(("%lu Processing /api/zigbee/get", c->id));
+					handle_zigbee_get(c);
+				}
+				keep_alive = true;
+				break;
 			} else if (mg_match(hm->uri, mg_str("/api/zigbee/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/zigbee/set", c->id));
 				handle_zigbee_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/onoff/set"), NULL)) {
+				printf("[NET-T0] /api/onoff/set tick=%lu\r\n", (unsigned long)HAL_GetTick());
+				fflush(stdout);
 				MG_INFO(("%lu Processing /api/onoff/set", c->id));
 				handle_onoff_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/button/get"), NULL)) {

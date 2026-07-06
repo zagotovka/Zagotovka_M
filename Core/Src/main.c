@@ -1750,6 +1750,9 @@ void StartWebServerTask(void *argument)
     {
         ZbeeCmdMsg_t zcmd;
         while (xQueueReceive(zbeeCmdQueueHandle, &zcmd, 0) == pdPASS) {
+            printf("[ZB-T6] DEQUEUED topic='%s' tick=%lu\r\n",
+                   zcmd.topic, (unsigned long)HAL_GetTick());
+            fflush(stdout);
             if (s_conn != NULL && mqtt_connected_reported) {
                 struct mg_mqtt_opts pub_opts;
                 memset(&pub_opts, 0, sizeof(pub_opts));
@@ -1758,10 +1761,13 @@ void StartWebServerTask(void *argument)
                 pub_opts.qos = s_qos;
                 pub_opts.retain = false;
                 mg_mqtt_pub(s_conn, &pub_opts);
-                LOG_Z2M("MQTT PUB: topic='%s'\r\n", zcmd.topic);
+                printf("[ZB-T7] MQTT PUB OK topic='%s' tick=%lu\r\n",
+                       zcmd.topic, (unsigned long)HAL_GetTick());
+                fflush(stdout);
             } else {
-                LOG_Z2M("MQTT DROP: s_conn=%p connected=%d\r\n",
-                       (void*)s_conn, mqtt_connected_reported);
+                printf("[ZB-T8] MQTT DROP! s_conn=%p connected=%d tick=%lu\r\n",
+                       (void*)s_conn, mqtt_connected_reported, (unsigned long)HAL_GetTick());
+                fflush(stdout);
             }
         }
     }
