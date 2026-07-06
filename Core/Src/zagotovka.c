@@ -29,6 +29,34 @@
 extern char *g_body;  // allocated in FreeRTOS heap, size = G_BODY_SIZE (net.h)
 extern bool s_tls_loaded;  /* TLS cert+key preload cache, invalidated on cert/key update */
 
+/* ── Cluster flags <-> JSON array ── */
+uint8_t clusters_json_to_flags(const char *json_str) {
+  if (!json_str || json_str[0] == '\0') return ZBEE_CL_ONOFF;
+  uint8_t flags = 0;
+  const char *p = json_str;
+  while (*p) {
+    while (*p == ' ' || *p == '[' || *p == ',') p++;
+    if (*p == ']' || *p == '\0') break;
+    long val = strtol(p, (char **)&p, 10);
+    if (val == 6)  flags |= ZBEE_CL_ONOFF;
+    if (val == 8)  flags |= ZBEE_CL_DIMMER;
+    if (val == 768) flags |= ZBEE_CL_COLOR;
+  }
+  return flags ? flags : ZBEE_CL_ONOFF;
+}
+
+int clusters_flags_to_json(uint8_t flags, char *buf, size_t buflen) {
+  if (!flags) flags = ZBEE_CL_ONOFF;
+  int off = 0;
+  buf[off++] = '[';
+  if (flags & ZBEE_CL_ONOFF)  off += snprintf(buf + off, buflen - off, "%s6",  off > 1 ? "," : "");
+  if (flags & ZBEE_CL_DIMMER) off += snprintf(buf + off, buflen - off, "%s8",  off > 1 ? "," : "");
+  if (flags & ZBEE_CL_COLOR)  off += snprintf(buf + off, buflen - off, "%s768", off > 1 ? "," : "");
+  buf[off++] = ']';
+  buf[off] = '\0';
+  return off;
+}
+
 #define PI 3.14159265358979323846
 #define RAD (PI / 180.0)
 extern int year;
@@ -348,23 +376,27 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
     emitted++;
   }
 
-  for (int i = 0; i < NUMZBEE && emitted < offset + limit; i++) {
-    ZigbeeVirtualPin zb;
-    taskENTER_CRITICAL();
-    zb = ZigbeeConf[i];
-    taskEXIT_CRITICAL();
-    if (emitted < offset) { emitted++; continue; }
-    mg_http_printf_chunk(c,
-      "%s{\"id\":%ld,\"topin\":%d,"
-      "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
-      "\"zbee_cluster\":%d,\"zbee_attribute\":%d,"
-      "\"zbee_label\":\"%s\"}",
-      (first ? "" : ","), (long)NUMPIN + i, zb.topin,
-      zb.zbee_ieee, zb.zbee_endpoint,
-      zb.zbee_cluster, zb.zbee_attribute,
-      zb.zbee_label);
-    first = 0;
-    emitted++;
+  {
+    static char clbuf[32];
+    for (int i = 0; i < NUMZBEE && emitted < offset + limit; i++) {
+      ZigbeeVirtualPin zb;
+      taskENTER_CRITICAL();
+      zb = ZigbeeConf[i];
+      taskEXIT_CRITICAL();
+      if (emitted < offset) { emitted++; continue; }
+      clusters_flags_to_json(zb.cluster_flags, clbuf, sizeof(clbuf));
+      mg_http_printf_chunk(c,
+        "%s{\"id\":%ld,\"topin\":%d,"
+        "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
+        "\"clusters\":%s,\"zbee_attribute\":%d,"
+        "\"zbee_label\":\"%s\"}",
+        (first ? "" : ","), (long)NUMPIN + i, zb.topin,
+        zb.zbee_ieee, zb.zbee_endpoint,
+        clbuf, zb.zbee_attribute,
+        zb.zbee_label);
+      first = 0;
+      emitted++;
+    }
   }
 
   mg_http_printf_chunk(c, "]}");
@@ -436,7 +468,7 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
         ZigbeeConf[zbi].zbee_ieee[0] = '\0';
         ZigbeeConf[zbi].zbee_label[0] = '\0';
         ZigbeeConf[zbi].zbee_endpoint = 1;
-        ZigbeeConf[zbi].zbee_cluster = 0x0006;
+        ZigbeeConf[zbi].cluster_flags = ZBEE_CL_ONOFF;
         ZigbeeConf[zbi].zbee_attribute = 0;
         ZigbeeConf[zbi].topin = 0;
       } else {
@@ -453,8 +485,14 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
           mg_free(label);
         }
         ZigbeeConf[zbi].zbee_endpoint = (uint8_t)mg_json_get_long(elem, "$.zbee_endpoint", 1);
-        ZigbeeConf[zbi].zbee_cluster = (uint16_t)mg_json_get_long(elem, "$.zbee_cluster", 0x0006);
         ZigbeeConf[zbi].zbee_attribute = (uint16_t)mg_json_get_long(elem, "$.zbee_attribute", 0);
+        char *clusters_str = mg_json_get_str(elem, "$.clusters");
+        if (clusters_str) {
+          ZigbeeConf[zbi].cluster_flags = clusters_json_to_flags(clusters_str);
+          mg_free(clusters_str);
+        } else {
+          ZigbeeConf[zbi].cluster_flags = ZBEE_CL_ONOFF;
+        }
         ZigbeeConf[zbi].topin = (ZigbeeConf[zbi].zbee_ieee[0] != '\0') ? 11 : 0;
       }
       zbee_count++;
@@ -499,10 +537,12 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
     ZigbeeConf[zbi].onoff = onoff;
     if (ZigbeeConf[zbi].zbee_ieee[0] != '\0') {
       const char *cmd = (onoff != 0) ? "ON" : "OFF";
-      SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
-                        ZigbeeConf[zbi].zbee_endpoint,
-                        ZigbeeConf[zbi].zbee_cluster,
-                        ZigbeeConf[zbi].zbee_attribute, cmd);
+      uint8_t flags = ZigbeeConf[zbi].cluster_flags;
+      if (flags & ZBEE_CL_ONOFF) {
+        SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                          ZigbeeConf[zbi].zbee_endpoint,
+                          6, ZigbeeConf[zbi].zbee_attribute, cmd);
+      }
     } else {
       LOG_Z2M("onoff: SKIP SendZigbeeCommand ieee EMPTY zbi=%d\r\n", zbi);
     }
@@ -3548,18 +3588,26 @@ const char* get_rxzbtop(void) {
 static void mqtt_zigbee_handler(const char *topic, const char *payload) {
     struct mg_str body = mg_str_n(payload, strlen(payload));
 
+    /* Parse topic: {rxzbtop}/data/{ieee}/{endpoint}/{cluster}/{attribute} */
+    const char prefix[] = "/data/";
+    const char *pfx = strstr(topic, prefix);
+    if (!pfx) return;
+    pfx += strlen(prefix);
+
+    char ieee[18] = {0};
+    int ep = 0, cluster = 0, attr = 0;
+    if (sscanf(pfx, "%17[^/]/%d/%x/%x", ieee, &ep, &cluster, &attr) != 4) return;
+
     for (int i = 0; i < NUMZBEE; i++) {
         if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
+        if (strcmp(ZigbeeConf[i].zbee_ieee, ieee) != 0) continue;
+        if (ZigbeeConf[i].zbee_endpoint != (uint8_t)ep) continue;
 
-        char expected[80];
-        snprintf(expected, sizeof(expected),
-                 "%s/data/%s/%d/%04X/%04X",
-                 get_rxzbtop(),
-                 ZigbeeConf[i].zbee_ieee,
-                 ZigbeeConf[i].zbee_endpoint,
-                 ZigbeeConf[i].zbee_cluster,
-                 ZigbeeConf[i].zbee_attribute);
-        if (strcmp(expected, topic) != 0) continue;
+        uint8_t cl_flag = 0;
+        if (cluster == 6)     cl_flag = ZBEE_CL_ONOFF;
+        else if (cluster == 8)    cl_flag = ZBEE_CL_DIMMER;
+        else if (cluster == 768)  cl_flag = ZBEE_CL_COLOR;
+        if (!(ZigbeeConf[i].cluster_flags & cl_flag)) continue;
 
         int toklen = 0;
         int offset = mg_json_get(body, "$.data.val", &toklen);
@@ -3573,13 +3621,13 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
             raw_len -= 2;
         }
 
-        LOG_Z2M("zbee[%d] ieee='%s' ep=%d cl=%04X val='%.*s'\r\n",
+        LOG_Z2M("zbee[%d] ieee='%s' ep=%d cl=%d val='%.*s'\r\n",
                NUMPIN + i, ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint,
-               ZigbeeConf[i].zbee_cluster, raw_len, raw);
+               cluster, raw_len, raw);
 
         taskENTER_CRITICAL();
 
-        if (ZigbeeConf[i].zbee_cluster == 0x0006) {
+        if (cluster == 6) {
             if (raw_len == 3 && memcmp(raw, "OFF", 3) == 0) {
                 ZigbeeConf[i].state = 0;
                 ZigbeeConf[i].dvalue = 0;
@@ -3587,8 +3635,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                 ZigbeeConf[i].state = 1;
                 ZigbeeConf[i].dvalue = 254;
             }
-        } else if (ZigbeeConf[i].zbee_cluster == 0x0008 ||
-                   ZigbeeConf[i].zbee_cluster == 0x0300) {
+        } else if (cluster == 8 || cluster == 768) {
             char numbuf[16];
             int copylen = raw_len < (int)sizeof(numbuf) - 1
                         ? raw_len : (int)sizeof(numbuf) - 1;
@@ -3598,6 +3645,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
         }
 
         taskEXIT_CRITICAL();
+        return;
     }
 }
 
@@ -3611,9 +3659,7 @@ void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
     for (int i = 0; i < NUMZBEE; i++) {
         if (ZigbeeConf[i].zbee_ieee[0] != '\0' &&
             strcmp(ZigbeeConf[i].zbee_ieee, zbee_ieee) == 0 &&
-            ZigbeeConf[i].zbee_endpoint == endpoint &&
-            ZigbeeConf[i].zbee_cluster == cluster &&
-            ZigbeeConf[i].zbee_attribute == attribute) {
+            ZigbeeConf[i].zbee_endpoint == endpoint) {
             zbee_idx = i;
             break;
         }
@@ -3621,8 +3667,7 @@ void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
     taskEXIT_CRITICAL();
 
     if (zbee_idx < 0) {
-        LOG_Z2M("zbee: NO MATCH for %s/%d/%04X/%04X\r\n",
-               zbee_ieee, endpoint, cluster, attribute);
+        LOG_Z2M("zbee: NO MATCH for %s/%d\r\n", zbee_ieee, endpoint);
         return;
     }
 
@@ -7151,6 +7196,7 @@ void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
 
 void handle_zigbee_get(struct mg_connection *c) {
   static char response[2048];
+  static char clbuf[32];
   
   int offset = 0;
   offset += snprintf(response + offset, sizeof(response) - offset,
@@ -7160,16 +7206,16 @@ void handle_zigbee_get(struct mg_connection *c) {
   bool first = true;
   for (int i = 0; i < NUMZBEE && offset < (int)sizeof(response); i++) {
     if (ZigbeeConf[i].zbee_ieee[0] == '\0' && ZigbeeConf[i].onoff == 0) continue; 
-    // We send it if it's active or has an IEEE assigned
     if (!first) {
       offset += snprintf(response + offset, sizeof(response) - offset, ",");
     }
     first = false;
+    clusters_flags_to_json(ZigbeeConf[i].cluster_flags, clbuf, sizeof(clbuf));
     offset += snprintf(response + offset, sizeof(response) - offset,
-                       "{\"id\":%d,\"ieee\":\"%s\",\"ep\":%d,\"cl\":%d,\"attr\":%d,\"onoff\":%d,\"info\":\"%s\"}",
+                       "{\"id\":%d,\"ieee\":\"%s\",\"ep\":%d,\"clusters\":%s,\"attr\":%d,\"onoff\":%d,\"brightness\":%d,\"color_hex\":%d,\"info\":\"%s\"}",
                        i, ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint,
-                       ZigbeeConf[i].zbee_cluster, ZigbeeConf[i].zbee_attribute,
-                       ZigbeeConf[i].onoff, ZigbeeConf[i].info);
+                       clbuf, ZigbeeConf[i].zbee_attribute,
+                       ZigbeeConf[i].onoff, ZigbeeConf[i].dvalue, 0xFFAA00, ZigbeeConf[i].zbee_label);
   }
   
   if (offset < (int)sizeof(response)) {
@@ -7195,18 +7241,45 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
       mg_free(ieee);
     }
     ZigbeeConf[id].zbee_endpoint = (uint8_t)mg_json_get_long(json, "$.ep", ZigbeeConf[id].zbee_endpoint);
-    ZigbeeConf[id].zbee_cluster = (uint16_t)mg_json_get_long(json, "$.cl", ZigbeeConf[id].zbee_cluster);
     ZigbeeConf[id].zbee_attribute = (uint16_t)mg_json_get_long(json, "$.attr", ZigbeeConf[id].zbee_attribute);
     ZigbeeConf[id].onoff = (uint8_t)mg_json_get_long(json, "$.onoff", ZigbeeConf[id].onoff);
 
-    LOG_Z2M("zbee: SAVED id=%d ieee='%s' ep=%d cl=0x%04X onoff=%d\r\n",
+    char *clusters_str = mg_json_get_str(json, "$.clusters");
+    if (clusters_str) {
+      ZigbeeConf[id].cluster_flags = clusters_json_to_flags(clusters_str);
+      mg_free(clusters_str);
+    }
+
+    int new_brightness = (int)mg_json_get_long(json, "$.brightness", -1);
+    int new_color_hex = (int)mg_json_get_long(json, "$.color_hex", -1);
+
+    if (new_brightness >= 0 && ZigbeeConf[id].zbee_ieee[0] != '\0') {
+      ZigbeeConf[id].dvalue = new_brightness;
+      if (ZigbeeConf[id].cluster_flags & ZBEE_CL_DIMMER) {
+        char valbuf[12];
+        snprintf(valbuf, sizeof(valbuf), "%d", new_brightness);
+        SendZigbeeCommand(ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint,
+                          8, ZigbeeConf[id].zbee_attribute, valbuf);
+      }
+    }
+
+    if (new_color_hex >= 0 && ZigbeeConf[id].zbee_ieee[0] != '\0') {
+      if (ZigbeeConf[id].cluster_flags & ZBEE_CL_COLOR) {
+        char valbuf[12];
+        snprintf(valbuf, sizeof(valbuf), "0x%06X", new_color_hex);
+        SendZigbeeCommand(ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint,
+                          768, ZigbeeConf[id].zbee_attribute, valbuf);
+      }
+    }
+
+    LOG_Z2M("zbee: SAVED id=%d ieee='%s' ep=%d flags=0x%02X onoff=%d\r\n",
            id, ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint,
-           ZigbeeConf[id].zbee_cluster, ZigbeeConf[id].onoff);
+           ZigbeeConf[id].cluster_flags, ZigbeeConf[id].onoff);
 
     char *info = mg_json_get_str(json, "$.info");
     if (info) {
-      strncpy(ZigbeeConf[id].info, info, sizeof(ZigbeeConf[id].info) - 1);
-      ZigbeeConf[id].info[sizeof(ZigbeeConf[id].info) - 1] = '\0';
+      strncpy(ZigbeeConf[id].zbee_label, info, sizeof(ZigbeeConf[id].zbee_label) - 1);
+      ZigbeeConf[id].zbee_label[sizeof(ZigbeeConf[id].zbee_label) - 1] = '\0';
       mg_free(info);
     }
     

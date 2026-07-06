@@ -166,14 +166,6 @@ const ArraySelect = ({ d, selectedValues, isRowDisabled, handleRadioChange, hand
               handleFieldChange(d.id, 'zbee_ieee', v);
             }}
             class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 flex-1" />
-          <select
-            value=${selectedValues[`zbee_device_type_${d.id}`] || 'socket'}
-            onChange=${(e) => handleFieldChange(d.id, 'zbee_device_type', e.target.value)}
-            class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 w-40">
-            <option value="socket">🔌 Socket</option>
-            <option value="dimmer">🔆 Dimmer</option>
-            <option value="lamp">💡 Color Lamp</option>
-          </select>
           <input type="text" placeholder="Info (e.g. Lamp Kuhnya)"
             maxlength="29"
             value=${selectedValues[`zbee_label_${d.id}`] || ''}
@@ -200,20 +192,11 @@ function TabSelect({ }) {
   const lastPollData = useRef(null);
   const serverSnapshot = useRef({});
 
-  const clusterToDeviceType = (cluster) => {
-    const cl = Number(cluster) || 0x0006;
-    if (cl === 0x0300) return 'lamp';
-    if (cl === 0x0008) return 'dimmer';
-    return 'socket';
-  };
-
   const buildSnapshotEntry = (d) => ({
     topin: d.topin.toString(),
     zbee_ieee: d.zbee_ieee || '',
     zbee_endpoint: d.zbee_endpoint || 1,
-    zbee_cluster: d.zbee_cluster != null ? Number(d.zbee_cluster).toString(16).padStart(4, '0') : '0006',
-    zbee_attribute: d.zbee_attribute != null ? Number(d.zbee_attribute).toString(16).padStart(2, '0') : '00',
-    zbee_device_type: d.zbee_device_type || clusterToDeviceType(d.zbee_cluster),
+    clusters: d.clusters || [6],
     zbee_label: d.zbee_label || '',
   });
 
@@ -258,7 +241,6 @@ function TabSelect({ }) {
         initialValues[`topin_${d.id}`] = d.topin.toString();
         if (d.zbee_ieee !== undefined) initialValues[`zbee_ieee_${d.id}`] = d.zbee_ieee;
         if (d.zbee_endpoint !== undefined) initialValues[`zbee_endpoint_${d.id}`] = d.zbee_endpoint;
-        initialValues[`zbee_device_type_${d.id}`] = d.zbee_device_type || clusterToDeviceType(d.zbee_cluster);
         if (d.zbee_label !== undefined) initialValues[`zbee_label_${d.id}`] = d.zbee_label;
       });
       setSelectedValues(initialValues);
@@ -321,25 +303,20 @@ function TabSelect({ }) {
           : d.topin.toString();
         const cur = {
           zbee_ieee: selectedValues[`zbee_ieee_${d.id}`] || '',
-          zbee_device_type: selectedValues[`zbee_device_type_${d.id}`] || 'socket',
           zbee_label: selectedValues[`zbee_label_${d.id}`] || '',
         };
         const isDirty =
           curTopin !== snap.topin ||
           cur.zbee_ieee !== snap.zbee_ieee ||
-          cur.zbee_device_type !== snap.zbee_device_type ||
           cur.zbee_label !== snap.zbee_label;
         if (isDirty) {
-            const typeToCluster = { socket: 0x0006, dimmer: 0x0008, lamp: 0x0300 };
-            const typeToAttr = { socket: 0, dimmer: 0, lamp: 0 };
             if (curTopin === '0') {
               changed.push({
                 id: d.id,
                 topin: 0,
                 zbee_ieee: '',
                 zbee_endpoint: 1,
-                zbee_cluster: 0x0006,
-                zbee_attribute: 0,
+                clusters: [6],
                 zbee_label: '',
               });
             } else {
@@ -347,8 +324,7 @@ function TabSelect({ }) {
                 id: d.id,
                 zbee_ieee: cur.zbee_ieee,
                 zbee_endpoint: 1,
-                zbee_cluster: typeToCluster[cur.zbee_device_type] || 0x0006,
-                zbee_attribute: typeToAttr[cur.zbee_device_type] || 0,
+                clusters: d.clusters || [6],
                 zbee_label: cur.zbee_label,
               });
             }
@@ -386,10 +362,6 @@ function TabSelect({ }) {
       changed.forEach((item) => {
         if (item.topin !== undefined) updatedValues[`topin_${item.id}`] = item.topin.toString();
         if (item.zbee_ieee !== undefined) updatedValues[`zbee_ieee_${item.id}`] = item.zbee_ieee;
-        if (item.zbee_cluster !== undefined) {
-          const cl = Number(item.zbee_cluster) || 0x0006;
-          updatedValues[`zbee_device_type_${item.id}`] = cl === 0x0300 ? 'lamp' : cl === 0x0008 ? 'dimmer' : 'socket';
-        }
         if (item.zbee_label !== undefined) updatedValues[`zbee_label_${item.id}`] = item.zbee_label;
       });
       setSelectedValues((prevState) => ({ ...prevState, ...updatedValues }));
@@ -411,15 +383,6 @@ function TabSelect({ }) {
   const handleFieldChange = (id, field, value) => {
     setSelectedValues(prev => ({ ...prev, [`${field}_${id}`]: value }));
     lastChangeTime.current = Date.now();
-    if (field === 'zbee_device_type') {
-      const typeToCluster = { socket: 0x0006, dimmer: 0x0008, lamp: 0x0300 };
-      const cluster = typeToCluster[value] || 0x0006;
-      fetch('/api/zigbee/set', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: id - 89, cl: cluster })
-      });
-    }
   };
 
   const handleLanguageChange = (e) => {

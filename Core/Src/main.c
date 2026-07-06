@@ -1951,10 +1951,26 @@ void StartOutputTask(void *argument)
         if (IsZigbeePin(data_pin.id)) {
           int zbi = ZbeeIdx(data_pin.id);
           const char *cmd = (data_pin.action == 1) ? "ON" : "OFF";
-          SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
-                            ZigbeeConf[zbi].zbee_endpoint,
-                            ZigbeeConf[zbi].zbee_cluster,
-                            ZigbeeConf[zbi].zbee_attribute, cmd);
+          uint8_t flags = ZigbeeConf[zbi].cluster_flags;
+          if (flags & ZBEE_CL_ONOFF) {
+            SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                              ZigbeeConf[zbi].zbee_endpoint,
+                              6, ZigbeeConf[zbi].zbee_attribute, cmd);
+          }
+          if (flags & ZBEE_CL_DIMMER) {
+            char valbuf[8];
+            snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
+            SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                              ZigbeeConf[zbi].zbee_endpoint,
+                              8, ZigbeeConf[zbi].zbee_attribute, valbuf);
+          }
+          if (flags & ZBEE_CL_COLOR) {
+            char valbuf[8];
+            snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
+            SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                              ZigbeeConf[zbi].zbee_endpoint,
+                              768, ZigbeeConf[zbi].zbee_attribute, valbuf);
+          }
         } else {
           switch (data_pin.action) {
           case 0:

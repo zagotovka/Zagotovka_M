@@ -2,18 +2,21 @@ import { h, render, useState, useEffect, useRef, html } from '../bundle.js';
 import { MyPolzunok } from '../main.js';
 
 function ModalZigbee({ device, onClose, onUpdate }) {
-  const deviceType = device.zbee_device_type || 'socket';
-  const isLamp = deviceType === 'lamp';
-  const isDimmer = deviceType === 'dimmer';
+  const [clusters, setClusters] = useState(device.clusters || [6]);
+
+  // Reactive: derive type from clusters state, not from fixed prop
+  const hasDimmer = clusters.includes(8);
+  const hasColor = clusters.includes(768);
+  const deviceType = hasColor ? 'lamp' : hasDimmer ? 'dimmer' : 'socket';
 
   const [onoff, setOnoff] = useState(device.onoff || 0);
   const [brightness, setBrightness] = useState(device.brightness || 254);
-  const [color, setColor] = useState(device.color || '#FFAA00');
+  const [color, setColor] = useState(device.color || '#' + (device.color_hex || 0xFFAA00).toString(16).padStart(6, '0'));
 
   const portalRef = useRef(null);
   const pendingUpdate = useRef(null);
   const prevSnapshot = useRef(JSON.stringify({
-    onoff: device.onoff, brightness: device.brightness, color: device.color
+    onoff: device.onoff, brightness: device.brightness, color: device.color, color_hex: device.color_hex
   }));
 
   useEffect(() => {
@@ -29,7 +32,7 @@ function ModalZigbee({ device, onClose, onUpdate }) {
 
   const scheduleUpdate = (patch) => {
     Object.assign(device, patch);
-    const snap = JSON.stringify({ onoff: device.onoff, brightness: device.brightness, color: device.color });
+    const snap = JSON.stringify({ onoff: device.onoff, brightness: device.brightness, color: device.color, color_hex: device.color_hex, clusters: device.clusters });
     if (snap === prevSnapshot.current) return;
     clearTimeout(pendingUpdate.current);
     pendingUpdate.current = setTimeout(() => {
@@ -50,7 +53,8 @@ function ModalZigbee({ device, onClose, onUpdate }) {
 
   const applyColor = (value) => {
     setColor(value);
-    scheduleUpdate({ color: value });
+    const hex = parseInt(value.replace('#', ''), 16);
+    scheduleUpdate({ color: value, color_hex: hex });
   };
 
   const handleOverlayClick = (e) => {
@@ -58,15 +62,23 @@ function ModalZigbee({ device, onClose, onUpdate }) {
   };
 
   const getClusterLabel = () => {
-    if (isLamp) return 'Color Lamp';
-    if (isDimmer) return 'Dimmer';
+    if (hasColor) return 'Color Lamp';
+    if (hasDimmer) return 'Dimmer';
     return 'On/Off Socket';
   };
 
   const getClusterIcon = () => {
-    if (isLamp) return '💡';
-    if (isDimmer) return '🔆';
+    if (hasColor) return '💡';
+    if (hasDimmer) return '🔆';
     return '🔌';
+  };
+
+  const toggleCluster = (id) => {
+    setClusters(prev => {
+      const next = prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id].sort((a, b) => a - b);
+      scheduleUpdate({ clusters: next });
+      return next;
+    });
   };
 
   const modalContent = html`
@@ -105,7 +117,7 @@ function ModalZigbee({ device, onClose, onUpdate }) {
               <${MyPolzunok} value=${onoff} onChange=${applyOnOff} />
             </div>
 
-            ${(isDimmer || isLamp) && html`
+            ${(hasDimmer || hasColor) && html`
               <div class="bg-slate-50 rounded-xl p-4">
                 <div class="flex justify-between items-center mb-3">
                   <span class="text-sm font-semibold text-slate-600 uppercase tracking-wider">Brightness</span>
@@ -122,7 +134,7 @@ function ModalZigbee({ device, onClose, onUpdate }) {
               </div>
             `}
 
-            ${isLamp && html`
+            ${hasColor && html`
               <div class="bg-slate-50 rounded-xl p-4">
                 <div class="text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wider">Color</div>
                 <div class="flex items-center gap-4">
@@ -149,6 +161,24 @@ function ModalZigbee({ device, onClose, onUpdate }) {
               <div class="text-sm font-semibold text-slate-600 mb-2 uppercase tracking-wider">Info</div>
               <div class="text-sm text-slate-700 font-mono">
                 EP: ${device.zbee_endpoint || 1} · Type: ${deviceType}
+              </div>
+            </div>
+
+            <div class="bg-slate-50 rounded-xl p-4">
+              <div class="text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wider">Clusters</div>
+              <div class="flex gap-3">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked=${clusters.includes(6)} onChange=${() => toggleCluster(6)} class="w-4 h-4 rounded accent-cyan-500" />
+                  <span class="text-sm text-slate-700">On/Off (6)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked=${clusters.includes(8)} onChange=${() => toggleCluster(8)} class="w-4 h-4 rounded accent-cyan-500" />
+                  <span class="text-sm text-slate-700">Dimmer (8)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked=${clusters.includes(768)} onChange=${() => toggleCluster(768)} class="w-4 h-4 rounded accent-cyan-500" />
+                  <span class="text-sm text-slate-700">Color (768)</span>
+                </label>
               </div>
             </div>
           </div>

@@ -2551,7 +2551,13 @@ void GetZigbeeConfig(void) {
     }
 
     ZigbeeConf[idx].zbee_endpoint = (uint8_t)mg_json_get_long(elem, "$.ep", 1);
-    ZigbeeConf[idx].zbee_cluster = (uint16_t)mg_json_get_long(elem, "$.cluster", 6);
+    char *clusters_str = mg_json_get_str(elem, "$.clusters");
+    if (clusters_str) {
+      ZigbeeConf[idx].cluster_flags = clusters_json_to_flags(clusters_str);
+      mg_free(clusters_str);
+    } else {
+      ZigbeeConf[idx].cluster_flags = ZBEE_CL_ONOFF;
+    }
     ZigbeeConf[idx].zbee_attribute = (uint16_t)mg_json_get_long(elem, "$.attr", 0);
     ZigbeeConf[idx].onoff = (uint8_t)mg_json_get_long(elem, "$.onoff", 1);
     ZigbeeConf[idx].dvalue = (int)mg_json_get_long(elem, "$.dvalue", 0);
@@ -2583,6 +2589,7 @@ void SetZigbeeConfig(void) {
   if (fresult != FR_OK) goto cleanup;
 
   bool first = true;
+  static char clbuf[32];
   for (int i = 0; i < NUMZBEE; i++) {
     // Сохраняем только валидные записи с IEEE-адресом
     if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
@@ -2593,12 +2600,13 @@ void SetZigbeeConfig(void) {
     }
     first = false;
 
+    clusters_flags_to_json(ZigbeeConf[i].cluster_flags, clbuf, sizeof(clbuf));
     len = snprintf(buf, sizeof(buf),
-        "{\"ieee\":\"%s\",\"ep\":%d,\"cluster\":%d,\"attr\":%d,"
-        "\"label\":\"%s\",\"onoff\":%d,\"dvalue\":%d,\"state\":%d,\"info\":\"%s\"}",
-        ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint, ZigbeeConf[i].zbee_cluster,
+        "{\"ieee\":\"%s\",\"ep\":%d,\"clusters\":%s,\"attr\":%d,"
+        "\"label\":\"%s\",\"onoff\":%d,\"dvalue\":%d,\"state\":%d,\"topin\":%d,\"info\":\"%s\"}",
+        ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint, clbuf,
         ZigbeeConf[i].zbee_attribute, ZigbeeConf[i].zbee_label, ZigbeeConf[i].onoff,
-        ZigbeeConf[i].dvalue, ZigbeeConf[i].state, ZigbeeConf[i].info);
+        ZigbeeConf[i].dvalue, ZigbeeConf[i].state, ZigbeeConf[i].topin, ZigbeeConf[i].info);
     if (len <= 0 || len >= (int)sizeof(buf)) continue;
 
     fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);

@@ -1177,21 +1177,52 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
 
     for (int i = 0; i < NUMZBEE; i++) {
       if (ZigbeeConf[i].zbee_ieee[0] != '\0') {
-        char zbee_sub_topic[80];
-        snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
-                 "%s/data/%s/%d/%04X/%04X",
-                 get_rxzbtop(),
-                 ZigbeeConf[i].zbee_ieee,
-                 ZigbeeConf[i].zbee_endpoint,
-                 ZigbeeConf[i].zbee_cluster,
-                 ZigbeeConf[i].zbee_attribute);
-        struct mg_mqtt_opts zbee_sub;
-        memset(&zbee_sub, 0, sizeof(zbee_sub));
-        zbee_sub.topic = mg_str(zbee_sub_topic);
-        zbee_sub.qos = s_qos;
-        mg_mqtt_sub(c, &zbee_sub);
-        printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n",
-               zbee_sub_topic, NUMPIN + i);
+        uint8_t flags = ZigbeeConf[i].cluster_flags;
+        if (flags & ZBEE_CL_ONOFF) {
+          char zbee_sub_topic[80];
+          snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                   "%s/data/%s/%d/0006/%04X",
+                   get_rxzbtop(),
+                   ZigbeeConf[i].zbee_ieee,
+                   ZigbeeConf[i].zbee_endpoint,
+                   ZigbeeConf[i].zbee_attribute);
+          struct mg_mqtt_opts zbee_sub;
+          memset(&zbee_sub, 0, sizeof(zbee_sub));
+          zbee_sub.topic = mg_str(zbee_sub_topic);
+          zbee_sub.qos = s_qos;
+          mg_mqtt_sub(c, &zbee_sub);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+        }
+        if (flags & ZBEE_CL_DIMMER) {
+          char zbee_sub_topic[80];
+          snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                   "%s/data/%s/%d/0008/%04X",
+                   get_rxzbtop(),
+                   ZigbeeConf[i].zbee_ieee,
+                   ZigbeeConf[i].zbee_endpoint,
+                   ZigbeeConf[i].zbee_attribute);
+          struct mg_mqtt_opts zbee_sub;
+          memset(&zbee_sub, 0, sizeof(zbee_sub));
+          zbee_sub.topic = mg_str(zbee_sub_topic);
+          zbee_sub.qos = s_qos;
+          mg_mqtt_sub(c, &zbee_sub);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+        }
+        if (flags & ZBEE_CL_COLOR) {
+          char zbee_sub_topic[80];
+          snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                   "%s/data/%s/%d/0300/%04X",
+                   get_rxzbtop(),
+                   ZigbeeConf[i].zbee_ieee,
+                   ZigbeeConf[i].zbee_endpoint,
+                   ZigbeeConf[i].zbee_attribute);
+          struct mg_mqtt_opts zbee_sub;
+          memset(&zbee_sub, 0, sizeof(zbee_sub));
+          zbee_sub.topic = mg_str(zbee_sub_topic);
+          zbee_sub.qos = s_qos;
+          mg_mqtt_sub(c, &zbee_sub);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+        }
       }
     }
   } else if (ev == MG_EV_MQTT_MSG) {

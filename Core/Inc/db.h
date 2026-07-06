@@ -13,6 +13,11 @@
 #define NUMPINLINKS 100 // количество pin to pin
 #define NUMTASK 50 // кол-во CRON task
 
+/* Zigbee cluster bitflags */
+#define ZBEE_CL_ONOFF   0x01  // 0x0006
+#define ZBEE_CL_DIMMER  0x02  // 0x0008
+#define ZBEE_CL_COLOR   0x04  // 0x0300
+
 #include "stdio.h"
 #include <stdbool.h>
 #include "stm32f7xx_hal.h"
@@ -265,7 +270,7 @@ _Static_assert(NUMPIN + NUMZBEE <= 255, "ID space exceeds uint8_t range");
 typedef struct {
     char     zbee_ieee[17];      // IEEE-адрес без "0x", 16 hex + '\0'
     uint8_t  zbee_endpoint;      // 1-240
-    uint16_t zbee_cluster;       // 0x0006=OnOff, 0x0008=Level, 0x0300=Color
+    uint8_t  cluster_flags;      // Bitmask: ZBEE_CL_ONOFF|ZBEE_CL_DIMMER|ZBEE_CL_COLOR
     uint16_t zbee_attribute;     // 0x0000 и т.д., зависит от кластера
     char     zbee_label[30];     // Произвольное имя для UI
     uint8_t  state;              // 0/1 — текущее состояние устройства

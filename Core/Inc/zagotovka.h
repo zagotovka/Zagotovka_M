@@ -152,6 +152,10 @@ void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_zigbee_get(struct mg_connection *c);
 void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm);
 bool zbee_is_valid_ieee(const char *s);
+
+/* Cluster flags <-> JSON array conversion */
+uint8_t clusters_json_to_flags(const char *json_str);
+int clusters_flags_to_json(uint8_t flags, char *buf, size_t buflen);
 void gen_switch_json(const struct dbPinsInfo *pins_info,
 		const struct dbPinsConf *pins_conf, int num_pins, char *buffer,
 		int buffer_size);

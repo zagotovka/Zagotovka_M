@@ -15,29 +15,33 @@ export function TabZigbee({}) {
   const dirtyIds = useRef(new Set());
   const pendingConfigSave = useRef(null);
 
-  const clusterToDeviceType = (cl) => {
-    if (cl === 0x0008) return 'dimmer';
+  const clusterToDeviceType = (clusters) => {
+    const cl = Array.isArray(clusters) ? clusters : [clusters || 6];
+    if (cl.includes(768)) return 'lamp';
+    if (cl.includes(8)) return 'dimmer';
     return 'socket';
   };
 
   const buildSnapshot = (d) => ({
     zbee_ieee: d.ieee || '',
     zbee_endpoint: d.ep || 1,
-    zbee_cluster: d.cl || 0x0006,
-    zbee_attribute: d.attr || 0,
+    clusters: d.clusters || [6],
     zbee_label: d.info || '',
     onoff: d.onoff || 0,
+    brightness: d.brightness || 254,
+    color_hex: d.color_hex || 0xFFAA00,
   });
 
   const normalizeDevice = (d) => ({
     id: d.id,
     zbee_ieee: d.ieee || '',
     zbee_endpoint: d.ep || 1,
-    zbee_cluster: d.cl || 0x0006,
-    zbee_attribute: d.attr || 0,
-    zbee_device_type: clusterToDeviceType(d.cl),
+    clusters: d.clusters || [6],
+    zbee_device_type: clusterToDeviceType(d.clusters),
     zbee_label: d.info || '',
     onoff: d.onoff || 0,
+    brightness: d.brightness || 254,
+    color_hex: d.color_hex || 0xFFAA00,
   });
 
   const refresh = () =>
@@ -100,86 +104,79 @@ export function TabZigbee({}) {
   };
 
   const closeModal = () => {
-    if (pendingConfigSave.current) {
-      const { id, data } = pendingConfigSave.current;
-      pendingConfigSave.current = null;
-      fetch('/api/zigbee/set', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      }).then(() => {
-        dirtyIds.current.delete(id);
-        serverSnapshot.current[id] = { ...data._snap };
-        setTimeout(() => { lastChangeTime.current = 0; }, 3000);
-      }).catch(err => console.error('Error saving config:', err));
-    }
     setIsModalOpen(false);
     setSelectedDevice(null);
   };
 
   const handleDeviceUpdate = (updatedDevice) => {
     const snap = serverSnapshot.current[updatedDevice.id] || {};
-    const typeToCluster = { socket: 0x0006, dimmer: 0x0008 };
-    const cluster = typeToCluster[updatedDevice.zbee_device_type] || 0x0006;
+    const typeToClusters = { socket: [6], dimmer: [6, 8], lamp: [6, 8, 768] };
+    const clusters = updatedDevice.clusters || typeToClusters[updatedDevice.zbee_device_type] || [6];
 
     const cur = {
       zbee_ieee: updatedDevice.zbee_ieee || '',
       zbee_endpoint: parseInt(updatedDevice.zbee_endpoint) || 1,
-      zbee_cluster: cluster,
+      clusters: clusters,
       zbee_label: updatedDevice.zbee_label || '',
       onoff: updatedDevice.onoff || 0,
       brightness: updatedDevice.brightness,
       color: updatedDevice.color,
+      color_hex: updatedDevice.color_hex,
     };
 
-    const isDirty =
+    const clustersEqual = (a, b) => {
+      const sa = Array.isArray(a) ? [...a].sort() : [a || 6];
+      const sb = Array.isArray(b) ? [...b].sort() : [b || 6];
+      return sa.length === sb.length && sa.every((v, i) => v === sb[i]);
+    };
+
+    const onoffChanged = cur.onoff !== snap.onoff;
+    const configChanged =
       cur.zbee_ieee !== snap.zbee_ieee ||
       String(cur.zbee_endpoint) !== String(snap.zbee_endpoint) ||
-      cur.zbee_cluster !== snap.zbee_cluster ||
+      !clustersEqual(cur.clusters, snap.clusters) ||
       cur.zbee_label !== snap.zbee_label ||
-      cur.onoff !== snap.onoff;
+      cur.brightness !== snap.brightness ||
+      cur.color_hex !== snap.color_hex;
 
-    if (!isDirty) return;
+    if (!onoffChanged && !configChanged) return;
 
     lastChangeTime.current = Date.now();
     setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d));
 
-    const onlyOnoffChanged =
-      cur.zbee_ieee === snap.zbee_ieee &&
-      String(cur.zbee_endpoint) === String(snap.zbee_endpoint) &&
-      cur.zbee_cluster === snap.zbee_cluster &&
-      cur.zbee_label === snap.zbee_label &&
-      cur.onoff !== snap.onoff;
-
-    if (onlyOnoffChanged) {
+    if (onoffChanged) {
       fetch('/api/onoff/set', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: 89 + updatedDevice.id, onoff: cur.onoff })
-      }).then(() => {
-        dirtyIds.current.delete(updatedDevice.id);
-        serverSnapshot.current[updatedDevice.id] = { ...cur };
-        setTimeout(() => { lastChangeTime.current = 0; }, 3000);
-      }).catch(err => console.error('Error saving:', err));
-    } else {
-      pendingConfigSave.current = {
-        id: updatedDevice.id,
-        data: {
+      }).catch(err => console.error('Error saving onoff:', err));
+    }
+
+    if (configChanged) {
+      fetch('/api/zigbee/set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           id: updatedDevice.id,
           ieee: cur.zbee_ieee,
           ep: cur.zbee_endpoint,
-          cl: cur.zbee_cluster,
-          attr: 0,
+          clusters: JSON.stringify(cur.clusters),
           info: cur.zbee_label,
           onoff: cur.onoff,
-          _snap: { ...cur },
-        }
-      };
+          brightness: cur.brightness,
+          color_hex: cur.color_hex
+        })
+      }).catch(err => console.error('Error saving config:', err));
     }
+
+    dirtyIds.current.delete(updatedDevice.id);
+    serverSnapshot.current[updatedDevice.id] = { ...cur };
+    setTimeout(() => { lastChangeTime.current = 0; }, 3000);
   };
 
   const getDeviceTypeLabel = (deviceType) => {
     switch (deviceType) {
+      case 'lamp': return '💡 Color Lamp';
       case 'dimmer': return '🔆 Dimmer';
       default: return '🔌 Socket';
     }
