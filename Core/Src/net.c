@@ -902,8 +902,6 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				MG_INFO(("%lu Processing /api/zigbee/set", c->id));
 				handle_zigbee_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/onoff/set"), NULL)) {
-				printf("[NET-T0] /api/onoff/set tick=%lu\r\n", (unsigned long)HAL_GetTick());
-				fflush(stdout);
 				MG_INFO(("%lu Processing /api/onoff/set", c->id));
 				handle_onoff_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/button/get"), NULL)) {

@@ -309,12 +309,7 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
   if (offset < 0) offset = 0;
   if (limit <= 0) limit = 30;
 
-  long total = (long)NUMPIN;
-  for (int i = 0; i < NUMZBEE; i++) {
-    taskENTER_CRITICAL();
-    if (ZigbeeConf[i].zbee_ieee[0] != '\0') total++;
-    taskEXIT_CRITICAL();
-  }
+  long total = (long)NUMPIN + (long)NUMZBEE;
 
   mg_printf(c,
     "HTTP/1.1 200 OK\r\n"
@@ -358,15 +353,13 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
     taskENTER_CRITICAL();
     zb = ZigbeeConf[i];
     taskEXIT_CRITICAL();
-    if (zb.zbee_ieee[0] == '\0') continue;
     if (emitted < offset) { emitted++; continue; }
-    uint8_t topin = 11;
     mg_http_printf_chunk(c,
       "%s{\"id\":%ld,\"topin\":%d,"
       "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
       "\"zbee_cluster\":%d,\"zbee_attribute\":%d,"
       "\"zbee_label\":\"%s\"}",
-      (first ? "" : ","), (long)NUMPIN + i, topin,
+      (first ? "" : ","), (long)NUMPIN + i, zb.topin,
       zb.zbee_ieee, zb.zbee_endpoint,
       zb.zbee_cluster, zb.zbee_attribute,
       zb.zbee_label);
@@ -491,13 +484,8 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
   long id_val = mg_json_get_long(body, "$.id", -1);
   long onoff_val = mg_json_get_long(body, "$.onoff", -1);
 
-  printf("[ZB-DBG] parse_onoff_json raw='%.*s' id=%ld onoff=%ld NUMPIN=%d NUMZBEE=%d\r\n",
-         (int)body.len, body.buf, id_val, onoff_val, NUMPIN, NUMZBEE);
-  fflush(stdout);
-
   if (id_val < 0 || onoff_val < 0) {
-    printf("[ZB-DBG] REJECT: invalid JSON id=%ld onoff=%ld\r\n", id_val, onoff_val);
-    fflush(stdout);
+    LOG_Z2M("onoff: REJECT invalid JSON id=%ld onoff=%ld\r\n", id_val, onoff_val);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
@@ -506,36 +494,17 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
   onoffid = (int32_t)id_val;
   uint8_t onoff = (uint8_t)onoff_val;
 
-  printf("[ZB-DBG] onoffid=%" PRId32 " onoff=%d (NUMPIN=%d)\r\n", onoffid, onoff, NUMPIN);
-  fflush(stdout);
-
   if (onoffid >= NUMPIN && onoffid < NUMPIN + NUMZBEE) {
     int zbi = onoffid - NUMPIN;
-    printf("[ZB-DBG] ZIGBEE path: zbi=%d ieee='%s' ep=%d cl=0x%04X attr=0x%04X\r\n",
-           zbi, ZigbeeConf[zbi].zbee_ieee,
-           ZigbeeConf[zbi].zbee_endpoint,
-           ZigbeeConf[zbi].zbee_cluster,
-           ZigbeeConf[zbi].zbee_attribute);
-    fflush(stdout);
     ZigbeeConf[zbi].onoff = onoff;
     if (ZigbeeConf[zbi].zbee_ieee[0] != '\0') {
-      printf("[ZB-T1] parse_onoff_json id=%ld onoff=%ld tick=%lu\r\n",
-             id_val, onoff_val, (unsigned long)HAL_GetTick());
-      fflush(stdout);
       const char *cmd = (onoff != 0) ? "ON" : "OFF";
-      printf("[ZB-T2] SendZigbeeCommand cmd='%s' tick=%lu\r\n", cmd, (unsigned long)HAL_GetTick());
-      fflush(stdout);
       SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
                         ZigbeeConf[zbi].zbee_endpoint,
                         ZigbeeConf[zbi].zbee_cluster,
                         ZigbeeConf[zbi].zbee_attribute, cmd);
-      printf("[ZB-T3] SendZigbeeCommand DONE tick=%lu\r\n", (unsigned long)HAL_GetTick());
-      fflush(stdout);
-      printf("[ZB-Tw] after fflush T3 tick=%lu\r\n", (unsigned long)HAL_GetTick());
-      fflush(stdout);
     } else {
-      printf("[ZB-DBG] SKIP SendZigbeeCommand: ieee is EMPTY\r\n");
-      fflush(stdout);
+      LOG_Z2M("onoff: SKIP SendZigbeeCommand ieee EMPTY zbi=%d\r\n", zbi);
     }
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
@@ -566,8 +535,16 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
     mqtt_queue_send_safe(8, (uint8_t)onoffid, 0, 0);
     /*********************************************************/
 
-    int usbnum = 1;
-    xQueueSend(usbQueueHandle, &usbnum, 0);
+    /* Deferred USB save: debounce 5s — rapid on/off toggles batch into one write */
+    {
+      static uint32_t s_onoff_last_save_tick = 0;
+      uint32_t now = HAL_GetTick();
+      if ((now - s_onoff_last_save_tick) >= 5000) {
+        int usbnum = 1;
+        xQueueSend(usbQueueHandle, &usbnum, 0);
+        s_onoff_last_save_tick = now;
+      }
+    }
 
   } else {
     printf("Invalid id: %" PRId32 "\n", onoffid);
@@ -581,13 +558,7 @@ void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
 
-  printf("[ZB-T0] handle_onoff_set ENTER tick=%lu body_len=%lu\r\n",
-         (unsigned long)HAL_GetTick(), (unsigned long)hm->body.len);
-  fflush(stdout);
-
   if (hm->body.len > 0) {
-    printf("[ZB-DBG] ONOFF JSON: %.*s\r\n", (int)hm->body.len, hm->body.buf);
-    fflush(stdout);
     parse_onoff_json(hm->body.buf, PinsConf, NUMPIN);
     /* Mark the relevant version counter dirty immediately so ETag changes.
        SetPinConfig() also does this, but only after the save queue drains;
@@ -610,8 +581,6 @@ void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
     MG_INFO(("Response headers for connection %ld:", c->id));
     log_headers(extra_headers);
     mg_http_reply(c, 200, extra_headers, "%s", response);
-    printf("[ZB-T9] onoff_set DONE tick=%lu\r\n", (unsigned long)HAL_GetTick());
-    fflush(stdout);
   } else {
     MG_INFO(("Response headers for connection %ld:", c->id));
     log_headers(extra_headers);
@@ -3566,8 +3535,9 @@ static bool zbee_cmd_throttle_ok(int zbee_idx) {
         ok = true;
     }
     taskEXIT_CRITICAL();
-    printf("[ZB-Ty] taskEXIT throttle ok=%d tick=%lu\r\n", ok, (unsigned long)HAL_GetTick());
-    fflush(stdout);
+    if (!ok) {
+        LOG_Z2M("zbee: THROTTLED zbee_idx=%d\r\n", zbee_idx);
+    }
     return ok;
 }
 
@@ -3635,9 +3605,6 @@ void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
                        uint16_t cluster, uint8_t attribute,
                        const char *json_cmd) {
     extern osMessageQueueId_t zbeeCmdQueueHandle;
-    printf("[ZB-DBG] SendZigbeeCommand ieee='%s' ep=%d cl=0x%04X attr=0x%04X cmd='%s'\r\n",
-           zbee_ieee, endpoint, cluster, attribute, json_cmd);
-    fflush(stdout);
 
     int zbee_idx = -1;
     taskENTER_CRITICAL();
@@ -3652,22 +3619,14 @@ void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
         }
     }
     taskEXIT_CRITICAL();
-    printf("[ZB-Tx] taskEXIT search zbee_idx=%d tick=%lu\r\n", zbee_idx, (unsigned long)HAL_GetTick());
-    fflush(stdout);
 
     if (zbee_idx < 0) {
-        printf("[ZB-DBG] NO MATCH in ZigbeeConf for %s/%d/%04X/%04X\r\n",
+        LOG_Z2M("zbee: NO MATCH for %s/%d/%04X/%04X\r\n",
                zbee_ieee, endpoint, cluster, attribute);
-        fflush(stdout);
         return;
     }
 
-    printf("[ZB-DBG] zbee_idx=%d\r\n", zbee_idx);
-    fflush(stdout);
-
     if (!zbee_cmd_throttle_ok(zbee_idx)) {
-        printf("[ZB-DBG] THROTTLED zbee_idx=%d\r\n", zbee_idx);
-        fflush(stdout);
         return;
     }
 
@@ -3676,23 +3635,16 @@ void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
              "%s/cmd/%s/%d/%04X",
              get_rxzbtop(), zbee_ieee, endpoint, cluster);
 
-    printf("[ZB-DBG] TOPIC='%s' PAYLOAD='%s'\r\n", set_topic, json_cmd);
-    fflush(stdout);
-
     ZbeeCmdMsg_t cmd;
     memset(&cmd, 0, sizeof(cmd));
     strncpy(cmd.topic, set_topic, sizeof(cmd.topic) - 1);
     strncpy(cmd.payload, json_cmd, sizeof(cmd.payload) - 1);
 
     if (xQueueSend(zbeeCmdQueueHandle, &cmd, 0) != pdPASS) {
-        printf("[ZB-T4] QUEUE FULL! topic='%s' tick=%lu\r\n", set_topic, (unsigned long)HAL_GetTick());
-        fflush(stdout);
+        LOG_Z2M("zbee: QUEUE FULL topic='%s'\r\n", set_topic);
     } else {
-        printf("[ZB-T5] QUEUED OK topic='%s' tick=%lu\r\n", set_topic, (unsigned long)HAL_GetTick());
-        fflush(stdout);
+        LOG_Z2M("zbee: QUEUED topic='%s' payload='%s'\r\n", set_topic, json_cmd);
     }
-    printf("[ZB-Tz] SendZigbeeCommand EXIT tick=%lu\r\n", (unsigned long)HAL_GetTick());
-    fflush(stdout);
 }
 
 void mqtt_message_handler(const char *topic, const char *payload) {
@@ -7232,13 +7184,7 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
   snprintf(body, sizeof(body), "%.*s", (int)hm->body.len, hm->body.buf);
   struct mg_str json = mg_str(body);
 
-  printf("[ZB-DBG] handle_zigbee_set body='%s'\r\n", body);
-  fflush(stdout);
-
   int id = (int)mg_json_get_long(json, "$.id", -1);
-  printf("[ZB-DBG] handle_zigbee_set id=%d\r\n", id);
-  fflush(stdout);
-
   if (id >= 0 && id < NUMZBEE) {
     char *ieee = mg_json_get_str(json, "$.ieee");
     if (ieee) {
@@ -7253,11 +7199,10 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
     ZigbeeConf[id].zbee_attribute = (uint16_t)mg_json_get_long(json, "$.attr", ZigbeeConf[id].zbee_attribute);
     ZigbeeConf[id].onoff = (uint8_t)mg_json_get_long(json, "$.onoff", ZigbeeConf[id].onoff);
 
-    printf("[ZB-DBG] handle_zigbee_set SAVED: ieee='%s' ep=%d cl=0x%04X onoff=%d\r\n",
-           ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint,
+    LOG_Z2M("zbee: SAVED id=%d ieee='%s' ep=%d cl=0x%04X onoff=%d\r\n",
+           id, ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint,
            ZigbeeConf[id].zbee_cluster, ZigbeeConf[id].onoff);
-    fflush(stdout);
-    
+
     char *info = mg_json_get_str(json, "$.info");
     if (info) {
       strncpy(ZigbeeConf[id].info, info, sizeof(ZigbeeConf[id].info) - 1);

@@ -13,6 +13,7 @@ export function TabZigbee({}) {
   const lastChangeTime = useRef(0);
   const serverSnapshot = useRef({});
   const dirtyIds = useRef(new Set());
+  const pendingConfigSave = useRef(null);
 
   const clusterToDeviceType = (cl) => {
     if (cl === 0x0008) return 'dimmer';
@@ -99,6 +100,19 @@ export function TabZigbee({}) {
   };
 
   const closeModal = () => {
+    if (pendingConfigSave.current) {
+      const { id, data } = pendingConfigSave.current;
+      pendingConfigSave.current = null;
+      fetch('/api/zigbee/set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }).then(() => {
+        dirtyIds.current.delete(id);
+        serverSnapshot.current[id] = { ...data._snap };
+        setTimeout(() => { lastChangeTime.current = 0; }, 3000);
+      }).catch(err => console.error('Error saving config:', err));
+    }
     setIsModalOpen(false);
     setSelectedDevice(null);
   };
@@ -130,30 +144,38 @@ export function TabZigbee({}) {
     lastChangeTime.current = Date.now();
     setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d));
 
-    fetch('/api/zigbee/set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const onlyOnoffChanged =
+      cur.zbee_ieee === snap.zbee_ieee &&
+      String(cur.zbee_endpoint) === String(snap.zbee_endpoint) &&
+      cur.zbee_cluster === snap.zbee_cluster &&
+      cur.zbee_label === snap.zbee_label &&
+      cur.onoff !== snap.onoff;
+
+    if (onlyOnoffChanged) {
+      fetch('/api/onoff/set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 89 + updatedDevice.id, onoff: cur.onoff })
+      }).then(() => {
+        dirtyIds.current.delete(updatedDevice.id);
+        serverSnapshot.current[updatedDevice.id] = { ...cur };
+        setTimeout(() => { lastChangeTime.current = 0; }, 3000);
+      }).catch(err => console.error('Error saving:', err));
+    } else {
+      pendingConfigSave.current = {
         id: updatedDevice.id,
-        ieee: cur.zbee_ieee,
-        ep: cur.zbee_endpoint,
-        cl: cur.zbee_cluster,
-        attr: 0,
-        info: cur.zbee_label,
-        onoff: cur.onoff,
-      })
-    }).then(() => {
-      if (cur.onoff !== snap.onoff) {
-        fetch('/api/onoff/set', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: 89 + updatedDevice.id, onoff: cur.onoff })
-        });
-      }
-      dirtyIds.current.delete(updatedDevice.id);
-      serverSnapshot.current[updatedDevice.id] = { ...cur };
-      setTimeout(() => { lastChangeTime.current = 0; }, 3000);
-    }).catch(err => console.error('Error saving:', err));
+        data: {
+          id: updatedDevice.id,
+          ieee: cur.zbee_ieee,
+          ep: cur.zbee_endpoint,
+          cl: cur.zbee_cluster,
+          attr: 0,
+          info: cur.zbee_label,
+          onoff: cur.onoff,
+          _snap: { ...cur },
+        }
+      };
+    }
   };
 
   const getDeviceTypeLabel = (deviceType) => {

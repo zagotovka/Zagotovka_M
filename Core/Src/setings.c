@@ -2556,7 +2556,7 @@ void GetZigbeeConfig(void) {
     ZigbeeConf[idx].onoff = (uint8_t)mg_json_get_long(elem, "$.onoff", 1);
     ZigbeeConf[idx].dvalue = (int)mg_json_get_long(elem, "$.dvalue", 0);
     ZigbeeConf[idx].state = (uint8_t)mg_json_get_long(elem, "$.state", 0);
-    ZigbeeConf[idx].topin = 11; // Always 11 for Zigbee
+    ZigbeeConf[idx].topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
 
     idx++;
   }
