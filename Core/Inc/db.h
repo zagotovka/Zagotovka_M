@@ -18,6 +18,12 @@
 #define ZBEE_CL_DIMMER  0x02  // 0x0008
 #define ZBEE_CL_COLOR   0x04  // 0x0300
 
+/* Zigbee cluster fixed attributes — фиксированные атрибуты для актуаторов.
+   Поле zbee_attribute для них больше не используется. */
+#define ZBEE_ATTR_ONOFF   0x0000
+#define ZBEE_ATTR_DIMMER  0x0000
+#define ZBEE_ATTR_COLOR   0x0004
+
 #include "stdio.h"
 #include <stdbool.h>
 #include "stm32f7xx_hal.h"
@@ -271,11 +277,12 @@ typedef struct {
     char     zbee_ieee[17];      // IEEE-адрес без "0x", 16 hex + '\0'
     uint8_t  zbee_endpoint;      // 1-240
     uint8_t  cluster_flags;      // Bitmask: ZBEE_CL_ONOFF|ZBEE_CL_DIMMER|ZBEE_CL_COLOR
-    uint16_t zbee_attribute;     // 0x0000 и т.д., зависит от кластера
+    uint16_t zbee_attribute;     // 0x0000 и т.д., зависит от кластера (только для сенсоров)
     char     zbee_label[30];     // Произвольное имя для UI
     uint8_t  state;              // 0/1 — текущее состояние устройства
     int      dvalue;             // яркость/hue/etc
     uint8_t  onoff;              // Master-enable: 1=вкл, 0=выкл
+    uint32_t color_hex;          // Текущий цвет RGB (0xRRGGBB), по умолчанию 0xFFAA00
     char     info[30];           // служебное поле
     uint8_t  topin;              // всегда 11 (ZIGBEE), для унификации
 } ZigbeeVirtualPin;

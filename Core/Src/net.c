@@ -893,8 +893,17 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				handle_switch_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/zigbee/get"), NULL)) {
 				if (!check_etag_304(c, hm, &g_ver_zigbee)) {
-					MG_INFO(("%lu Processing /api/zigbee/get", c->id));
-					handle_zigbee_get(c);
+					char buf[32];
+					long offset = 0, limit = 30;
+					if (mg_http_get_var(&hm->query, "offset", buf, sizeof(buf)) > 0)
+						offset = mg_json_get_long(mg_str(buf), "$", 0);
+					if (mg_http_get_var(&hm->query, "limit", buf, sizeof(buf)) > 0)
+						limit = mg_json_get_long(mg_str(buf), "$", 30);
+					if (offset < 0) offset = 0;
+					if (limit <= 0) limit = 30;
+					if (limit > MAX_SELECT_PAGE_LIMIT) limit = MAX_SELECT_PAGE_LIMIT;
+					MG_INFO(("%lu Processing /api/zigbee/get offset=%ld limit=%ld", c->id, offset, limit));
+					handle_zigbee_get(c, offset, limit);
 				}
 				keep_alive = true;
 				break;
@@ -1175,6 +1184,9 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     MG_INFO(("%lu PUBLISHED %.*s -> %.*s", c->id, (int) data.len, data.buf, (int) pubt.len, pubt.buf));
     mqtt_publish_logfilter_status();
 
+    /* КРИТИЧНО: использовать фиксированные ZBEE_ATTR_*, а не zbee_attribute!
+       После зонда cluster_flags установлен, но zbee_attribute может быть 0
+       (по умолчанию) — тогда подписка уйдёт не на тот атрибут. */
     for (int i = 0; i < NUMZBEE; i++) {
       if (ZigbeeConf[i].zbee_ieee[0] != '\0') {
         uint8_t flags = ZigbeeConf[i].cluster_flags;
@@ -1185,7 +1197,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
                    get_rxzbtop(),
                    ZigbeeConf[i].zbee_ieee,
                    ZigbeeConf[i].zbee_endpoint,
-                   ZigbeeConf[i].zbee_attribute);
+                   ZBEE_ATTR_ONOFF);
           struct mg_mqtt_opts zbee_sub;
           memset(&zbee_sub, 0, sizeof(zbee_sub));
           zbee_sub.topic = mg_str(zbee_sub_topic);
@@ -1200,7 +1212,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
                    get_rxzbtop(),
                    ZigbeeConf[i].zbee_ieee,
                    ZigbeeConf[i].zbee_endpoint,
-                   ZigbeeConf[i].zbee_attribute);
+                   ZBEE_ATTR_DIMMER);
           struct mg_mqtt_opts zbee_sub;
           memset(&zbee_sub, 0, sizeof(zbee_sub));
           zbee_sub.topic = mg_str(zbee_sub_topic);
@@ -1215,7 +1227,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
                    get_rxzbtop(),
                    ZigbeeConf[i].zbee_ieee,
                    ZigbeeConf[i].zbee_endpoint,
-                   ZigbeeConf[i].zbee_attribute);
+                   ZBEE_ATTR_COLOR);
           struct mg_mqtt_opts zbee_sub;
           memset(&zbee_sub, 0, sizeof(zbee_sub));
           zbee_sub.topic = mg_str(zbee_sub_topic);

@@ -257,10 +257,10 @@ const osMessageQueueAttr_t mqttRxQueue_attributes = {
   .name = "mqttRxQueue"
 };
 /* Definitions for zbeeCmdQueue */
-static const osMessageQueueAttr_t zbeeCmd_attributes = {
+osMessageQueueId_t zbeeCmdQueueHandle;
+const osMessageQueueAttr_t zbeeCmdQueue_attributes = {
   .name = "zbeeCmdQueue"
 };
-osMessageQueueId_t zbeeCmdQueueHandle;
 /* USER CODE BEGIN PV */
 extern struct dbSettings SetSettings;
 extern struct dbCron dbCrontxt[NUMTASK];
@@ -277,6 +277,7 @@ static uint32_t mqtt_tx_peak = 0;
 static uint32_t mqtt_rx_peak = 0;
 static uint32_t output_peak = 0;
 static uint32_t usb_peak = 0;
+static uint32_t zbee_cmd_peak = 0;
 static uint32_t mg_conn_peak = 0;
 static uint32_t mg_conn_cur = 0;
 static uint32_t mg_conn_listeners = 0;
@@ -812,7 +813,7 @@ int main(void)
   mqttRxQueueHandle = osMessageQueueNew (4, sizeof(MqttRxMsg_t), &mqttRxQueue_attributes);
 
   /* creation of zbeeCmdQueue */
-  zbeeCmdQueueHandle = osMessageQueueNew(4, sizeof(ZbeeCmdMsg_t), &zbeeCmd_attributes);
+  zbeeCmdQueueHandle = osMessageQueueNew (16, sizeof(ZbeeCmdMsg_t), &zbeeCmdQueue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -1749,6 +1750,12 @@ void StartWebServerTask(void *argument)
     /* Обработка исходящих Zigbee-команд */
     {
         ZbeeCmdMsg_t zcmd;
+        {
+            uint32_t cur_zbee = uxQueueMessagesWaiting(zbeeCmdQueueHandle);
+            if (cur_zbee > zbee_cmd_peak) {
+                zbee_cmd_peak = cur_zbee;
+            }
+        }
         while (xQueueReceive(zbeeCmdQueueHandle, &zcmd, 0) == pdPASS) {
             if (s_conn != NULL && mqtt_connected_reported) {
                 struct mg_mqtt_opts pub_opts;
@@ -1915,6 +1922,9 @@ void StartWebServerTask(void *argument)
               }
           }
     }
+
+    /* Проверка таймаутов зондов возможностей zigbee-устройств */
+    zbee_probe_check_timeout();
 
 
 
@@ -3069,9 +3079,12 @@ void StartPIDTask(void *argument)
 * @param argument: Not used
 * @retval None
 */
-/* Функция диагностики памяти с delta-отслеживанием */
+/* Функция диагностики памяти с delta-отслеживанианием */
 static void heap_diagnostic(void)
 {
+    /* Пропускаем отчёт если категория SYSTEM отключена в фильтре логов */
+    if (!(g_log_filter_mask & LOG_MASK_SYSTEM)) return;
+
     static unsigned last_free = 0;
     static unsigned last_min_ever = 0;
     static uint32_t last_malloc_fail = 0;
@@ -3079,6 +3092,7 @@ static void heap_diagnostic(void)
     static uint32_t last_mqtt_rx_peak = 0;
     static uint32_t last_output_peak = 0;
     static uint32_t last_usb_peak = 0;
+    static uint32_t last_zbee_cmd_peak = 0;
     static uint32_t last_mg_conn_peak = 0;
     static uint32_t last_mg_poll_gap_peak = 0;
     static uint32_t last_mg_poll_gap_over_50ms_cnt = 0;
@@ -3101,6 +3115,7 @@ static void heap_diagnostic(void)
         mqtt_rx_peak != last_mqtt_rx_peak ||
         output_peak != last_output_peak ||
         usb_peak != last_usb_peak ||
+        zbee_cmd_peak != last_zbee_cmd_peak ||
         mg_conn_peak != last_mg_conn_peak ||
         mg_poll_gap_peak != last_mg_poll_gap_peak ||
         mg_poll_gap_over_50ms_cnt != last_mg_poll_gap_over_50ms_cnt ||
@@ -3133,6 +3148,7 @@ static void heap_diagnostic(void)
         printf("MQTT RX queue peak: %lu / 4\r\n", mqtt_rx_peak);
         printf("Output queue peak:  %lu / 16\r\n", output_peak);
         printf("USB queue peak:     %lu / 16\r\n", usb_peak);
+        printf("Zbee cmd peak:      %lu / 16\r\n", zbee_cmd_peak);
         printf("Mongoose conns peak: %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu]\r\n",
                mg_conn_peak, mg_conn_cur,
                mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other);
@@ -3148,6 +3164,7 @@ static void heap_diagnostic(void)
         last_mqtt_rx_peak = mqtt_rx_peak;
         last_output_peak = output_peak;
         last_usb_peak = usb_peak;
+        last_zbee_cmd_peak = zbee_cmd_peak;
         last_mg_conn_peak = mg_conn_peak;
         last_mg_poll_gap_peak = mg_poll_gap_peak;
         last_mg_poll_gap_over_50ms_cnt = mg_poll_gap_over_50ms_cnt;

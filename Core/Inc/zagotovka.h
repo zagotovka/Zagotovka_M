@@ -149,8 +149,10 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf, uin
 
 void handle_switch_get(struct mg_connection *c);
 void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm);
-void handle_zigbee_get(struct mg_connection *c);
+void handle_zigbee_get(struct mg_connection *c, long offset, long limit);
 void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm);
+void SendZigbeeReadProbe(const char *ieee, uint8_t ep);
+void zbee_probe_check_timeout(void);
 bool zbee_is_valid_ieee(const char *s);
 
 /* Cluster flags <-> JSON array conversion */

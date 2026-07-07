@@ -2561,6 +2561,7 @@ void GetZigbeeConfig(void) {
     ZigbeeConf[idx].zbee_attribute = (uint16_t)mg_json_get_long(elem, "$.attr", 0);
     ZigbeeConf[idx].onoff = (uint8_t)mg_json_get_long(elem, "$.onoff", 1);
     ZigbeeConf[idx].dvalue = (int)mg_json_get_long(elem, "$.dvalue", 0);
+    ZigbeeConf[idx].color_hex = (uint32_t)mg_json_get_long(elem, "$.color_hex", 0xFFAA00);
     ZigbeeConf[idx].state = (uint8_t)mg_json_get_long(elem, "$.state", 0);
     ZigbeeConf[idx].topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
 
@@ -2603,10 +2604,12 @@ void SetZigbeeConfig(void) {
     clusters_flags_to_json(ZigbeeConf[i].cluster_flags, clbuf, sizeof(clbuf));
     len = snprintf(buf, sizeof(buf),
         "{\"ieee\":\"%s\",\"ep\":%d,\"clusters\":%s,\"attr\":%d,"
-        "\"label\":\"%s\",\"onoff\":%d,\"dvalue\":%d,\"state\":%d,\"topin\":%d,\"info\":\"%s\"}",
+        "\"label\":\"%s\",\"onoff\":%d,\"dvalue\":%d,\"color_hex\":%u,"
+        "\"state\":%d,\"topin\":%d,\"info\":\"%s\"}",
         ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint, clbuf,
         ZigbeeConf[i].zbee_attribute, ZigbeeConf[i].zbee_label, ZigbeeConf[i].onoff,
-        ZigbeeConf[i].dvalue, ZigbeeConf[i].state, ZigbeeConf[i].topin, ZigbeeConf[i].info);
+        ZigbeeConf[i].dvalue, (unsigned)ZigbeeConf[i].color_hex,
+        ZigbeeConf[i].state, ZigbeeConf[i].topin, ZigbeeConf[i].info);
     if (len <= 0 || len >= (int)sizeof(buf)) continue;
 
     fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
