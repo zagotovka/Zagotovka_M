@@ -386,11 +386,13 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
       if (emitted < offset) { emitted++; continue; }
       clusters_flags_to_json(zb.cluster_flags, clbuf, sizeof(clbuf));
       mg_http_printf_chunk(c,
-        "%s{\"id\":%ld,\"topin\":%d,"
+        "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d,"
         "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
         "\"clusters\":%s,\"zbee_attribute\":%d,"
         "\"zbee_label\":\"%s\"}",
-        (first ? "" : ","), (long)NUMPIN + i, zb.topin,
+        (first ? "" : ","), (long)NUMPIN + i,
+        zb.zbee_ieee[0] != '\0' ? zb.zbee_label : "",
+        zb.topin,
         zb.zbee_ieee, zb.zbee_endpoint,
         clbuf, zb.zbee_attribute,
         zb.zbee_label);
@@ -543,7 +545,7 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
   if (onoffid >= NUMPIN && onoffid < NUMPIN + NUMZBEE) {
     int zbi = onoffid - NUMPIN;
     ZigbeeConf[zbi].onoff = onoff;
-    if (ZigbeeConf[zbi].zbee_ieee[0] != '\0') {
+    if (ZigbeeConf[zbi].zbee_ieee[0] != '\0' && ZigbeeConf[zbi].onoff) {
       const char *cmd = (onoff != 0) ? "ON" : "OFF";
       uint8_t flags = ZigbeeConf[zbi].cluster_flags;
       if (flags & ZBEE_CL_ONOFF) {
@@ -4153,6 +4155,29 @@ void action_handler(uint8_t button_id, const char *action_str,
       case 0:
       case 1:
       case 2:
+        /* Zigbee-устройства (id >= NUMPIN) */
+        if (id >= NUMPIN && id < NUMPIN + NUMZBEE) {
+          int zbi = id - NUMPIN;
+          printf("[ACTION] VPIN id=%d zbi=%d ieee='%s' onoff=%d state=%d action=%d\r\n",
+                 id, zbi, ZigbeeConf[zbi].zbee_ieee, ZigbeeConf[zbi].onoff,
+                 ZigbeeConf[zbi].state, action);
+          if (ZigbeeConf[zbi].zbee_ieee[0] != '\0' && ZigbeeConf[zbi].onoff) {
+            const char *cmd;
+            if (action == 2) {
+              /* TOGGLE — инвертируем текущее состояние */
+              cmd = (ZigbeeConf[zbi].state) ? "OFF" : "ON";
+            } else {
+              cmd = (action == 0) ? "OFF" : "ON";
+            }
+            printf("[ACTION] VPIN sending %s to %s\r\n", cmd, ZigbeeConf[zbi].zbee_ieee);
+            SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                              ZigbeeConf[zbi].zbee_endpoint,
+                              6, ZBEE_ATTR_ONOFF, cmd);
+          } else {
+            printf("[ACTION] VPIN SKIP: ieee empty or onoff=0\r\n");
+          }
+          break;
+        }
         if (id < 0 || id >= NUMPIN)
           break; // Защита от выхода за пределы массива
 
@@ -7554,7 +7579,7 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
     int new_brightness = (int)mg_json_get_long(json, "$.brightness", -1);
     int new_color_hex = (int)mg_json_get_long(json, "$.color_hex", -1);
 
-    if (new_brightness >= 0 && ZigbeeConf[id].zbee_ieee[0] != '\0') {
+    if (new_brightness >= 0 && ZigbeeConf[id].zbee_ieee[0] != '\0' && ZigbeeConf[id].onoff) {
       ZigbeeConf[id].dvalue = new_brightness;
       if (ZigbeeConf[id].cluster_flags & ZBEE_CL_DIMMER) {
         char valbuf[12];
@@ -7564,7 +7589,7 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
       }
     }
 
-    if (new_color_hex >= 0 && ZigbeeConf[id].zbee_ieee[0] != '\0') {
+    if (new_color_hex >= 0 && ZigbeeConf[id].zbee_ieee[0] != '\0' && ZigbeeConf[id].onoff) {
       ZigbeeConf[id].color_hex = (uint32_t)new_color_hex;
       if (ZigbeeConf[id].cluster_flags & ZBEE_CL_COLOR) {
         char valbuf[12];
@@ -7601,4 +7626,54 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
   } else {
     mg_http_reply(c, 400, "Content-Type: application/json\r\n", "{\"status\":false,\"message\":\"Invalid ID\"}");
   }
+}
+
+/* Master enable/disable zigbee-устройства — только onoff, без MQTT-команды */
+void handle_zigbee_enable(struct mg_connection *c, struct mg_http_message *hm) {
+  char body[256];
+  snprintf(body, sizeof(body), "%.*s", (int)hm->body.len, hm->body.buf);
+  struct mg_str json = mg_str(body);
+
+  int id = (int)mg_json_get_long(json, "$.id", -1);
+  int onoff = (int)mg_json_get_long(json, "$.onoff", -1);
+
+  if (id < 0 || id >= NUMZBEE || onoff < 0 || onoff > 1) {
+    mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+                  "{\"status\":false,\"message\":\"Invalid id or onoff\"}");
+    return;
+  }
+
+  ZigbeeConf[id].onoff = (uint8_t)onoff;
+
+  extern osMessageQueueId_t usbQueueHandle;
+  uint32_t usbnum = 7;
+  if (usbQueueHandle) xQueueSend(usbQueueHandle, &usbnum, 0);
+
+  LOG_Z2M("zbee: ENABLE id=%d onoff=%d\r\n", id, onoff);
+  mg_http_reply(c, 200, "Content-Type: application/json\r\n", "{\"status\":true}");
+}
+
+/* Физическое управление zigbee-устройством — MQTT-команда, без onoff */
+void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm) {
+  char body[256];
+  snprintf(body, sizeof(body), "%.*s", (int)hm->body.len, hm->body.buf);
+  struct mg_str json = mg_str(body);
+
+  int id = (int)mg_json_get_long(json, "$.id", -1);
+  int onoff_cmd = (int)mg_json_get_long(json, "$.onoff", -1);
+
+  if (id < 0 || id >= NUMZBEE || onoff_cmd < 0 || onoff_cmd > 1) {
+    mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+                  "{\"status\":false,\"message\":\"Invalid id or onoff\"}");
+    return;
+  }
+
+  /* Отправляем MQTT-команду только если мастер-включён */
+  if (ZigbeeConf[id].zbee_ieee[0] != '\0' && ZigbeeConf[id].onoff) {
+    const char *cmd = onoff_cmd ? "ON" : "OFF";
+    SendZigbeeCommand(ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint,
+                      6, ZBEE_ATTR_ONOFF, cmd);
+  }
+
+  mg_http_reply(c, 200, "Content-Type: application/json\r\n", "{\"status\":true}");
 }

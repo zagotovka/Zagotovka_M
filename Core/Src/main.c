@@ -487,45 +487,36 @@ void button_event_handler(
                  //       printf("Button %d: PRESS_UP!\r\n", handle->button_id);
     break;
   case LONG_PRESS_START: // Начало долгого нажатия
-    //       printf("Button %d: LONG_PRESS_START!\r\n", handle->button_id);
+    printf("[BTN] Button %d: LONG_PRESS_START lpress='%s'\r\n", handle->button_id, PinsConf[handle->button_id].lpress);
     if (handle->button_id < NUMPIN) {
-      //	 printf("PinsConf[%d].lpress content: %s\n",
-      //        handle->button_id, PinsConf[handle->button_id].lpress);
       action_handler(handle->button_id, PinsConf[handle->button_id].lpress,
                      "long press");
-      // Подготовка MQTT сообщения (локальная копия — без гонки данных)
       mqtt_queue_send_safe(3, handle->button_id, 1, 0);
     } else {
-      printf("Invalid button ID: %d\n", handle->button_id);
+      printf("[BTN] Invalid button ID: %d\r\n", handle->button_id);
     }
     break;
   case LONG_PRESS_HOLD: // Продолжение долгого нажатия
     //       printf("Button %d: LONG_PRESS_HOLD!\r\n", handle->button_id);
     break;
   case SINGLE_CLICK: // Одиночное нажатие кнопки
+    printf("[BTN] Button %d: SINGLE_CLICK sclick='%s'\r\n", handle->button_id, PinsConf[handle->button_id].sclick);
     if (handle->button_id < NUMPIN) {
-      // printf("PinsConf[%d].sclick content: %s\n", handle->button_id,
-      // PinsConf[handle->button_id].sclick);
       action_handler(handle->button_id, PinsConf[handle->button_id].sclick,
                      "sclick press");
-      // Подготовка MQTT сообщения (локальная копия — без гонки данных)
       mqtt_queue_send_safe(4, handle->button_id, 2, 0);
     } else {
-      printf("Invalid button ID: %d\n", handle->button_id);
+      printf("[BTN] Invalid button ID: %d\r\n", handle->button_id);
     }
-//    printf("Button %d: SINGLE_CLICK!\r\n", handle->button_id);
     break;
   case DOUBLE_CLICK: // Двойное нажатие кнопки
-    //		printf("Button %d: DOUBLE_CLICK!\r\n", handle->button_id);
+    printf("[BTN] Button %d: DOUBLE_CLICK dclick='%s'\r\n", handle->button_id, PinsConf[handle->button_id].dclick);
     if (handle->button_id < NUMPIN) {
-      //	 rintf("PinsConf[%d].lpress content: %s\n",
-      //        handle->button_id, PinsConf[handle->button_id].lpress);
       action_handler(handle->button_id, PinsConf[handle->button_id].dclick,
                      "double press");
-      // Подготовка MQTT сообщения (локальная копия — без гонки данных)
       mqtt_queue_send_safe(5, handle->button_id, 3, 0);
     } else {
-      printf("Invalid button ID: %d\n", handle->button_id);
+      printf("[BTN] Invalid button ID: %d\r\n", handle->button_id);
     }
     break;
   case PRESS_REPEAT: // Повторное нажатие кнопки
@@ -1960,26 +1951,34 @@ void StartOutputTask(void *argument)
       if (data_pin.id >= 0 && data_pin.id < (NUMPIN + NUMZBEE)) {
         if (IsZigbeePin(data_pin.id)) {
           int zbi = ZbeeIdx(data_pin.id);
-          const char *cmd = (data_pin.action == 1) ? "ON" : "OFF";
-          uint8_t flags = ZigbeeConf[zbi].cluster_flags;
-          if (flags & ZBEE_CL_ONOFF) {
-            SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
-                              ZigbeeConf[zbi].zbee_endpoint,
-                              6, ZigbeeConf[zbi].zbee_attribute, cmd);
-          }
-          if (flags & ZBEE_CL_DIMMER) {
-            char valbuf[8];
-            snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
-            SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
-                              ZigbeeConf[zbi].zbee_endpoint,
-                              8, ZigbeeConf[zbi].zbee_attribute, valbuf);
-          }
-          if (flags & ZBEE_CL_COLOR) {
-            char valbuf[8];
-            snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
-            SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
-                              ZigbeeConf[zbi].zbee_endpoint,
-                              768, ZigbeeConf[zbi].zbee_attribute, valbuf);
+          if (ZigbeeConf[zbi].zbee_ieee[0] != '\0' && ZigbeeConf[zbi].onoff) {
+            const char *cmd;
+            if (data_pin.action == 2) {
+              /* TOGGLE — инвертируем текущее состояние */
+              cmd = (ZigbeeConf[zbi].state) ? "OFF" : "ON";
+            } else {
+              cmd = (data_pin.action == 1) ? "ON" : "OFF";
+            }
+            uint8_t flags = ZigbeeConf[zbi].cluster_flags;
+            if (flags & ZBEE_CL_ONOFF) {
+              SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                                ZigbeeConf[zbi].zbee_endpoint,
+                                6, ZBEE_ATTR_ONOFF, cmd);
+            }
+            if (flags & ZBEE_CL_DIMMER) {
+              char valbuf[8];
+              snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
+              SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                                ZigbeeConf[zbi].zbee_endpoint,
+                                8, ZBEE_ATTR_DIMMER, valbuf);
+            }
+            if (flags & ZBEE_CL_COLOR) {
+              char valbuf[8];
+              snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
+              SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                                ZigbeeConf[zbi].zbee_endpoint,
+                                768, ZBEE_ATTR_COLOR, valbuf);
+            }
           }
         } else {
           switch (data_pin.action) {

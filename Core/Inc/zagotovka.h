@@ -22,7 +22,7 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 
-#define FW_VERSION "0.4.2-slim"
+#define FW_VERSION "0.5.0-zigbee"
 #define BUFFER_SIZE 10000 /* max Button = 9835 символов, это не точно! */
 #define SECURITY_BODY_MAX 4096U /* max body для handle_security_set (heap) */
 #define ENTER_CRITICAL() taskENTER_CRITICAL()
@@ -151,6 +151,8 @@ void handle_switch_get(struct mg_connection *c);
 void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_zigbee_get(struct mg_connection *c, long offset, long limit);
 void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_enable(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm);
 void SendZigbeeReadProbe(const char *ieee, uint8_t ep);
 void zbee_probe_check_timeout(void);
 bool zbee_is_valid_ieee(const char *s);

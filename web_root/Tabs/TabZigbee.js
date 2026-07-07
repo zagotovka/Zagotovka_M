@@ -86,10 +86,11 @@ export function TabZigbee({}) {
     isPending.current = true;
     lastChangeTime.current = Date.now();
 
-    fetch('/api/onoff/set', {
+    /* Master enable/disable — только onoff, без MQTT-команды */
+    fetch('/api/zigbee/enable', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: 89 + device.id, onoff: onoff ? 1 : 0 })
+      body: JSON.stringify({ id: device.id, onoff: onoff ? 1 : 0 })
     })
       .then(r => r.json())
       .finally(() => {
@@ -145,11 +146,12 @@ export function TabZigbee({}) {
     setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d));
 
     if (onoffChanged) {
-      fetch('/api/onoff/set', {
+      /* Физическое управление — MQTT-команда, без master enable */
+      fetch('/api/zigbee/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: 89 + updatedDevice.id, onoff: cur.onoff })
-      }).catch(err => console.error('Error saving onoff:', err));
+        body: JSON.stringify({ id: updatedDevice.id, onoff: cur.onoff })
+      }).catch(err => console.error('Error sending command:', err));
     }
 
     if (configChanged) {

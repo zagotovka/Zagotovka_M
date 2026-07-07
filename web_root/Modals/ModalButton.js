@@ -59,7 +59,8 @@ const ModalButton = ({
   useEffect(() => {
     fetch('/api/select/get')
       .then((response) => response.json())
-      .then((data) => {
+      .then((response) => {
+        const data = response.data || response;
         if (Array.isArray(data)) {
           setPinOptions(data.filter((pin) => pin.topin === 2 || pin.topin === 11));
         } else {
@@ -134,7 +135,7 @@ const ModalButton = ({
               <td class="p-2">
                 <select
                   name="setrpins"
-                  value=${pinOptions.some(opt => opt.pins === selectedButton?.setrpins) ? selectedButton?.setrpins : ''}
+                  value=${pinOptions.some(opt => (opt.pins === selectedButton?.setrpins || opt.id.toString() === selectedButton?.setrpins) ? selectedButton?.setrpins : '')}
                   onChange=${(e) =>
       onButtonChange({
         ...selectedButton,
@@ -145,8 +146,8 @@ const ModalButton = ({
                   <option value="">Select a connection</option>
                   ${pinOptions.map(
         (option) => html`
-                      <option value=${option.pins}>
-                        ${option.pins} (ID: ${option.id})
+                      <option value=${option.topin === 11 ? option.id : option.pins}>
+                        ${option.pins || option.zbee_label || 'Pin ' + option.id} (ID: ${option.id})
                       </option>
                     `
       )}
