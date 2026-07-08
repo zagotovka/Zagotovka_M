@@ -75,6 +75,12 @@ export function TabZigbee({}) {
         zigbee.forEach(d => { snap[d.id] = buildSnapshot(d); });
         serverSnapshot.current = snap;
         dirtyIds.current.clear();
+        // Синхронизируем selectedDevice если модалка открыта
+        setSelectedDevice(prev => {
+          if (!prev) return null;
+          const updated = normalized.find(d => d.id === prev.id);
+          return updated || prev;
+        });
       }
     });
     return () => { active = false; unregisterPoll('zigbee'); };
@@ -176,6 +182,22 @@ export function TabZigbee({}) {
     setTimeout(() => { lastChangeTime.current = 0; }, 3000);
   };
 
+  const handleRescan = (device) => {
+    fetch('/api/zigbee/rescan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: device.id })
+    })
+      .then(r => r.json())
+      .then(() => {
+        /* Сбрасываем тип устройства до определения зонда */
+        setDevices(prev => prev.map(d =>
+          d.id === device.id ? { ...d, clusters: [6], zbee_device_type: 'socket' } : d
+        ));
+      })
+      .catch(err => console.error('Error triggering rescan:', err));
+  };
+
   const getDeviceTypeLabel = (deviceType) => {
     switch (deviceType) {
       case 'lamp': return '💡 Color Lamp';
@@ -245,7 +267,7 @@ export function TabZigbee({}) {
                               onClick=${() => handleEdit(d)}
                               class="px-4 py-1.5 rounded-full text-xs font-bold text-white shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600"
                             >
-                              ${language === 'ru' ? 'Настройки' : 'Settings'}
+                              ${language === 'ru' ? 'Управление' : 'Control'}
                             </button>
                           </td>
                         </tr>
@@ -264,6 +286,8 @@ export function TabZigbee({}) {
           device=${selectedDevice}
           onClose=${closeModal}
           onUpdate=${handleDeviceUpdate}
+          onRescan=${handleRescan}
+          language=${language}
         />
       `}
     </div>

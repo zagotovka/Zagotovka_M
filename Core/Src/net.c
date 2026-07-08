@@ -916,6 +916,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/zigbee/command"), NULL)) {
 				MG_INFO(("%lu Processing /api/zigbee/command", c->id));
 				handle_zigbee_command(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/rescan"), NULL)) {
+				MG_INFO(("%lu Processing /api/zigbee/rescan", c->id));
+				handle_zigbee_rescan(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/onoff/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/onoff/set", c->id));
 				handle_onoff_set(c, hm);

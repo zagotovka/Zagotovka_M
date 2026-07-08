@@ -2551,12 +2551,18 @@ void GetZigbeeConfig(void) {
     }
 
     ZigbeeConf[idx].zbee_endpoint = (uint8_t)mg_json_get_long(elem, "$.ep", 1);
-    char *clusters_str = mg_json_get_str(elem, "$.clusters");
-    if (clusters_str) {
-      ZigbeeConf[idx].cluster_flags = clusters_json_to_flags(clusters_str);
-      mg_free(clusters_str);
-    } else {
-      ZigbeeConf[idx].cluster_flags = ZBEE_CL_ONOFF;
+    /* Читаем clusters как сырой JSON-массив [6,8,768] — mg_json_get_str не работает с массивами */
+    {
+      int cl_len = 0;
+      int cl_off = mg_json_get(elem, "$.clusters", &cl_len);
+      if (cl_off >= 0 && cl_len > 0 && cl_len < 64) {
+        char cl_raw[64];
+        memcpy(cl_raw, elem.buf + cl_off, cl_len);
+        cl_raw[cl_len] = '\0';
+        ZigbeeConf[idx].cluster_flags = clusters_json_to_flags(cl_raw);
+      } else {
+        ZigbeeConf[idx].cluster_flags = ZBEE_CL_ONOFF;
+      }
     }
     ZigbeeConf[idx].zbee_attribute = (uint16_t)mg_json_get_long(elem, "$.attr", 0);
     ZigbeeConf[idx].onoff = (uint8_t)mg_json_get_long(elem, "$.onoff", 1);

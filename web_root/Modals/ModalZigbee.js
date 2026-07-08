@@ -1,10 +1,11 @@
 import { h, render, useState, useEffect, useRef, html } from '../bundle.js';
 import { MyPolzunok } from '../main.js';
 
-function ModalZigbee({ device, onClose, onUpdate }) {
+function ModalZigbee({ device, onClose, onUpdate, onRescan, language }) {
   const [clusters, setClusters] = useState(device.clusters || [6]);
+  const [isScanning, setIsScanning] = useState(false);
 
-  // Reactive: derive type from clusters state, not from fixed prop
+  // Reactive: derive type from clusters state
   const hasDimmer = clusters.includes(8);
   const hasColor = clusters.includes(768);
   const deviceType = hasColor ? 'lamp' : hasDimmer ? 'dimmer' : 'socket';
@@ -13,10 +14,26 @@ function ModalZigbee({ device, onClose, onUpdate }) {
   const [brightness, setBrightness] = useState(device.brightness || 254);
   const [color, setColor] = useState(device.color || '#' + (device.color_hex || 0xFFAA00).toString(16).padStart(6, '0'));
 
+  // Синхронизация с пропами (когда poll обновит данные в TabZigbee)
+  useEffect(() => {
+    setClusters(device.clusters || [6]);
+    setOnoff(device.onoff || 0);
+    setBrightness(device.brightness || 254);
+    setColor(device.color || '#' + (device.color_hex || 0xFFAA00).toString(16).padStart(6, '0'));
+    if (isScanning) setIsScanning(false);
+  }, [device.clusters, device.onoff, device.brightness, device.color_hex]);
+
+  // Фоллбэк: сброс isScanning через 5 сек на случай если poll не обновил данные
+  useEffect(() => {
+    if (!isScanning) return;
+    const t = setTimeout(() => setIsScanning(false), 5000);
+    return () => clearTimeout(t);
+  }, [isScanning]);
+
   const portalRef = useRef(null);
   const pendingUpdate = useRef(null);
   const prevSnapshot = useRef(JSON.stringify({
-    onoff: device.onoff, brightness: device.brightness, color: device.color, color_hex: device.color_hex
+    brightness: device.brightness, color: device.color, color_hex: device.color_hex
   }));
 
   useEffect(() => {
@@ -32,7 +49,7 @@ function ModalZigbee({ device, onClose, onUpdate }) {
 
   const scheduleUpdate = (patch) => {
     Object.assign(device, patch);
-    const snap = JSON.stringify({ onoff: device.onoff, brightness: device.brightness, color: device.color, color_hex: device.color_hex, clusters: device.clusters });
+    const snap = JSON.stringify({ brightness: device.brightness, color: device.color, color_hex: device.color_hex, clusters: device.clusters });
     if (snap === prevSnapshot.current) return;
     clearTimeout(pendingUpdate.current);
     pendingUpdate.current = setTimeout(() => {
@@ -43,7 +60,12 @@ function ModalZigbee({ device, onClose, onUpdate }) {
 
   const applyOnOff = (value) => {
     setOnoff(value);
-    scheduleUpdate({ onoff: value });
+    /* Отправляем MQTT-команду напрямую, не меняя master enable */
+    fetch('/api/zigbee/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: device.id, onoff: value ? 1 : 0 })
+    }).catch(err => console.error('Error sending command:', err));
   };
 
   const applyBrightness = (value) => {
@@ -73,13 +95,7 @@ function ModalZigbee({ device, onClose, onUpdate }) {
     return '🔌';
   };
 
-  const toggleCluster = (id) => {
-    setClusters(prev => {
-      const next = prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id].sort((a, b) => a - b);
-      scheduleUpdate({ clusters: next });
-      return next;
-    });
-  };
+
 
   const modalContent = html`
     <div
@@ -165,20 +181,25 @@ function ModalZigbee({ device, onClose, onUpdate }) {
             </div>
 
             <div class="bg-slate-50 rounded-xl p-4">
-              <div class="text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wider">Clusters</div>
-              <div class="flex gap-3">
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked=${clusters.includes(6)} onChange=${() => toggleCluster(6)} class="w-4 h-4 rounded accent-cyan-500" />
-                  <span class="text-sm text-slate-700">On/Off (6)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked=${clusters.includes(8)} onChange=${() => toggleCluster(8)} class="w-4 h-4 rounded accent-cyan-500" />
-                  <span class="text-sm text-slate-700">Dimmer (8)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked=${clusters.includes(768)} onChange=${() => toggleCluster(768)} class="w-4 h-4 rounded accent-cyan-500" />
-                  <span class="text-sm text-slate-700">Color (768)</span>
-                </label>
+              <div class="text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wider">${language === 'ru' ? 'Возможности' : 'Capabilities'}</div>
+              <div class="flex gap-3 flex-wrap items-center">
+                ${clusters.includes(6) && html`<span class="px-3 py-1 rounded-full text-sm font-medium bg-teal-100 text-teal-700">🔘 ${language === 'ru' ? 'Вкл/Выкл' : 'On/Off'}</span>`}
+                ${clusters.includes(8) && html`<span class="px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-700">🔆 ${language === 'ru' ? 'Яркость' : 'Brightness'}</span>`}
+                ${clusters.includes(768) && html`<span class="px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-700">🎨 ${language === 'ru' ? 'Цвет' : 'Color'}</span>`}
+                <button
+                  onClick=${() => {
+                    if (isScanning) return;
+                    setIsScanning(true);
+                    onRescan(device);
+                  }}
+                  disabled=${isScanning}
+                  class="px-3 py-1 rounded-full text-sm font-medium transition-colors ${isScanning ? 'bg-cyan-100 text-cyan-600 cursor-wait' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}"
+                >
+                  ${isScanning
+                    ? html`<span class="inline-block animate-spin mr-1">⏳</span> ${language === 'ru' ? 'Сканирование...' : 'Scanning...'}`
+                    : html`🔄 ${language === 'ru' ? 'Пересканировать' : 'Rescan'}`
+                  }
+                </button>
               </div>
             </div>
           </div>

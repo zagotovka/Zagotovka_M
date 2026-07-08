@@ -3711,6 +3711,13 @@ static void zbee_probe_finalize_slot(int slot) {
     LOG_Z2M("zbee: PROBE DONE ieee=%s flags=0x%02X (dimmer=%d color=%d)\r\n",
             p->ieee, flags, p->dimmer_seen, p->color_seen);
 
+    /* Сохраняем cluster_flags на флешку */
+    extern osMessageQueueId_t usbQueueHandle;
+    if (usbQueueHandle) {
+        uint32_t usbnum = 7;
+        xQueueSend(usbQueueHandle, &usbnum, 0);
+    }
+
     p->pending = 0;
 }
 
@@ -7519,7 +7526,7 @@ void handle_zigbee_get(struct mg_connection *c, long offset_req, long limit_req)
       "\"type\":\"%s\",\"icon\":\"%s\","
       "\"onoff\":%d,\"brightness\":%d,\"color_hex\":\"%06X\",\"info\":\"%s\"}",
       (first ? "" : ","),
-      i, ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint,
+      NUMPIN + i, ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint,
       clbuf, type, icon,
       ZigbeeConf[i].onoff, ZigbeeConf[i].dvalue,
       ZigbeeConf[i].color_hex & 0xFFFFFF,
@@ -7538,6 +7545,7 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
   struct mg_str json = mg_str(body);
 
   int id = (int)mg_json_get_long(json, "$.id", -1);
+  if (id >= NUMPIN) id -= NUMPIN;
   if (id >= 0 && id < NUMZBEE) {
     bool config_changed = false;  /* Только для полей, требующих записи на флешку */
 
@@ -7635,6 +7643,7 @@ void handle_zigbee_enable(struct mg_connection *c, struct mg_http_message *hm) {
   struct mg_str json = mg_str(body);
 
   int id = (int)mg_json_get_long(json, "$.id", -1);
+  if (id >= NUMPIN) id -= NUMPIN;
   int onoff = (int)mg_json_get_long(json, "$.onoff", -1);
 
   if (id < 0 || id >= NUMZBEE || onoff < 0 || onoff > 1) {
@@ -7660,6 +7669,7 @@ void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm) 
   struct mg_str json = mg_str(body);
 
   int id = (int)mg_json_get_long(json, "$.id", -1);
+  if (id >= NUMPIN) id -= NUMPIN;
   int onoff_cmd = (int)mg_json_get_long(json, "$.onoff", -1);
 
   if (id < 0 || id >= NUMZBEE || onoff_cmd < 0 || onoff_cmd > 1) {
@@ -7674,6 +7684,38 @@ void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm) 
     SendZigbeeCommand(ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint,
                       6, ZBEE_ATTR_ONOFF, cmd);
   }
+
+  mg_http_reply(c, 200, "Content-Type: application/json\r\n", "{\"status\":true}");
+}
+
+/* Пересканирование возможностей zigbee-устройства */
+void handle_zigbee_rescan(struct mg_connection *c, struct mg_http_message *hm) {
+  char body[256];
+  snprintf(body, sizeof(body), "%.*s", (int)hm->body.len, hm->body.buf);
+  struct mg_str json = mg_str(body);
+
+  int id = (int)mg_json_get_long(json, "$.id", -1);
+  if (id >= NUMPIN) id -= NUMPIN;
+
+  if (id < 0 || id >= NUMZBEE) {
+    mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+                  "{\"status\":false,\"message\":\"Invalid ID\"}");
+    return;
+  }
+
+  if (ZigbeeConf[id].zbee_ieee[0] == '\0') {
+    mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+                  "{\"status\":false,\"message\":\"No IEEE address\"}");
+    return;
+  }
+
+  /* Сбрасываем флаги и запускаем зонд */
+  taskENTER_CRITICAL();
+  ZigbeeConf[id].cluster_flags = 0;
+  taskEXIT_CRITICAL();
+  SendZigbeeReadProbe(ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint);
+
+  LOG_Z2M("zbee: RESCAN triggered for id=%d ieee='%s'\r\n", id, ZigbeeConf[id].zbee_ieee);
 
   mg_http_reply(c, 200, "Content-Type: application/json\r\n", "{\"status\":true}");
 }
