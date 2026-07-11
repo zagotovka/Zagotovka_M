@@ -801,10 +801,10 @@ int main(void)
   mqttQueueHandle = osMessageQueueNew (32, sizeof(MqttMessage_t), &mqttQueue_attributes);
 
   /* creation of mqttRxQueue */
-  mqttRxQueueHandle = osMessageQueueNew (4, sizeof(MqttRxMsg_t), &mqttRxQueue_attributes);
+  mqttRxQueueHandle = osMessageQueueNew (16, sizeof(MqttRxMsg_t), &mqttRxQueue_attributes);
 
   /* creation of zbeeCmdQueue */
-  zbeeCmdQueueHandle = osMessageQueueNew (16, sizeof(ZbeeCmdMsg_t), &zbeeCmdQueue_attributes);
+  zbeeCmdQueueHandle = osMessageQueueNew (32, sizeof(ZbeeCmdMsg_t), &zbeeCmdQueue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -1916,6 +1916,7 @@ void StartWebServerTask(void *argument)
 
     /* Проверка таймаутов зондов возможностей zigbee-устройств */
     zbee_probe_check_timeout();
+    zbee_learn_check_timeout();
 
 
 
@@ -1952,32 +1953,51 @@ void StartOutputTask(void *argument)
         if (IsZigbeePin(data_pin.id)) {
           int zbi = ZbeeIdx(data_pin.id);
           if (ZigbeeConf[zbi].zbee_ieee[0] != '\0' && ZigbeeConf[zbi].onoff) {
-            const char *cmd;
-            if (data_pin.action == 2) {
-              /* TOGGLE — инвертируем текущее состояние */
-              cmd = (ZigbeeConf[zbi].state) ? "OFF" : "ON";
+            /* Tuya DP command — отправка на конкретный DP */
+            if (ZigbeeConf[zbi].tuya_dp > 0) {
+              const char *val_str;
+              char valbuf[8];
+              if (ZigbeeConf[zbi].cluster_flags & ZBEE_CL_ONOFF) {
+                val_str = (data_pin.action == 1 || (data_pin.action == 2 && !ZigbeeConf[zbi].state)) ? "1" : "0";
+              } else if (ZigbeeConf[zbi].cluster_flags & ZBEE_CL_DIMMER) {
+                snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
+                val_str = valbuf;
+              } else {
+                val_str = "0";
+              }
+              extern void SendZigbeeTuyaCommand(const char *ieee, uint8_t ep, uint16_t dp, const char *val);
+              SendZigbeeTuyaCommand(ZigbeeConf[zbi].zbee_ieee,
+                                    ZigbeeConf[zbi].zbee_endpoint,
+                                    ZigbeeConf[zbi].tuya_dp, val_str);
             } else {
-              cmd = (data_pin.action == 1) ? "ON" : "OFF";
-            }
-            uint8_t flags = ZigbeeConf[zbi].cluster_flags;
-            if (flags & ZBEE_CL_ONOFF) {
-              SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
-                                ZigbeeConf[zbi].zbee_endpoint,
-                                6, ZBEE_ATTR_ONOFF, cmd);
-            }
-            if (flags & ZBEE_CL_DIMMER) {
-              char valbuf[8];
-              snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
-              SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
-                                ZigbeeConf[zbi].zbee_endpoint,
-                                8, ZBEE_ATTR_DIMMER, valbuf);
-            }
-            if (flags & ZBEE_CL_COLOR) {
-              char valbuf[8];
-              snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
-              SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
-                                ZigbeeConf[zbi].zbee_endpoint,
-                                768, ZBEE_ATTR_COLOR, valbuf);
+              /* Стандартная ZCL-команда */
+              const char *cmd;
+              if (data_pin.action == 2) {
+                /* TOGGLE — инвертируем текущее состояние */
+                cmd = (ZigbeeConf[zbi].state) ? "OFF" : "ON";
+              } else {
+                cmd = (data_pin.action == 1) ? "ON" : "OFF";
+              }
+              uint8_t flags = ZigbeeConf[zbi].cluster_flags;
+              if (flags & ZBEE_CL_ONOFF) {
+                SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                                  ZigbeeConf[zbi].zbee_endpoint,
+                                  6, ZBEE_ATTR_ONOFF, cmd);
+              }
+              if (flags & ZBEE_CL_DIMMER) {
+                char valbuf[8];
+                snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
+                SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                                  ZigbeeConf[zbi].zbee_endpoint,
+                                  8, ZBEE_ATTR_DIMMER, valbuf);
+              }
+              if (flags & ZBEE_CL_COLOR) {
+                char valbuf[8];
+                snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
+                SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                                  ZigbeeConf[zbi].zbee_endpoint,
+                                  768, ZBEE_ATTR_COLOR, valbuf);
+              }
             }
           }
         } else {
@@ -3144,10 +3164,10 @@ static void heap_diagnostic(void)
 
         printf("Malloc fail count:  %lu\r\n", current_malloc_fail);
         printf("MQTT TX queue peak: %lu / 32\r\n", mqtt_tx_peak);
-        printf("MQTT RX queue peak: %lu / 4\r\n", mqtt_rx_peak);
+        printf("MQTT RX queue peak: %lu / 16\r\n", mqtt_rx_peak);
         printf("Output queue peak:  %lu / 16\r\n", output_peak);
         printf("USB queue peak:     %lu / 16\r\n", usb_peak);
-        printf("Zbee cmd peak:      %lu / 16\r\n", zbee_cmd_peak);
+        printf("Zbee cmd peak:      %lu / 32\r\n", zbee_cmd_peak);
         printf("Mongoose conns peak: %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu]\r\n",
                mg_conn_peak, mg_conn_cur,
                mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other);

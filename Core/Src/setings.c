@@ -2570,6 +2570,10 @@ void GetZigbeeConfig(void) {
     ZigbeeConf[idx].color_hex = (uint32_t)mg_json_get_long(elem, "$.color_hex", 0xFFAA00);
     ZigbeeConf[idx].state = (uint8_t)mg_json_get_long(elem, "$.state", 0);
     ZigbeeConf[idx].topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
+    ZigbeeConf[idx].tuya_dp = (uint16_t)mg_json_get_long(elem, "$.tuya_dp", 0);
+    ZigbeeConf[idx].tuya_dp_onoff = (uint16_t)mg_json_get_long(elem, "$.tuya_dp_onoff", 0);
+    ZigbeeConf[idx].tuya_dp_brightness = (uint16_t)mg_json_get_long(elem, "$.tuya_dp_brightness", 0);
+    ZigbeeConf[idx].tuya_dp_color = (uint16_t)mg_json_get_long(elem, "$.tuya_dp_color", 0);
 
     idx++;
   }
@@ -2611,11 +2615,14 @@ void SetZigbeeConfig(void) {
     len = snprintf(buf, sizeof(buf),
         "{\"ieee\":\"%s\",\"ep\":%d,\"clusters\":%s,\"attr\":%d,"
         "\"label\":\"%s\",\"onoff\":%d,\"dvalue\":%d,\"color_hex\":%u,"
-        "\"state\":%d,\"topin\":%d,\"info\":\"%s\"}",
+        "\"state\":%d,\"topin\":%d,\"info\":\"%s\","
+        "\"tuya_dp\":%d,\"tuya_dp_onoff\":%d,\"tuya_dp_brightness\":%d,\"tuya_dp_color\":%d}",
         ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint, clbuf,
         ZigbeeConf[i].zbee_attribute, ZigbeeConf[i].zbee_label, ZigbeeConf[i].onoff,
         ZigbeeConf[i].dvalue, (unsigned)ZigbeeConf[i].color_hex,
-        ZigbeeConf[i].state, ZigbeeConf[i].topin, ZigbeeConf[i].info);
+        ZigbeeConf[i].state, ZigbeeConf[i].topin, ZigbeeConf[i].info,
+        ZigbeeConf[i].tuya_dp, ZigbeeConf[i].tuya_dp_onoff,
+        ZigbeeConf[i].tuya_dp_brightness, ZigbeeConf[i].tuya_dp_color);
     if (len <= 0 || len >= (int)sizeof(buf)) continue;
 
     fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);

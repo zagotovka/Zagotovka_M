@@ -155,7 +155,14 @@ void handle_zigbee_enable(struct mg_connection *c, struct mg_http_message *hm);
 void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm);
 void handle_zigbee_rescan(struct mg_connection *c, struct mg_http_message *hm);
 void SendZigbeeReadProbe(const char *ieee, uint8_t ep);
+void SendZigbeeReadProbeAllEndpoints(const char *ieee);
+void SendZigbeeReadProbeInteractive(const char *ieee);
 void zbee_probe_check_timeout(void);
+void zbee_learn_check_timeout(void);
+void handle_zigbee_learn_status(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_learn_start(struct mg_connection *c, struct mg_http_message *hm);
 bool zbee_is_valid_ieee(const char *s);
 
 /* Cluster flags <-> JSON array conversion */
@@ -245,6 +252,8 @@ void mqtt_message_handler(const char* topic, const char* payload);
 void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
                        uint16_t cluster, uint8_t attribute,
                        const char *json_cmd);
+void SendZigbeeTuyaCommand(const char *zbee_ieee, uint8_t endpoint,
+                           uint16_t dp, const char *val);
 
 void action_handler(uint8_t button_id, const char* action_str, const char* press_type);
 

@@ -17,12 +17,31 @@
 #define ZBEE_CL_ONOFF   0x01  // 0x0006
 #define ZBEE_CL_DIMMER  0x02  // 0x0008
 #define ZBEE_CL_COLOR   0x04  // 0x0300
+#define ZBEE_CL_COVER   0x08  // 0x0102 Window Covering
+#define ZBEE_CL_THERMO  0x10  // 0x0201 Thermostat
+#define ZBEE_CL_LOCK    0x20  // 0x0101 Door Lock
 
 /* Zigbee cluster fixed attributes — фиксированные атрибуты для актуаторов.
    Поле zbee_attribute для них больше не используется. */
 #define ZBEE_ATTR_ONOFF   0x0000
 #define ZBEE_ATTR_DIMMER  0x0000
 #define ZBEE_ATTR_COLOR   0x0004
+#define ZBEE_ATTR_COVER   0x0008
+#define ZBEE_ATTR_THERMO  0x0000
+#define ZBEE_ATTR_LOCK    0x0000
+
+/* Пассивные кластеры (сенсоры/Tuya — не зондируем, только слушаем) */
+#define ZBEE_CLUSTER_TEMP       0x0402
+#define ZBEE_CLUSTER_HUMIDITY   0x0405
+#define ZBEE_CLUSTER_OCCUPANCY  0x0406
+#define ZBEE_CLUSTER_TUYA       0xEF00
+
+/* Роль устройства (пассивная классификация) */
+#define ZBEE_ROLE_UNKNOWN   0
+#define ZBEE_ROLE_ACTUATOR  1
+#define ZBEE_ROLE_SENSOR    2
+#define ZBEE_ROLE_TRIGGER   3
+#define ZBEE_ROLE_TUYA      4
 
 #include "stdio.h"
 #include <stdbool.h>
@@ -285,9 +304,31 @@ typedef struct {
     uint32_t color_hex;          // Текущий цвет RGB (0xRRGGBB), по умолчанию 0xFFAA00
     char     info[30];           // служебное поле
     uint8_t  topin;              // всегда 11 (ZIGBEE), для унификации
+    uint8_t  zbee_role;          // ZBEE_ROLE_* — тип поведения
+    uint16_t sensor_cluster;     // какой кластер сработал (для SENSOR)
+    int      sensor_last_val;    // последнее значение сенсора
+    uint16_t tuya_dp_onoff;      // DP-номер для вкл/выкл (0 = не размечен)
+    uint16_t tuya_dp_brightness; // DP-номер для яркости
+    uint16_t tuya_dp_color;      // DP-номер для цвета
+    uint16_t tuya_dp;            // DP-номер этого слота (0 = не Tuya sub-slot)
 } ZigbeeVirtualPin;
 
 extern ZigbeeVirtualPin ZigbeeConf[NUMZBEE];
+
+/* ── Trigger → Button pin: общая таблица synthetic-триггеров ── */
+#define ZBEE_TRIGGER_TABLE_SIZE 32
+
+typedef struct {
+    uint8_t used;
+    int     zbee_slot;       /* индекс родителя в ZigbeeConf[] */
+    char    payload[32];     /* уникальная trigger-строка */
+    int     virtual_zbi;     /* индекс synthetic-слота в ZigbeeConf[] (0 = parent) */
+    char    sclick[125];     // actions для single click
+    char    dclick[125];     // actions для double click
+    char    lpress[125];     // actions для long press
+} ZigbeeTriggerEntry;
+
+extern ZigbeeTriggerEntry ZigbeeTriggers[ZBEE_TRIGGER_TABLE_SIZE];
 
 /* ── Адресация: единое пространство ID ── */
 static inline bool IsZigbeePin(int id) { return id >= NUMPIN; }
