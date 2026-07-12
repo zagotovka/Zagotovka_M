@@ -2577,6 +2577,60 @@ void GetZigbeeConfig(void) {
 
     idx++;
   }
+
+  /* ── ZigbeeTriggers ── */
+  memset(ZigbeeTriggers, 0, sizeof(ZigbeeTriggers));
+  int trig_ofs = mg_json_get(body, "$.triggers", NULL);
+  if (trig_ofs >= 0) {
+    struct mg_str trig_arr = mg_str_n(body.buf + trig_ofs, body.len - (size_t)trig_ofs);
+    int ti = 0;
+    size_t tpos = 0;
+    struct mg_str tkey, telem;
+    while (ti < ZBEE_TRIGGER_TABLE_SIZE && (tpos = mg_json_next(trig_arr, tpos, &tkey, &telem)) > 0) {
+      ZigbeeTriggers[ti].used = 1;
+      ZigbeeTriggers[ti].zbee_slot = (int)mg_json_get_long(telem, "$.slot", 0);
+      ZigbeeTriggers[ti].virtual_zbi = (int)mg_json_get_long(telem, "$.virt", 0);
+
+      char *payload = mg_json_get_str(telem, "$.payload");
+      if (payload) {
+        strncpy(ZigbeeTriggers[ti].payload, payload, sizeof(ZigbeeTriggers[ti].payload) - 1);
+        ZigbeeTriggers[ti].payload[sizeof(ZigbeeTriggers[ti].payload) - 1] = '\0';
+        mg_free(payload);
+      }
+
+      char *label = mg_json_get_str(telem, "$.label");
+      if (label) {
+        strncpy(ZigbeeTriggers[ti].label, label, sizeof(ZigbeeTriggers[ti].label) - 1);
+        ZigbeeTriggers[ti].label[sizeof(ZigbeeTriggers[ti].label) - 1] = '\0';
+        mg_free(label);
+      }
+
+      char *sclick = mg_json_get_str(telem, "$.sclick");
+      if (sclick) {
+        strncpy(ZigbeeTriggers[ti].sclick, sclick, sizeof(ZigbeeTriggers[ti].sclick) - 1);
+        ZigbeeTriggers[ti].sclick[sizeof(ZigbeeTriggers[ti].sclick) - 1] = '\0';
+        mg_free(sclick);
+      }
+
+      char *dclick = mg_json_get_str(telem, "$.dclick");
+      if (dclick) {
+        strncpy(ZigbeeTriggers[ti].dclick, dclick, sizeof(ZigbeeTriggers[ti].dclick) - 1);
+        ZigbeeTriggers[ti].dclick[sizeof(ZigbeeTriggers[ti].dclick) - 1] = '\0';
+        mg_free(dclick);
+      }
+
+      char *lpress = mg_json_get_str(telem, "$.lpress");
+      if (lpress) {
+        strncpy(ZigbeeTriggers[ti].lpress, lpress, sizeof(ZigbeeTriggers[ti].lpress) - 1);
+        ZigbeeTriggers[ti].lpress[sizeof(ZigbeeTriggers[ti].lpress) - 1] = '\0';
+        mg_free(lpress);
+      }
+
+      ti++;
+    }
+    printf("[ZIGBEE] Loaded %d triggers from zigbee.ini\r\n", ti);
+  }
+
   vPortFree(buf);
   if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
   printf("[ZIGBEE] Loaded %d slots from zigbee.ini\r\n", idx);
@@ -2629,6 +2683,40 @@ void SetZigbeeConfig(void) {
     if (fresult != FR_OK) goto cleanup;
   }
 
+  /* ── ZigbeeTriggers ── */
+  const char *trig_start = "],\"triggers\":[";
+  fresult = f_write(&USBHFile, trig_start, strlen(trig_start), &byteswritten);
+  if (fresult != FR_OK) goto cleanup;
+
+  first = true;
+  for (int i = 0; i < ZBEE_TRIGGER_TABLE_SIZE; i++) {
+    if (!ZigbeeTriggers[i].used) continue;
+
+    if (!first) {
+      fresult = f_write(&USBHFile, ",", 1, &byteswritten);
+      if (fresult != FR_OK) goto cleanup;
+    }
+    first = false;
+
+    /* Экранируем строки для JSON */
+    char esc_sc[260], esc_dc[260], esc_lp[260], esc_payload[64], esc_label[64];
+    json_escape_str(esc_sc, ZigbeeTriggers[i].sclick, sizeof(esc_sc));
+    json_escape_str(esc_dc, ZigbeeTriggers[i].dclick, sizeof(esc_dc));
+    json_escape_str(esc_lp, ZigbeeTriggers[i].lpress, sizeof(esc_lp));
+    json_escape_str(esc_payload, ZigbeeTriggers[i].payload, sizeof(esc_payload));
+    json_escape_str(esc_label, ZigbeeTriggers[i].label, sizeof(esc_label));
+
+    len = snprintf(buf, sizeof(buf),
+        "{\"slot\":%d,\"virt\":%d,\"payload\":\"%s\",\"label\":\"%s\","
+        "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\"}",
+        ZigbeeTriggers[i].zbee_slot, ZigbeeTriggers[i].virtual_zbi,
+        esc_payload, esc_label, esc_sc, esc_dc, esc_lp);
+    if (len <= 0 || len >= (int)sizeof(buf)) continue;
+
+    fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
+    if (fresult != FR_OK) goto cleanup;
+  }
+
   const char *end = "]}";
   fresult = f_write(&USBHFile, end, strlen(end), &byteswritten);
 
@@ -2638,8 +2726,10 @@ cleanup:
   }
   extern volatile uint32_t g_ver_zigbee;
   extern volatile uint32_t g_ver_select;
+  extern volatile uint32_t g_ver_button;
   mark_slice_dirty(&g_ver_zigbee);
   mark_slice_dirty(&g_ver_select);
+  mark_slice_dirty(&g_ver_button);
   f_close(&USBHFile);
   printf("[ZIGBEE] Config saved to zigbee.ini\r\n");
 }

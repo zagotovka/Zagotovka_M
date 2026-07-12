@@ -1746,6 +1746,79 @@ void handle_buttons(struct mg_connection *c) {
         first = false;
     }
 
+    /* ── Zigbee кнопки (триггеры) ── */
+    for (int i = 0; i < ZBEE_TRIGGER_TABLE_SIZE; i++) {
+        if (!ZigbeeTriggers[i].used) continue;
+
+        int remaining = (int)G_BODY_SIZE - pos;
+        if (remaining < 700) {
+            MG_ERROR(("buttons: OVERFLOW at zbee trigger %d, pos=%d", i, pos));
+            break;
+        }
+
+        int slot = ZigbeeTriggers[i].zbee_slot;
+        int virt = ZigbeeTriggers[i].virtual_zbi;
+        int target_slot = (virt > 0) ? virt : slot;
+
+        char esc_info[64], esc_sc[200], esc_dc[200], esc_lp[200], esc_pins[32];
+        json_escape_str(esc_sc,   ZigbeeTriggers[i].sclick, sizeof(esc_sc));
+        json_escape_str(esc_dc,   ZigbeeTriggers[i].dclick, sizeof(esc_dc));
+        json_escape_str(esc_lp,   ZigbeeTriggers[i].lpress, sizeof(esc_lp));
+
+        char info_buf[64];
+        if (ZigbeeTriggers[i].label[0]) {
+            strncpy(info_buf, ZigbeeTriggers[i].label, sizeof(info_buf) - 1);
+            info_buf[sizeof(info_buf) - 1] = '\0';
+        } else {
+            /* Если label пустой, используем payload как имя по умолчанию */
+            strncpy(info_buf, ZigbeeTriggers[i].payload, sizeof(info_buf) - 1);
+            info_buf[sizeof(info_buf) - 1] = '\0';
+        }
+        json_escape_str(esc_info, info_buf, sizeof(esc_info));
+
+        char pin_label[32];
+        if (ZigbeeConf[target_slot].tuya_dp > 0) {
+            snprintf(pin_label, sizeof(pin_label), "DP%d", ZigbeeConf[target_slot].tuya_dp);
+        } else if (ZigbeeTriggers[i].payload[0]) {
+            json_escape_str(pin_label, ZigbeeTriggers[i].payload, sizeof(pin_label));
+        } else {
+            strncpy(pin_label, "ZB", sizeof(pin_label) - 1);
+        }
+        json_escape_str(esc_pins, pin_label, sizeof(esc_pins));
+
+        int zbee_id = NUMPIN + i;
+        int parent_id = NUMPIN + slot;
+
+        /* Расчёт sub_idx: первый триггер = parent_id, остальные = parent_id.N */
+        int prev_count = 0;
+        for (int j = 0; j < ZBEE_TRIGGER_TABLE_SIZE; j++) {
+            if (j == i) break;
+            if (ZigbeeTriggers[j].used && ZigbeeTriggers[j].zbee_slot == slot) {
+                prev_count++;
+            }
+        }
+
+        char display_id[24];
+        if (prev_count > 0) {
+            snprintf(display_id, sizeof(display_id), "%d.%d", parent_id, prev_count);
+        } else {
+            snprintf(display_id, sizeof(display_id), "%d", parent_id);
+        }
+
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+            "%s{\"topin\":1,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,"
+            "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
+            "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d,"
+            "\"display_id\":\"%s\",\"is_zigbee\":1}",
+            first ? "" : ",",
+            zbee_id, esc_pins,
+            esc_sc, esc_dc, esc_lp, esc_info,
+            ZigbeeConf[target_slot].onoff,
+            display_id);
+
+        first = false;
+    }
+
     /* ── Закрываем JSON ── */
     pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
 

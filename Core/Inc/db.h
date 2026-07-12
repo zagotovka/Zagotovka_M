@@ -323,6 +323,7 @@ typedef struct {
     int     zbee_slot;       /* индекс родителя в ZigbeeConf[] */
     char    payload[32];     /* уникальная trigger-строка */
     int     virtual_zbi;     /* индекс synthetic-слота в ZigbeeConf[] (0 = parent) */
+    char    label[30];       /* имя/описание для Button pin */
     char    sclick[125];     // actions для single click
     char    dclick[125];     // actions для double click
     char    lpress[125];     // actions для long press

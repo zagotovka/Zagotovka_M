@@ -12,11 +12,6 @@ const ROLE_OPTIONS = [
   { value: 'tuya_dp',     label: { ru: 'Tuya DP',       en: 'Tuya DP' } },
 ];
 
-const TRIGGER_ROLE_OPTIONS = [
-  ROLE_OPTIONS.find(o => o.value === 'ignore'),
-  ROLE_OPTIONS.find(o => o.value === 'button'),
-];
-
 function obsKey(o) {
   if (o.source === 'trigger') return `trigger_${o.payload}`;
   return `${o.ep}_${o.cluster}_${o.attr}`;
@@ -189,12 +184,16 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                 </div>
               `}
 
-              ${(savedType === 'trigger' || savedType === 'tuya') && html`
+              ${(savedType === 'trigger' || savedType === 'tuya' || savedType === 'multi_tuya') && html`
                 <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-2 text-left">
                   <p class="text-sm text-blue-800 mb-3">
-                    ${lang === 'ru'
-                      ? 'Мы только определили устройство. Чтобы кнопка что-то делала при нажатии, настройте действия на странице Button pin.'
-                      : 'We only identified the device. To make the button actually do something, configure actions on the Button pin page.'}
+                    ${savedType === 'multi_tuya'
+                      ? (lang === 'ru'
+                        ? 'Создано несколько устройств. Если есть кнопки, настройте действия на странице Button pin.'
+                        : 'Multiple devices created. If there are buttons, configure actions on the Button pin page.')
+                      : (lang === 'ru'
+                        ? 'Мы только определили устройство. Чтобы кнопка что-то делала при нажатии, настройте действия на странице Button pin.'
+                        : 'We only identified the device. To make the button actually do something, configure actions on the Button pin page.')}
                   </p>
                   ${onGoToButtonPin && html`
                     <button
@@ -294,7 +293,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                                   ...prev,
                                   [obsKey(o)]: e.target.value
                                 }))}>
-                          ${TRIGGER_ROLE_OPTIONS.map(opt => html`
+                          ${ROLE_OPTIONS.map(opt => html`
                             <option key=${opt.value} value=${opt.value}>
                               ${opt.label[lang] || opt.label.en}
                             </option>

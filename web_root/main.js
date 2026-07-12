@@ -491,10 +491,18 @@ function Main({ }) {
   <//>`;
 }
 
-export const MyPolzunok = ({ value, onChange, disabled = false }) => {
+export const MyPolzunok = ({ value, onChange, disabled = false, activeColor }) => {
   const handleSliderChange = (e) => {
     onChange(e.target.checked ? 1 : 0);
   };
+
+  const trackStyle = activeColor
+    ? `background: ${value ? activeColor : ''}; transition: background 0.2s;`
+    : '';
+
+  const trackClass = activeColor
+    ? 'w-[42px] h-[22px] bg-slate-200/80 rounded-full peer peer-focus:ring-2 peer-focus:ring-teal-300/50 peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-[18px] after:w-[18px] after:transition-all shadow-inner'
+    : 'w-[42px] h-[22px] bg-slate-200/80 rounded-full peer peer-focus:ring-2 peer-focus:ring-teal-300/50 peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-teal-400 peer-checked:to-cyan-500 shadow-inner';
 
   return html`
     <div class="flex items-center gap-3 ${disabled ? 'opacity-50 pointer-events-none' : ''}">
@@ -506,7 +514,7 @@ export const MyPolzunok = ({ value, onChange, disabled = false }) => {
           disabled=${disabled}
           onChange=${handleSliderChange}
         />
-        <div class="w-[42px] h-[22px] bg-slate-200/80 rounded-full peer peer-focus:ring-2 peer-focus:ring-teal-300/50 peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-teal-400 peer-checked:to-cyan-500 shadow-inner"></div>
+        <div class="${trackClass}" style=${trackStyle}></div>
       </label>
       <span class="text-sm font-medium text-slate-600 w-8">${value ? 'On' : 'Off'}</span>
     </div>

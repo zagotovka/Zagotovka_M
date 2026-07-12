@@ -11,11 +11,13 @@ export function TabZigbee({}) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [learnIeee, setLearnIeee] = useState(null);
+  const [expandedGroups, setExpandedGroups] = useState({});
   const isPending = useRef(false);
   const lastChangeTime = useRef(0);
   const serverSnapshot = useRef({});
   const dirtyIds = useRef(new Set());
   const pendingConfigSave = useRef(null);
+  const modalOpenRef = useRef(false);
 
   const clusterToDeviceType = (clusters) => {
     const cl = Array.isArray(clusters) ? clusters : [clusters || 6];
@@ -73,18 +75,20 @@ export function TabZigbee({}) {
       if (data) {
         const zigbee = data.zigbee || [];
         const normalized = zigbee.map(normalizeDevice);
-        setDevices(normalized);
-        setLanguage(data.lang || 'ru');
         const snap = {};
         zigbee.forEach(d => { snap[d.id] = buildSnapshot(d); });
         serverSnapshot.current = snap;
-        dirtyIds.current.clear();
-        // Синхронизируем selectedDevice если модалка открыта
-        setSelectedDevice(prev => {
-          if (!prev) return null;
-          const updated = normalized.find(d => d.id === prev.id);
-          return updated || prev;
-        });
+
+        if (!modalOpenRef.current) {
+          setDevices(normalized);
+          setLanguage(data.lang || 'ru');
+          dirtyIds.current.clear();
+          setSelectedDevice(prev => {
+            if (!prev) return null;
+            const updated = normalized.find(d => d.id === prev.id);
+            return updated || prev;
+          });
+        }
       }
     });
     return () => { active = false; unregisterPoll('zigbee'); };
@@ -108,15 +112,31 @@ export function TabZigbee({}) {
       });
   };
 
+  const toggleGroup = (ieee) => {
+    setExpandedGroups(prev => ({ ...prev, [ieee]: !prev[ieee] }));
+  };
+
   const handleEdit = (device) => {
-    dirtyIds.current.add(device.id);
-    setSelectedDevice({ ...device });
+    const displayId = device.tuya_dp > 0
+      ? (() => {
+          const parent = devices.find(d => d.zbee_ieee === device.zbee_ieee && d.tuya_dp === 0);
+          if (parent) {
+            const idx = devices.filter(d => d.zbee_ieee === device.zbee_ieee && d.tuya_dp > 0).indexOf(device);
+            return `${parent.id}.${idx + 1}`;
+          }
+          return device.id;
+        })()
+      : device.id;
+    setSelectedDevice({ ...device, displayId });
     setIsModalOpen(true);
+    modalOpenRef.current = true;
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setSelectedDevice(null);
+    modalOpenRef.current = false;
+    setTimeout(() => refresh(), 300);
   };
 
   const handleDeviceUpdate = (updatedDevice) => {
@@ -246,7 +266,7 @@ export function TabZigbee({}) {
                   <thead>
                     <tr class="bg-teal-600/10 border-b border-teal-600/20">
                       <${Th} title="ID" />
-                      <${Th} title="IEEE" />
+                      <${Th} title="IEEE Address" />
                       <${Th} title="Type" />
                       <${Th} title="Info" />
                       <${Th} title="On/Off" />
@@ -270,22 +290,29 @@ export function TabZigbee({}) {
                         const typeLabel = hasMultiDp ? 'Multi' : deviceType;
 
                         /* Головная строка */
+                        const isExpanded = !!expandedGroups[head.zbee_ieee];
                         rows.push(html`
-                          <tr class="hover:bg-slate-200/80 transition-colors bg-white/80">
+                          <tr class="hover:bg-slate-200/80 transition-colors bg-white/80 ${hasMultiDp ? 'cursor-pointer' : ''}"
+                              onClick=${hasMultiDp ? () => toggleGroup(head.zbee_ieee) : undefined}>
                             <td class="px-6 py-2 text-sm text-slate-800">${head.id}</td>
                             <td class="px-6 py-2 text-sm text-slate-800 font-mono">${head.zbee_ieee || '—'}</td>
                             <td class="px-6 py-2 text-sm text-slate-700">
                               ${hasMultiDp
-                                ? html`✱ Multi <span class="text-xs text-slate-400">×${group.length}</span>`
+                                ? html`<span class="mr-1 text-slate-500">${isExpanded ? '▼' : '▶'}</span>✱ Multi <span class="text-xs text-slate-400">×${group.length}</span>`
                                 : getDeviceTypeLabel(typeLabel)}
                             </td>
                             <td class="px-6 py-2 text-sm text-slate-600">${head.zbee_label || ''}</td>
-                            <td class="px-6 py-2">
-                              ${hasMultiDp
-                                ? html`<span class="text-xs text-slate-400">—</span>`
-                                : html`<${MyPolzunok} value=${head.onoff || 0} disabled=${dirtyIds.current.has(head.id)} onChange=${(val) => handleToggle(head, val)} />`}
+                            <td class="px-6 py-2" onClick=${(e) => e.stopPropagation()}>
+                              <${MyPolzunok} value=${head.onoff || 0} disabled=${dirtyIds.current.has(head.id)} onChange=${(val) => {
+                                if (hasMultiDp) {
+                                  group.forEach(d => {
+                                    handleToggle(d, val === 1);
+                                  });
+                                }
+                                handleToggle(head, val);
+                              }} />
                             </td>
-                            <td class="px-6 py-2 text-sm flex gap-2">
+                            <td class="px-6 py-2 text-sm flex gap-2" onClick=${(e) => e.stopPropagation()}>
                               <button
                                 onClick=${() => handleEdit(head)}
                                 class="px-4 py-1.5 rounded-full text-xs font-bold text-white shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600"
@@ -301,7 +328,8 @@ export function TabZigbee({}) {
                                     body: JSON.stringify({ ieee: head.zbee_ieee })
                                   }).catch(err => console.error('Error starting learn:', err));
                                 }}
-                                class="px-3 py-1.5 rounded-full text-xs font-bold text-white shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-violet-400 to-purple-500 hover:from-violet-500 hover:to-purple-600"
+                                style="background: linear-gradient(to right, #6366f1, #8b5cf6);"
+                                class="px-3 py-1.5 rounded-full text-xs font-bold text-white shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 hover:opacity-90"
                               >
                                 ${language === 'ru' ? 'Обучение' : 'Learn'}
                               </button>
@@ -310,25 +338,30 @@ export function TabZigbee({}) {
                         `);
 
                         /* Sub-строки для мульти-DP */
-                        if (hasMultiDp) {
+                        if (hasMultiDp && isExpanded) {
                           group.slice(1).forEach((d, idx) => {
                             const subType = (d.clusters || []).includes(8) ? 'Dimmer'
                                           : (d.clusters || []).includes(768) ? 'Color'
                                           : 'On/Off';
                             rows.push(html`
                               <tr class="hover:bg-slate-200/80 transition-colors bg-white/60"
-                                  style="opacity:0.85; font-size:0.9em;">
-                                <td class="px-6 py-2 text-sm text-slate-600 font-mono"
-                                    style="padding-left:24px;">${head.id}.${idx + 1}</td>
-                                <td class="px-6 py-2 text-sm text-slate-400"
-                                    style="border-left:3px solid var(--accent-color, #06b6d4); padding-left:24px;">↳</td>
-                                <td class="px-6 py-2 text-sm text-slate-600">${subType}</td>
-                                <td class="px-6 py-2 text-sm text-slate-600">${d.zbee_label || ''}</td>
-                                <td class="px-6 py-2">
-                                  <${MyPolzunok} value=${d.onoff || 0} disabled=${dirtyIds.current.has(d.id)} onChange=${(val) => handleToggle(d, val)} />
+                                  style="font-size:0.9em;">
+                                <td class="px-6 py-2 text-sm font-mono"
+                                    style="padding-left:60px; color:#6b7fa3;">${head.id}.${idx + 1}</td>
+                                <td class="px-6 py-2 text-sm font-mono"
+                                    style="border-left:3px solid var(--accent-color, #06b6d4); padding-left:60px; color:#6b7fa3;">↳ DP${d.tuya_dp}</td>
+                                <td class="px-6 py-2 text-sm" style="padding-left:60px; color:#6b7fa3;">${subType}</td>
+                                <td class="px-6 py-2 text-sm" style="padding-left:60px; color:#6b7fa3;">${d.zbee_label || ''}</td>
+                                <td class="px-6 py-2" style="padding-left:60px;">
+                                  <${MyPolzunok} value=${d.onoff || 0} disabled=${(head.onoff || 0) === 0 || dirtyIds.current.has(d.id)} activeColor="linear-gradient(to right, #5b7093, #8599b8)" onChange=${(val) => handleToggle(d, val)} />
                                 </td>
                                 <td class="px-6 py-2 text-sm flex gap-2">
-                                  <span class="text-xs text-slate-300">DP${d.tuya_dp}</span>
+                                  <button
+                                    onClick=${() => handleEdit(d)}
+                                    class="px-4 py-1.5 rounded-full text-xs font-bold text-white shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600"
+                                  >
+                                    ${language === 'ru' ? 'Управление' : 'Control'}
+                                  </button>
                                 </td>
                               </tr>
                             `);

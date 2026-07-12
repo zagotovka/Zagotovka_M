@@ -117,14 +117,17 @@ const ModalButton = ({
     setErrors({ sclick: null, dclick: null, lpress: null });
   };
 
-  const renderConnectionModal = () => html`
+  const renderConnectionModal = () => {
+    const displayId = selectedButton.display_id || selectedButton.id;
+
+    return html`
     <form onSubmit=${handleSubmit}>
       <div class="modal-body">
         <table class="table-auto w-full">
           <tbody>
             <tr class="bg-gray-200">
               <td class="p-2 font-bold">ID</td>
-              <td class="p-2">${selectedButton.id}</td>
+              <td class="p-2">${displayId}</td>
             </tr>
             <tr class="bg-white">
               <td class="p-2 font-bold">Pin</td>
@@ -167,15 +170,20 @@ const ModalButton = ({
       </div>
     </form>
   `;
+  };
 
-  const renderEditModal = () => html`
+  const renderEditModal = () => {
+    const isZigbee = selectedButton.is_zigbee;
+    const displayId = selectedButton.display_id || selectedButton.id;
+
+    return html`
     <form onSubmit=${handleSubmit}>
       <div class="modal-body">
         <table class="table-auto w-full">
           <tbody>
             <tr class="bg-gray-200">
               <td class="p-2 font-bold">ID</td>
-              <td class="p-2">${selectedButton.id}</td>
+              <td class="p-2">${displayId}</td>
             </tr>
             <tr class="bg-white">
               <td class="p-2 font-bold">Pin</td>
@@ -186,13 +194,16 @@ const ModalButton = ({
               <td class="p-2">
                 <select
                   name="ptype"
-                  value=${ptype}
+                  value=${isZigbee ? 0 : ptype}
                   onChange=${(e) => setPtype(parseInt(e.target.value))}
-                  class="border rounded p-2 w-full"
+                  class="border rounded p-2 w-full ${isZigbee ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}"
+                  disabled=${isZigbee}
                 >
                   <option value="0">None</option>
-                  <option value="1">GPIO_PULLUP</option>
-                  <option value="2">GPIO_PULLDOWN</option>
+                  ${!isZigbee && html`
+                    <option value="1">GPIO_PULLUP</option>
+                    <option value="2">GPIO_PULLDOWN</option>
+                  `}
                 </select>
               </td>
             </tr>
@@ -262,6 +273,7 @@ const ModalButton = ({
       ${submitError && html`<p class="text-red-500 mt-2">${submitError}</p>`}
     </form>
   `;
+  };
 
   const modalContent = html`
     <div

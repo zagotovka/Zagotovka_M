@@ -12,9 +12,14 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
   const isMultiDp = siblings.length > 1 && siblings.some(d => d.tuya_dp > 0);
 
   /* Для мульти-DP: собираем подслоты с tuya_dp > 0 */
-  const dpSlots = isMultiDp
+  const dpSlotsRaw = isMultiDp
     ? siblings.filter(d => d.tuya_dp > 0)
     : [];
+  const [dpSlots, setDpSlots] = useState(dpSlotsRaw);
+
+  useEffect(() => {
+    setDpSlots(dpSlotsRaw);
+  }, [allDevices]);
 
   /* Для одиночного устройства */
   const hasDimmer = (device.clusters || []).includes(8);
@@ -87,6 +92,7 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
 
   /* Команды для мульти-DP слотов */
   const applyDpOnOff = (slotId, value) => {
+    setDpSlots(prev => prev.map(s => s.id === slotId ? { ...s, onoff: value ? 1 : 0 } : s));
     fetch('/api/zigbee/command', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -95,6 +101,7 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
   };
 
   const applyDpBrightness = (slotId, value) => {
+    setDpSlots(prev => prev.map(s => s.id === slotId ? { ...s, brightness: value } : s));
     fetch('/api/zigbee/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -133,7 +140,7 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
                 `}
               </h2>
               <p class="text-sm text-slate-500 mt-1">
-                ID: ${device.id} · ${isMultiDp
+                ID: ${device.displayId || device.id} · ${isMultiDp
                   ? `Multi-DP (${dpSlots.length} DP)`
                   : (isTrigger ? 'Button' : (hasColor ? 'Color Lamp' : (hasDimmer ? 'Dimmer' : 'On/Off Socket')))}
               </p>
@@ -150,9 +157,44 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
 
           <div class="space-y-4">
             ${isTrigger ? html`
+              <div class="bg-slate-50 rounded-xl p-4">
+                <div class="text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wider">
+                  ${lang === 'ru' ? 'Тестирование' : 'Testing'}
+                </div>
+                <p class="text-sm text-slate-500 mb-3">
+                  ${lang === 'ru'
+                    ? 'Нажмите кнопку на устройстве и наблюдайте за событиями. Или отправьте команду для тестирования:'
+                    : 'Press the button on the device and observe events. Or send a command for testing:'}
+                </p>
+                <div class="flex gap-3 flex-wrap">
+                  <button
+                    onClick=${() => {
+                      fetch('/api/zigbee/command', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: device.id, trigger: 'btn_double' })
+                      });
+                    }}
+                    class="px-4 py-2 rounded-lg bg-teal-500 text-white text-sm font-medium hover:bg-teal-600 transition-colors">
+                    btn_double
+                  </button>
+                  <button
+                    onClick=${() => {
+                      fetch('/api/zigbee/command', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: device.id, trigger: 'btn_long' })
+                      });
+                    }}
+                    class="px-4 py-2 rounded-lg bg-purple-500 text-white text-sm font-medium hover:bg-purple-600 transition-colors">
+                    btn_long
+                  </button>
+                </div>
+              </div>
+
               <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
                 <div class="text-sm font-semibold text-blue-700 mb-2">
-                  ${lang === 'ru' ? 'Кнопка / Триггер' : 'Button / Trigger'}
+                  ${lang === 'ru' ? 'Настройка действий' : 'Configure Actions'}
                 </div>
                 <p class="text-sm text-blue-600 mb-3">
                   ${lang === 'ru'
@@ -213,6 +255,16 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
                   `}
                 </div>
               </div>
+
+              ${dpSlots.filter(s => (s.clusters || []).includes(6)).length > 0 && html`
+                <div class="flex justify-center">
+                  <button
+                    onClick=${() => { onClose(); window.location.href = '/#/button'; }}
+                    class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
+                    ${language === 'ru' ? 'Перейти на Button pin →' : 'Go to Button pin →'}
+                  </button>
+                </div>
+              `}
             ` : html`
               <!-- Одиночное устройство -->
               <div class="bg-slate-50 rounded-xl p-4">
