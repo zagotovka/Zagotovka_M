@@ -2550,7 +2550,8 @@ void GetZigbeeConfig(void) {
       mg_free(info);
     }
 
-    ZigbeeConf[idx].zbee_endpoint = (uint8_t)mg_json_get_long(elem, "$.ep", 1);
+    ZigbeeConf[idx].zbee_endpoint = (uint8_t)mg_json_get_long(elem, "$.endpoint",
+        (int)mg_json_get_long(elem, "$.ep", 1));
     /* Читаем clusters как сырой JSON-массив [6,8,768] — mg_json_get_str не работает с массивами */
     {
       int cl_len = 0;
@@ -2570,65 +2571,52 @@ void GetZigbeeConfig(void) {
     ZigbeeConf[idx].color_hex = (uint32_t)mg_json_get_long(elem, "$.color_hex", 0xFFAA00);
     ZigbeeConf[idx].state = (uint8_t)mg_json_get_long(elem, "$.state", 0);
     ZigbeeConf[idx].topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
-    ZigbeeConf[idx].tuya_dp = (uint16_t)mg_json_get_long(elem, "$.tuya_dp", 0);
-    ZigbeeConf[idx].tuya_dp_onoff = (uint16_t)mg_json_get_long(elem, "$.tuya_dp_onoff", 0);
-    ZigbeeConf[idx].tuya_dp_brightness = (uint16_t)mg_json_get_long(elem, "$.tuya_dp_brightness", 0);
-    ZigbeeConf[idx].tuya_dp_color = (uint16_t)mg_json_get_long(elem, "$.tuya_dp_color", 0);
+    ZigbeeConf[idx].ep = (uint16_t)mg_json_get_long(elem, "$.ep", 0);
+    ZigbeeConf[idx].ep_onoff = (uint16_t)mg_json_get_long(elem, "$.ep_onoff", 0);
+    ZigbeeConf[idx].ep_brightness = (uint16_t)mg_json_get_long(elem, "$.ep_brightness", 0);
+    ZigbeeConf[idx].ep_color = (uint16_t)mg_json_get_long(elem, "$.ep_color", 0);
+    ZigbeeConf[idx].zbee_role = (uint8_t)mg_json_get_long(elem, "$.role", 0);
+
+    /* Читаем sclick/dclick/lpress для кнопок */
+    char *sclick = mg_json_get_str(elem, "$.sclick");
+    if (sclick) {
+      strncpy(ZigbeeConf[idx].sclick, sclick, sizeof(ZigbeeConf[idx].sclick) - 1);
+      mg_free(sclick);
+    }
+
+    char *dclick = mg_json_get_str(elem, "$.dclick");
+    if (dclick) {
+      strncpy(ZigbeeConf[idx].dclick, dclick, sizeof(ZigbeeConf[idx].dclick) - 1);
+      mg_free(dclick);
+    }
+
+    char *lpress = mg_json_get_str(elem, "$.lpress");
+    if (lpress) {
+      strncpy(ZigbeeConf[idx].lpress, lpress, sizeof(ZigbeeConf[idx].lpress) - 1);
+      mg_free(lpress);
+    }
+
+    ZigbeeConf[idx].vbtn_mode = (uint8_t)mg_json_get_long(elem, "$.vbtn_mode", 0);
+
+    char *pt_single = mg_json_get_str(elem, "$.pt_single");
+    if (pt_single) {
+      strncpy(ZigbeeConf[idx].pt_single, pt_single, sizeof(ZigbeeConf[idx].pt_single) - 1);
+      mg_free(pt_single);
+    }
+
+    char *pt_double = mg_json_get_str(elem, "$.pt_double");
+    if (pt_double) {
+      strncpy(ZigbeeConf[idx].pt_double, pt_double, sizeof(ZigbeeConf[idx].pt_double) - 1);
+      mg_free(pt_double);
+    }
+
+    char *pt_long = mg_json_get_str(elem, "$.pt_long");
+    if (pt_long) {
+      strncpy(ZigbeeConf[idx].pt_long, pt_long, sizeof(ZigbeeConf[idx].pt_long) - 1);
+      mg_free(pt_long);
+    }
 
     idx++;
-  }
-
-  /* ── ZigbeeTriggers ── */
-  memset(ZigbeeTriggers, 0, sizeof(ZigbeeTriggers));
-  int trig_ofs = mg_json_get(body, "$.triggers", NULL);
-  if (trig_ofs >= 0) {
-    struct mg_str trig_arr = mg_str_n(body.buf + trig_ofs, body.len - (size_t)trig_ofs);
-    int ti = 0;
-    size_t tpos = 0;
-    struct mg_str tkey, telem;
-    while (ti < ZBEE_TRIGGER_TABLE_SIZE && (tpos = mg_json_next(trig_arr, tpos, &tkey, &telem)) > 0) {
-      ZigbeeTriggers[ti].used = 1;
-      ZigbeeTriggers[ti].zbee_slot = (int)mg_json_get_long(telem, "$.slot", 0);
-      ZigbeeTriggers[ti].virtual_zbi = (int)mg_json_get_long(telem, "$.virt", 0);
-
-      char *payload = mg_json_get_str(telem, "$.payload");
-      if (payload) {
-        strncpy(ZigbeeTriggers[ti].payload, payload, sizeof(ZigbeeTriggers[ti].payload) - 1);
-        ZigbeeTriggers[ti].payload[sizeof(ZigbeeTriggers[ti].payload) - 1] = '\0';
-        mg_free(payload);
-      }
-
-      char *label = mg_json_get_str(telem, "$.label");
-      if (label) {
-        strncpy(ZigbeeTriggers[ti].label, label, sizeof(ZigbeeTriggers[ti].label) - 1);
-        ZigbeeTriggers[ti].label[sizeof(ZigbeeTriggers[ti].label) - 1] = '\0';
-        mg_free(label);
-      }
-
-      char *sclick = mg_json_get_str(telem, "$.sclick");
-      if (sclick) {
-        strncpy(ZigbeeTriggers[ti].sclick, sclick, sizeof(ZigbeeTriggers[ti].sclick) - 1);
-        ZigbeeTriggers[ti].sclick[sizeof(ZigbeeTriggers[ti].sclick) - 1] = '\0';
-        mg_free(sclick);
-      }
-
-      char *dclick = mg_json_get_str(telem, "$.dclick");
-      if (dclick) {
-        strncpy(ZigbeeTriggers[ti].dclick, dclick, sizeof(ZigbeeTriggers[ti].dclick) - 1);
-        ZigbeeTriggers[ti].dclick[sizeof(ZigbeeTriggers[ti].dclick) - 1] = '\0';
-        mg_free(dclick);
-      }
-
-      char *lpress = mg_json_get_str(telem, "$.lpress");
-      if (lpress) {
-        strncpy(ZigbeeTriggers[ti].lpress, lpress, sizeof(ZigbeeTriggers[ti].lpress) - 1);
-        ZigbeeTriggers[ti].lpress[sizeof(ZigbeeTriggers[ti].lpress) - 1] = '\0';
-        mg_free(lpress);
-      }
-
-      ti++;
-    }
-    printf("[ZIGBEE] Loaded %d triggers from zigbee.ini\r\n", ti);
   }
 
   vPortFree(buf);
@@ -2667,50 +2655,24 @@ void SetZigbeeConfig(void) {
 
     clusters_flags_to_json(ZigbeeConf[i].cluster_flags, clbuf, sizeof(clbuf));
     len = snprintf(buf, sizeof(buf),
-        "{\"ieee\":\"%s\",\"ep\":%d,\"clusters\":%s,\"attr\":%d,"
+        "{\"ieee\":\"%s\",\"endpoint\":%d,\"clusters\":%s,\"attr\":%d,"
         "\"label\":\"%s\",\"onoff\":%d,\"dvalue\":%d,\"color_hex\":%u,"
         "\"state\":%d,\"topin\":%d,\"info\":\"%s\","
-        "\"tuya_dp\":%d,\"tuya_dp_onoff\":%d,\"tuya_dp_brightness\":%d,\"tuya_dp_color\":%d}",
+        "\"ep\":%d,\"ep_onoff\":%d,\"ep_brightness\":%d,\"ep_color\":%d,"
+        "\"role\":%d,"
+        "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
+        "\"vbtn_mode\":%d,"
+        "\"pt_single\":\"%s\",\"pt_double\":\"%s\",\"pt_long\":\"%s\"}",
         ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint, clbuf,
         ZigbeeConf[i].zbee_attribute, ZigbeeConf[i].zbee_label, ZigbeeConf[i].onoff,
         ZigbeeConf[i].dvalue, (unsigned)ZigbeeConf[i].color_hex,
         ZigbeeConf[i].state, ZigbeeConf[i].topin, ZigbeeConf[i].info,
-        ZigbeeConf[i].tuya_dp, ZigbeeConf[i].tuya_dp_onoff,
-        ZigbeeConf[i].tuya_dp_brightness, ZigbeeConf[i].tuya_dp_color);
-    if (len <= 0 || len >= (int)sizeof(buf)) continue;
-
-    fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
-    if (fresult != FR_OK) goto cleanup;
-  }
-
-  /* ── ZigbeeTriggers ── */
-  const char *trig_start = "],\"triggers\":[";
-  fresult = f_write(&USBHFile, trig_start, strlen(trig_start), &byteswritten);
-  if (fresult != FR_OK) goto cleanup;
-
-  first = true;
-  for (int i = 0; i < ZBEE_TRIGGER_TABLE_SIZE; i++) {
-    if (!ZigbeeTriggers[i].used) continue;
-
-    if (!first) {
-      fresult = f_write(&USBHFile, ",", 1, &byteswritten);
-      if (fresult != FR_OK) goto cleanup;
-    }
-    first = false;
-
-    /* Экранируем строки для JSON */
-    char esc_sc[260], esc_dc[260], esc_lp[260], esc_payload[64], esc_label[64];
-    json_escape_str(esc_sc, ZigbeeTriggers[i].sclick, sizeof(esc_sc));
-    json_escape_str(esc_dc, ZigbeeTriggers[i].dclick, sizeof(esc_dc));
-    json_escape_str(esc_lp, ZigbeeTriggers[i].lpress, sizeof(esc_lp));
-    json_escape_str(esc_payload, ZigbeeTriggers[i].payload, sizeof(esc_payload));
-    json_escape_str(esc_label, ZigbeeTriggers[i].label, sizeof(esc_label));
-
-    len = snprintf(buf, sizeof(buf),
-        "{\"slot\":%d,\"virt\":%d,\"payload\":\"%s\",\"label\":\"%s\","
-        "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\"}",
-        ZigbeeTriggers[i].zbee_slot, ZigbeeTriggers[i].virtual_zbi,
-        esc_payload, esc_label, esc_sc, esc_dc, esc_lp);
+        ZigbeeConf[i].ep, ZigbeeConf[i].ep_onoff,
+        ZigbeeConf[i].ep_brightness, ZigbeeConf[i].ep_color,
+        ZigbeeConf[i].zbee_role,
+        ZigbeeConf[i].sclick, ZigbeeConf[i].dclick, ZigbeeConf[i].lpress,
+        ZigbeeConf[i].vbtn_mode,
+        ZigbeeConf[i].pt_single, ZigbeeConf[i].pt_double, ZigbeeConf[i].pt_long);
     if (len <= 0 || len >= (int)sizeof(buf)) continue;
 
     fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);

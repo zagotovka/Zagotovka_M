@@ -47,7 +47,7 @@ export function TabZigbee({}) {
     brightness: d.brightness || 254,
     color_hex: d.color_hex || 0xFFAA00,
     zbee_role: d.role || 0,
-    tuya_dp: d.tuya_dp || 0,
+    ep: d.ep || 0,
   });
 
   const refresh = () =>
@@ -117,16 +117,7 @@ export function TabZigbee({}) {
   };
 
   const handleEdit = (device) => {
-    const displayId = device.tuya_dp > 0
-      ? (() => {
-          const parent = devices.find(d => d.zbee_ieee === device.zbee_ieee && d.tuya_dp === 0);
-          if (parent) {
-            const idx = devices.filter(d => d.zbee_ieee === device.zbee_ieee && d.tuya_dp > 0).indexOf(device);
-            return `${parent.id}.${idx + 1}`;
-          }
-          return device.id;
-        })()
-      : device.id;
+    const displayId = device.display_id || device.id;
     setSelectedDevice({ ...device, displayId });
     setIsModalOpen(true);
     modalOpenRef.current = true;
@@ -224,10 +215,10 @@ export function TabZigbee({}) {
 
   const getDeviceTypeLabel = (deviceType) => {
     switch (deviceType) {
-      case 'lamp': return '💡 Color Lamp';
-      case 'dimmer': return '🔆 Dimmer';
-      case 'trigger': return '🔘 Кнопка';
-      default: return '🔌 Socket';
+      case 'lamp': return 'Color Lamp';
+      case 'dimmer': return 'Dimmer';
+      case 'trigger': return 'Кнопка';
+      default: return 'Socket';
     }
   };
 
@@ -285,7 +276,7 @@ export function TabZigbee({}) {
                       const rows = [];
                       Object.values(groups).forEach(group => {
                         const head = group[0];
-                        const hasMultiDp = group.length > 1 && group.some(d => d.tuya_dp > 0);
+                        const hasMultiDp = group.length > 1 && group.some(d => d.ep > 0);
                         const deviceType = head.zbee_device_type || 'socket';
                         const typeLabel = hasMultiDp ? 'Multi' : deviceType;
 
@@ -294,11 +285,13 @@ export function TabZigbee({}) {
                         rows.push(html`
                           <tr class="hover:bg-slate-200/80 transition-colors bg-white/80 ${hasMultiDp ? 'cursor-pointer' : ''}"
                               onClick=${hasMultiDp ? () => toggleGroup(head.zbee_ieee) : undefined}>
-                            <td class="px-6 py-2 text-sm text-slate-800">${head.id}</td>
+                            <td class="px-6 py-2 text-sm text-slate-800" style="position:relative">
+                              ${hasMultiDp ? html`<span style="position:absolute;left:60px" class="text-slate-500">${isExpanded ? '▼' : '▶'}</span>` : ''}${head.display_id || head.id}
+                            </td>
                             <td class="px-6 py-2 text-sm text-slate-800 font-mono">${head.zbee_ieee || '—'}</td>
                             <td class="px-6 py-2 text-sm text-slate-700">
                               ${hasMultiDp
-                                ? html`<span class="mr-1 text-slate-500">${isExpanded ? '▼' : '▶'}</span>✱ Multi <span class="text-xs text-slate-400">×${group.length}</span>`
+                                ? html`Multi <span class="text-xs text-slate-400">×${group.length}</span>`
                                 : getDeviceTypeLabel(typeLabel)}
                             </td>
                             <td class="px-6 py-2 text-sm text-slate-600">${head.zbee_label || ''}</td>
@@ -337,7 +330,7 @@ export function TabZigbee({}) {
                           </tr>
                         `);
 
-                        /* Sub-строки для мульти-DP */
+                        /* Sub-строки для мульти-EP */
                         if (hasMultiDp && isExpanded) {
                           group.slice(1).forEach((d, idx) => {
                             const subType = (d.clusters || []).includes(8) ? 'Dimmer'
@@ -347,9 +340,9 @@ export function TabZigbee({}) {
                               <tr class="hover:bg-slate-200/80 transition-colors bg-white/60"
                                   style="font-size:0.9em;">
                                 <td class="px-6 py-2 text-sm font-mono"
-                                    style="padding-left:60px; color:#6b7fa3;">${head.id}.${idx + 1}</td>
+                                    style="padding-left:60px; color:#6b7fa3;">${d.display_id || d.id}</td>
                                 <td class="px-6 py-2 text-sm font-mono"
-                                    style="border-left:3px solid var(--accent-color, #06b6d4); padding-left:60px; color:#6b7fa3;">↳ DP${d.tuya_dp}</td>
+                                    style="border-left:3px solid var(--accent-color, #06b6d4); padding-left:60px; color:#6b7fa3;">↳ EP${d.ep}</td>
                                 <td class="px-6 py-2 text-sm" style="padding-left:60px; color:#6b7fa3;">${subType}</td>
                                 <td class="px-6 py-2 text-sm" style="padding-left:60px; color:#6b7fa3;">${d.zbee_label || ''}</td>
                                 <td class="px-6 py-2" style="padding-left:60px;">

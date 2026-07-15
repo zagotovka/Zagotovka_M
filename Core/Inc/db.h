@@ -30,7 +30,7 @@
 #define ZBEE_ATTR_THERMO  0x0000
 #define ZBEE_ATTR_LOCK    0x0000
 
-/* Пассивные кластеры (сенсоры/Tuya — не зондируем, только слушаем) */
+/* Пассивные кластеры (сенсоры/multi-EP — не зондируем, только слушаем) */
 #define ZBEE_CLUSTER_TEMP       0x0402
 #define ZBEE_CLUSTER_HUMIDITY   0x0405
 #define ZBEE_CLUSTER_OCCUPANCY  0x0406
@@ -290,7 +290,6 @@ struct dbSettings {	// Cтруктура для setting
  *  ZIGBEE PLAN B — отдельный массив ZigbeeConf[NUMZBEE]
  * ═══════════════════════════════════════════════════════════════════════════ */
 #define NUMZBEE 100
-_Static_assert(NUMPIN + NUMZBEE <= 255, "ID space exceeds uint8_t range");
 
 typedef struct {
     char     zbee_ieee[17];      // IEEE-адрес без "0x", 16 hex + '\0'
@@ -307,33 +306,55 @@ typedef struct {
     uint8_t  zbee_role;          // ZBEE_ROLE_* — тип поведения
     uint16_t sensor_cluster;     // какой кластер сработал (для SENSOR)
     int      sensor_last_val;    // последнее значение сенсора
-    uint16_t tuya_dp_onoff;      // DP-номер для вкл/выкл (0 = не размечен)
-    uint16_t tuya_dp_brightness; // DP-номер для яркости
-    uint16_t tuya_dp_color;      // DP-номер для цвета
-    uint16_t tuya_dp;            // DP-номер этого слота (0 = не Tuya sub-slot)
+    uint16_t ep_onoff;      // EP-номер для вкл/выкл (0 = не размечен)
+    uint16_t ep_brightness; // EP-номер для яркости
+    uint16_t ep_color;      // EP-номер для цвета
+    uint16_t ep;            // EP-номер этого слота (0 = не sub-slot)
+
+    /* ── Button fields (when zbee_role == ZBEE_ROLE_TRIGGER) ── */
+    char     sclick[32];         // Single click action. (18 символов)
+    char     dclick[32];         // Double click action  (18 символов)
+    char     lpress[32];         // Long press action    (18 символов)
+
+    uint8_t  vbtn_mode;          // 0 = PASSTHROUGH, 1 = RAW (auto-detected)
+    char     pt_single[12];      // Payload for single click (PASSTHROUGH)
+    char     pt_double[12];      // Payload for double click
+    char     pt_long[12];        // Payload for long press
+
+    /* ── Runtime state for RAW mode (not saved to flash) ── */
+    uint8_t  vbtn_state;         // 0=IDLE, 1=PRESSED, 2=WAIT_REPEAT, 3=RE_PRESSED, 5=LONG_HOLD
+    uint8_t  vbtn_repeat;        // Click counter (1 or 2)
+    uint8_t  vbtn_level;         // Current level (1=pressed, 0=released)
+    uint32_t vbtn_last_tick;     // Last event time
+    uint32_t vbtn_state_tick;    // Time of state entry
 } ZigbeeVirtualPin;
 
 extern ZigbeeVirtualPin ZigbeeConf[NUMZBEE];
 
-/* ── Trigger → Button pin: общая таблица synthetic-триггеров ── */
-#define ZBEE_TRIGGER_TABLE_SIZE 32
+/* ── Virtual button constants ── */
+#define VBTN_STATE_IDLE        0
+#define VBTN_STATE_PRESSED     1
+#define VBTN_STATE_WAIT_REPEAT 2
+#define VBTN_STATE_RE_PRESSED  3
+#define VBTN_STATE_LONG_HOLD   5
 
-typedef struct {
-    uint8_t used;
-    int     zbee_slot;       /* индекс родителя в ZigbeeConf[] */
-    char    payload[32];     /* уникальная trigger-строка */
-    int     virtual_zbi;     /* индекс synthetic-слота в ZigbeeConf[] (0 = parent) */
-    char    label[30];       /* имя/описание для Button pin */
-    char    sclick[125];     // actions для single click
-    char    dclick[125];     // actions для double click
-    char    lpress[125];     // actions для long press
-} ZigbeeTriggerEntry;
+#define VBTN_MODE_PASSTHROUGH  0
+#define VBTN_MODE_RAW          1
 
-extern ZigbeeTriggerEntry ZigbeeTriggers[ZBEE_TRIGGER_TABLE_SIZE];
+#define VBTN_DEBOUNCE_MS       30
+#define VBTN_DOUBLE_MS         300
+#define VBTN_LONG_MS           800
+#define VBTN_WATCHDOG_MS       5000
 
-/* ── Адресация: единое пространство ID ── */
-static inline bool IsZigbeePin(int id) { return id >= NUMPIN; }
+/* ── Addressing: unified ID space ── */
+static inline bool IsZigbeePin(int id) { return id >= NUMPIN && id < NUMPIN + NUMZBEE; }
 static inline int  ZbeeIdx(int id)     { return id - NUMPIN; }
+
+/* ── Virtual button functions ── */
+void zbee_vbtn_tick(void);
+void zbee_vbtn_mqtt_event(int slot, const char *payload);
+void zbee_vbtn_auto_detect(int slot, const char *first_payload);
+void vbtn_execute(int slot, int event_type);
 
 /* ── PinView — тонкий интерфейс для общих операций ── */
 typedef struct {

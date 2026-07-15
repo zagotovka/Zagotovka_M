@@ -17,7 +17,7 @@ const ModalButton = ({
   const [buttonInfo, setButtonInfo] = useState(selectedButton?.info || '');
   const [onoff, setOnOff] = useState(selectedButton?.onoff || 0);
   const [ptype, setPtype] = useState(selectedButton?.ptype || 0);
-  const [sclick, setSclick] = useState(selectedButton?.sclick || '');
+  const [sclick, setSclick] = useState(selectedButton?.sclick || selectedButton?.action || '');
   const [dclick, setDclick] = useState(selectedButton?.dclick || '');
   const [lpress, setLpress] = useState(selectedButton?.lpress || '');
   const [pinOptions, setPinOptions] = useState([]);
@@ -28,7 +28,7 @@ const ModalButton = ({
   });
   const [submitError, setSubmitError] = useState(null);
 
-  const doubleClickLongPressRegex = /^(None|\d{1,2}:[012])(,\d{1,2}:[012])*$/;
+  const doubleClickLongPressRegex = /^(None|\d{1,4}(\.\d)?:[012])(,\d{1,4}(\.\d)?:[012])*$/;
 
   const validateInput = (value) => {
     if (!value || value.trim() === '' || value.toLowerCase() === 'none') {
@@ -36,7 +36,7 @@ const ModalButton = ({
     }
     return doubleClickLongPressRegex.test(value)
       ? null
-      : 'Incorrect format. Use "None" or "pin:value" format.';
+      : 'Format: None, 6:1, 93.1:2 (pin:value, 0=OFF 1=ON 2=TOGGLE)';
   };
 
   const handleInputChange = (key, value) => {
@@ -84,11 +84,11 @@ const ModalButton = ({
     const updatedButton = {
       ...selectedButton,
       info: buttonInfo,
+      onoff,
+      ptype,
       sclick: sclick || 'None',
       dclick: dclick || 'None',
-      lpress: lpress || 'None',
-      onoff,
-      ptype
+      lpress: lpress || 'None'
     };
 
     fetch('/api/button/set', {
@@ -226,7 +226,7 @@ const ModalButton = ({
                       class="border rounded p-2 w-full ${errors[type]
         ? 'border-red-500'
         : ''}"
-                      placeholder="None"
+                      placeholder="None, 6:1, 93.1:2"
                     />
                     ${errors[type] &&
       html`<p class="text-red-500 text-sm">${errors[type]}</p>`}

@@ -17,9 +17,6 @@ struct dbPinToPin PinsLinks[NUMPINLINKS];
 /* ── ZIGBEE PLAN B ── */
 ZigbeeVirtualPin ZigbeeConf[NUMZBEE];
 
-/* ── Trigger → Button pin ── */
-ZigbeeTriggerEntry ZigbeeTriggers[ZBEE_TRIGGER_TABLE_SIZE];
-
 PinView GetPinView(int id) {
     PinView v = {0};
     if (id < NUMPIN) {

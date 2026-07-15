@@ -6,14 +6,29 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
   const [isScanning, setIsScanning] = useState(false);
 
   const isTrigger = device.zbee_role === 3;
+  const [triggers, setTriggers] = useState([]);
 
-  /* Определяем, мульти-DP группа или одиночное устройство */
+  useEffect(() => {
+    if (!isTrigger) return;
+    fetch('/api/button/get')
+      .then(r => r.json())
+      .then(data => {
+        const btns = data.data || data;
+        if (Array.isArray(btns)) {
+          const myTriggers = btns.filter(b => b.is_zigbee && b.payload);
+          setTriggers(myTriggers);
+        }
+      })
+      .catch(() => {});
+  }, [isTrigger, device.id]);
+
+  /* Определяем, мульти-EP группа или одиночное устройство */
   const siblings = (allDevices || []).filter(d => d.zbee_ieee === device.zbee_ieee);
-  const isMultiDp = siblings.length > 1 && siblings.some(d => d.tuya_dp > 0);
+  const isMultiDp = siblings.length > 1 && siblings.some(d => d.ep > 0);
 
-  /* Для мульти-DP: собираем подслоты с tuya_dp > 0 */
+  /* Для мульти-EP: собираем подслоты с ep > 0 */
   const dpSlotsRaw = isMultiDp
-    ? siblings.filter(d => d.tuya_dp > 0)
+    ? siblings.filter(d => d.ep > 0)
     : [];
   const [dpSlots, setDpSlots] = useState(dpSlotsRaw);
 
@@ -90,14 +105,14 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
     scheduleUpdate({ color: value, color_hex: hex });
   };
 
-  /* Команды для мульти-DP слотов */
+  /* Команды для мульти-EP слотов */
   const applyDpOnOff = (slotId, value) => {
     setDpSlots(prev => prev.map(s => s.id === slotId ? { ...s, onoff: value ? 1 : 0 } : s));
     fetch('/api/zigbee/command', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: slotId, onoff: value ? 1 : 0 })
-    }).catch(err => console.error('Error sending tuya command:', err));
+    }).catch(err => console.error('Error sending ep command:', err));
   };
 
   const applyDpBrightness = (slotId, value) => {
@@ -106,7 +121,7 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: slotId, brightness: value })
-    }).catch(err => console.error('Error sending tuya brightness:', err));
+    }).catch(err => console.error('Error sending ep brightness:', err));
   };
 
   const handleOverlayClick = (e) => {
@@ -141,7 +156,7 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
               </h2>
               <p class="text-sm text-slate-500 mt-1">
                 ID: ${device.displayId || device.id} · ${isMultiDp
-                  ? `Multi-DP (${dpSlots.length} DP)`
+                  ? `Multi-EP (${dpSlots.length} EP)`
                   : (isTrigger ? 'Button' : (hasColor ? 'Color Lamp' : (hasDimmer ? 'Dimmer' : 'On/Off Socket')))}
               </p>
             </div>
@@ -167,28 +182,24 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
                     : 'Press the button on the device and observe events. Or send a command for testing:'}
                 </p>
                 <div class="flex gap-3 flex-wrap">
-                  <button
-                    onClick=${() => {
-                      fetch('/api/zigbee/command', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: device.id, trigger: 'btn_double' })
-                      });
-                    }}
-                    class="px-4 py-2 rounded-lg bg-teal-500 text-white text-sm font-medium hover:bg-teal-600 transition-colors">
-                    btn_double
-                  </button>
-                  <button
-                    onClick=${() => {
-                      fetch('/api/zigbee/command', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: device.id, trigger: 'btn_long' })
-                      });
-                    }}
-                    class="px-4 py-2 rounded-lg bg-purple-500 text-white text-sm font-medium hover:bg-purple-600 transition-colors">
-                    btn_long
-                  </button>
+                  ${triggers.map(t => html`
+                    <button
+                      onClick=${() => {
+                        fetch('/api/zigbee/command', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ id: t.id, trigger: t.payload })
+                        });
+                      }}
+                      class="px-4 py-2 rounded-lg bg-teal-500 text-white text-sm font-medium hover:bg-teal-600 transition-colors">
+                      ${t.label || t.payload}
+                    </button>
+                  `)}
+                  ${triggers.length === 0 && html`
+                    <span class="text-sm text-slate-400 italic">
+                      ${lang === 'ru' ? 'Нет триггеров — нажмите кнопку на устройстве' : 'No triggers — press a button on the device'}
+                    </span>
+                  `}
                 </div>
               </div>
 
@@ -198,8 +209,8 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
                 </div>
                 <p class="text-sm text-blue-600 mb-3">
                   ${lang === 'ru'
-                    ? 'Настройте действия (Single Click / Double Click / Long Press) на странице Button pin.'
-                    : 'Configure actions (Single Click / Double Click / Long Press) on the Button pin page.'}
+                    ? 'Настройте действия для каждого payload на странице Button pin.'
+                    : 'Configure actions for each payload on the Button pin page.'}
                 </p>
                 <button
                   onClick=${() => { onClose(); window.location.href = '/#/button'; }}
@@ -208,15 +219,15 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
                 </button>
               </div>
             ` : isMultiDp ? html`
-              <!-- Мульти-DP: групповая модалка -->
+              <!-- Мульти-EP: групповая модалка -->
               ${dpSlots.map(slot => html`
                 <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
                   <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center gap-2">
                       ${dpIcon(slot.clusters[0] || 6)}
-                      <span class="text-sm font-semibold text-slate-700">${slot.zbee_label || 'DP' + slot.tuya_dp}</span>
+                      <span class="text-sm font-semibold text-slate-700">${slot.zbee_label || 'EP' + slot.ep}</span>
                     </div>
-                    <span class="text-xs text-slate-400 font-mono">DP${slot.tuya_dp}</span>
+                    <span class="text-xs text-slate-400 font-mono">EP${slot.ep}</span>
                   </div>
                   ${(slot.clusters || []).includes(6) && html`
                     <${MyPolzunok} value=${slot.onoff || 0} onChange=${(val) => applyDpOnOff(slot.id, val)} />

@@ -1953,8 +1953,8 @@ void StartOutputTask(void *argument)
         if (IsZigbeePin(data_pin.id)) {
           int zbi = ZbeeIdx(data_pin.id);
           if (ZigbeeConf[zbi].zbee_ieee[0] != '\0' && ZigbeeConf[zbi].onoff) {
-            /* Tuya DP command — отправка на конкретный DP */
-            if (ZigbeeConf[zbi].tuya_dp > 0) {
+            /* multi-EP команда — отправка на конкретный EP */
+            if (ZigbeeConf[zbi].ep > 0) {
               const char *val_str;
               char valbuf[8];
               if (ZigbeeConf[zbi].cluster_flags & ZBEE_CL_ONOFF) {
@@ -1965,10 +1965,10 @@ void StartOutputTask(void *argument)
               } else {
                 val_str = "0";
               }
-              extern void SendZigbeeTuyaCommand(const char *ieee, uint8_t ep, uint16_t dp, const char *val);
-              SendZigbeeTuyaCommand(ZigbeeConf[zbi].zbee_ieee,
+              extern void SendZigbeeEPCommand(const char *ieee, uint8_t ep, uint16_t dp, const char *val);
+              SendZigbeeEPCommand(ZigbeeConf[zbi].zbee_ieee,
                                     ZigbeeConf[zbi].zbee_endpoint,
-                                    ZigbeeConf[zbi].tuya_dp, val_str);
+                                    ZigbeeConf[zbi].ep, val_str);
             } else {
               /* Стандартная ZCL-команда */
               const char *cmd;
@@ -2093,6 +2093,11 @@ void StartCronTask(void *argument)
         printf("[SYSTEM] Reset CSR=0x%08lX\r\n", reset_csr_value);
         printf("[SYSTEM] Reset flags: %s\r\n", reset_reason_str);
         printf("[SYSTEM] Reset reason: %s (CSR=0x%08lX)\r\n", reset_reason_str, reset_csr_value);
+        printf("[SYSTEM][BOOT] FW=%s NUMPIN=%d NUMZBEE=%d\r\n",
+               FW_VERSION, NUMPIN, NUMZBEE);
+        printf("[SYSTEM][BOOT] Compiled: %s %s\r\n", __DATE__, __TIME__);
+        printf("[SYSTEM][BOOT] sizeof(ZigbeeConf)=%d\r\n",
+               (int)sizeof(ZigbeeVirtualPin));
       }
 
       if (cronetime != cronetime_old) {
@@ -2265,6 +2270,10 @@ void StartInputTask(void *argument)
         }
       }
     }
+
+    /* Process Zigbee virtual buttons (RAW mode state machine) */
+    zbee_vbtn_tick();
+
     osDelay(10);
   }
   /* USER CODE END StartInputTask */

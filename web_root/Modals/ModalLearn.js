@@ -9,7 +9,7 @@ const ROLE_OPTIONS = [
   { value: 'humidity',    label: { ru: 'Влажность',     en: 'Humidity' } },
   { value: 'occupancy',   label: { ru: 'Присутствие',   en: 'Occupancy' } },
   { value: 'button',      label: { ru: 'Кнопка',        en: 'Button' } },
-  { value: 'tuya_dp',     label: { ru: 'Tuya DP',       en: 'Tuya DP' } },
+  { value: 'ep',          label: { ru: 'EP',             en: 'EP' } },
 ];
 
 function obsKey(o) {
@@ -94,12 +94,11 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                 label: names[obsKey(o)] || '',
               }
             : {
-                ep: o.ep,
+                ep: o.cluster === '0xEF00' ? parseInt(o.attr, 16) : o.ep,
                 cluster: o.cluster,
                 attr: o.attr,
                 role: labels[obsKey(o)] || 'ignore',
                 label: names[obsKey(o)] || '',
-                tuya_dp: o.cluster === '0xEF00' ? parseInt(o.attr, 16) : undefined,
               }
         )),
       };
@@ -111,11 +110,11 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
       const res = await r.json();
       if (res.status) {
         setSavedType(res.device_type);
-        if (res.device_type !== 'trigger' && res.device_type !== 'tuya') {
+        if (res.device_type !== 'trigger' && res.device_type !== 'multi_ep') {
           setTimeout(() => onSaved?.(res.device_type), 2000);
         }
-        if (res.tuya_slots > 1) {
-          setSavedType('multi_tuya');
+        if (res.ep_slots > 1) {
+          setSavedType('multi_ep');
         }
       } else {
         setError(res.message);
@@ -133,9 +132,9 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
 
   const typeIcon = (t) => ({
     dimmer: '🔆', color_lamp: '💡', sensor: '📡',
-    trigger: '🔘', tuya: '🏭', cover: '🚪',
+    trigger: '🔘', multi_ep: '🏭', cover: '🚪',
     thermostat: '🌡️', lock: '🔒', socket: '🔌',
-    multi_tuya: '✱',
+    multi_ep: '✱',
   }[t] || '🔌');
 
   const typeLabel = (t) => ({
@@ -143,12 +142,12 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
     color_lamp: lang === 'ru' ? 'Цветная лампа' : 'Color Lamp',
     sensor: lang === 'ru' ? 'Сенсор' : 'Sensor',
     trigger: lang === 'ru' ? 'Кнопка/Триггер' : 'Trigger',
-    tuya: lang === 'ru' ? 'Tuya устройство' : 'Tuya Device',
+    multi_ep: lang === 'ru' ? 'Multi-EP устройство' : 'Multi-EP Device',
     cover: lang === 'ru' ? 'Шторы/Жалюзи' : 'Cover',
     thermostat: lang === 'ru' ? 'Термостат' : 'Thermostat',
     lock: lang === 'ru' ? 'Замок' : 'Lock',
     socket: lang === 'ru' ? 'Розетка' : 'Socket',
-    multi_tuya: lang === 'ru' ? 'Multi-DP устройство' : 'Multi-DP Device',
+    multi_ep: lang === 'ru' ? 'Multi-EP устройство' : 'Multi-EP Device',
   }[t] || t);
 
   return html`
@@ -174,7 +173,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
               <div class="text-2xl font-bold text-slate-800 mb-1">${typeLabel(savedType)}</div>
               <div class="text-sm text-slate-400 mb-4">${ieee}</div>
 
-              ${savedType === 'multi_tuya' && html`
+              ${savedType === 'multi_ep' && html`
                 <div class="bg-green-50 border border-green-200 rounded-lg p-4 mt-2 text-left">
                   <p class="text-sm text-green-800">
                     ${lang === 'ru'
@@ -184,10 +183,10 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                 </div>
               `}
 
-              ${(savedType === 'trigger' || savedType === 'tuya' || savedType === 'multi_tuya') && html`
+              ${(savedType === 'trigger' || savedType === 'multi_ep') && html`
                 <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-2 text-left">
                   <p class="text-sm text-blue-800 mb-3">
-                    ${savedType === 'multi_tuya'
+                    ${savedType === 'multi_ep'
                       ? (lang === 'ru'
                         ? 'Создано несколько устройств. Если есть кнопки, настройте действия на странице Button pin.'
                         : 'Multiple devices created. If there are buttons, configure actions on the Button pin page.')
@@ -306,7 +305,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                       <td class="py-2 font-mono">${o.ep}</td>
                       <td class="py-2">
                         <span class="font-mono text-xs">${o.cluster}</span>
-                        <span class="text-slate-400 ml-1">${o.cluster_name}${o.cluster === '0xEF00' ? ' DP' + parseInt(o.attr, 16) : ''}</span>
+                        <span class="text-slate-400 ml-1">${o.cluster_name}${o.cluster === '0xEF00' ? ' EP' + parseInt(o.attr, 16) : ''}</span>
                         ${o.changed && html`
                           <span class="text-amber-500 ml-1" title="
                             ${lang === 'ru' ? 'Значение менялось' : 'Value changed'}">↻</span>

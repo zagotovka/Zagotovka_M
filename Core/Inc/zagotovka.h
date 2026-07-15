@@ -22,7 +22,7 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 
-#define FW_VERSION "0.5.1-zigbee"
+#define FW_VERSION "v2.0.2m"
 #define BUFFER_SIZE 10000 /* max Button = 9835 символов, это не точно! */
 #define SECURITY_BODY_MAX 4096U /* max body для handle_security_set (heap) */
 #define ENTER_CRITICAL() taskENTER_CRITICAL()
@@ -165,6 +165,13 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
 void handle_zigbee_learn_start(struct mg_connection *c, struct mg_http_message *hm);
 bool zbee_is_valid_ieee(const char *s);
 
+void calc_display_id(int parent_id, int zbee_slot, int trigger_index,
+                     char *out, size_t out_size);
+void calc_zigbee_display_id(int index, char *out, size_t out_size);
+
+/* Helper: check if payload is a raw press/release word */
+int is_raw_payload(const char *payload);
+
 /* Cluster flags <-> JSON array conversion */
 uint8_t clusters_json_to_flags(const char *json_str);
 int clusters_flags_to_json(uint8_t flags, char *buf, size_t buflen);
@@ -173,7 +180,7 @@ void gen_switch_json(const struct dbPinsInfo *pins_info,
 		int buffer_size);
 void parse_switch_json(char* json, struct dbPinsConf* PinsConf, const struct dbPinsInfo* PinsInfo, int count);
 
-void handle_button_get(struct mg_connection *c);
+void handle_button_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm);
 void gen_button_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pins_conf, int num_pins, char *buffer, int buffer_size);
 void parse_button_json(char* json, struct dbPinsConf* PinsConf,const struct dbPinsInfo* PinsInfo, int count);
@@ -252,7 +259,7 @@ void mqtt_message_handler(const char* topic, const char* payload);
 void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
                        uint16_t cluster, uint8_t attribute,
                        const char *json_cmd);
-void SendZigbeeTuyaCommand(const char *zbee_ieee, uint8_t endpoint,
+void SendZigbeeEPCommand(const char *zbee_ieee, uint8_t endpoint,
                            uint16_t dp, const char *val);
 
 void action_handler(uint8_t button_id, const char* action_str, const char* press_type);
@@ -330,7 +337,7 @@ void handle_select_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_switch_get(struct mg_connection *c);
 void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm);
-void handle_button_get(struct mg_connection *c);
+void handle_button_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_encoder_get(struct mg_connection *c);
 void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm);
@@ -372,7 +379,7 @@ const char *json_escape_str(char *dst, const char *src, size_t dst_sz);
 void json_escape_send(struct mg_connection *c, const char *src);
 
 /* Content-Length HTTP handlers from net.c (Keep-Alive polling) */
-void handle_buttons(struct mg_connection *c);
+void handle_buttons(struct mg_connection *c, struct mg_http_message *hm);
 void handle_switches(struct mg_connection *c);
 void handle_encoders(struct mg_connection *c);
 

@@ -9,7 +9,7 @@
 #define MQTT_PORT "1883"
 
 // Shared JSON response buffer — heap-allocated in web_init() to save 16KB .bss
-#define G_BODY_SIZE 16384
+#define G_BODY_SIZE 32768
 
 #ifdef __cplusplus
 extern "C" {

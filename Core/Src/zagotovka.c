@@ -549,45 +549,34 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
   onoffid = (int32_t)id_val;
   uint8_t onoff = (uint8_t)onoff_val;
 
+  int zbi = -1;
   if (onoffid >= NUMPIN && onoffid < NUMPIN + NUMZBEE) {
-    int zbi = onoffid - NUMPIN;
+    /* ZigbeeConf slot: id = NUMPIN + slot_index */
+    zbi = onoffid - NUMPIN;
+  }
 
-    /* Для триггеров: onoffid — это индекс в ZigbeeTriggers[], нужно найти родителя */
-    int trig_idx = onoffid - NUMPIN;
-    int trig_found = -1;
-    if (trig_idx >= 0 && trig_idx < ZBEE_TRIGGER_TABLE_SIZE &&
-        ZigbeeTriggers[trig_idx].used) {
-      zbi = ZigbeeTriggers[trig_idx].zbee_slot;
-      trig_found = trig_idx;
-    }
-
+  if (zbi >= 0) {
     ZigbeeConf[zbi].onoff = onoff;
-    if (ZigbeeConf[zbi].zbee_ieee[0] != '\0' && ZigbeeConf[zbi].onoff) {
-      /* Для триггеров: шлём payload на trigger topic */
-      if (trig_found >= 0 && ZigbeeTriggers[trig_found].payload[0]) {
-        extern struct mg_connection * volatile s_conn;
-        if (s_conn && !s_conn->is_closing) {
-          char topic[128];
-          snprintf(topic, sizeof(topic), "zigbee2mqtt/trigger/%s", ZigbeeConf[zbi].zbee_ieee);
-          struct mg_str pubt = mg_str(topic);
-          struct mg_str data = mg_str(ZigbeeTriggers[trig_found].payload);
-          struct mg_mqtt_opts pub_opts;
-          memset(&pub_opts, 0, sizeof(pub_opts));
-          pub_opts.topic = pubt;
-          pub_opts.message = data;
-          pub_opts.qos = 0;
-          pub_opts.retain = false;
-          mg_mqtt_pub(s_conn, &pub_opts);
-          LOG_Z2M("onoff: TRIGGER %s -> %s\r\n", ZigbeeTriggers[trig_found].payload, topic);
+    if (ZigbeeConf[zbi].zbee_ieee[0] != '\0') {
+      /* Проверяем есть ли sclick/dclick/lpress (кнопка) */
+      int is_button = (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_TRIGGER &&
+                       ZigbeeConf[zbi].sclick[0] != '\0');
+
+      if (!is_button) {
+        /* Обычное устройство: ON/OFF */
+        if (ZigbeeConf[zbi].onoff) {
+          const char *cmd = (onoff != 0) ? "ON" : "OFF";
+          uint8_t flags = ZigbeeConf[zbi].cluster_flags;
+          if (flags & ZBEE_CL_ONOFF) {
+            SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                              ZigbeeConf[zbi].zbee_endpoint,
+                              6, ZigbeeConf[zbi].zbee_attribute, cmd);
+          }
         }
       } else {
-        /* Обычное устройство: ON/OFF */
-        const char *cmd = (onoff != 0) ? "ON" : "OFF";
-        uint8_t flags = ZigbeeConf[zbi].cluster_flags;
-        if (flags & ZBEE_CL_ONOFF) {
-          SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
-                            ZigbeeConf[zbi].zbee_endpoint,
-                            6, ZigbeeConf[zbi].zbee_attribute, cmd);
+        /* Кнопка: onoff toggle → выполняем sclick */
+        if (onoff) {
+          vbtn_execute(zbi, 0);
         }
       }
     } else {
@@ -910,8 +899,8 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
   }
 }
 /*******************************************************************************************************************/
-void handle_button_get(struct mg_connection *c) {
-  handle_buttons(c);
+void handle_button_get(struct mg_connection *c, struct mg_http_message *hm) {
+  handle_buttons(c, hm);
 }
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
@@ -921,37 +910,35 @@ void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
     struct mg_str body = mg_str_n(hm->body.buf, hm->body.len);
     long id_val = mg_json_get_long(body, "$.id", -1);
 
-    if (id_val >= NUMPIN) {
-      /* Zigbee trigger: id = NUMPIN + trigger_index */
-      int trig_idx = (int)id_val - NUMPIN;
-      if (trig_idx >= 0 && trig_idx < ZBEE_TRIGGER_TABLE_SIZE &&
-          ZigbeeTriggers[trig_idx].used) {
-        char *sclick = mg_json_get_str(body, "$.sclick");
-        if (sclick) {
-          strncpy(ZigbeeTriggers[trig_idx].sclick, sclick,
-                  sizeof(ZigbeeTriggers[trig_idx].sclick) - 1);
-          ZigbeeTriggers[trig_idx].sclick[sizeof(ZigbeeTriggers[trig_idx].sclick) - 1] = '\0';
-          mg_free(sclick);
+    if (id_val >= NUMPIN && id_val < NUMPIN + NUMZBEE) {
+      int zbi = (int)id_val - NUMPIN;
+      if (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_TRIGGER) {
+        char *action_str = mg_json_get_str(body, "$.sclick");
+        if (action_str) {
+          strncpy(ZigbeeConf[zbi].sclick, action_str,
+                  sizeof(ZigbeeConf[zbi].sclick) - 1);
+          ZigbeeConf[zbi].sclick[sizeof(ZigbeeConf[zbi].sclick) - 1] = '\0';
+          mg_free(action_str);
         }
-        char *dclick = mg_json_get_str(body, "$.dclick");
-        if (dclick) {
-          strncpy(ZigbeeTriggers[trig_idx].dclick, dclick,
-                  sizeof(ZigbeeTriggers[trig_idx].dclick) - 1);
-          ZigbeeTriggers[trig_idx].dclick[sizeof(ZigbeeTriggers[trig_idx].dclick) - 1] = '\0';
-          mg_free(dclick);
+        char *dclick_str = mg_json_get_str(body, "$.dclick");
+        if (dclick_str) {
+          strncpy(ZigbeeConf[zbi].dclick, dclick_str,
+                  sizeof(ZigbeeConf[zbi].dclick) - 1);
+          ZigbeeConf[zbi].dclick[sizeof(ZigbeeConf[zbi].dclick) - 1] = '\0';
+          mg_free(dclick_str);
         }
-        char *lpress = mg_json_get_str(body, "$.lpress");
-        if (lpress) {
-          strncpy(ZigbeeTriggers[trig_idx].lpress, lpress,
-                  sizeof(ZigbeeTriggers[trig_idx].lpress) - 1);
-          ZigbeeTriggers[trig_idx].lpress[sizeof(ZigbeeTriggers[trig_idx].lpress) - 1] = '\0';
-          mg_free(lpress);
+        char *lpress_str = mg_json_get_str(body, "$.lpress");
+        if (lpress_str) {
+          strncpy(ZigbeeConf[zbi].lpress, lpress_str,
+                  sizeof(ZigbeeConf[zbi].lpress) - 1);
+          ZigbeeConf[zbi].lpress[sizeof(ZigbeeConf[zbi].lpress) - 1] = '\0';
+          mg_free(lpress_str);
         }
         char *info = mg_json_get_str(body, "$.info");
         if (info) {
-          strncpy(ZigbeeTriggers[trig_idx].label, info,
-                  sizeof(ZigbeeTriggers[trig_idx].label) - 1);
-          ZigbeeTriggers[trig_idx].label[sizeof(ZigbeeTriggers[trig_idx].label) - 1] = '\0';
+          strncpy(ZigbeeConf[zbi].zbee_label, info,
+                  sizeof(ZigbeeConf[zbi].zbee_label) - 1);
+          ZigbeeConf[zbi].zbee_label[sizeof(ZigbeeConf[zbi].zbee_label) - 1] = '\0';
           mg_free(info);
         }
 
@@ -963,7 +950,7 @@ void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
         if (usbQueueHandle) xQueueSend(usbQueueHandle, &usbnum, 0);
 
         mg_http_reply(c, 200, extra_headers,
-                      "{\"status\":true,\"message\":\"Zigbee trigger updated\"}");
+                      "{\"status\":true,\"message\":\"Zigbee button updated\"}");
         return;
       }
       mg_http_reply(c, 400, extra_headers,
@@ -3791,22 +3778,6 @@ static void zbee_learn_start(const char *ieee);
 static void zbee_learn_observe(uint16_t ep, uint16_t cluster, uint16_t attr, int val);
 static void zbee_learn_observe_trigger(const char *payload);
 
-typedef enum { ZBEE_CLICK_SINGLE, ZBEE_CLICK_DOUBLE, ZBEE_CLICK_LONG } ZbeeClickType;
-
-static ZbeeClickType zbee_classify_trigger_payload(const char *payload) {
-    char lower[32];
-    size_t n = strlen(payload);
-    if (n >= sizeof(lower)) n = sizeof(lower) - 1;
-    for (size_t i = 0; i < n; i++) lower[i] = (char)tolower((unsigned char)payload[i]);
-    lower[n] = '\0';
-
-    if (strstr(lower, "single")) return ZBEE_CLICK_SINGLE;
-    if (strstr(lower, "double")) return ZBEE_CLICK_DOUBLE;
-    if (strstr(lower, "long"))   return ZBEE_CLICK_LONG;
-    if (strstr(lower, "hold"))   return ZBEE_CLICK_LONG;
-    return ZBEE_CLICK_SINGLE;
-}
-
 /* Финализация одного зонда из пула */
 static void zbee_probe_finalize_slot(int slot) {
     ZigbeeProbe *p = &s_zbee_probe_pool[slot];
@@ -4034,9 +4005,9 @@ void SendZigbeeReadProbeInteractive(const char *ieee) {
 }
 
 
-/* Forward declarations for Tuya multi-DP helpers */
+/* Forward declarations for multi-EP helpers */
 static int find_zbee_slot_by_dp(const char *ieee, uint8_t ep, uint16_t dp);
-static void clear_tuya_subslots(const char *ieee);
+static void clear_ep_subslots(const char *ieee, int parent_slot);
 static int alloc_zbee_slot(void);
 
 static void mqtt_zigbee_handler(const char *topic, const char *payload) {
@@ -4134,7 +4105,13 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                     }
                 }
             }
-            ZigbeeConf[i].zbee_role = ZBEE_ROLE_TUYA;
+
+            /* TRIGGER: передаём в vbtn ПРОВЕРЯЯ ТОЛЬКО РОЛЬ (не dp_slot) */
+            if (ZigbeeConf[i].zbee_role == ZBEE_ROLE_TRIGGER) {
+                zbee_vbtn_mqtt_event(i, payload);
+            } else if (ZigbeeConf[i].zbee_role != ZBEE_ROLE_TRIGGER) {
+                ZigbeeConf[i].zbee_role = ZBEE_ROLE_TUYA;
+            }
             continue;
         }
 
@@ -4219,12 +4196,13 @@ static void mqtt_zigbee_trigger_handler(const char *topic, const char *payload) 
 
     char ieee[18] = {0};
     strncpy(ieee, pfx, sizeof(ieee) - 1);
+    /* Remove trailing / or anything after IEEE */
+    char *slash = strchr(ieee, '/');
+    if (slash) *slash = '\0';
 
     for (int i = 0; i < NUMZBEE; i++) {
         if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
         if (strcmp(ZigbeeConf[i].zbee_ieee, ieee) != 0) continue;
-
-        ZigbeeConf[i].zbee_role = ZBEE_ROLE_TRIGGER;
 
         for (int q = 0; q < ZBEE_PROBE_POOL_SIZE; q++) {
             if (s_zbee_probe_pool[q].pending &&
@@ -4234,37 +4212,17 @@ static void mqtt_zigbee_trigger_handler(const char *topic, const char *payload) 
         }
 
         if (s_zbee_learn.active && strcmp(ieee, s_zbee_learn.ieee) == 0) {
+            /* Learning mode: observe the trigger payload */
             zbee_learn_observe_trigger(payload);
+            LOG_Z2M("zbee: LEARN TRIGGER observed ieee=%s payload=%s\r\n",
+                    ieee, payload);
         } else {
-            ZbeeClickType ct = zbee_classify_trigger_payload(payload);
-            const char *click_str = NULL;
-            const char *press_type = NULL;
-
-            for (int t = 0; t < ZBEE_TRIGGER_TABLE_SIZE; t++) {
-                if (ZigbeeTriggers[t].used &&
-                    ZigbeeTriggers[t].zbee_slot == i &&
-                    strcmp(ZigbeeTriggers[t].payload, payload) == 0) {
-                    if (ct == ZBEE_CLICK_SINGLE && ZigbeeTriggers[t].sclick[0]) {
-                        click_str = ZigbeeTriggers[t].sclick; press_type = "SC";
-                    } else if (ct == ZBEE_CLICK_DOUBLE && ZigbeeTriggers[t].dclick[0]) {
-                        click_str = ZigbeeTriggers[t].dclick; press_type = "DC";
-                    } else if (ct == ZBEE_CLICK_LONG && ZigbeeTriggers[t].lpress[0]) {
-                        click_str = ZigbeeTriggers[t].lpress; press_type = "LP";
-                    } else if (ZigbeeTriggers[t].sclick[0]) {
-                        click_str = ZigbeeTriggers[t].sclick; press_type = "SC";
-                    }
-                    break;
-                }
-            }
-
-            if (click_str) {
-                action_handler((uint8_t)(NUMPIN + i), click_str, press_type);
-            }
-
-            LOG_Z2M("zbee: TRIGGER ieee=%s payload=%s (%s)\r\n",
-                    ieee, payload, press_type ? press_type : "no-action");
+            /* Normal mode: delegate to virtual button handler */
+            zbee_vbtn_mqtt_event(i, payload);
+            LOG_Z2M("zbee: TRIGGER ieee=%s slot=%d payload=%s\r\n",
+                    ieee, i, payload);
         }
-        break;
+        /* НЕ break — проверяем все слоты с этим IEEE для PASSTHROUGH */
     }
 }
 
@@ -4420,7 +4378,7 @@ void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm
                 case 0x0402: cl_name = "Temperature"; break;
                 case 0x0405: cl_name = "Humidity"; break;
                 case 0x0406: cl_name = "Occupancy"; break;
-                case 0xEF00: cl_name = "Tuya DP"; break;
+                case 0xEF00: cl_name = "EP"; break;
             }
             off += snprintf(body + off, sizeof(body) - off,
                              "{\"source\":\"data\",\"ep\":%d,\"cluster\":\"0x%04X\","
@@ -4441,25 +4399,25 @@ void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm
     mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", body);
 }
 
-/* Найти слот по IEEE + endpoint + tuya_dp */
+/* Найти слот по IEEE + endpoint + ep */
 static int find_zbee_slot_by_dp(const char *ieee, uint8_t ep, uint16_t dp) {
     for (int i = 0; i < NUMZBEE; i++) {
         if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
         if (strcmp(ZigbeeConf[i].zbee_ieee, ieee) == 0 &&
             ZigbeeConf[i].zbee_endpoint == ep &&
-            ZigbeeConf[i].tuya_dp == dp) {
+            ZigbeeConf[i].ep == dp) {
             return i;
         }
     }
     return -1;
 }
 
-/* Очистить все Tuya sub-slots (tuya_dp > 0) для данного IEEE */
-static void clear_tuya_subslots(const char *ieee) {
+/* Очистить все multi-EP sub-slots для данного IEEE, кроме родителя */
+static void clear_ep_subslots(const char *ieee, int parent_slot) {
     for (int i = 0; i < NUMZBEE; i++) {
+        if (i == parent_slot) continue;
         if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
-        if (strcmp(ZigbeeConf[i].zbee_ieee, ieee) == 0 &&
-            ZigbeeConf[i].tuya_dp > 0) {
+        if (strcmp(ZigbeeConf[i].zbee_ieee, ieee) == 0) {
             memset(&ZigbeeConf[i], 0, sizeof(ZigbeeConf[i]));
         }
     }
@@ -4498,13 +4456,13 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
     for (int i = 0; i < NUMZBEE; i++) {
         if (ZigbeeConf[i].zbee_ieee[0] != '\0' &&
             strcmp(ZigbeeConf[i].zbee_ieee, s_zbee_learn.ieee) == 0 &&
-            ZigbeeConf[i].tuya_dp == 0) {
+            ZigbeeConf[i].ep == 0) {
             zbi = i;
             break;
         }
     }
     if (zbi < 0) {
-        /* Ищем любой слот с этим IEEE (включая Tuya) */
+        /* Ищем любой слот с этим IEEE (включая multi-EP) */
         for (int i = 0; i < NUMZBEE; i++) {
             if (ZigbeeConf[i].zbee_ieee[0] != '\0' &&
                 strcmp(ZigbeeConf[i].zbee_ieee, s_zbee_learn.ieee) == 0) {
@@ -4530,27 +4488,28 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
     /* ── Шаг 1: Парсим все labels ── */
     uint8_t normal_flags = 0;
     int has_brightness = 0, has_color = 0;
-    int has_sensor = 0, has_trigger = 0, has_tuya = 0;
+    int has_sensor = 0, has_trigger = 0, has_ep = 0;
     int has_cover = 0, has_thermo = 0, has_lock = 0;
 
     char trigger_payloads[8][32];
     char trigger_names[8][30];
     int  trigger_count = 0;
 
-    /* Для мульти-DP: собираем Tuya DP labels во временный массив */
+    /* Для мульти-EP: собираем EP labels во временный массив */
     typedef struct {
         int  dp;
         int  role_flag;   /* ZBEE_CL_ONOFF / ZBEE_CL_DIMMER / ZBEE_CL_COLOR */
+        int  is_button;   /* 1 если это кнопка (trigger), 0 иначе */
         char label[30];
-    } TuyaDpEntry;
-    TuyaDpEntry tuya_entries[8];
-    int tuya_count = 0;
+    } EPEntry;
+    EPEntry ep_entries[8];
+    int ep_count = 0;
 
     int label_count = 0;
     for (int li = 0; li < ZBEE_LEARN_MAX_OBS; li++) {
         char path_role[32], path_dp[32], path_tp[48], path_label[48];
         snprintf(path_role, sizeof(path_role), "$.labels[%d].role", li);
-        snprintf(path_dp, sizeof(path_dp), "$.labels[%d].tuya_dp", li);
+        snprintf(path_dp, sizeof(path_dp), "$.labels[%d].ep", li);
         snprintf(path_tp, sizeof(path_tp), "$.labels[%d].trigger_payload", li);
         snprintf(path_label, sizeof(path_label), "$.labels[%d].label", li);
 
@@ -4559,23 +4518,23 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
         label_count++;
 
         char *label_str = mg_json_get_str(json, path_label);
-        int tuya_dp = (int)mg_json_get_long(json, path_dp, 0);
+        int ep = (int)mg_json_get_long(json, path_dp, 0);
 
         int role_flag = 0;
         if (strcmp(role_str, "onoff") == 0) {
             role_flag = ZBEE_CL_ONOFF;
             normal_flags |= ZBEE_CL_ONOFF;
-            if (tuya_dp > 0) ZigbeeConf[zbi].tuya_dp_onoff = (uint16_t)tuya_dp;
+            if (ep > 0) ZigbeeConf[zbi].ep_onoff = (uint16_t)ep;
         } else if (strcmp(role_str, "brightness") == 0) {
             role_flag = ZBEE_CL_DIMMER;
             normal_flags |= ZBEE_CL_DIMMER;
             has_brightness = 1;
-            if (tuya_dp > 0) ZigbeeConf[zbi].tuya_dp_brightness = (uint16_t)tuya_dp;
+            if (ep > 0) ZigbeeConf[zbi].ep_brightness = (uint16_t)ep;
         } else if (strcmp(role_str, "color") == 0) {
             role_flag = ZBEE_CL_COLOR;
             normal_flags |= ZBEE_CL_COLOR;
             has_color = 1;
-            if (tuya_dp > 0) ZigbeeConf[zbi].tuya_dp_color = (uint16_t)tuya_dp;
+            if (ep > 0) ZigbeeConf[zbi].ep_color = (uint16_t)ep;
         } else if (strcmp(role_str, "cover") == 0) {
             normal_flags |= ZBEE_CL_COVER;
             has_cover = 1;
@@ -4603,26 +4562,27 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                 trigger_count++;
                 mg_free(tp);
             }
-        } else if (strcmp(role_str, "tuya_dp") == 0) {
-            has_tuya = 1;
+        } else if (strcmp(role_str, "ep") == 0) {
+            has_ep = 1;
         }
 
-        /* Собираем Tuya DP entries для мульти-DP слотов */
-        if (tuya_dp > 0 && strcmp(role_str, "ignore") != 0 && tuya_count < 8) {
-            tuya_entries[tuya_count].dp = tuya_dp;
+        /* Собираем EP entries для мульти-EP слотов */
+        if (ep > 0 && strcmp(role_str, "ignore") != 0 && ep_count < 8) {
+            ep_entries[ep_count].dp = ep;
             /* Для "button" используем ZBEE_CL_ONOFF как базовый флаг */
-            tuya_entries[tuya_count].role_flag = role_flag ? role_flag : ZBEE_CL_ONOFF;
-            tuya_entries[tuya_count].label[0] = '\0';
+            ep_entries[ep_count].role_flag = role_flag ? role_flag : ZBEE_CL_ONOFF;
+            ep_entries[ep_count].is_button = (strcmp(role_str, "button") == 0);
+            ep_entries[ep_count].label[0] = '\0';
             if (label_str && label_str[0]) {
-                strncpy(tuya_entries[tuya_count].label, label_str, 29);
-                tuya_entries[tuya_count].label[29] = '\0';
+                strncpy(ep_entries[ep_count].label, label_str, 29);
+                ep_entries[ep_count].label[29] = '\0';
             }
-            tuya_count++;
+            ep_count++;
         }
 
-        /* Обычные (не-Tuya) labels: имя в головной слот */
+        /* Обычные (не multi-EP) labels: имя в головной слот */
         if (label_str && label_str[0] &&
-            tuya_dp == 0 &&
+            ep == 0 &&
             strcmp(role_str, "button") != 0 &&
             strcmp(role_str, "ignore") != 0) {
             strncpy(ZigbeeConf[zbi].zbee_label, label_str,
@@ -4634,45 +4594,111 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
         mg_free(role_str);
     }
 
-    /* ── Шаг 2: Триггеры ── */
+    /* ── Шаг 2: Кнопки → сохраняем прямо в ZigbeeConf[zbi] ── */
 
-    /* Очистка старых триггеров для этого устройства */
-    for (int i = 0; i < ZBEE_TRIGGER_TABLE_SIZE; i++) {
-        if (ZigbeeTriggers[i].used && ZigbeeTriggers[i].zbee_slot == zbi) {
-            memset(&ZigbeeTriggers[i], 0, sizeof(ZigbeeTriggerEntry));
-        }
-    }
+    /* Очищаем старые sclick/dclick/lpress */
+    ZigbeeConf[zbi].sclick[0] = '\0';
+    ZigbeeConf[zbi].dclick[0] = '\0';
+    ZigbeeConf[zbi].lpress[0] = '\0';
+    ZigbeeConf[zbi].pt_single[0] = '\0';
+    ZigbeeConf[zbi].pt_double[0] = '\0';
+    ZigbeeConf[zbi].pt_long[0] = '\0';
+    ZigbeeConf[zbi].vbtn_mode = VBTN_MODE_RAW;
 
     if (trigger_count > 0 && trigger_count <= 3) {
-        for (int k = 0; k < trigger_count; k++) {
-            int t = -1;
-            for (int e = 0; e < ZBEE_TRIGGER_TABLE_SIZE; e++) {
-                if (!ZigbeeTriggers[e].used) { t = e; break; }
-            }
-            if (t >= 0) {
-                ZigbeeTriggers[t].used = 1;
-                ZigbeeTriggers[t].zbee_slot = zbi;
-                strncpy(ZigbeeTriggers[t].payload, trigger_payloads[k], 31);
-                ZigbeeTriggers[t].payload[31] = '\0';
-                ZigbeeTriggers[t].virtual_zbi = 0;
-                ZigbeeTriggers[t].label[0] = '\0';
-                if (trigger_names[k][0]) {
-                    strncpy(ZigbeeTriggers[t].label, trigger_names[k], 29);
-                    ZigbeeTriggers[t].label[29] = '\0';
+        /* Определяем тип payloads: RAW или PASSTHROUGH */
+        int is_passthrough = 0;
+        if (trigger_payloads[0][0]) {
+            is_passthrough = !is_raw_payload(trigger_payloads[0]);
+        }
+
+        if (is_passthrough) {
+            /* PASSTHROUGH: каждая кнопка = отдельный слот */
+            for (int k = 0; k < trigger_count; k++) {
+                int target_zbi = (k == 0) ? zbi : alloc_zbee_slot();
+                if (target_zbi < 0) {
+                    LOG_Z2M("zbee: LEARN PASSTHROUGH no free slot for '%s'\r\n",
+                            trigger_payloads[k]);
+                    continue;
                 }
-                ZigbeeTriggers[t].sclick[0] = '\0';
-                ZigbeeTriggers[t].dclick[0] = '\0';
-                ZigbeeTriggers[t].lpress[0] = '\0';
+
+                if (k > 0) {
+                    /* Копируем базовые поля в новый слот */
+                    memset(&ZigbeeConf[target_zbi], 0, sizeof(ZigbeeConf[target_zbi]));
+                    strncpy(ZigbeeConf[target_zbi].zbee_ieee, ZigbeeConf[zbi].zbee_ieee,
+                            sizeof(ZigbeeConf[target_zbi].zbee_ieee) - 1);
+                    ZigbeeConf[target_zbi].zbee_ieee[16] = '\0';
+                    ZigbeeConf[target_zbi].zbee_role = ZBEE_ROLE_TRIGGER;
+                    ZigbeeConf[target_zbi].topin = 11;
+                }
+
+                /* Настраиваем PASSTHROUGH mode */
+                ZigbeeConf[target_zbi].vbtn_mode = VBTN_MODE_PASSTHROUGH;
+                strncpy(ZigbeeConf[target_zbi].pt_single, trigger_payloads[k],
+                        sizeof(ZigbeeConf[target_zbi].pt_single) - 1);
+                ZigbeeConf[target_zbi].pt_single[sizeof(ZigbeeConf[target_zbi].pt_single) - 1] = '\0';
+
+                /* sclick = "None" (action не настроен) */
+                strncpy(ZigbeeConf[target_zbi].sclick, "None",
+                        sizeof(ZigbeeConf[target_zbi].sclick) - 1);
+
+                /* Label из trigger_names или payload */
+                if (trigger_names[k][0]) {
+                    strncpy(ZigbeeConf[target_zbi].zbee_label, trigger_names[k],
+                            sizeof(ZigbeeConf[target_zbi].zbee_label) - 1);
+                } else {
+                    strncpy(ZigbeeConf[target_zbi].zbee_label, trigger_payloads[k],
+                            sizeof(ZigbeeConf[target_zbi].zbee_label) - 1);
+                }
+                ZigbeeConf[target_zbi].zbee_label[sizeof(ZigbeeConf[target_zbi].zbee_label) - 1] = '\0';
+
+                LOG_Z2M("zbee: LEARN PASSTHROUGH %d '%s' -> slot %d (id=%d)\r\n",
+                        k, trigger_payloads[k], target_zbi, NUMPIN + target_zbi);
             }
-            if (k == 0 && trigger_names[0][0]) {
+        } else {
+            /* RAW: группируем в один слот (старое поведение) */
+            for (int k = 0; k < trigger_count; k++) {
+                if (k == 0) {
+                    strncpy(ZigbeeConf[zbi].sclick, "None",
+                            sizeof(ZigbeeConf[zbi].sclick) - 1);
+                } else if (k == 1) {
+                    strncpy(ZigbeeConf[zbi].dclick, "None",
+                            sizeof(ZigbeeConf[zbi].dclick) - 1);
+                } else if (k == 2) {
+                    strncpy(ZigbeeConf[zbi].lpress, "None",
+                            sizeof(ZigbeeConf[zbi].lpress) - 1);
+                }
+                LOG_Z2M("zbee: LEARN BUTTON %d '%s' -> slot %d (id=%d)\r\n",
+                        k, trigger_payloads[k], zbi, NUMPIN + zbi);
+            }
+
+            /* Инициализируем оставшиеся поля "None" если trigger_count < 3 */
+            if (trigger_count < 3) {
+                if (ZigbeeConf[zbi].dclick[0] == '\0')
+                    strncpy(ZigbeeConf[zbi].dclick, "None", sizeof(ZigbeeConf[zbi].dclick) - 1);
+                if (ZigbeeConf[zbi].lpress[0] == '\0')
+                    strncpy(ZigbeeConf[zbi].lpress, "None", sizeof(ZigbeeConf[zbi].lpress) - 1);
+            }
+            if (trigger_count < 2) {
+                if (ZigbeeConf[zbi].sclick[0] == '\0')
+                    strncpy(ZigbeeConf[zbi].sclick, "None", sizeof(ZigbeeConf[zbi].sclick) - 1);
+            }
+
+            /* Auto-detect RAW/PASSTHROUGH from first payload */
+            if (trigger_payloads[0][0]) {
+                zbee_vbtn_auto_detect(zbi, trigger_payloads[0]);
+            }
+
+            /* Если имена кнопок заданы — используем их как labels */
+            if (trigger_names[0][0]) {
                 strncpy(ZigbeeConf[zbi].zbee_label, trigger_names[0],
                         sizeof(ZigbeeConf[zbi].zbee_label) - 1);
                 ZigbeeConf[zbi].zbee_label[sizeof(ZigbeeConf[zbi].zbee_label) - 1] = '\0';
             }
-            LOG_Z2M("zbee: LEARN TRIGGER <=3 '%s' -> parent id=%d\r\n",
-                    trigger_payloads[k], NUMPIN + zbi);
         }
-    } else if (trigger_count > 3) {
+    }
+    /* Если >3 триггеров — каждая кнопка занимает свой sub-slot */
+    else if (trigger_count > 3) {
         for (int k = 0; k < trigger_count; k++) {
             int free_zbi = alloc_zbee_slot();
             if (free_zbi < 0) {
@@ -4681,53 +4707,50 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                 continue;
             }
 
+            memset(&ZigbeeConf[free_zbi], 0, sizeof(ZigbeeConf[free_zbi]));
             strncpy(ZigbeeConf[free_zbi].zbee_ieee, ZigbeeConf[zbi].zbee_ieee,
                     sizeof(ZigbeeConf[free_zbi].zbee_ieee) - 1);
             ZigbeeConf[free_zbi].zbee_ieee[16] = '\0';
             ZigbeeConf[free_zbi].zbee_role = ZBEE_ROLE_TRIGGER;
             ZigbeeConf[free_zbi].topin = 11;
+
             if (trigger_names[k][0]) {
-                strncpy(ZigbeeConf[free_zbi].zbee_label,
-                         trigger_names[k],
-                         sizeof(ZigbeeConf[free_zbi].zbee_label) - 1);
+                strncpy(ZigbeeConf[free_zbi].zbee_label, trigger_names[k],
+                        sizeof(ZigbeeConf[free_zbi].zbee_label) - 1);
             } else {
-                strncpy(ZigbeeConf[free_zbi].zbee_label,
-                         trigger_payloads[k],
-                         sizeof(ZigbeeConf[free_zbi].zbee_label) - 1);
+                strncpy(ZigbeeConf[free_zbi].zbee_label, trigger_payloads[k],
+                        sizeof(ZigbeeConf[free_zbi].zbee_label) - 1);
             }
             ZigbeeConf[free_zbi].zbee_label[sizeof(ZigbeeConf[free_zbi].zbee_label) - 1] = '\0';
 
-            int t = -1;
-            for (int e = 0; e < ZBEE_TRIGGER_TABLE_SIZE; e++) {
-                if (!ZigbeeTriggers[e].used) { t = e; break; }
-            }
-            if (t >= 0) {
-                ZigbeeTriggers[t].used = 1;
-                ZigbeeTriggers[t].zbee_slot = zbi;
-                strncpy(ZigbeeTriggers[t].payload, trigger_payloads[k], 31);
-                ZigbeeTriggers[t].payload[31] = '\0';
-                ZigbeeTriggers[t].virtual_zbi = free_zbi;
+            /* sclick = "None" (actions not configured yet) */
+            strncpy(ZigbeeConf[free_zbi].sclick, "None",
+                    sizeof(ZigbeeConf[free_zbi].sclick) - 1);
+
+            /* Auto-detect mode */
+            if (trigger_payloads[k][0]) {
+                zbee_vbtn_auto_detect(free_zbi, trigger_payloads[k]);
             }
 
-            LOG_Z2M("zbee: LEARN TRIGGER >3 '%s' -> synthetic zbi=%d\r\n",
-                    trigger_payloads[k], free_zbi);
+            LOG_Z2M("zbee: LEARN TRIGGER >3 '%s' -> slot %d (id=%d)\r\n",
+                    trigger_payloads[k], free_zbi, NUMPIN + free_zbi);
         }
     }
 
-    /* ── Шаг 3: Мульти-DP Tuya слоты ── */
-    int tuya_slots_created = 0;
-    if (tuya_count > 0) {
-        clear_tuya_subslots(s_zbee_learn.ieee);
+    /* ── Шаг 3: Мульти-EP слоты ── */
+    int ep_slots_created = 0;
+    if (ep_count > 0) {
+        clear_ep_subslots(s_zbee_learn.ieee, zbi);
 
-        for (int t = 0; t < tuya_count; t++) {
-            int dp = tuya_entries[t].dp;
+        for (int t = 0; t < ep_count; t++) {
+            int dp = ep_entries[t].dp;
             int slot = find_zbee_slot_by_dp(s_zbee_learn.ieee,
                                             ZigbeeConf[zbi].zbee_endpoint,
                                             (uint16_t)dp);
             if (slot < 0) {
                 slot = alloc_zbee_slot();
                 if (slot < 0) {
-                    LOG_Z2M("zbee: LEARN TUYA no free slot for DP%d\r\n", dp);
+                    LOG_Z2M("zbee: LEARN TUYA no free slot for EP%d\r\n", dp);
                     continue;
                 }
             }
@@ -4737,44 +4760,40 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                     sizeof(ZigbeeConf[slot].zbee_ieee) - 1);
             ZigbeeConf[slot].zbee_ieee[16] = '\0';
             ZigbeeConf[slot].zbee_endpoint = ZigbeeConf[zbi].zbee_endpoint;
-            ZigbeeConf[slot].tuya_dp = (uint16_t)dp;
-            ZigbeeConf[slot].cluster_flags = tuya_entries[t].role_flag;
-            ZigbeeConf[slot].zbee_role = ZBEE_ROLE_TUYA;
+            ZigbeeConf[slot].ep = (uint16_t)dp;
+            ZigbeeConf[slot].cluster_flags = ep_entries[t].role_flag;
+            if (ep_entries[t].is_button) {
+                ZigbeeConf[slot].zbee_role = ZBEE_ROLE_TRIGGER;
+            } else {
+                ZigbeeConf[slot].zbee_role = ZBEE_ROLE_TUYA;
+            }
             ZigbeeConf[slot].topin = 11;
             ZigbeeConf[slot].state = 0;
             ZigbeeConf[slot].dvalue = 0;
-            if (tuya_entries[t].label[0]) {
-                strncpy(ZigbeeConf[slot].zbee_label, tuya_entries[t].label,
+            if (ep_entries[t].label[0]) {
+                strncpy(ZigbeeConf[slot].zbee_label, ep_entries[t].label,
                         sizeof(ZigbeeConf[slot].zbee_label) - 1);
                 ZigbeeConf[slot].zbee_label[sizeof(ZigbeeConf[slot].zbee_label) - 1] = '\0';
             }
 
-            /* Для Tuya DP кнопок создаём триггер в ZigbeeTriggers */
-            if (tuya_entries[t].role_flag & ZBEE_CL_ONOFF) {
-                int trig = -1;
-                for (int e = 0; e < ZBEE_TRIGGER_TABLE_SIZE; e++) {
-                    if (!ZigbeeTriggers[e].used) { trig = e; break; }
-                }
-                if (trig >= 0) {
-                    ZigbeeTriggers[trig].used = 1;
-                    ZigbeeTriggers[trig].zbee_slot = zbi;
-                    ZigbeeTriggers[trig].virtual_zbi = slot;
-                    snprintf(ZigbeeTriggers[trig].payload, sizeof(ZigbeeTriggers[trig].payload),
-                             "DP%d", dp);
-                    ZigbeeTriggers[trig].sclick[0] = '\0';
-                    ZigbeeTriggers[trig].dclick[0] = '\0';
-                    ZigbeeTriggers[trig].lpress[0] = '\0';
-                    LOG_Z2M("zbee: LEARN TUYA DP%d -> trigger[%d] slot=%d\r\n", dp, trig, slot);
-                }
+            /* Для multi-EP кнопок: сохраняем payload в pt_single */
+            if (ep_entries[t].role_flag & ZBEE_CL_ONOFF) {
+                char ep_payload[32];
+                snprintf(ep_payload, sizeof(ep_payload), "EP%d", dp);
+                strncpy(ZigbeeConf[slot].pt_single, ep_payload,
+                        sizeof(ZigbeeConf[slot].pt_single) - 1);
+                ZigbeeConf[slot].pt_single[sizeof(ZigbeeConf[slot].pt_single) - 1] = '\0';
+                ZigbeeConf[slot].vbtn_mode = VBTN_MODE_PASSTHROUGH;
+                LOG_Z2M("zbee: LEARN TUYA EP%d -> slot %d pt_single='%s'\r\n", dp, slot, ep_payload);
             }
 
-            tuya_slots_created++;
-            LOG_Z2M("zbee: LEARN TUYA DP%d -> slot %d flags=0x%02X label='%s'\r\n",
-                    dp, slot, tuya_entries[t].role_flag, tuya_entries[t].label);
+            ep_slots_created++;
+            LOG_Z2M("zbee: LEARN TUYA EP%d -> slot %d flags=0x%02X label='%s'\r\n",
+                    dp, slot, ep_entries[t].role_flag, ep_entries[t].label);
         }
     }
 
-    /* ── Шаг 4: Головной слот — обычные (не-Tuya) устройства ── */
+    /* ── Шаг 4: Головной слот — обычные (не multi-EP) устройства ── */
     const char *device_type = "socket";
     if (has_color)           device_type = "color_lamp";
     else if (has_brightness) device_type = "dimmer";
@@ -4783,16 +4802,16 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
     else if (has_lock)       device_type = "lock";
     else if (has_sensor)     device_type = "sensor";
     else if (has_trigger)    device_type = "trigger";
-    else if (has_tuya)       device_type = "tuya";
+    else if (has_ep)       device_type = "multi_ep";
 
     uint8_t new_role = ZBEE_ROLE_ACTUATOR;
     if (has_sensor)  new_role = ZBEE_ROLE_SENSOR;
     if (has_trigger) new_role = ZBEE_ROLE_TRIGGER;
-    if (has_tuya)    new_role = ZBEE_ROLE_TUYA;
+    if (has_ep)    new_role = ZBEE_ROLE_TUYA;
 
     taskENTER_CRITICAL();
-    if (tuya_count == 0) {
-        /* Обычное (не-Tuya) устройство — обновляем головной слот */
+    if (ep_count == 0) {
+        /* Обычное (не multi-EP) устройство — обновляем головной слот */
         ZigbeeConf[zbi].cluster_flags = normal_flags;
         ZigbeeConf[zbi].zbee_role = new_role;
     } else {
@@ -4815,13 +4834,13 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
         xQueueSend(usbQueueHandle, &usbnum, 0);
     }
 
-    LOG_Z2M("zbee: LEARN LABEL ieee=%s flags=0x%02X role=%d type=%s tuya_slots=%d\r\n",
-            s_zbee_learn.ieee, normal_flags, new_role, device_type, tuya_slots_created);
+    LOG_Z2M("zbee: LEARN LABEL ieee=%s flags=0x%02X role=%d type=%s ep_slots=%d\r\n",
+            s_zbee_learn.ieee, normal_flags, new_role, device_type, ep_slots_created);
 
     mg_http_reply(c, 200, "Content-Type: application/json\r\n",
                   "{\"status\":true,\"message\":\"Labels saved\","
-                  "\"device_type\":\"%s\",\"tuya_slots\":%d}",
-                  device_type, tuya_slots_created);
+                  "\"device_type\":\"%s\",\"ep_slots\":%d}",
+                  device_type, ep_slots_created);
 }
 
 void handle_zigbee_learn_start(struct mg_connection *c, struct mg_http_message *hm) {
@@ -4887,7 +4906,7 @@ void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
     }
 }
 
-void SendZigbeeTuyaCommand(const char *zbee_ieee, uint8_t endpoint,
+void SendZigbeeEPCommand(const char *zbee_ieee, uint8_t endpoint,
                            uint16_t dp, const char *val) {
     extern osMessageQueueId_t zbeeCmdQueueHandle;
 
@@ -4896,7 +4915,7 @@ void SendZigbeeTuyaCommand(const char *zbee_ieee, uint8_t endpoint,
              "%s/cmd/%s/%d/EF00/%04X",
              get_rxzbtop(), zbee_ieee, endpoint, dp);
 
-    /* Формируем JSON payload для Tuya DP */
+    /* Формируем JSON payload для multi-EP */
     char json_payload[64];
     snprintf(json_payload, sizeof(json_payload),
              "{\"value\":%s}", val);
@@ -4907,9 +4926,9 @@ void SendZigbeeTuyaCommand(const char *zbee_ieee, uint8_t endpoint,
     strncpy(cmd.payload, json_payload, sizeof(cmd.payload) - 1);
 
     if (xQueueSend(zbeeCmdQueueHandle, &cmd, 0) != pdPASS) {
-        LOG_Z2M("zbee: QUEUE FULL tuya topic='%s'\r\n", set_topic);
+        LOG_Z2M("zbee: QUEUE FULL ep topic='%s'\r\n", set_topic);
     } else {
-        LOG_Z2M("zbee: QUEUED tuya topic='%s' payload='%s'\r\n", set_topic, json_payload);
+        LOG_Z2M("zbee: QUEUED ep topic='%s' payload='%s'\r\n", set_topic, json_payload);
     }
 }
 
@@ -5115,12 +5134,11 @@ void mqtt_message_handler(const char *topic, const char *payload) {
 
 void action_handler(uint8_t button_id, const char *action_str,
                     const char *press_type) {
-  //    printf("Processing %s for DEVICE %d, actions: %s\n", press_type,
-  //    button_id, action_str);
+  printf("[SYSTEM][ONOFF] ENTER id=%d type='%s' actions='%s'\r\n",
+         button_id, press_type ? press_type : "NULL",
+         action_str ? action_str : "NULL");
   if (action_str == NULL || strlen(action_str) == 0 ||
       strcmp(action_str, "None") == 0) {
-    //        printf("No actions defined for this button or 'None'
-    //        specified.\n");
     return;
   }
   /* Используем стековый буфер вместо strdup (malloc) — макс. 125 байт из db.h
@@ -5135,13 +5153,37 @@ void action_handler(uint8_t button_id, const char *action_str,
   char *saveptr = NULL;
   char *token = strtok_r(str, ",", &saveptr);
   while (token != NULL) {
-    //        printf("Current token: %s\n", token);
-    int id;
-    int action;
-    int result = sscanf(token, "%d:%d", &id, &action);
-    //        printf("sscanf result: %d\n", result);
-    if (result == 2) {
-      //            printf("Parsed action: ID=%d, Action=%d\n", id, action);
+    int id = 0;
+    int action = 0;
+    int sub_idx = 0;
+    /* Поддержка формата: 6:1, 93:2, 93.1:2 (sub-index для Zigbee триггеров) */
+    int dot_pos = -1;
+    for (int k = 0; token[k]; k++) {
+      if (token[k] == '.') { dot_pos = k; break; }
+    }
+    if (dot_pos >= 0) {
+      /* Есть десятичная часть: 93.1:2 */
+      token[dot_pos] = '\0';
+      id = atoi(token);
+      token[dot_pos] = '.';
+      sub_idx = atoi(token + dot_pos + 1);
+      char *colon = strchr(token + dot_pos, ':');
+      if (colon) {
+        action = atoi(colon + 1);
+      }
+    } else {
+      int result = sscanf(token, "%d:%d", &id, &action);
+      if (result != 2) {
+        token = strtok_r(NULL, ",", &saveptr);
+        continue;
+      }
+    }
+
+    if (action < 0 || action > 2) {
+      token = strtok_r(NULL, ",", &saveptr);
+      continue;
+    }
+
       switch (action) {
       case 0:
       case 1:
@@ -5149,30 +5191,64 @@ void action_handler(uint8_t button_id, const char *action_str,
         /* Zigbee-устройства (id >= NUMPIN) */
         if (id >= NUMPIN && id < NUMPIN + NUMZBEE) {
           int zbi = id - NUMPIN;
-          printf("[ACTION] VPIN id=%d zbi=%d ieee='%s' onoff=%d state=%d action=%d\r\n",
-                 id, zbi, ZigbeeConf[zbi].zbee_ieee, ZigbeeConf[zbi].onoff,
-                 ZigbeeConf[zbi].state, action);
-          if (ZigbeeConf[zbi].zbee_ieee[0] != '\0' && ZigbeeConf[zbi].onoff) {
-            const char *cmd;
-            if (action == 2) {
-              /* TOGGLE — инвертируем текущее состояние */
-              cmd = (ZigbeeConf[zbi].state) ? "OFF" : "ON";
-            } else {
-              cmd = (action == 0) ? "OFF" : "ON";
+          printf("[SYSTEM][ONOFF] ZBEE id=%d zbi=%d onoff=%d ieee='%s'\r\n",
+                 id, zbi, ZigbeeConf[zbi].onoff, ZigbeeConf[zbi].zbee_ieee);
+
+          /* Sub-index: execute specific action (sclick=0, dclick=1, lpress=2) */
+          if (sub_idx > 0 && sub_idx <= 2) {
+            if (press_type && strcmp(press_type, "trigger") == 0) {
+              /* Защита от feedback loop: trigger не должен отправлять другой trigger */
+              break;
             }
-            printf("[ACTION] VPIN sending %s to %s\r\n", cmd, ZigbeeConf[zbi].zbee_ieee);
-            SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
-                              ZigbeeConf[zbi].zbee_endpoint,
-                              6, ZBEE_ATTR_ONOFF, cmd);
+            vbtn_execute(zbi, sub_idx - 1);
+            break;
+          }
+
+          /* No sub-index: check if this is a button */
+          if (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_TRIGGER) {
+            if (press_type && strcmp(press_type, "trigger") != 0) {
+              vbtn_execute(zbi, action);  /* action 0=off=sclick, 1=on=dclick, 2=toggle=lpress */
+            } else {
+              /* Normal ON/OFF for button slot */
+              if (ZigbeeConf[zbi].zbee_ieee[0] != '\0' && ZigbeeConf[zbi].onoff) {
+                const char *cmd;
+                if (action == 2) {
+                  cmd = (ZigbeeConf[zbi].state) ? "OFF" : "ON";
+                } else {
+                  cmd = (action == 0) ? "OFF" : "ON";
+                }
+                SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                                  ZigbeeConf[zbi].zbee_endpoint,
+                                  6, ZBEE_ATTR_ONOFF, cmd);
+              }
+            }
           } else {
-            printf("[ACTION] VPIN SKIP: ieee empty or onoff=0\r\n");
+            /* Обычное устройство: ON/OFF */
+            if (ZigbeeConf[zbi].zbee_ieee[0] != '\0' && ZigbeeConf[zbi].onoff) {
+              const char *cmd;
+              if (action == 2) {
+                cmd = (ZigbeeConf[zbi].state) ? "OFF" : "ON";
+              } else {
+                cmd = (action == 0) ? "OFF" : "ON";
+              }
+              printf("[SYSTEM][ONOFF] SEND cmd='%s' to '%s' ep=%d\r\n",
+                     cmd, ZigbeeConf[zbi].zbee_ieee, ZigbeeConf[zbi].zbee_endpoint);
+              SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                                ZigbeeConf[zbi].zbee_endpoint,
+                                6, ZBEE_ATTR_ONOFF, cmd);
+            } else {
+              printf("[SYSTEM][ONOFF] BLOCKED onoff=%d ieee='%s'\r\n",
+                     ZigbeeConf[zbi].onoff, ZigbeeConf[zbi].zbee_ieee);
+            }
           }
           break;
         }
         if (id < 0 || id >= NUMPIN)
-          break; // Защита от выхода за пределы массива
+          break;
 
         if (PinsConf[id].topin == 3) {
+          printf("[SYSTEM][ONOFF] SWITCH id=%d action=%d onoff=%d\r\n",
+                 id, action, PinsConf[id].onoff);
           /* Если рубильник (Master Enable) отключен, игнорируем любые команды!
            */
           if (PinsConf[id].onoff == 0) {
@@ -5233,6 +5309,8 @@ void action_handler(uint8_t button_id, const char *action_str,
           }
         } else {
           /* Обычное прямое управление для не-Switch пинов */
+          printf("[SYSTEM][ONOFF] PIN id=%d action=%d topin=%d onoff=%d\r\n",
+                 id, action, PinsConf[id].topin, PinsConf[id].onoff);
           /* Блокируем выполнение, если устройство отключено (onoff == 0),
              НО только если команда пришла извне (CMD), и это не PWM (у ШИМ onoff хранит текущее состояние) */
           if (PinsConf[id].topin != 5 && PinsConf[id].onoff == 0) {
@@ -5261,9 +5339,6 @@ void action_handler(uint8_t button_id, const char *action_str,
         printf("Unknown action %d for ID %d\n", action, id);
         break;
       }
-    } else {
-      printf("Failed to parse token: %s (expected format: %%d:%%d)\n", token);
-    }
     token = strtok_r(NULL, ",", &saveptr);
   }
   //    printf("Finished processing %s actions for button %d\n", press_type,
@@ -8442,6 +8517,65 @@ void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
 }
 /****************** End Zerg section **************************/
 
+void calc_display_id(int parent_id, int zbee_slot, int trigger_index,
+                     char *out, size_t out_size) {
+    if (trigger_index < 0 || zbee_slot < 0) {
+        snprintf(out, out_size, "%d", parent_id);
+        return;
+    }
+
+    int prev_count = 0;
+    for (int j = 0; j < NUMZBEE; j++) {
+        if (j == trigger_index) break;
+        if (ZigbeeConf[j].zbee_role == ZBEE_ROLE_TRIGGER &&
+            ZigbeeConf[j].zbee_ieee[0] != '\0') {
+            prev_count++;
+        }
+    }
+
+    if (prev_count > 0) {
+        snprintf(out, out_size, "%d.%d", parent_id, prev_count);
+    } else {
+        snprintf(out, out_size, "%d", parent_id);
+    }
+}
+
+void calc_zigbee_display_id(int index, char *out, size_t out_size) {
+    if (index < 0 || index >= NUMZBEE) {
+        snprintf(out, out_size, "%d", NUMPIN + index);
+        return;
+    }
+
+    if (ZigbeeConf[index].ep > 0) {
+        int parent_idx = -1;
+        for (int p = 0; p < NUMZBEE; p++) {
+            if (p == index) continue;
+            if (ZigbeeConf[p].zbee_ieee[0] != '\0' &&
+                strcmp(ZigbeeConf[p].zbee_ieee, ZigbeeConf[index].zbee_ieee) == 0 &&
+                ZigbeeConf[p].ep == 0) {
+                parent_idx = p;
+                break;
+            }
+        }
+        if (parent_idx >= 0) {
+            int sub_idx = 0;
+            for (int s = 0; s < NUMZBEE; s++) {
+                if (s == index) break;
+                if (ZigbeeConf[s].zbee_ieee[0] != '\0' &&
+                    strcmp(ZigbeeConf[s].zbee_ieee, ZigbeeConf[index].zbee_ieee) == 0 &&
+                    ZigbeeConf[s].ep > 0) {
+                    sub_idx++;
+                }
+            }
+            snprintf(out, out_size, "%d.%d", NUMPIN + parent_idx, sub_idx + 1);
+        } else {
+            snprintf(out, out_size, "%d", NUMPIN + index);
+        }
+    } else {
+        snprintf(out, out_size, "%d", NUMPIN + index);
+    }
+}
+
 void handle_zigbee_get(struct mg_connection *c, long offset_req, long limit_req) {
   if (offset_req < 0) offset_req = 0;
   if (limit_req <= 0) limit_req = 30;
@@ -8490,6 +8624,9 @@ void handle_zigbee_get(struct mg_connection *c, long offset_req, long limit_req)
 
     clusters_flags_to_json(ZigbeeConf[i].cluster_flags, clbuf, sizeof(clbuf));
 
+    char display_id[24];
+    calc_zigbee_display_id(i, display_id, sizeof(display_id));
+
     /* Определяем тип устройства */
     const char *type = "unknown";
     const char *icon = "?";
@@ -8506,18 +8643,18 @@ void handle_zigbee_get(struct mg_connection *c, long offset_req, long limit_req)
     }
 
     mg_http_printf_chunk(c,
-      "%s{\"id\":%d,\"ieee\":\"%s\",\"ep\":%d,\"clusters\":%s,"
+      "%s{\"id\":%d,\"display_id\":\"%s\",\"ieee\":\"%s\",\"ep\":%d,\"clusters\":%s,"
       "\"type\":\"%s\",\"icon\":\"%s\","
       "\"onoff\":%d,\"brightness\":%d,\"color_hex\":\"%06X\",\"info\":\"%s\","
-      "\"role\":%d,\"tuya_dp\":%d}",
+      "\"role\":%d,\"ep\":%d}",
       (first ? "" : ","),
-      NUMPIN + i, ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint,
+      NUMPIN + i, display_id, ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint,
       clbuf, type, icon,
       ZigbeeConf[i].onoff, ZigbeeConf[i].dvalue,
       ZigbeeConf[i].color_hex & 0xFFFFFF,
       ZigbeeConf[i].zbee_label,
       ZigbeeConf[i].zbee_role,
-      ZigbeeConf[i].tuya_dp);
+      ZigbeeConf[i].ep);
     first = 0;
     emitted++;
   }
@@ -8570,7 +8707,7 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
       mg_free(clusters_str);
     }
 
-    ZigbeeConf[id].tuya_dp = (uint16_t)mg_json_get_long(json, "$.tuya_dp", ZigbeeConf[id].tuya_dp);
+    ZigbeeConf[id].ep = (uint16_t)mg_json_get_long(json, "$.ep", ZigbeeConf[id].ep);
 
     /* Яркость и цвет — только MQTT-команда, БЕЗ записи на флешку */
     int new_brightness = (int)mg_json_get_long(json, "$.brightness", -1);
@@ -8578,11 +8715,11 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
 
     if (new_brightness >= 0 && ZigbeeConf[id].zbee_ieee[0] != '\0' && ZigbeeConf[id].onoff) {
       ZigbeeConf[id].dvalue = new_brightness;
-      if (ZigbeeConf[id].tuya_dp > 0 && (ZigbeeConf[id].cluster_flags & ZBEE_CL_DIMMER)) {
+      if (ZigbeeConf[id].ep > 0 && (ZigbeeConf[id].cluster_flags & ZBEE_CL_DIMMER)) {
         char valbuf[12];
         snprintf(valbuf, sizeof(valbuf), "%d", new_brightness);
-        SendZigbeeTuyaCommand(ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint,
-                              ZigbeeConf[id].tuya_dp, valbuf);
+        SendZigbeeEPCommand(ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint,
+                              ZigbeeConf[id].ep, valbuf);
       } else if (ZigbeeConf[id].cluster_flags & ZBEE_CL_DIMMER) {
         char valbuf[12];
         snprintf(valbuf, sizeof(valbuf), "%d", new_brightness);
@@ -8593,11 +8730,11 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
 
     if (new_color_hex >= 0 && ZigbeeConf[id].zbee_ieee[0] != '\0' && ZigbeeConf[id].onoff) {
       ZigbeeConf[id].color_hex = (uint32_t)new_color_hex;
-      if (ZigbeeConf[id].tuya_dp > 0 && (ZigbeeConf[id].cluster_flags & ZBEE_CL_COLOR)) {
+      if (ZigbeeConf[id].ep > 0 && (ZigbeeConf[id].cluster_flags & ZBEE_CL_COLOR)) {
         char valbuf[12];
         snprintf(valbuf, sizeof(valbuf), "%d", new_color_hex);
-        SendZigbeeTuyaCommand(ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint,
-                              ZigbeeConf[id].tuya_dp, valbuf);
+        SendZigbeeEPCommand(ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint,
+                              ZigbeeConf[id].ep, valbuf);
       } else if (ZigbeeConf[id].cluster_flags & ZBEE_CL_COLOR) {
         char valbuf[12];
         snprintf(valbuf, sizeof(valbuf), "0x%06X", new_color_hex);
@@ -8675,15 +8812,9 @@ void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm) 
   int zbee_idx = -1;
   if (id >= NUMPIN) {
     int slot_candidate = id - NUMPIN;
-    /* Сначала ищем триггер с таким родительским слотом (из Zigbee Devices) */
-    for (int t = 0; t < ZBEE_TRIGGER_TABLE_SIZE; t++) {
-      if (ZigbeeTriggers[t].used && ZigbeeTriggers[t].zbee_slot == slot_candidate) {
-        zbee_idx = slot_candidate;
-        break;
-      }
-    }
-    /* Если не нашли триггер — это обычный Zigbee слот */
-    if (zbee_idx < 0 && slot_candidate >= 0 && slot_candidate < NUMZBEE) {
+    /* Check if this slot exists */
+    if (slot_candidate >= 0 && slot_candidate < NUMZBEE &&
+        ZigbeeConf[slot_candidate].zbee_ieee[0] != '\0') {
       zbee_idx = slot_candidate;
     }
   } else {
@@ -8716,49 +8847,19 @@ void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm) 
         mg_mqtt_pub(s_conn, &pub_opts);
         LOG_Z2M("zbee: TRIGGER cmd %s -> %s\r\n", trigger_str, topic);
       }
+    } else if (ZigbeeConf[zbee_idx].zbee_role == ZBEE_ROLE_TRIGGER) {
+      /* Кнопка: выполняем sclick */
+      vbtn_execute(zbee_idx, 0);
+    } else if (ZigbeeConf[zbee_idx].ep > 0) {
+      /* multi-EP команда */
+      char valbuf[8];
+      snprintf(valbuf, sizeof(valbuf), "%d", onoff_cmd);
+      SendZigbeeEPCommand(ZigbeeConf[zbee_idx].zbee_ieee, ZigbeeConf[zbee_idx].zbee_endpoint,
+                            ZigbeeConf[zbee_idx].ep, valbuf);
     } else {
-      /* Проверяем есть ли триггеры для этого слота */
-      int has_triggers = 0;
-      int trig_count = 0;
-      int found_trig = -1;
-      for (int t = 0; t < ZBEE_TRIGGER_TABLE_SIZE; t++) {
-        if (ZigbeeTriggers[t].used && ZigbeeTriggers[t].zbee_slot == zbee_idx &&
-            ZigbeeTriggers[t].payload[0]) {
-          has_triggers = 1;
-          if ((onoff_cmd && trig_count == 0) || (!onoff_cmd && trig_count == 1)) {
-            found_trig = t;
-          }
-          trig_count++;
-        }
-      }
-      if (has_triggers) {
-        /* Триггер: ON → первый payload, OFF → второй payload */
-        extern struct mg_connection * volatile s_conn;
-        if (s_conn && !s_conn->is_closing && found_trig >= 0) {
-          char topic[128];
-          snprintf(topic, sizeof(topic), "zigbee2mqtt/trigger/%s", ZigbeeConf[zbee_idx].zbee_ieee);
-          struct mg_str pubt = mg_str(topic);
-          struct mg_str data = mg_str(ZigbeeTriggers[found_trig].payload);
-          struct mg_mqtt_opts pub_opts;
-          memset(&pub_opts, 0, sizeof(pub_opts));
-          pub_opts.topic = pubt;
-          pub_opts.message = data;
-          pub_opts.qos = 0;
-          pub_opts.retain = false;
-          mg_mqtt_pub(s_conn, &pub_opts);
-          LOG_Z2M("zbee: TRIGGER auto %s -> %s\r\n", ZigbeeTriggers[found_trig].payload, topic);
-        }
-      } else if (ZigbeeConf[zbee_idx].tuya_dp > 0) {
-        /* Tuya DP команда */
-        char valbuf[8];
-        snprintf(valbuf, sizeof(valbuf), "%d", onoff_cmd);
-        SendZigbeeTuyaCommand(ZigbeeConf[zbee_idx].zbee_ieee, ZigbeeConf[zbee_idx].zbee_endpoint,
-                              ZigbeeConf[zbee_idx].tuya_dp, valbuf);
-      } else {
-        const char *cmd = onoff_cmd ? "ON" : "OFF";
-        SendZigbeeCommand(ZigbeeConf[zbee_idx].zbee_ieee, ZigbeeConf[zbee_idx].zbee_endpoint,
-                          6, ZBEE_ATTR_ONOFF, cmd);
-      }
+      const char *cmd = onoff_cmd ? "ON" : "OFF";
+      SendZigbeeCommand(ZigbeeConf[zbee_idx].zbee_ieee, ZigbeeConf[zbee_idx].zbee_endpoint,
+                        6, ZBEE_ATTR_ONOFF, cmd);
     }
   }
 

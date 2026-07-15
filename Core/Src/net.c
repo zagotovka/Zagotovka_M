@@ -447,7 +447,7 @@ static uint64_t tls_hs_track_finish(unsigned long conn_id) {
 
 static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
                            volatile uint32_t *ver);
-void handle_buttons(struct mg_connection *c);
+void handle_buttons(struct mg_connection *c, struct mg_http_message *hm);
 void handle_switches(struct mg_connection *c);
 void handle_encoders(struct mg_connection *c);
 static void handle_get_pins(struct mg_connection *c, struct mg_http_message *hm);
@@ -731,7 +731,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				} else if (mg_match(hm->uri, mg_str("/api/state/onewire"), NULL)) {
 					if (!check_etag_304(c, hm, &g_ver_onewire)) handle_onewire(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/button"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_button)) handle_buttons(c);
+					if (!check_etag_304(c, hm, &g_ver_button)) handle_buttons(c, hm);
 				} else if (mg_match(hm->uri, mg_str("/api/state/security"), NULL)) {
 					if (!check_etag_304(c, hm, &g_ver_security)) handle_security(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/switch"), NULL)) {
@@ -936,7 +936,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				handle_onoff_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/button/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/button/get", c->id));
-				handle_button_get(c);
+				handle_button_get(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/button/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/button/set", c->id));
 				handle_button_set(c, hm);
@@ -1210,22 +1210,22 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
        (по умолчанию) — тогда подписка уйдёт не на тот атрибут. */
     for (int i = 0; i < NUMZBEE; i++) {
       if (ZigbeeConf[i].zbee_ieee[0] != '\0') {
-        /* Tuya DP слоты — подписка на конкретный DP */
-        if (ZigbeeConf[i].tuya_dp > 0) {
+        /* multi-EP слоты — подписка на конкретный EP */
+        if (ZigbeeConf[i].ep > 0) {
           char zbee_sub_topic[96];
           snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
                    "%s/data/%s/%d/EF00/%04X",
                    get_rxzbtop(),
                    ZigbeeConf[i].zbee_ieee,
                    ZigbeeConf[i].zbee_endpoint,
-                   ZigbeeConf[i].tuya_dp);
+                   ZigbeeConf[i].ep);
           struct mg_mqtt_opts zbee_sub;
           memset(&zbee_sub, 0, sizeof(zbee_sub));
           zbee_sub.topic = mg_str(zbee_sub_topic);
           zbee_sub.qos = s_qos;
           mg_mqtt_sub(c, &zbee_sub);
-          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d tuya_dp=%d)\r\n",
-                 zbee_sub_topic, NUMPIN + i, ZigbeeConf[i].tuya_dp);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d ep=%d)\r\n",
+                 zbee_sub_topic, NUMPIN + i, ZigbeeConf[i].ep);
           continue;
         }
 
@@ -1319,6 +1319,26 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
           zbee_sub.qos = s_qos;
           mg_mqtt_sub(c, &zbee_sub);
           printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+        }
+
+        /* Подписка на trigger топик если это кнопка (TRIGGER role) */
+        {
+          int is_trigger = (ZigbeeConf[i].zbee_role == ZBEE_ROLE_TRIGGER);
+          printf("[SYSTEM][BOOT] zbee[%d] ieee='%s' is_trigger=%d\r\n",
+                 i, ZigbeeConf[i].zbee_ieee, is_trigger);
+          if (is_trigger) {
+            char zbee_sub_topic[80];
+            snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                     "%s/trigger/%s",
+                     get_rxzbtop(),
+                     ZigbeeConf[i].zbee_ieee);
+            struct mg_mqtt_opts zbee_sub;
+            memset(&zbee_sub, 0, sizeof(zbee_sub));
+            zbee_sub.topic = mg_str(zbee_sub_topic);
+            zbee_sub.qos = s_qos;
+            mg_mqtt_sub(c, &zbee_sub);
+            printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d TRIGGER)\r\n", zbee_sub_topic, NUMPIN + i);
+          }
         }
       }
     }
@@ -1702,28 +1722,28 @@ static void handle_get_pins(struct mg_connection *c,
     c->is_draining = 1;
 }
 
-/* ─── /api/state/button (Keep-Alive polling) ─── */
-/* ─── /api/state/button (Keep-Alive polling) ─── */
-void handle_buttons(struct mg_connection *c) {
+/* ─── /api/state/button (Chunked — no g_body limit) ─── */
+void handle_buttons(struct mg_connection *c, struct mg_http_message *hm) {
 
-    int pos = 0;
+    char etag[16];
+    snprintf(etag, sizeof(etag), "\"%lu\"", (unsigned long)g_ver_button);
+
+    mg_printf(c,
+              "HTTP/1.1 200 OK\r\n"
+              "Content-Type: application/json\r\n"
+              "Transfer-Encoding: chunked\r\n"
+              "ETag: %s\r\n"
+              "Cache-Control: no-cache\r\n\r\n",
+              etag);
 
     /* ── Заголовок JSON ── */
-    pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-        "{\"lang\":\"%s\",\"buttons\":[", SetSettings.lang);
+    mg_http_printf_chunk(c, "{\"lang\":\"%s\",\"buttons\":[", SetSettings.lang);
 
     bool first = true;
 
-    /* ── Массив buttons ── */
+    /* ── Массив buttons (STM32) ── */
     for (int i = 0; i < NUMPIN; i++) {
         if (PinsConf[i].topin != 1) continue;
-
-        int remaining = (int)G_BODY_SIZE - pos;
-        if (remaining < 700) {  // 700 — максимум одной кнопки (3 строки × 200 + фикс.)
-            MG_ERROR(("buttons: OVERFLOW at pin %d, pos=%d remaining=%d",
-                      i, pos, remaining));
-            break;
-        }
 
         char esc_info[64], esc_sc[200], esc_dc[200], esc_lp[200];
         char esc_pins[16];
@@ -1733,105 +1753,56 @@ void handle_buttons(struct mg_connection *c) {
         json_escape_str(esc_info, PinsConf[i].info,   sizeof(esc_info));
         json_escape_str(esc_pins, PinsInfo[i].pins,   sizeof(esc_pins));
 
-        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-            "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
+        CHUNK_SEND_FMT(c, &first,
+            "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
             "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
             "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
-            first ? "" : ",",
             PinsConf[i].topin, i, esc_pins,
             PinsConf[i].ptype,
             esc_sc, esc_dc, esc_lp, esc_info,
             PinsConf[i].onoff);
-
-        first = false;
     }
 
-    /* ── Zigbee кнопки (триггеры) ── */
-    for (int i = 0; i < ZBEE_TRIGGER_TABLE_SIZE; i++) {
-        if (!ZigbeeTriggers[i].used) continue;
+    /* ── Zigbee trigger buttons ── */
+    for (int i = 0; i < NUMZBEE; i++) {
+        if (ZigbeeConf[i].zbee_role != ZBEE_ROLE_TRIGGER) continue;
+        if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
 
-        int remaining = (int)G_BODY_SIZE - pos;
-        if (remaining < 700) {
-            MG_ERROR(("buttons: OVERFLOW at zbee trigger %d, pos=%d", i, pos));
-            break;
-        }
-
-        int slot = ZigbeeTriggers[i].zbee_slot;
-        int virt = ZigbeeTriggers[i].virtual_zbi;
-        int target_slot = (virt > 0) ? virt : slot;
-
-        char esc_info[64], esc_sc[200], esc_dc[200], esc_lp[200], esc_pins[32];
-        json_escape_str(esc_sc,   ZigbeeTriggers[i].sclick, sizeof(esc_sc));
-        json_escape_str(esc_dc,   ZigbeeTriggers[i].dclick, sizeof(esc_dc));
-        json_escape_str(esc_lp,   ZigbeeTriggers[i].lpress, sizeof(esc_lp));
-
-        char info_buf[64];
-        if (ZigbeeTriggers[i].label[0]) {
-            strncpy(info_buf, ZigbeeTriggers[i].label, sizeof(info_buf) - 1);
-            info_buf[sizeof(info_buf) - 1] = '\0';
-        } else {
-            /* Если label пустой, используем payload как имя по умолчанию */
-            strncpy(info_buf, ZigbeeTriggers[i].payload, sizeof(info_buf) - 1);
-            info_buf[sizeof(info_buf) - 1] = '\0';
-        }
-        json_escape_str(esc_info, info_buf, sizeof(esc_info));
-
-        char pin_label[32];
-        if (ZigbeeConf[target_slot].tuya_dp > 0) {
-            snprintf(pin_label, sizeof(pin_label), "DP%d", ZigbeeConf[target_slot].tuya_dp);
-        } else if (ZigbeeTriggers[i].payload[0]) {
-            json_escape_str(pin_label, ZigbeeTriggers[i].payload, sizeof(pin_label));
-        } else {
-            strncpy(pin_label, "ZB", sizeof(pin_label) - 1);
-        }
-        json_escape_str(esc_pins, pin_label, sizeof(esc_pins));
+        char esc_sclick[260], esc_dclick[260], esc_lpress[260];
+        char esc_label[64];
+        json_escape_str(esc_sclick, ZigbeeConf[i].sclick, sizeof(esc_sclick));
+        json_escape_str(esc_dclick, ZigbeeConf[i].dclick, sizeof(esc_dclick));
+        json_escape_str(esc_lpress, ZigbeeConf[i].lpress, sizeof(esc_lpress));
+        json_escape_str(esc_label, ZigbeeConf[i].zbee_label, sizeof(esc_label));
 
         int zbee_id = NUMPIN + i;
-        int parent_id = NUMPIN + slot;
-
-        /* Расчёт sub_idx: первый триггер = parent_id, остальные = parent_id.N */
-        int prev_count = 0;
-        for (int j = 0; j < ZBEE_TRIGGER_TABLE_SIZE; j++) {
-            if (j == i) break;
-            if (ZigbeeTriggers[j].used && ZigbeeTriggers[j].zbee_slot == slot) {
-                prev_count++;
-            }
-        }
-
         char display_id[24];
-        if (prev_count > 0) {
-            snprintf(display_id, sizeof(display_id), "%d.%d", parent_id, prev_count);
+        snprintf(display_id, sizeof(display_id), "%d", zbee_id);
+
+        char esc_pins[64];
+        if (ZigbeeConf[i].vbtn_mode == VBTN_MODE_PASSTHROUGH &&
+            ZigbeeConf[i].pt_single[0] != '\0') {
+            json_escape_str(esc_pins, ZigbeeConf[i].pt_single, sizeof(esc_pins));
         } else {
-            snprintf(display_id, sizeof(display_id), "%d", parent_id);
+            snprintf(esc_pins, sizeof(esc_pins), "ZB_%s", ZigbeeConf[i].zbee_ieee);
         }
 
-        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-            "%s{\"topin\":1,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,"
+        CHUNK_SEND_FMT(c, &first,
+            "{\"topin\":1,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,"
             "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
             "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d,"
-            "\"display_id\":\"%s\",\"is_zigbee\":1}",
-            first ? "" : ",",
+            "\"display_id\":\"%s\",\"is_zigbee\":1,"
+            "\"vbtn_mode\":%d}",
             zbee_id, esc_pins,
-            esc_sc, esc_dc, esc_lp, esc_info,
-            ZigbeeConf[target_slot].onoff,
-            display_id);
-
-        first = false;
+            esc_sclick, esc_dclick, esc_lpress,
+            esc_label, ZigbeeConf[i].onoff,
+            display_id, ZigbeeConf[i].vbtn_mode);
     }
 
     /* ── Закрываем JSON ── */
-    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
-
-    /* ── Лог для контроля ── */
-    MG_DEBUG(("buttons: len=%d buf=%d", pos, (int)G_BODY_SIZE));
-
-    /* ── Ответ с Content-Length → Keep-Alive работает ── */
-    char extra[128];
-    snprintf(extra, sizeof(extra), "%sETag: \"%lu\"\r\n",
-             s_json_header, (unsigned long)g_ver_button);
-
-    mg_http_reply(c, 200, extra, "%s", g_body);
-    /* НЕТ c->is_draining = 1 — соединение остаётся живым! */
+    mg_http_printf_chunk(c, "]}");
+    mg_http_write_chunk(c, "", 0);
+    c->is_draining = 1;
 }
 
 /* ─── /api/state/switch (Keep-Alive polling) ─── */
@@ -2251,7 +2222,7 @@ close_ds18b20:
 
 /* ─── /api/state/common ─── */
 static void handle_common(struct mg_connection *c) {
-    char b[320];
+    char b[400];
     char tbuf[256];
     char extra[160];
     parse_stm32time(tbuf, sizeof(tbuf), &SetSettings);
@@ -2264,8 +2235,8 @@ static void handle_common(struct mg_connection *c) {
         "ETag: \"%lu\"\r\n",
         (unsigned long)g_ver_common);
     snprintf(b, sizeof(b),
-        "{\"uptime\":%lu,\"heap\":%lu,\"ip\":\"%s\",\"gsm\":\"%s\",\"time\":%s}",
-        uptime, heap, "0.0.0.0", "ok", tbuf);
+        "{\"uptime\":%lu,\"heap\":%lu,\"ip\":\"%s\",\"gsm\":\"%s\",\"time\":%s,\"fw\":\"%s\"}",
+        uptime, heap, "0.0.0.0", "ok", tbuf, FW_VERSION);
     mg_http_reply(c, 200, extra, "%s", b);
 }
 
