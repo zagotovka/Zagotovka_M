@@ -1,2 +1,10 @@
 /Debug/
 /Release/
+
+# Generated build artifacts
+/Core/Src/packed_fs.c
+/scripts/_pack_work/
+
+# Web build
+/web_root/dist/
+/web_root/node_modules/

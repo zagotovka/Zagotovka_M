@@ -95,6 +95,9 @@
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+			<storageModule moduleId="org.eclipse.cdt.managedbuilder.core.buildsteps">
+				<preBuildStep enabled="true" command="bash ${workspace_loc:/Zagotovka_M}/scripts/build_web_and_pack.sh"/>
+			</storageModule>
 		</cconfiguration>
 		<cconfiguration id="com.st.stm32cube.ide.mcu.gnu.managedbuild.config.exe.release.112394855">
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="com.st.stm32cube.ide.mcu.gnu.managedbuild.config.exe.release.112394855" moduleId="org.eclipse.cdt.core.settings" name="Release">
@@ -186,6 +189,9 @@
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+			<storageModule moduleId="org.eclipse.cdt.managedbuilder.core.buildsteps">
+				<preBuildStep enabled="true" command="bash ${workspace_loc:/Zagotovka_M}/scripts/build_web_and_pack.sh"/>
+			</storageModule>
 		</cconfiguration>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.core.pathentry"/>
