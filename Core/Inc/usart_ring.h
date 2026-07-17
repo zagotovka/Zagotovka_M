@@ -22,6 +22,7 @@
 
 int16_t gsm_available(void);
 int16_t gsm_read(void);
+void usart_ring_dtcm_init(void);
 
 /////////////////// DEBUG USART ///////////////////// можно удалить после отладки всего
 #define DBG_RX_BUFFER_SIZE 64

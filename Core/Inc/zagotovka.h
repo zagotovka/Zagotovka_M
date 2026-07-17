@@ -227,6 +227,7 @@ void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm);
 void gen_mysett_json(const struct dbSettings *settings, char *buffer, int buffer_size);
 void parse_mysett_json(char *json_string, struct dbSettings *settings);
 void mysett_cache_reload(void);
+void zagotovka_dtcm_init(void);
 
 void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm, struct dbPinToPin PinsLinks[NUMPINLINKS]);
 

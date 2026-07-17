@@ -12,6 +12,7 @@
 #include "setings.h" /* SetSettings */
 #include "usart_ring.h" /* GSM_RX_BUFFER_SIZE, DTMF_BUF_SIZE, gsm_available(), gsm_read() */
 #include "zagotovka.h" /* send_sms(), action_handler() */
+#include "dtcm_alloc.h"
 
 #define SEND_STR_SIZE 64
 
@@ -36,14 +37,22 @@ extern void Error_Handler(void);
  * check_speed() переинициализирует UART вручную через HAL_UART_Init(). */
 
 /* ───── Переменные GSM-модуля (перенесены из main.c) ───── */
-char dtmf_buf[DTMF_BUF_SIZE] = {0}; /* буфер DTMF-цифр              */
+char *dtmf_buf = NULL;       /* буфер DTMF-цифр              */
 uint8_t dtmf_idx = 0;               /* индекс в dtmf_buf             */
-char vldpins[240] = {0};            /* валидные пины  (результат)    */
-char invpins[256] = {0};            /* невалидные пины (результат)   */
+char *vldpins = NULL;        /* валидные пины  (результат)    */
+char *invpins = NULL;        /* невалидные пины (результат)   */
 int validcnt = 0;
 int invldcnt = 0;
-char buf[GSM_RX_BUFFER_SIZE] = {0};  /* рабочий приёмный буфер        */
-char str2[GSM_RX_BUFFER_SIZE] = {0}; /* вспомогательный буфер         */
+char *buf = NULL;            /* рабочий приёмный буфер        */
+char *str2 = NULL;           /* вспомогательный буфер         */
+
+void gsm_dtcm_init(void) {
+    dtmf_buf  = (char *)dtcm_gsm_dtmf;
+    vldpins   = (char *)dtcm_gsm_vldpins;
+    invpins   = (char *)dtcm_gsm_invpins;
+    buf       = (char *)dtcm_gsm_buf;
+    str2      = (char *)dtcm_gsm_str2;
+}
 
 /* ────────────────────────────────────────────────────────────
  *  Внутренние вспомогательные функции
@@ -386,7 +395,7 @@ void execute_commands(char *cmd_str) {
               continue;
             }
 
-            if (strlen(vldpins) + strlen(pin_str) < sizeof(vldpins)) {
+            if (strlen(vldpins) + strlen(pin_str) < DTCM_BUF_GSM_VLDPINS) {
               strcat(vldpins, pin_str);
               validcnt++;
             } else {
@@ -418,7 +427,7 @@ void execute_commands(char *cmd_str) {
               else
                 snprintf(pin_str, sizeof(pin_str), "%s", cmd_msg);
 
-              if (strlen(vldpins) + strlen(pin_str) < sizeof(vldpins)) {
+              if (strlen(vldpins) + strlen(pin_str) < DTCM_BUF_GSM_VLDPINS) {
                 strcat(vldpins, pin_str);
                 validcnt++;
               }
@@ -428,7 +437,7 @@ void execute_commands(char *cmd_str) {
             char inv_str[32];
             snprintf(inv_str, sizeof(inv_str), "%s%d#%d*",
                      invldcnt > 0 ? "," : "", pin, value);
-            if (strlen(invpins) + strlen(inv_str) < sizeof(invpins)) {
+            if (strlen(invpins) + strlen(inv_str) < DTCM_BUF_GSM_INVPINS) {
               strcat(invpins, inv_str);
               invldcnt++;
             }
@@ -438,7 +447,7 @@ void execute_commands(char *cmd_str) {
           char inv_str[32];
           snprintf(inv_str, sizeof(inv_str), "%s%d#%d*", invldcnt > 0 ? "," : "",
                    pin, value);
-          if (strlen(invpins) + strlen(inv_str) < sizeof(invpins)) {
+          if (strlen(invpins) + strlen(inv_str) < DTCM_BUF_GSM_INVPINS) {
             strcat(invpins, inv_str);
             invldcnt++;
           }
@@ -461,7 +470,7 @@ void execute_commands(char *cmd_str) {
           char inv_str[64];
           snprintf(inv_str, sizeof(inv_str), "%s%s", invldcnt > 0 ? "," : "",
                    invalid_cmd);
-          if (strlen(invpins) + strlen(inv_str) < sizeof(invpins)) {
+          if (strlen(invpins) + strlen(inv_str) < DTCM_BUF_GSM_INVPINS) {
             strcat(invpins, inv_str);
             invldcnt++;
           }
@@ -811,8 +820,8 @@ void process_sim800l_data(void) {
             if (slen >= 2 && sms_text[slen - 1] == '#' && sms_text[slen - 2] == '*') {
               sms_text[slen - 1] = '\0';
             }
-            memset(vldpins, 0, sizeof(vldpins));
-            memset(invpins, 0, sizeof(invpins));
+            memset(vldpins, 0, DTCM_BUF_GSM_VLDPINS);
+            memset(invpins, 0, DTCM_BUF_GSM_INVPINS);
             validcnt = 0;
             invldcnt = 0;
 
@@ -824,8 +833,8 @@ void process_sim800l_data(void) {
             send_command_result_sms();
 
             /* Сбрасываем буферы после отчёта */
-            memset(vldpins, 0, sizeof(vldpins));
-            memset(invpins, 0, sizeof(invpins));
+            memset(vldpins, 0, DTCM_BUF_GSM_VLDPINS);
+            memset(invpins, 0, DTCM_BUF_GSM_INVPINS);
             validcnt = 0;
             invldcnt = 0;
           } else {
@@ -846,7 +855,7 @@ void process_sim800l_data(void) {
   /* ── DTMF ── */
   if (strstr(buf, "+DTMF:") != NULL) {
     char dtmf_dig = buf[7];
-    if (dtmf_idx < sizeof(dtmf_buf) - 1) {
+    if (dtmf_idx < DTCM_BUF_GSM_DTMF - 1) {
       dtmf_buf[dtmf_idx++] = dtmf_dig;
       dtmf_buf[dtmf_idx] = '\0';
 
@@ -858,7 +867,7 @@ void process_sim800l_data(void) {
           snprintf(PinsConf[1].sclick, sizeof(PinsConf[1].sclick), "All SMS alerts ON!");
           taskEXIT_CRITICAL();
           send_sms(SMS_ENABLE_CODE);
-          memset(dtmf_buf, 0, sizeof(dtmf_buf));
+          memset(dtmf_buf, 0, DTCM_BUF_GSM_DTMF);
           dtmf_idx = 0;
           uint8_t usbnum = 1;
           xQueueSend(usbQueueHandle, &usbnum, 0);
@@ -870,7 +879,7 @@ void process_sim800l_data(void) {
           snprintf(PinsConf[1].sclick, sizeof(PinsConf[1].sclick), "All SMS alerts OFF!");
           PinsConf[1].onoff = 0;
           taskEXIT_CRITICAL();
-          memset(dtmf_buf, 0, sizeof(dtmf_buf));
+          memset(dtmf_buf, 0, DTCM_BUF_GSM_DTMF);
           dtmf_idx = 0;
           uint8_t usbnum = 1;
           xQueueSend(usbQueueHandle, &usbnum, 0);
@@ -882,8 +891,8 @@ void process_sim800l_data(void) {
       /* Признак конца серии команд: *# */
       if (dtmf_idx >= 2 && dtmf_buf[dtmf_idx - 2] == '*' &&
           dtmf_buf[dtmf_idx - 1] == '#') {
-        memset(vldpins, 0, sizeof(vldpins));
-        memset(invpins, 0, sizeof(invpins));
+        memset(vldpins, 0, DTCM_BUF_GSM_VLDPINS);
+        memset(invpins, 0, DTCM_BUF_GSM_INVPINS);
         validcnt = 0;
         invldcnt = 0;
 
@@ -894,13 +903,13 @@ void process_sim800l_data(void) {
 
         execute_commands(cmd_copy);
 
-        memset(dtmf_buf, 0, sizeof(dtmf_buf));
+        memset(dtmf_buf, 0, DTCM_BUF_GSM_DTMF);
         dtmf_idx = 0;
       }
     }
 
-    if (dtmf_idx >= sizeof(dtmf_buf) - 1) {
-      memset(dtmf_buf, 0, sizeof(dtmf_buf));
+    if (dtmf_idx >= DTCM_BUF_GSM_DTMF - 1) {
+      memset(dtmf_buf, 0, DTCM_BUF_GSM_DTMF);
       dtmf_idx = 0;
       HAL_UART_Transmit(myDEBUG, (uint8_t *)"Buffer overflow, cleared\n",
                         strlen("Buffer overflow, cleared\n"), 1000);
@@ -908,15 +917,15 @@ void process_sim800l_data(void) {
 
     /* ── NO CARRIER: конец звонка — отправляем SMS-отчёт ── */
   } else if (strstr(buf, "NO CARRIER") != NULL) {
-    memset(dtmf_buf, 0, sizeof(dtmf_buf));
+    memset(dtmf_buf, 0, DTCM_BUF_GSM_DTMF);
     dtmf_idx = 0;
 
     osDelay(1000);
     send_command_result_sms();
 
     /* После отправки очищаем буферы */
-    memset(vldpins, 0, sizeof(vldpins));
-    memset(invpins, 0, sizeof(invpins));
+    memset(vldpins, 0, DTCM_BUF_GSM_VLDPINS);
+    memset(invpins, 0, DTCM_BUF_GSM_INVPINS);
     validcnt = 0;
     invldcnt = 0;
   }

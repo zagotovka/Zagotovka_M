@@ -47,7 +47,7 @@
 /////////////////// GSM USART ////////////////////
 extern volatile gsm_rx_buffer_index_t gsm_rx_buffer_head;
 extern volatile gsm_rx_buffer_index_t gsm_rx_buffer_tail;
-extern unsigned char gsm_rx_buffer[GSM_RX_BUFFER_SIZE];
+extern unsigned char *gsm_rx_buffer;
 /////////////////// DEBUG USART //////////////////// можно удалить после отладки всего
 extern volatile dbg_rx_buffer_index_t dbg_rx_buffer_head;
 extern volatile dbg_rx_buffer_index_t dbg_rx_buffer_tail;

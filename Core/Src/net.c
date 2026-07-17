@@ -9,6 +9,7 @@
 #include "compat_ota.h"
 #include "fmt_float.h"
 #include <stdlib.h>   // rand()
+#include "dtcm_alloc.h"
 
 struct user {
   const char *name, *pass;
@@ -411,8 +412,13 @@ static struct {
 	uint64_t      accept_ms;
 } s_tls_hs_track[TLS_HS_TRACK_MAX];
 
-char s_tls_cert[1024] = {0};  /* PEM certificate, loaded once in web_init() */
-char s_tls_key[512]   = {0};  /* PEM private key, loaded once in web_init() */
+char *s_tls_cert = NULL;  /* PEM certificate, loaded once in web_init() */
+char *s_tls_key  = NULL;  /* PEM private key, loaded once in web_init() */
+
+void net_dtcm_init(void) {
+    s_tls_cert = (char *)dtcm_tls_cert;
+    s_tls_key  = (char *)dtcm_tls_key;
+}
 bool s_tls_loaded = false;           /* true after successful preload */
 
 static void tls_hs_track_start(unsigned long conn_id) {
@@ -2411,15 +2417,14 @@ void web_init(struct mg_mgr *mgr) {
     // Инициализация настроек устройства
     s_settings.device_name = (char *)default_name;
 
-    // Allocate shared JSON buffer in FreeRTOS heap (saves 16KB of .bss)
-    if (g_body != NULL) {
-        vPortFree(g_body);  // Free previous buffer on re-init
-        g_body = NULL;
-    }
-    g_body = pvPortMalloc(G_BODY_SIZE);
+    // Allocate shared JSON buffer in DTCM pool (saves 32KB of FreeRTOS heap)
     if (g_body == NULL) {
-        MG_ERROR(("OOM: g_body allocation failed"));
-        return;
+        g_body = (char *)dtcm_malloc(G_BODY_SIZE);
+        if (g_body == NULL) {
+            MG_ERROR(("OOM: g_body allocation failed"));
+            return;
+        }
+        memset(g_body, 0, G_BODY_SIZE);
     }
 
     // Подключение упакованной файловой системы
@@ -2442,8 +2447,8 @@ void web_init(struct mg_mgr *mgr) {
     if (SetSettings.usehttps == 1) {
         /* Предзагрузка TLS-сертификатов ОДИН раз — до accept, без файлового I/O в mg_mgr_poll */
         uint32_t t_cert = HAL_GetTick();
-        bool cert_ok = https_get_tls_cert(s_tls_cert, sizeof(s_tls_cert));
-        bool key_ok  = https_get_tls_key(s_tls_key, sizeof(s_tls_key));
+        bool cert_ok = https_get_tls_cert(s_tls_cert, DTCM_BUF_TLS_CERT);
+        bool key_ok  = https_get_tls_key(s_tls_key, DTCM_BUF_TLS_KEY);
         printf("[TLS] cert+key preloaded: %lu ms\r\n", (unsigned long)(HAL_GetTick() - t_cert));
 
         if (!cert_ok || !key_ok) {

@@ -16,6 +16,7 @@
 #include "zagotovka.h"
 #include <stdio.h>
 #include <string.h>
+#include "dtcm_alloc.h"
 
 #include "FreeRTOS.h"
 #include "cmsis_os2.h"
@@ -2132,7 +2133,7 @@ void SetOneWireConfig() {
   UINT byteswritten;
   const uint8_t CHUNK_SIZE =
       1; // Обработка по одному сенсору за раз для экономии памяти
-  static char buf[1536];
+  char *buf = (char *)dtcm_settings_a;
   bool first_pin = true;
   int len = 0;
 
@@ -2171,10 +2172,10 @@ void SetOneWireConfig() {
         goto cleanup;
     }
     first_pin = false;
-    len = snprintf(buf, sizeof(buf),
+    len = snprintf(buf, DTCM_BUF_SETTINGS_A,
         "{\"id\":%d,\"pin\":\"%s\",\"typsensr\":1,\"numsens\":%d,\"onoff\":%d",
         ds18b20[i].id, ds18b20[i].pin, ds18b20[i].numsens, ds18b20[i].onoff);
-    if (len <= 0 || len >= (int)sizeof(buf)) continue;
+    if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_A) continue;
 
     fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
     if (fresult != FR_OK)
@@ -2205,14 +2206,14 @@ void SetOneWireConfig() {
           sprintf(sensor_addr_str + (k * 2), "%02X",
                   ds18b20[i].sensors[j].addr[k]);
         }
-        len = snprintf(buf, sizeof(buf),
+        len = snprintf(buf, DTCM_BUF_SETTINGS_A,
             "{\"s_number\":\"%s\",\"t\":0.00,\"valid\":false,"
             "\"ut\":%.2f,\"lt\":%.2f,"
             "\"action_ut\":\"%s\",\"action_lt\":\"%s\",\"info\":\"%s\"}",
             sensor_addr_str, ds18b20[i].sensors[j].upt, ds18b20[i].sensors[j].lowt,
             ds18b20[i].sensors[j].actup, ds18b20[i].sensors[j].actlow,
             ds18b20[i].sensors[j].info);
-        if (len <= 0 || len >= (int)sizeof(buf)) continue;
+        if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_A) continue;
 
         fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
         if (fresult != FR_OK)
@@ -2244,10 +2245,10 @@ void SetOneWireConfig() {
       }
       first_pin = false;
       // Create pin object
-      len = snprintf(buf, sizeof(buf),
+      len = snprintf(buf, DTCM_BUF_SETTINGS_A,
           "{\"id\":%d,\"pin\":\"%s\",\"typsensr\":2,\"numsens\":1,\"onoff\":%d",
           dht22[j].id, dht22[j].pin, dht22[j].onoff);
-      if (len <= 0 || len >= (int)sizeof(buf)) continue;
+      if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_A) continue;
 
       fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
       if (fresult != FR_OK)
@@ -2258,7 +2259,7 @@ void SetOneWireConfig() {
       if (fresult != FR_OK)
         goto cleanup;
       // Create DHT22 sensor object
-      len = snprintf(buf, sizeof(buf),
+      len = snprintf(buf, DTCM_BUF_SETTINGS_A,
           "{\"s_number\":\"DHT22\",\"t\":0.00,\"humidity\":0.00,\"valid\":false,"
           "\"ut\":%.2f,\"lt\":%.2f,"
           "\"action_ut\":\"%s\",\"action_lt\":\"%s\","
@@ -2268,7 +2269,7 @@ void SetOneWireConfig() {
           dht22[j].actup, dht22[j].actlow,
           dht22[j].uph, dht22[j].lowh,
           dht22[j].actuh, dht22[j].actlh, dht22[j].info);
-      if (len <= 0 || len >= (int)sizeof(buf)) goto cleanup;
+      if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_A) goto cleanup;
 
       fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
       if (fresult != FR_OK)
@@ -2394,7 +2395,7 @@ void GetPidConfig() {
 void SetPidConfig() {
   FRESULT fresult;
   UINT byteswritten;
-  static char buf[1536];
+  char *buf = (char *)dtcm_settings_b;
   int len = 0;
 
   fresult = f_open(&USBHFile, (const TCHAR *)"pid.ini",
@@ -2421,7 +2422,7 @@ void SetPidConfig() {
     }
     first = false;
 
-    len = snprintf(buf, sizeof(buf),
+    len = snprintf(buf, DTCM_BUF_SETTINGS_B,
         "{\"pwm_pin_id\":%d,\"selsens\":%d,\"sensor_pin_id\":%d,"
         "\"sernum\":\"%s\",\"sensor_sub_idx\":%d,\"preset\":%d,"
         "\"tmpset\":%.2f,\"Kp\":%.4f,\"Ki\":%.6f,\"Kd\":%.4f,\"bias\":%.4f,"
@@ -2438,7 +2439,7 @@ void SetPidConfig() {
         PidConf[i].temp_max, PidConf[i].temp_min, PidConf[i].pause_sec,
         PidConf[i].tau, PidConf[i].K_gain,
         PidConf[i].info, PidConf[i].onoff);
-    if (len <= 0 || len >= (int)sizeof(buf)) continue;
+    if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_B) continue;
 
     fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
     if (fresult != FR_OK) goto cleanup;
@@ -2627,7 +2628,7 @@ void GetZigbeeConfig(void) {
 void SetZigbeeConfig(void) {
   FRESULT fresult;
   UINT byteswritten;
-  static char buf[1024];
+  char *buf = (char *)dtcm_settings_c;
   int len = 0;
 
   fresult = f_open(&USBHFile, (const TCHAR *)"zigbee.ini",
@@ -2654,7 +2655,7 @@ void SetZigbeeConfig(void) {
     first = false;
 
     clusters_flags_to_json(ZigbeeConf[i].cluster_flags, clbuf, sizeof(clbuf));
-    len = snprintf(buf, sizeof(buf),
+    len = snprintf(buf, DTCM_BUF_SETTINGS_C,
         "{\"ieee\":\"%s\",\"endpoint\":%d,\"clusters\":%s,\"attr\":%d,"
         "\"label\":\"%s\",\"onoff\":%d,\"dvalue\":%d,\"color_hex\":%u,"
         "\"state\":%d,\"topin\":%d,\"info\":\"%s\","
@@ -2673,7 +2674,7 @@ void SetZigbeeConfig(void) {
         ZigbeeConf[i].sclick, ZigbeeConf[i].dclick, ZigbeeConf[i].lpress,
         ZigbeeConf[i].vbtn_mode,
         ZigbeeConf[i].pt_single, ZigbeeConf[i].pt_double, ZigbeeConf[i].pt_long);
-    if (len <= 0 || len >= (int)sizeof(buf)) continue;
+    if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_C) continue;
 
     fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
     if (fresult != FR_OK) goto cleanup;

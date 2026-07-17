@@ -45,6 +45,7 @@
 
 #include "gsm.h"
 #include "usart_ring.h"
+#include "dtcm_alloc.h"
 
 #define BLINK_PERIOD_MS 1000 // LED blinking period in millis
 #define DEBOUNCE_DELAY 45    // Encoder (ms)
@@ -62,7 +63,7 @@ int32_t onoffid;  /* знаковый: JSON id может быть < 0 */
 extern onewire_config_t ow_conf[MAX_DS18B20_P + MAX_DHT22_P];
 struct Button button[NUMPIN];
 extern volatile uint8_t onlineFlg;
-extern uint8_t gsm_rx_buffer[GSM_RX_BUFFER_SIZE];
+extern uint8_t *gsm_rx_buffer;
 extern volatile gsm_rx_buffer_index_t gsm_rx_buffer_head;
 uint8_t RxByte; // Буфер для приема одного байта по UART
 
@@ -770,6 +771,13 @@ int main(void)
   memset(dht22, 0, sizeof(dht22));
   DWT_Init();
   test_init();
+  dtcm_alloc_init();
+  usart_ring_dtcm_init();
+  gsm_dtcm_init();
+  net_dtcm_init();
+  zagotovka_dtcm_init();
+  printf("[SYSTEM] DTCM pool: %u B total at 0x%08lX\r\n",
+         (unsigned)dtcm_alloc_get_total(), (unsigned long)_sdtcm_pool);
   printf("[SYSTEM] Reset CSR=0x%08lX\r\n", reset_csr_value);
   printf("[SYSTEM] Reset flags: %s\r\n", reset_reason_str);
   printf("[SYSTEM] Reset reason: %s (CSR=0x%08lX)\r\n", reset_reason_str, reset_csr_value);
@@ -1583,7 +1591,7 @@ void StartWebServerTask(void *argument)
            mif.mac[5]));
 
   struct mg_mgr *mgr =
-      (struct mg_mgr *)pvPortMalloc(sizeof(struct mg_mgr)); // Одноразовый при загрузке, живёт весь runtime
+      (struct mg_mgr *)dtcm_malloc(sizeof(struct mg_mgr)); // Одноразовый при загрузке, живёт весь runtime
   mg_mgr_init(mgr);                                   // Инициализируем менеджер
 
   // Настройка MQTT
@@ -1923,7 +1931,6 @@ void StartWebServerTask(void *argument)
     osDelay(1); /* Yield CPU to RTOS, preventing 100% CPU loop starvation */
   }
   mg_mgr_free(mgr);
-  vPortFree(mgr); // парный к pvPortMalloc() на строке инициализации
   /* USER CODE END StartWebServerTask */
 }
 
@@ -3172,6 +3179,18 @@ static void heap_diagnostic(void)
         }
 
         printf("Malloc fail count:  %lu\r\n", current_malloc_fail);
+
+        size_t dtcm_used  = dtcm_alloc_get_used();
+        size_t dtcm_total = dtcm_alloc_get_total();
+        size_t dtcm_pct   = dtcm_total ? (dtcm_used * 100 / dtcm_total) : 0;
+
+        printf("[SYSTEM] DTCM pool used:     %u B / %u B (%u%%)\r\n",
+               (unsigned)dtcm_used, (unsigned)dtcm_total, (unsigned)dtcm_pct);
+        printf("[SYSTEM] DTCM pool free:     %u B\r\n",
+               (unsigned)dtcm_alloc_get_free());
+        printf("[SYSTEM] DTCM alloc fails:   %u\r\n",
+               (unsigned)dtcm_alloc_get_fail_count());
+
         printf("MQTT TX queue peak: %lu / 32\r\n", mqtt_tx_peak);
         printf("MQTT RX queue peak: %lu / 16\r\n", mqtt_rx_peak);
         printf("Output queue peak:  %lu / 16\r\n", output_peak);
@@ -3299,6 +3318,17 @@ void StartDgnTask(void *argument)
 			printf("Min ever: %lu\r\n",
 			(uint32_t) xPortGetMinimumEverFreeHeapSize());
 			printf("Malloc fail count: %lu\r\n", malloc_fail_count);
+
+			{
+				size_t dtcm_used  = dtcm_alloc_get_used();
+				size_t dtcm_total = dtcm_alloc_get_total();
+				size_t dtcm_pct   = dtcm_total ? (dtcm_used * 100 / dtcm_total) : 0;
+				printf("\r\n""=== DTCM POOL ===\r\n");
+				printf("Used:  %u B / %u B (%u%%)\r\n",
+				       (unsigned)dtcm_used, (unsigned)dtcm_total, (unsigned)dtcm_pct);
+				printf("Free:  %u B\r\n", (unsigned)dtcm_alloc_get_free());
+				printf("Fails: %u\r\n", (unsigned)dtcm_alloc_get_fail_count());
+			}
 
 			printf("\r\n""=== QUEUE PEAKS ===\r\n");
 			printf("MQTT TX peak:  %lu / 32\r\n", mqtt_tx_peak);

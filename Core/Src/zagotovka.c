@@ -20,6 +20,7 @@
 #include <stdio.h>  /* для printf */
 #include <stdlib.h> // Для функции free()
 #include <string.h>
+#include "dtcm_alloc.h"
 /*********************** Moon *****************************/
 #include "net.h"
 #include <math.h>
@@ -1797,17 +1798,23 @@ static void emit_usehttps_logmask(struct mg_connection *c,
 }
 
 /* ──── Кэш файловых настроек для устранения starvation в mg_mgr_poll ──── */
-static char s_cached_tls_ca[512]     = {0};
-static char s_cached_domain[128]     = {0};
-static char s_cached_tg_token[256]   = {0};
+char *s_cached_tls_ca   = NULL;
+char *s_cached_domain   = NULL;
+char *s_cached_tg_token = NULL;
 static bool s_mysett_cache_valid     = false;
 
+void zagotovka_dtcm_init(void) {
+    s_cached_tls_ca   = (char *)dtcm_cache_tls_ca;
+    s_cached_domain   = (char *)dtcm_cache_domain;
+    s_cached_tg_token = (char *)dtcm_cache_tg_token;
+}
+
 void mysett_cache_reload(void) {
-    https_get_tls_cert(s_tls_cert, sizeof(s_tls_cert));
-    https_get_tls_key(s_tls_key, sizeof(s_tls_key));
-    https_get_tls_ca(s_cached_tls_ca, sizeof(s_cached_tls_ca));
-    https_get_domain(s_cached_domain, sizeof(s_cached_domain));
-    https_get_telegram_token(s_cached_tg_token, sizeof(s_cached_tg_token));
+    https_get_tls_cert(s_tls_cert, DTCM_BUF_TLS_CERT);
+    https_get_tls_key(s_tls_key, DTCM_BUF_TLS_KEY);
+    https_get_tls_ca(s_cached_tls_ca, DTCM_BUF_CACHE_TLS_CA);
+    https_get_domain(s_cached_domain, DTCM_BUF_CACHE_DOMAIN);
+    https_get_telegram_token(s_cached_tg_token, DTCM_BUF_CACHE_TG_TOKEN);
     s_mysett_cache_valid = true;
 }
 
@@ -2609,14 +2616,14 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
   memcpy(writebuf, current, sizeof(HTTPSsettings));
   HTTPSsettings *new_settings = (HTTPSsettings *)writebuf;
 
-  static char decoded_buffer[1024];
+  char *decoded_buffer = (char *)dtcm_decoded;
   bool settings_changed = false;
 
   char *tls_ca_val = mg_json_get_str(body, "$.tls_ca");
   if (tls_ca_val) {
     if (!is_template_value(tls_ca_val)) {
-      memset(decoded_buffer, 0, sizeof(decoded_buffer));
-      if (!json_decode_string(tls_ca_val, decoded_buffer, sizeof(decoded_buffer))) {
+      memset(decoded_buffer, 0, DTCM_BUF_DECODED);
+      if (!json_decode_string(tls_ca_val, decoded_buffer, DTCM_BUF_DECODED)) {
         fprintf(stderr, "Error: Failed to decode tls_ca\n");
       } else {
         if (strcmp(new_settings->tls_ca, decoded_buffer) != 0) {
@@ -2633,8 +2640,8 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
   char *tls_key_val = mg_json_get_str(body, "$.tls_key");
   if (tls_key_val) {
     if (!is_template_value(tls_key_val)) {
-      memset(decoded_buffer, 0, sizeof(decoded_buffer));
-      if (!json_decode_string(tls_key_val, decoded_buffer, sizeof(decoded_buffer))) {
+      memset(decoded_buffer, 0, DTCM_BUF_DECODED);
+      if (!json_decode_string(tls_key_val, decoded_buffer, DTCM_BUF_DECODED)) {
         fprintf(stderr, "Error: Failed to decode tls_key\n");
       } else {
         if (strcmp(new_settings->tls_key, decoded_buffer) != 0) {
@@ -2658,8 +2665,8 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
       } else { printf("tls_cert not changed (already empty).\n"); }
     }
     if (!is_template_value(tls_cert_val) && is_c_like_format(tls_cert_val)) {
-      memset(decoded_buffer, 0, sizeof(decoded_buffer));
-      if (!json_decode_string(tls_cert_val, decoded_buffer, sizeof(decoded_buffer))) {
+      memset(decoded_buffer, 0, DTCM_BUF_DECODED);
+      if (!json_decode_string(tls_cert_val, decoded_buffer, DTCM_BUF_DECODED)) {
         fprintf(stderr, "Error: Failed to decode tls_cert\n");
       } else {
         if (strcmp(new_settings->tls_cert, decoded_buffer) != 0) {
@@ -2676,8 +2683,8 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
   char *tg_token_val = mg_json_get_str(body, "$.telegram_token");
   if (tg_token_val) {
     if (!is_template_value(tg_token_val)) {
-      memset(decoded_buffer, 0, sizeof(decoded_buffer));
-      if (!json_decode_string(tg_token_val, decoded_buffer, sizeof(decoded_buffer))) {
+      memset(decoded_buffer, 0, DTCM_BUF_DECODED);
+      if (!json_decode_string(tg_token_val, decoded_buffer, DTCM_BUF_DECODED)) {
         fprintf(stderr, "Error: Failed to decode telegram_token\n");
       } else {
         if (strcmp(new_settings->telegram_token, decoded_buffer) != 0) {
@@ -4320,10 +4327,10 @@ void handle_zigbee_learn_status(struct mg_connection *c, struct mg_http_message 
 }
 
 void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm) {
-    static char body[4096];
+    char *body = (char *)dtcm_zbee_body;
     static ZigbeeLearnObs obs_copy[ZBEE_LEARN_MAX_OBS];
     int off = 0;
-    int safe_limit = (int)sizeof(body) - 128;
+    int safe_limit = (int)DTCM_BUF_ZBEE_BODY - 128;
 
     char ieee_copy[18] = {0};
     uint8_t active_copy;
@@ -4336,22 +4343,22 @@ void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm
     started_copy = s_zbee_learn.started_at;
     taskEXIT_CRITICAL();
 
-    off += snprintf(body + off, sizeof(body) - off, "{\"active\":%s,",
+    off += snprintf(body + off, DTCM_BUF_ZBEE_BODY - off, "{\"active\":%s,",
                      active_copy ? "true" : "false");
 
     if (active_copy) {
         uint32_t elapsed = HAL_GetTick() - started_copy;
         uint32_t rem = (elapsed < ZBEE_LEARN_TIMEOUT_MS)
                      ? (ZBEE_LEARN_TIMEOUT_MS - elapsed) : 0;
-        off += snprintf(body + off, sizeof(body) - off,
+        off += snprintf(body + off, DTCM_BUF_ZBEE_BODY - off,
                          "\"ieee\":\"%s\",\"remaining_ms\":%lu,",
                          ieee_copy, (unsigned long)rem);
     } else {
-        off += snprintf(body + off, sizeof(body) - off,
+        off += snprintf(body + off, DTCM_BUF_ZBEE_BODY - off,
                          "\"ieee\":null,\"remaining_ms\":0,");
     }
 
-    off += snprintf(body + off, sizeof(body) - off, "\"observations\":[");
+    off += snprintf(body + off, DTCM_BUF_ZBEE_BODY - off, "\"observations\":[");
 
     uint8_t first = 1;
     for (int i = 0; i < ZBEE_LEARN_MAX_OBS; i++) {
@@ -4363,7 +4370,7 @@ void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm
         first = 0;
 
         if (o->source == OBS_SOURCE_TRIGGER) {
-            off += snprintf(body + off, sizeof(body) - off,
+            off += snprintf(body + off, DTCM_BUF_ZBEE_BODY - off,
                              "{\"source\":\"trigger\",\"payload\":\"%s\"}",
                              o->payload);
         } else {
@@ -4380,7 +4387,7 @@ void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm
                 case 0x0406: cl_name = "Occupancy"; break;
                 case 0xEF00: cl_name = "EP"; break;
             }
-            off += snprintf(body + off, sizeof(body) - off,
+            off += snprintf(body + off, DTCM_BUF_ZBEE_BODY - off,
                              "{\"source\":\"data\",\"ep\":%d,\"cluster\":\"0x%04X\","
                              "\"cluster_name\":\"%s\",\"attr\":\"0x%04X\","
                              "\"first_val\":%d,\"last_val\":%d,\"changed\":%s}",
@@ -4394,7 +4401,7 @@ void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm
                       "{\"status\":false,\"message\":\"Buffer overflow\"}");
         return;
     }
-    off += snprintf(body + off, sizeof(body) - off, "]}");
+    off += snprintf(body + off, DTCM_BUF_ZBEE_BODY - off, "]}");
 
     mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", body);
 }
@@ -4432,8 +4439,8 @@ static int alloc_zbee_slot(void) {
 }
 
 void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *hm) {
-    static char raw_body[2048];
-    snprintf(raw_body, sizeof(raw_body), "%.*s", (int)hm->body.len, hm->body.buf);
+    char *raw_body = (char *)dtcm_zbee_raw;
+    snprintf(raw_body, DTCM_BUF_ZBEE_RAW, "%.*s", (int)hm->body.len, hm->body.buf);
     struct mg_str json = mg_str(raw_body);
 
     if (s_zbee_learn.ieee[0] == '\0') {
@@ -6717,12 +6724,12 @@ void publish_sensor_batch(struct mg_connection *conn) {
   if (!conn || conn->is_closing || conn->is_draining) return;
   if (SetSettings.check_mqtt != 1 || SetSettings.txmqttop[0] == '\0') return;
 
-  static char batch_buf[4096];
+  char *batch_buf = (char *)dtcm_sensor_batch;
   int off = 0;
   int count = 0;
   int avail;
 
-  off += snprintf(batch_buf + off, sizeof(batch_buf) - off, "{");
+  off += snprintf(batch_buf + off, DTCM_BUF_SENSOR_BATCH - off, "{");
 
   /* --- DS18B20 --- */
   for (uint8_t pin = 0; pin < MAX_DS18B20_P; pin++) {
@@ -6741,7 +6748,7 @@ void publish_sensor_batch(struct mg_connection *conn) {
       if (diff < 0) diff = -diff;
       if (diff < 0.2f) continue;
       /* Добавляем в пакет: ключ = серийный номер DS18B20 */
-      avail = sizeof(batch_buf) - off;
+      avail = DTCM_BUF_SENSOR_BATCH - off;
       if (avail > 64) {
         char s_t[16]; fmt_float(s_t, sizeof(s_t), ds18b20[pin].sensors[s].temp, 2);
         int added = snprintf(batch_buf + off, avail,
@@ -6785,7 +6792,7 @@ void publish_sensor_batch(struct mg_connection *conn) {
       if (dh < 0) dh = -dh;
       if (dt < 0.2f && dh < 1.0f) continue;
       /* Добавляем в пакет: "h<pin>":[temp, humidity] */
-      avail = sizeof(batch_buf) - off;
+      avail = DTCM_BUF_SENSOR_BATCH - off;
       if (avail > 64) {
         char s_t[16]; fmt_float(s_t, sizeof(s_t), dht22[j].temp, 1);
         char s_h[16]; fmt_float(s_h, sizeof(s_h), dht22[j].humid, 1);
@@ -6808,7 +6815,7 @@ void publish_sensor_batch(struct mg_connection *conn) {
   for (uint8_t i = 0; i < NUMPIN; i++) {
     if (PinsConf[i].topin != 5) continue;
     if (abs((int)PinsConf[i].dvalue - (int)prev_pwm_dvalue[i]) < 2) continue;
-    avail = sizeof(batch_buf) - off;
+    avail = DTCM_BUF_SENSOR_BATCH - off;
     if (avail > 32) {
       int added = snprintf(batch_buf + off, avail,
                       "%s\"p%d\":%d",
@@ -6822,7 +6829,7 @@ void publish_sensor_batch(struct mg_connection *conn) {
     }
   }
 
-  avail = sizeof(batch_buf) - off;
+  avail = DTCM_BUF_SENSOR_BATCH - off;
   if (avail > 0) {
     off += snprintf(batch_buf + off, avail, "}");
   }
@@ -6843,7 +6850,7 @@ void send_mqtt_timer_batch(struct mg_connection *conn) {
   if (!conn || conn->is_closing || conn->is_draining) return;
   if (SetSettings.check_mqtt != 1 || SetSettings.txmqttop[0] == '\0') return;
 
-  static char tbuf[TIMER_BATCH_BUF_SIZE];
+  char *tbuf = (char *)dtcm_timer_batch;
 
   /* Отслеживание изменений */
   static uint8_t  prev_gpio[NUMPIN];
@@ -6877,17 +6884,17 @@ void send_mqtt_timer_batch(struct mg_connection *conn) {
     struct tm *tp = localtime(&cronetime);
     if (tp) {
       memcpy(&ts_local, tp, sizeof(ts_local));
-      off += snprintf(tbuf + off, sizeof(tbuf) - off,
+      off += snprintf(tbuf + off, DTCM_BUF_TIMER_BATCH - off,
                       "{\"ts\":\"%04d-%02d-%02dT%02d:%02d:%02d\"",
                       ts_local.tm_year + 1900, ts_local.tm_mon + 1, ts_local.tm_mday,
                       ts_local.tm_hour, ts_local.tm_min, ts_local.tm_sec);
     } else {
-      off += snprintf(tbuf + off, sizeof(tbuf) - off, "{\"ts\":\"\"");
+      off += snprintf(tbuf + off, DTCM_BUF_TIMER_BATCH - off, "{\"ts\":\"\"");
     }
   }
 
   for (int i = 0; i < NUMTASK; i++) {
-    int avail = (int)sizeof(tbuf) - off;
+    int avail = (int)DTCM_BUF_TIMER_BATCH - off;
     if (avail < 80) break;
 
     struct dbCron cron_copy;
@@ -6908,7 +6915,7 @@ void send_mqtt_timer_batch(struct mg_connection *conn) {
     strncpy(acopy, cron_copy.activ, sizeof(acopy) - 1);
     acopy[sizeof(acopy) - 1] = '\0';
 
-    off += snprintf(tbuf + off, (int)sizeof(tbuf) - off,
+    off += snprintf(tbuf + off, (int)DTCM_BUF_TIMER_BATCH - off,
                     ",\"%s_%d\":[", pfx, i);
 
     char *sptr = NULL;
@@ -6916,7 +6923,7 @@ void send_mqtt_timer_batch(struct mg_connection *conn) {
     int pcnt = 0;
 
     while (tok != NULL) {
-      avail = (int)sizeof(tbuf) - off;
+      avail = (int)DTCM_BUF_TIMER_BATCH - off;
       if (avail < 64) break;
 
       if (strncmp(tok, "pwm:", 4) == 0) {
@@ -6957,13 +6964,13 @@ void send_mqtt_timer_batch(struct mg_connection *conn) {
       tok = strtok_r(NULL, ",", &sptr);
     }
 
-    avail = (int)sizeof(tbuf) - off;
+    avail = (int)DTCM_BUF_TIMER_BATCH - off;
     if (avail > 1) off += snprintf(tbuf + off, avail, "]");
   }
 
   /* Закрываем JSON */
   {
-    int avail = (int)sizeof(tbuf) - off;
+    int avail = (int)DTCM_BUF_TIMER_BATCH - off;
     if (avail > 1) off += snprintf(tbuf + off, avail, "}");
   }
 

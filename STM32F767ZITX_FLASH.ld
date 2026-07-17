@@ -38,7 +38,7 @@ ENTRY(Reset_Handler)
 /* Highest address of the user mode stack */
 _estack = 0x20080000; /* Конец всей физической 512КБ RAM */
 
-_Min_Heap_Size = 0x8000; /* required amount of heap */
+_Min_Heap_Size = 0x0; /* newlib malloc() не используется — вся динамика через FreeRTOS pvPortMalloc() */
 _Min_Stack_Size = 0x800; /* required amount of stack */
 
 /* Memories definition */
@@ -162,6 +162,20 @@ SECTIONS
     . = . + _Min_Stack_Size;
     . = ALIGN(8);
   } >RAM
+
+  /* Пул DTCM: статические DMA-небезопасные объекты (стеки задач,
+     DSP-буферы, парсинг). НЕ подключён к pvPortMalloc()/heap_4 —
+     отдельный простой bump-allocator, см. dtcm_alloc.c.
+     ВНИМАНИЕ: DTCM не DMA-доступна! Buffers для Ethernet/USB/UART/SPI
+     через DMA сюда класть НЕЛЬЗЯ. */
+  .dtcm_pool (NOLOAD) :
+  {
+    . = ALIGN(8);
+    _sdtcm_pool = .;
+  } >RAM
+
+  /* _edtcm_pool — фиксированный адрес: конец DTCM пула (перед ethernet_dma) */
+  _edtcm_pool = 0x20020000 - 8;
 
   /* Принудительно фиксируем сетевую секцию на адрес 0x20020000 (начало AxiSRAM) */
   .ethernet_dma 0x20020000 (NOLOAD) :
