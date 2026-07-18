@@ -280,6 +280,10 @@ static uint32_t output_peak = 0;
 static uint32_t usb_peak = 0;
 static uint32_t zbee_cmd_peak = 0;
 static uint32_t mg_conn_peak = 0;
+
+/* Runtime arrays for SecurityTask (节约 BSS — вместо полей в dbPinsConf) */
+static uint32_t sec_deb_tm[NUMPIN];
+static uint32_t sec_lasttrg[NUMPIN];
 static uint32_t mg_conn_cur = 0;
 static uint32_t mg_conn_listeners = 0;
 static uint32_t mg_conn_tls = 0;
@@ -1790,7 +1794,7 @@ void StartWebServerTask(void *argument)
     }
     status = xQueueReceive(mqttQueueHandle, &rxMsg, 0);
     if (status == pdPASS) {
-			printf("[MQTT_Q] cmd=%d dev=%d state=%d\r\n", rxMsg.command,rxMsg.deviceId, rxMsg.state); // Подсветит кто спамит в MQTT.
+			// printf("[MQTT_Q] cmd=%d dev=%d state=%d\r\n", rxMsg.command,rxMsg.deviceId, rxMsg.state);
       /* Защита от повреждённых сообщений в очереди */
       if (rxMsg.deviceId >= NUMPIN && rxMsg.command != 1) {
         printf("MQTT queue: invalid deviceId=%d, cmd=%d — skipped\r\n", rxMsg.deviceId, rxMsg.command);
@@ -2100,11 +2104,11 @@ void StartCronTask(void *argument)
         printf("[SYSTEM] Reset CSR=0x%08lX\r\n", reset_csr_value);
         printf("[SYSTEM] Reset flags: %s\r\n", reset_reason_str);
         printf("[SYSTEM] Reset reason: %s (CSR=0x%08lX)\r\n", reset_reason_str, reset_csr_value);
-        printf("[SYSTEM][BOOT] FW=%s NUMPIN=%d NUMZBEE=%d\r\n",
-               FW_VERSION, NUMPIN, NUMZBEE);
-        printf("[SYSTEM][BOOT] Compiled: %s %s\r\n", __DATE__, __TIME__);
-        printf("[SYSTEM][BOOT] sizeof(ZigbeeConf)=%d\r\n",
-               (int)sizeof(ZigbeeVirtualPin));
+        // printf("[SYSTEM][BOOT] FW=%s NUMPIN=%d NUMZBEE=%d\r\n",
+        //        FW_VERSION, NUMPIN, NUMZBEE);
+        // printf("[SYSTEM][BOOT] Compiled: %s %s\r\n", __DATE__, __TIME__);
+        // printf("[SYSTEM][BOOT] sizeof(ZigbeeConf)=%d\r\n",
+        //        (int)sizeof(ZigbeeVirtualPin));
       }
 
       if (cronetime != cronetime_old) {
@@ -2355,7 +2359,7 @@ void StartEncoderTask(void *argument)
 	                                       if (val > 100) val = 100;
 	                                       PinsConf[idpwm].dvalue = (int8_t)val;
 	                                       mark_slice_dirty(&g_ver_encoder);
-                                       mark_slice_dirty(&g_ver_pins);
+	                                       mark_slice_dirty(&g_ver_pins);
 
 	                                       /* Применяем к железу только если включено */
 	                                       if (PinsConf[id].onoff != 0) {
@@ -2908,7 +2912,7 @@ void StartSecurityTask(void *argument)
           HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
 
       if (current_state != PinsConf[i].prvstate) {
-        if ((currtime - PinsConf[i].deb_tm) >= DEBOUNCE_DELAY) {
+        if ((currtime - sec_deb_tm[i]) >= DEBOUNCE_DELAY) {
           bool trigger_event = false;
 
           switch (PinsConf[i].ptype) {
@@ -2937,7 +2941,7 @@ void StartSecurityTask(void *argument)
           }
 
           if (trigger_event) { // Если обнаружено срабатывание
-            if ((currtime - PinsConf[i].lasttrg) >= 1000) {
+            if ((currtime - sec_lasttrg[i]) >= 1000) {
               if (PinsConf[i].onoff && PinsConf[i].sclick[0] != '\0' &&
                   strcmp(PinsConf[i].sclick, "None") != 0) {
                 action_handler(i, PinsConf[i].sclick, "Security action");
@@ -2945,17 +2949,12 @@ void StartSecurityTask(void *argument)
                 mqtt_queue_send_safe(6, i, current_state, 0);
               }
 
-              if (PinsConf[i].onoff && PinsConf[i].send_sms[0] != '\0' &&
-                  strcmp(PinsConf[i].send_sms, "None") != 0) {
-                send_sms(i);
-              }
-
-              PinsConf[i].lasttrg = currtime;
+              sec_lasttrg[i] = currtime;
             }
           }
           PinsConf[i].prvstate = current_state;
           PinsConf[i].state = current_state;
-          PinsConf[i].deb_tm = currtime;
+          sec_deb_tm[i] = currtime;
         }
       }
     }

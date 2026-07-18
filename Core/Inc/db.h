@@ -34,19 +34,19 @@
 #define ZBEE_CLUSTER_TEMP       0x0402
 #define ZBEE_CLUSTER_HUMIDITY   0x0405
 #define ZBEE_CLUSTER_OCCUPANCY  0x0406
-#define ZBEE_CLUSTER_TUYA       0xEF00
+#define ZBEE_CLUSTER_MFR        0xEF00
 
 /* Роль устройства (пассивная классификация) */
 #define ZBEE_ROLE_UNKNOWN   0
 #define ZBEE_ROLE_ACTUATOR  1
 #define ZBEE_ROLE_SENSOR    2
 #define ZBEE_ROLE_TRIGGER   3
-#define ZBEE_ROLE_TUYA      4
+#define ZBEE_ROLE_MFR       4
 
 #include "stdio.h"
 #include <stdbool.h>
 #include "stm32f7xx_hal.h"
-#define PINPAIRS 10 // ПОКА 10 пар {ID:Pin}.
+#define PINPAIRS 3 // Пар {ID:Pin} для каждой кнопки
 
 // Определение структуры для хранения пары {ID:Pin}.
 typedef struct {
@@ -87,18 +87,17 @@ struct dbPinsConf {     // Создали структуру с необходи
 	uint8_t act;        // Action (No action - 0, On - 1,  Off - 2, Toggle - 3, Value - 4, IncValue - 5)
 	short parametr;     // Parameter value for dimmer (0-255), value for IncValue (-255 to 255).
 	int timeout;        // Timeout (ms)
-	char send_sms[5];   // Send sms YES/NO.
-	PinAction pinact[PINPAIRS]; // Массив структур для хранения пар.
-	uint8_t state;      // Значение текущего состояния
-	uint8_t prvstate;   // Значение предыдущего состояния
-	uint32_t deb_tm;    // debounce time
-	uint32_t lasttrg;   // Last trigger time
 	// === ZIGBEE v6 ===
 	char     zbee_ieee[17];       // IEEE адрес, 16 + '\0' (без "0x")
 	uint8_t  zbee_endpoint;       // Endpoint (1-240)
 	uint16_t zbee_cluster;        // Cluster ID: 0x0006=OnOff, 0x0008=Level, 0x0300=Color
 	uint16_t zbee_attribute;      // Attribute ID (16-bit): 0x0000=OnOff state
 	char     zbee_label[30];      // Friendly name для UI (только для отображения)
+	// === ENCODER ↔ ZIGBEE BINDING ===
+	uint8_t  zbee_bind_id;        // ID привязанного Zigbee устройства (NUMPIN+zbi)
+	char     send_sms[5];         // Send sms YES/NO
+	uint8_t  prvstate;            // Предыдущее состояние (для edge detection)
+	uint8_t  state;               // Текущее состояние пина (0/1)
 };
 
 /* ─── PID Controller ─── */
@@ -312,9 +311,9 @@ typedef struct {
     uint16_t ep;            // EP-номер этого слота (0 = не sub-slot)
 
     /* ── Button fields (when zbee_role == ZBEE_ROLE_TRIGGER) ── */
-    char     sclick[32];         // Single click action. (18 символов)
-    char     dclick[32];         // Double click action  (18 символов)
-    char     lpress[32];         // Long press action    (18 символов)
+    char     sclick[125];         // Single click action (124 симв + '\0')
+    char     dclick[125];         // Double click action (124 симв + '\0')
+    char     lpress[125];         // Long press action   (124 симв + '\0')
 
     uint8_t  vbtn_mode;          // 0 = PASSTHROUGH, 1 = RAW (auto-detected)
     char     pt_single[12];      // Payload for single click (PASSTHROUGH)
@@ -327,6 +326,12 @@ typedef struct {
     uint8_t  vbtn_level;         // Current level (1=pressed, 0=released)
     uint32_t vbtn_last_tick;     // Last event time
     uint32_t vbtn_state_tick;    // Time of state entry
+
+    /* ── Dimmer range auto-detection (from Learning Mode observations) ── */
+    uint16_t dimmer_min;         // Минимальное значение яркости (автоопределённое или ручное)
+    uint16_t dimmer_max;         // Максимальное значение яркости
+    uint16_t dimmer_cluster;     // Cluster: 0x0008=Level, 0xEF00=Manufacturer
+    uint8_t  dimmer_attr;        // Attribute: 0x0000=Level, DP# for Manufacturer
 } ZigbeeVirtualPin;
 
 extern ZigbeeVirtualPin ZigbeeConf[NUMZBEE];

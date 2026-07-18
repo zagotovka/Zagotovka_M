@@ -986,6 +986,8 @@ void GetPinConfig() {
             zbee_sanitize_str(PinsConf[currentPin].zbee_label,
                               sizeof(PinsConf[currentPin].zbee_label));
         }
+        else if (strcmp(key, "zbee_bind_id") == 0)
+            PinsConf[currentPin].zbee_bind_id = (uint8_t)atoi(value);
       }
       //            printf("Finished processing pin at index %d\n", currentPin);
       inObject = false;
@@ -1357,6 +1359,13 @@ void SetPinConfig() {
     fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
     if (fresult != FR_OK) {
       printf("Failed to write 'zbee_label': %d\n", fresult);
+      f_close(&USBHFile);
+      return;
+    }
+    snprintf(buffer, sizeof(buffer), ",\"zbee_bind_id\":%d", PinsConf[i].zbee_bind_id);
+    fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
+    if (fresult != FR_OK) {
+      printf("Failed to write 'zbee_bind_id': %d\n", fresult);
       f_close(&USBHFile);
       return;
     }
@@ -2617,6 +2626,12 @@ void GetZigbeeConfig(void) {
       mg_free(pt_long);
     }
 
+    /* Читаем dimmer поля */
+    ZigbeeConf[idx].dimmer_min = (uint16_t)mg_json_get_long(elem, "$.dimmer_min", 0);
+    ZigbeeConf[idx].dimmer_max = (uint16_t)mg_json_get_long(elem, "$.dimmer_max", 0);
+    ZigbeeConf[idx].dimmer_cluster = (uint16_t)mg_json_get_long(elem, "$.dimmer_cluster", 0x0008);
+    ZigbeeConf[idx].dimmer_attr = (uint8_t)mg_json_get_long(elem, "$.dimmer_attr", 0);
+
     idx++;
   }
 
@@ -2663,7 +2678,8 @@ void SetZigbeeConfig(void) {
         "\"role\":%d,"
         "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
         "\"vbtn_mode\":%d,"
-        "\"pt_single\":\"%s\",\"pt_double\":\"%s\",\"pt_long\":\"%s\"}",
+        "\"pt_single\":\"%s\",\"pt_double\":\"%s\",\"pt_long\":\"%s\","
+        "\"dimmer_min\":%d,\"dimmer_max\":%d,\"dimmer_cluster\":%d,\"dimmer_attr\":%d}",
         ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint, clbuf,
         ZigbeeConf[i].zbee_attribute, ZigbeeConf[i].zbee_label, ZigbeeConf[i].onoff,
         ZigbeeConf[i].dvalue, (unsigned)ZigbeeConf[i].color_hex,
@@ -2673,7 +2689,9 @@ void SetZigbeeConfig(void) {
         ZigbeeConf[i].zbee_role,
         ZigbeeConf[i].sclick, ZigbeeConf[i].dclick, ZigbeeConf[i].lpress,
         ZigbeeConf[i].vbtn_mode,
-        ZigbeeConf[i].pt_single, ZigbeeConf[i].pt_double, ZigbeeConf[i].pt_long);
+        ZigbeeConf[i].pt_single, ZigbeeConf[i].pt_double, ZigbeeConf[i].pt_long,
+        ZigbeeConf[i].dimmer_min, ZigbeeConf[i].dimmer_max,
+        ZigbeeConf[i].dimmer_cluster, ZigbeeConf[i].dimmer_attr);
     if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_C) continue;
 
     fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);

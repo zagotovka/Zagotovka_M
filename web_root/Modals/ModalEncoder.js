@@ -28,6 +28,7 @@ function ModalEncoder({
   const [pinOptions, setPinOptions] = useState([]);
   const [encoderBOptions, setEncoderBOptions] = useState([]);
   const [pwmOptions, setPwmOptions] = useState([]);
+  const [zbeeBind, setZbeeBind] = useState(selectedEncoder?.zbee_bind || 0);
 
   // dvalue хранится как ПРОЦЕНТ 0-100. C-код сам масштабирует в шаги таймера.
   const pwmmax = selectedEncoder.pwmmax || 100;
@@ -84,6 +85,20 @@ function ModalEncoder({
         setEncoderBOptions([]);
         setPwmOptions([]);
       });
+
+    // Загружаем Zigbee устройства для выпадающего списка
+    fetch('/api/zigbee/get?offset=0&limit=50', {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' }
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.zigbee) {
+          window.__zigbeeConf = data.zigbee;
+        }
+      })
+      .catch(e => console.error('Error fetching zigbee:', e));
   }, [selectedEncoder]);
 
   const handleSubmit = (e) => {
@@ -121,7 +136,8 @@ function ModalEncoder({
       jsonData = {
         id: selectedEncoder.id,
         pins: selectedEncoder.pins,
-        pwm: parseInt(pwmFreq), // Передаем текущую частоту mHz, чтобы она не стерлась в памяти STM32
+        pwm: parseInt(pwmFreq),
+        zbee_bind: zbeeBind
       };
 
       // Логика для Encoder B
@@ -255,6 +271,30 @@ function ModalEncoder({
           }
         )}
                       </select>
+                    </td>
+                  </tr>
+                  <tr class="bg-gray-200">
+                    <td class="p-2 font-bold">Zigbee Device</td>
+                    <td class="p-2">
+                      <select
+                        name="zbee_bind"
+                        value=${zbeeBind}
+                        onchange=${e => {
+                          const val = parseInt(e.target.value) || 0;
+                          setZbeeBind(val);
+                        }}
+                        class="border rounded p-2 w-full"
+                      >
+                        <option value="0">None</option>
+                        ${(window.__zigbeeConf || []).filter(z => z.ieee && z.type === 'dimmer').map(z => html`
+                          <option value=${z.id || 0}>
+                            ${z.info || z.ieee} (ID: ${z.id})
+                          </option>
+                        `)}
+                      </select>
+                      <div class="text-xs text-slate-500 mt-1">
+                        Привязать к Zigbee-диммеру для автоматического управления
+                      </div>
                     </td>
                   </tr>
                 </tbody>

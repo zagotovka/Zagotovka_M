@@ -1186,6 +1186,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
 	s_tcp_backoff = 0;                 /* сброс backoff  -  соединение успешно */
 	s_tcp_delay_idx = 0;
 	printf("[MQTT] txmqttop='%s' rxmqttop='%s'\r\n", SetSettings.txmqttop, SetSettings.rxmqttop);
+    LOG_Z2M("MQTT sub='%s' rxzbtop='%s'\r\n", s_sub_topic, get_rxzbtop());
     struct mg_str subt = mg_str(s_sub_topic);
     struct mg_str pubt = mg_str(get_mqtt_topic()), data = mg_str("Hello from stm32!");
     MG_INFO(("%lu CONNECTED to %s", c->id, get_mqtt_url()));
@@ -1202,6 +1203,16 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     sub_opts.topic = mg_str(subt_wildcard);
     mg_mqtt_sub(c, &sub_opts);
     MG_INFO(("%lu SUBSCRIBED to %s", c->id, subt_wildcard));
+
+    /* Подписка на zigbee2mqtt data если rxzbtop отличается от rxmqttop */
+    const char *zbtop = get_rxzbtop();
+    if (strcmp(zbtop, s_sub_topic) != 0) {
+      char zb_wildcard[64];
+      snprintf(zb_wildcard, sizeof(zb_wildcard), "%s/#", zbtop);
+      sub_opts.topic = mg_str(zb_wildcard);
+      mg_mqtt_sub(c, &sub_opts);
+      LOG_Z2M("MQTT SUBSCRIBED to '%s' (zigbee2mqtt data)\r\n", zb_wildcard);
+    }
     struct mg_mqtt_opts pub_opts;
     memset(&pub_opts, 0, sizeof(pub_opts));
     pub_opts.topic = pubt;
@@ -1232,6 +1243,23 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
           mg_mqtt_sub(c, &zbee_sub);
           printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d ep=%d)\r\n",
                  zbee_sub_topic, NUMPIN + i, ZigbeeConf[i].ep);
+
+          /* Также подписываемся на кластер 8 (Dimmer) для этого EP */
+          if (ZigbeeConf[i].cluster_flags & ZBEE_CL_DIMMER) {
+            snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                     "%s/data/%s/%d/0008/%04X",
+                     get_rxzbtop(),
+                     ZigbeeConf[i].zbee_ieee,
+                     ZigbeeConf[i].zbee_endpoint,
+                     ZBEE_ATTR_DIMMER);
+            memset(&zbee_sub, 0, sizeof(zbee_sub));
+            zbee_sub.topic = mg_str(zbee_sub_topic);
+            zbee_sub.qos = s_qos;
+            mg_mqtt_sub(c, &zbee_sub);
+            printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d dimmer)\r\n",
+                   zbee_sub_topic, NUMPIN + i);
+          }
+
           continue;
         }
 
@@ -1330,8 +1358,8 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
         /* Подписка на trigger топик если это кнопка (TRIGGER role) */
         {
           int is_trigger = (ZigbeeConf[i].zbee_role == ZBEE_ROLE_TRIGGER);
-          printf("[SYSTEM][BOOT] zbee[%d] ieee='%s' is_trigger=%d\r\n",
-                 i, ZigbeeConf[i].zbee_ieee, is_trigger);
+          // printf("[SYSTEM][BOOT] zbee[%d] ieee='%s' is_trigger=%d\r\n",
+          //        i, ZigbeeConf[i].zbee_ieee, is_trigger);
           if (is_trigger) {
             char zbee_sub_topic[80];
             snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
@@ -1963,13 +1991,15 @@ void handle_encoders(struct mg_connection *c) {
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\","
             "\"encoderb\":%d,\"encdrbpin\":\"%s\","
             "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,\"ponr\":%d,"
-            "\"pinact\":{%s},\"info\":\"%s\",\"onoff\":%d}",
+            "\"pinact\":{%s},\"info\":\"%s\",\"onoff\":%d,"
+            "\"zbee_bind\":%d}",
             first ? "" : ",",
             PinsConf[i].topin, i, esc_pins,
             encoderb_id, esc_encb,
             pwm_dvalue, pwm_freq, pwm_max,
             PinsConf[i].ponr,
-            pinact, esc_info, PinsConf[i].onoff);
+            pinact, esc_info, PinsConf[i].onoff,
+            PinsConf[i].zbee_bind_id);
 
         first = false;
     }

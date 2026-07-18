@@ -22,7 +22,7 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 
-#define FW_VERSION "v2.0.2p"
+#define FW_VERSION "v2.0.2w"
 #define BUFFER_SIZE 10000 /* max Button = 9835 символов, это не точно! */
 #define SECURITY_BODY_MAX 4096U /* max body для handle_security_set (heap) */
 #define ENTER_CRITICAL() taskENTER_CRITICAL()

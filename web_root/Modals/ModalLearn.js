@@ -4,6 +4,7 @@ const ROLE_OPTIONS = [
   { value: 'ignore',      label: { ru: 'Игнорировать', en: 'Ignore' } },
   { value: 'onoff',       label: { ru: 'Вкл/Выкл',    en: 'On/Off' } },
   { value: 'brightness',  label: { ru: 'Яркость',      en: 'Brightness' } },
+  { value: 'dimmer',      label: { ru: 'Диммер',       en: 'Dimmer' } },
   { value: 'color',       label: { ru: 'Цвет',         en: 'Color' } },
   { value: 'temperature', label: { ru: 'Температура',   en: 'Temperature' } },
   { value: 'humidity',    label: { ru: 'Влажность',     en: 'Humidity' } },
@@ -28,9 +29,11 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
   const [error, setError] = useState(null);
   const pollRef = useRef(null);
   const mergedRef = useRef({});
+  const dimmerRef = useRef({ dMin: null, dMax: null });
 
   useEffect(() => {
     mergedRef.current = {};
+    dimmerRef.current = { dMin: null, dMax: null };
     setObservations([]);
     setLabels({});
     setNames({});
@@ -350,6 +353,85 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
           ${error && html`
             <div class="bg-red-50 text-red-700 text-sm rounded p-3 mb-4">${error}</div>
           `}
+
+          ${(() => {
+            const dimmerObs = observations.filter(o => {
+              const lbl = labels[obsKey(o)];
+              return (lbl === 'dimmer' || lbl === 'brightness') && o.source !== 'trigger';
+            });
+            if (dimmerObs.length === 0) return html``;
+
+            let currentVal = null;
+            for (const o of dimmerObs) {
+              const v1 = parseInt(o.first_val, 10);
+              const v2 = parseInt(o.last_val, 10);
+              if (!isNaN(v1)) {
+                if (dimmerRef.current.dMin === null || v1 < dimmerRef.current.dMin) dimmerRef.current.dMin = v1;
+                if (dimmerRef.current.dMax === null || v1 > dimmerRef.current.dMax) dimmerRef.current.dMax = v1;
+              }
+              if (!isNaN(v2)) {
+                if (dimmerRef.current.dMin === null || v2 < dimmerRef.current.dMin) dimmerRef.current.dMin = v2;
+                if (dimmerRef.current.dMax === null || v2 > dimmerRef.current.dMax) dimmerRef.current.dMax = v2;
+                currentVal = v2;
+              }
+            }
+            const dMin = dimmerRef.current.dMin;
+            const dMax = dimmerRef.current.dMax;
+            const hasData = dMin !== Infinity;
+            const hasRange = hasData && dMax > dMin;
+
+            return html`
+              <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-sm">
+                <div class="flex items-center gap-2 text-amber-700 font-medium mb-1">
+                  💡 ${lang === 'ru' ? 'Определение диапазона диммера' : 'Dimmer range detection'}
+                </div>
+                <div class="text-amber-600 mb-3">
+                  ${lang === 'ru'
+                    ? 'Вращайте регулятор до minimum, затем до maximum. Система автоматически определит границы диапазона.'
+                    : 'Rotate the dimmer to minimum, then to maximum. The system will automatically detect the range boundaries.'}
+                </div>
+
+                ${hasData && html`
+                  <div class="bg-white rounded-lg p-3 border border-amber-100">
+                    <div class="flex justify-between text-xs text-slate-500 mb-1">
+                      <span>${lang === 'ru' ? 'Min' : 'Min'}: ${dMin}</span>
+                      <span>${lang === 'ru' ? 'Max' : 'Max'}: ${dMax}</span>
+                    </div>
+                    <div class="relative h-4 bg-slate-200 rounded-full overflow-hidden">
+                      ${currentVal !== null && html`
+                        <div class="absolute top-0 bottom-0 left-0 rounded-full transition-all duration-300"
+                             style="background: linear-gradient(to right, #4ade80, #22c55e); width: ${hasRange ? `${((currentVal - dMin) / (dMax - dMin)) * 100}%` : '50%'}">
+                        </div>
+                      `}
+                    </div>
+                    <div class="flex justify-between items-center mt-2">
+                      <span class="text-xs text-slate-500">
+                        ${lang === 'ru' ? 'Диапазон' : 'Range'}: ${dMax - dMin}
+                      </span>
+                      ${hasRange && html`
+                        <span class="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                          ✓ ${lang === 'ru' ? 'Диапазон определён' : 'Range detected'}
+                        </span>
+                      `}
+                    </div>
+                    ${currentVal !== null && html`
+                      <div class="text-xs text-amber-600 mt-1">
+                        ${lang === 'ru' ? 'Текущее:' : 'Current:'} <span class="font-mono font-bold">${currentVal}</span>
+                      </div>
+                    `}
+                  </div>
+                `}
+
+                ${!hasData && html`
+                  <div class="text-xs text-amber-500 italic">
+                    ${lang === 'ru'
+                      ? 'Ожидание данных... Вращайте регулятор.'
+                      : 'Waiting for data... Rotate the dimmer.'}
+                  </div>
+                `}
+              </div>
+            `;
+          })()}
         </div>
 
         <div class="flex justify-end gap-3 px-6 py-4 border-t">

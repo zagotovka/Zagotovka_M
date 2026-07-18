@@ -54,7 +54,8 @@ export const enencoder = [
   'On/Off - Enable or disable the encoder handler.', // 9
   'Action - The Edit button allows you to access the encoder settings menu.', // 10
   'PWM Frequency - PWM frequency of the controlled device (in Hertz).', // 11
-  'Resolution (steps) - Maximum number of steps from 0 to 100% for the PWM device.' // 12
+  'Resolution (steps) - Maximum number of steps from 0 to 100% for the PWM device.', // 12
+  'Zigbee - Bind to a Zigbee dimmer for automatic brightness control.' // 13
 ];
 
 export const enlangeditbutton = [
