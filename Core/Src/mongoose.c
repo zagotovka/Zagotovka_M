@@ -11135,7 +11135,7 @@ static const uint32_t mg_sha256_k[64] = {
     0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
     0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
 
-void mg_sha256_init(mg_sha256_ctx *ctx) {
+__attribute__((section(".itcm"))) void mg_sha256_init(mg_sha256_ctx *ctx) {
   ctx->len = 0;
   ctx->bits = 0;
   ctx->state[0] = 0x6a09e667;
@@ -11148,7 +11148,7 @@ void mg_sha256_init(mg_sha256_ctx *ctx) {
   ctx->state[7] = 0x5be0cd19;
 }
 
-static void mg_sha256_chunk(mg_sha256_ctx *ctx) {
+__attribute__((section(".itcm"))) static void mg_sha256_chunk(mg_sha256_ctx *ctx) {
   int i, j;
   uint32_t a, b, c, d, e, f, g, h;
   uint32_t m[64];
@@ -11192,7 +11192,7 @@ static void mg_sha256_chunk(mg_sha256_ctx *ctx) {
   ctx->state[7] += h;
 }
 
-void mg_sha256_update(mg_sha256_ctx *ctx, const unsigned char *data,
+__attribute__((section(".itcm"))) void mg_sha256_update(mg_sha256_ctx *ctx, const unsigned char *data,
                       size_t len) {
   size_t i;
   for (i = 0; i < len; i++) {
@@ -11206,7 +11206,7 @@ void mg_sha256_update(mg_sha256_ctx *ctx, const unsigned char *data,
 }
 
 // TODO: make final reusable (remove side effects)
-void mg_sha256_final(unsigned char digest[32], mg_sha256_ctx *ctx) {
+__attribute__((section(".itcm"))) void mg_sha256_final(unsigned char digest[32], mg_sha256_ctx *ctx) {
   uint32_t i = ctx->len;
   if (i < 56) {
     ctx->buffer[i++] = 0x80;
@@ -11245,14 +11245,14 @@ void mg_sha256_final(unsigned char digest[32], mg_sha256_ctx *ctx) {
   }
 }
 
-void mg_sha256(uint8_t dst[32], uint8_t *data, size_t datasz) {
+__attribute__((section(".itcm"))) void mg_sha256(uint8_t dst[32], uint8_t *data, size_t datasz) {
   mg_sha256_ctx ctx;
   mg_sha256_init(&ctx);
   mg_sha256_update(&ctx, data, datasz);
   mg_sha256_final(dst, &ctx);
 }
 
-void mg_hmac_sha256(uint8_t dst[32], uint8_t *key, size_t keysz, uint8_t *data,
+__attribute__((section(".itcm"))) void mg_hmac_sha256(uint8_t dst[32], uint8_t *key, size_t keysz, uint8_t *data,
                     size_t datasz) {
   mg_sha256_ctx ctx;
   uint8_t k[64] = {0};
@@ -13819,7 +13819,7 @@ void gcm_zero_ctx(gcm_context *ctx) {
 //
 //
 
-int mg_aes_gcm_encrypt(unsigned char *output,  //
+__attribute__((section(".itcm"))) int mg_aes_gcm_encrypt(unsigned char *output,  //
                        const unsigned char *input, size_t input_length,
                        const unsigned char *key, const size_t key_len,
                        const unsigned char *iv, const size_t iv_len,
@@ -13838,7 +13838,7 @@ int mg_aes_gcm_encrypt(unsigned char *output,  //
   return (ret);
 }
 
-int mg_aes_gcm_decrypt(unsigned char *output, const unsigned char *input,
+__attribute__((section(".itcm"))) int mg_aes_gcm_decrypt(unsigned char *output, const unsigned char *input,
                        size_t input_length, const unsigned char *key,
                        const size_t key_len, const unsigned char *iv,
                        const size_t iv_len, unsigned char *aead,
@@ -14133,7 +14133,7 @@ static int mg_der_to_tlv(uint8_t *der, size_t dersz, struct mg_der_tlv *tlv) {
 }
 
 // Did we receive a full TLS record in the c->rtls buffer?
-static bool mg_tls_got_record(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static bool mg_tls_got_record(struct mg_connection *c) {
   return c->rtls.len >= (size_t) TLS_RECHDR_SIZE &&
          c->rtls.len >=
              (size_t) (TLS_RECHDR_SIZE + MG_LOAD_BE16(c->rtls.buf + 3));
@@ -14167,7 +14167,7 @@ static void mg_tls_drop_message(struct mg_connection *c) {
 }
 
 // TLS1.3 secret derivation based on the key label
-static void mg_tls_derive_secret(const char *label, uint8_t *key, size_t keysz,
+__attribute__((section(".itcm"))) static void mg_tls_derive_secret(const char *label, uint8_t *key, size_t keysz,
                                  uint8_t *data, size_t datasz, uint8_t *hash,
                                  size_t hashsz) {
   size_t labelsz = strlen(label);
@@ -14185,7 +14185,7 @@ static void mg_tls_derive_secret(const char *label, uint8_t *key, size_t keysz,
 
 // at this point we have x25519 shared secret, we can generate a set of derived
 // handshake encryption keys
-static void mg_tls_generate_handshake_keys(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static void mg_tls_generate_handshake_keys(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
 
   mg_sha256_ctx sha256;
@@ -14251,7 +14251,7 @@ static void mg_tls_generate_handshake_keys(struct mg_connection *c) {
 #endif
 }
 
-static void mg_tls_generate_application_keys(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static void mg_tls_generate_application_keys(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   uint8_t hash[32];
   uint8_t premaster_secret[32];
@@ -14494,7 +14494,7 @@ static void mg_tls_calc_cert_verify_hash(struct mg_connection *c,
 }
 
 // read and parse ClientHello record
-static int mg_tls_server_recv_hello(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static int mg_tls_server_recv_hello(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   struct mg_iobuf *rio = &c->rtls;
   uint8_t session_id_len;
@@ -14567,7 +14567,7 @@ fail:
 #define PLACEHOLDER_32B PLACEHOLDER_16B, PLACEHOLDER_16B
 
 // put ServerHello record into wio buffer
-static bool mg_tls_server_send_hello(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static bool mg_tls_server_send_hello(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   struct mg_iobuf *wio = &tls->send;
 
@@ -14626,7 +14626,7 @@ static bool mg_tls_server_send_hello(struct mg_connection *c) {
   return true;
 }
 
-static bool mg_tls_server_send_ext(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static bool mg_tls_server_send_ext(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   // server extensions
   uint8_t ext[6] = {0x08, 0, 0, 2, 0, 0};
@@ -14639,7 +14639,7 @@ static bool mg_tls_server_send_ext(struct mg_connection *c) {
 static const uint8_t secp256r1_sig_algs[12] = {
     0x00, 0x0d, 0x00, 0x08, 0x00, 0x06, 0x04, 0x03, 0x08, 0x04, 0x04, 0x01};
 
-static bool mg_tls_server_send_cert_request(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static bool mg_tls_server_send_cert_request(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   uint8_t req[13 + sizeof(secp256r1_sig_algs)];
   req[0] = MG_TLS_CERTIFICATE_REQUEST;  // handshake header
@@ -14656,7 +14656,7 @@ static bool mg_tls_server_send_cert_request(struct mg_connection *c) {
   return mg_tls_encrypt(c, req, sizeof(req), MG_TLS_HANDSHAKE);
 }
 
-static bool mg_tls_send_cert(struct mg_connection *c, bool is_client) {
+__attribute__((section(".itcm"))) static bool mg_tls_send_cert(struct mg_connection *c, bool is_client) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   int send_ca = !is_client && tls->ca_der.len > 0;
   // DER certificate + CA (server optional)
@@ -14892,7 +14892,7 @@ static bool mg_tls_rsa_sign(struct tls_data *tls, const uint8_t *em,
 #endif
 }
 
-static bool mg_tls_send_cert_verify(struct mg_connection *c, bool is_client) {
+__attribute__((section(".itcm"))) static bool mg_tls_send_cert_verify(struct mg_connection *c, bool is_client) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   uint8_t hash[32] = {0};
 
@@ -14977,7 +14977,7 @@ static bool mg_tls_send_cert_verify(struct mg_connection *c, bool is_client) {
   }
 }
 
-static bool mg_tls_server_send_finish(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static bool mg_tls_server_send_finish(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   mg_sha256_ctx sha256;
   uint8_t hash[32];
@@ -14991,7 +14991,7 @@ static bool mg_tls_server_send_finish(struct mg_connection *c) {
   return true;
 }
 
-static int mg_tls_server_recv_finish(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static int mg_tls_server_recv_finish(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   unsigned char *recv_buf;
   // we have to backup sha256 value to restore it later, since Finished record
@@ -15775,7 +15775,7 @@ static bool mg_tls_client_handshake(struct mg_connection *c) {
   return true;
 }
 
-static bool mg_tls_server_handshake(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static bool mg_tls_server_handshake(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   switch (tls->state) {
     case MG_TLS_STATE_SERVER_START:
@@ -15807,6 +15807,7 @@ static bool mg_tls_server_handshake(struct mg_connection *c) {
       }
       tls->state = MG_TLS_STATE_SERVER_CONNECTED;
       c->is_tls_hs = 0;
+      mg_call(c, MG_EV_TLS_HS, NULL);
       break;
     case MG_TLS_STATE_SERVER_WAIT_CERT:
       if (mg_tls_recv_cert(c, false) < 0) break;
@@ -15823,7 +15824,7 @@ static bool mg_tls_server_handshake(struct mg_connection *c) {
   return true;
 }
 
-void mg_tls_handshake(struct mg_connection *c) {
+__attribute__((section(".itcm"))) void mg_tls_handshake(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   long n;
   bool res;
@@ -16248,7 +16249,7 @@ static int mg_parse_pem_certs(const struct mg_str pem, struct mg_str **ders) {
   return count;
 }
 
-void mg_tls_init(struct mg_connection *c, const struct mg_tls_opts *opts) {
+__attribute__((section(".itcm"))) void mg_tls_init(struct mg_connection *c, const struct mg_tls_opts *opts) {
   struct mg_str key;
   struct tls_data *tls =
       (struct tls_data *) mg_calloc(1, sizeof(struct tls_data));
@@ -17804,7 +17805,7 @@ static PORTABLE_8439_DECL void poly1305_calculate_mac(
 #define MG_OVERLAPPING(s, s_size, b, b_size) \
   (MG_PM(s) < MG_PM((b) + (b_size))) && (MG_PM(b) < MG_PM((s) + (s_size)))
 
-PORTABLE_8439_DECL size_t mg_chacha20_poly1305_encrypt(
+__attribute__((section(".itcm"))) PORTABLE_8439_DECL size_t mg_chacha20_poly1305_encrypt(
     uint8_t *restrict cipher_text, const uint8_t key[RFC_8439_KEY_SIZE],
     const uint8_t nonce[RFC_8439_NONCE_SIZE], const uint8_t *restrict ad,
     size_t ad_size, const uint8_t *restrict plain_text,
@@ -17819,7 +17820,7 @@ PORTABLE_8439_DECL size_t mg_chacha20_poly1305_encrypt(
   return new_size;
 }
 
-PORTABLE_8439_DECL size_t mg_chacha20_poly1305_decrypt(
+__attribute__((section(".itcm"))) PORTABLE_8439_DECL size_t mg_chacha20_poly1305_decrypt(
     uint8_t *restrict plain_text, const uint8_t key[RFC_8439_KEY_SIZE],
     const uint8_t nonce[RFC_8439_NONCE_SIZE], const uint8_t *restrict ad,
     size_t ad_size, const uint8_t *restrict cipher_text,
@@ -20056,7 +20057,7 @@ NS_INTERNAL bigint *bi_crt(BI_CTX *ctx, bigint *bi, bigint *dP, bigint *dQ,
 // - free bigints calling bi_free()
 // - bi_terminate(c)                    <-- frees c
 
-int mg_rsa_mod_pow(const uint8_t *mod, size_t modsz, const uint8_t *exp, size_t expsz, const uint8_t *msg, size_t msgsz, uint8_t *out, size_t outsz) {
+__attribute__((section(".itcm"))) int mg_rsa_mod_pow(const uint8_t *mod, size_t modsz, const uint8_t *exp, size_t expsz, const uint8_t *msg, size_t msgsz, uint8_t *out, size_t outsz) {
 	BI_CTX *bi_ctx = bi_initialize();
 	bigint *m1;
 	bigint *n = bi_import(bi_ctx, mod, (int) modsz);
@@ -20070,7 +20071,7 @@ int mg_rsa_mod_pow(const uint8_t *mod, size_t modsz, const uint8_t *exp, size_t 
 	return 0;
 }
 
-int mg_rsa_crt_sign(const uint8_t *em, size_t em_len,
+__attribute__((section(".itcm"))) int mg_rsa_crt_sign(const uint8_t *em, size_t em_len,
                     const uint8_t *dP, size_t dP_len,
                     const uint8_t *dQ, size_t dQ_len,
                     const uint8_t *p, size_t p_len,
@@ -23566,7 +23567,7 @@ static void x25519_core(mg_fe xs[5], const uint8_t scalar[X25519_BYTES],
   condswap(x2, x3, swap);
 }
 
-int mg_tls_x25519(uint8_t out[X25519_BYTES], const uint8_t scalar[X25519_BYTES],
+__attribute__((section(".itcm"))) int mg_tls_x25519(uint8_t out[X25519_BYTES], const uint8_t scalar[X25519_BYTES],
                   const uint8_t x1[X25519_BYTES], int clamp) {
   int i, ret;
   mg_fe xs[5], out_limbs;
@@ -29952,7 +29953,7 @@ static bool mg_tcpip_driver_xmc7_poll(struct mg_tcpip_if *ifp, bool s1) {
   return up;
 }
 
-void ETH_IRQHandler(void) {
+__attribute__((section(".itcm"))) void ETH_IRQHandler(void) {
   uint32_t irq_status = ETH0->INT_STATUS;
   if (irq_status & MG_BIT(1)) {
     for (uint8_t i = 0; i < 10; i++) {  // read as they arrive, but not forever

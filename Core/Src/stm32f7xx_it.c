@@ -474,7 +474,7 @@ void DebugMon_Handler(void)
 /**
   * @brief This function handles USART2 global interrupt.
   */
-void USART2_IRQHandler(void)
+__attribute__((section(".itcm"))) void USART2_IRQHandler(void)
 {
   /* USER CODE BEGIN USART2_IRQn 0 */
     /*
@@ -531,7 +531,7 @@ void USART2_IRQHandler(void)
 /**
   * @brief This function handles TIM6 global interrupt, DAC1 and DAC2 underrun error interrupts.
   */
-void TIM6_DAC_IRQHandler(void)
+__attribute__((section(".itcm"))) void TIM6_DAC_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM6_DAC_IRQn 0 */
 
@@ -559,7 +559,7 @@ void TIM6_DAC_IRQHandler(void)
 /**
   * @brief This function handles USB On The Go FS global interrupt.
   */
-void OTG_FS_IRQHandler(void)
+__attribute__((section(".itcm"))) void OTG_FS_IRQHandler(void)
 {
   /* USER CODE BEGIN OTG_FS_IRQn 0 */
 

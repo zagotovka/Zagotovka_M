@@ -233,7 +233,7 @@ volatile uint32_t ulDummy = 0;
 }
 /*-----------------------------------------------------------*/
 
-void vPortSVCHandler( void )
+__attribute__((section(".itcm"))) void vPortSVCHandler( void )
 {
 	__asm volatile (
 					"	ldr	r3, pxCurrentTCBConst2		\n" /* Restore the context. */
@@ -416,7 +416,7 @@ void vPortExitCritical( void )
 }
 /*-----------------------------------------------------------*/
 
-void xPortPendSVHandler( void )
+__attribute__((section(".itcm"))) void xPortPendSVHandler( void )
 {
 	/* This is a naked function. */
 
@@ -475,7 +475,7 @@ void xPortPendSVHandler( void )
 }
 /*-----------------------------------------------------------*/
 
-void xPortSysTickHandler( void )
+__attribute__((section(".itcm"))) void xPortSysTickHandler( void )
 {
 	/* The SysTick runs at the lowest interrupt priority, so when this interrupt
 	executes all interrupts must be unmasked.  There is therefore no need to

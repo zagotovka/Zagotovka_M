@@ -288,7 +288,7 @@ function ModalEncoder({
                         <option value="0">None</option>
                         ${(window.__zigbeeConf || []).filter(z => z.ieee && z.type === 'dimmer').map(z => html`
                           <option value=${z.id || 0}>
-                            ${z.info || z.ieee} (ID: ${z.id})
+                            ID: ${z.id}
                           </option>
                         `)}
                       </select>

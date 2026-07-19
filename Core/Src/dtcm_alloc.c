@@ -30,7 +30,7 @@ uint8_t *dtcm_cache_domain  = NULL;
 uint8_t *dtcm_cache_tg_token = NULL;
 uint8_t *dtcm_dbg_rx        = NULL;
 
-void dtcm_alloc_init(void)
+__attribute__((section(".itcm"))) void dtcm_alloc_init(void)
 {
     dtcm_next       = _sdtcm_pool;
     dtcm_fail_count = 0;
@@ -70,7 +70,7 @@ void dtcm_alloc_init(void)
     }
 }
 
-void *dtcm_malloc(size_t size)
+__attribute__((section(".itcm"))) void *dtcm_malloc(size_t size)
 {
     size = (size + 7) & ~(size_t)7; // выравнивание по 8 байт
 
@@ -84,22 +84,22 @@ void *dtcm_malloc(size_t size)
     return p;
 }
 
-size_t dtcm_alloc_get_used(void)
+__attribute__((section(".itcm"))) size_t dtcm_alloc_get_used(void)
 {
     return (size_t)(dtcm_next - _sdtcm_pool);
 }
 
-size_t dtcm_alloc_get_free(void)
+__attribute__((section(".itcm"))) size_t dtcm_alloc_get_free(void)
 {
     return (size_t)(_edtcm_pool - dtcm_next);
 }
 
-size_t dtcm_alloc_get_total(void)
+__attribute__((section(".itcm"))) size_t dtcm_alloc_get_total(void)
 {
     return (size_t)(_edtcm_pool - _sdtcm_pool);
 }
 
-uint32_t dtcm_alloc_get_fail_count(void)
+__attribute__((section(".itcm"))) uint32_t dtcm_alloc_get_fail_count(void)
 {
     return dtcm_fail_count;
 }

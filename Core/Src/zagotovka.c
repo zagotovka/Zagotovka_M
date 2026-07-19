@@ -1736,7 +1736,7 @@ static void emit_mqtt(struct mg_connection *c,
   mg_http_write_chunk(c, buf, (size_t)len);
 }
 
-static void emit_ip(struct mg_connection *c,
+__attribute__((section(".itcm"))) static void emit_ip(struct mg_connection *c,
                     const struct dbSettings *s, char *buf) {
   int len = snprintf(buf, 512,
       "\"check_ip\":%d,"
@@ -4133,7 +4133,6 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                                             break;
                                         }
                                     }
-                                    break;
                                 }
                             }
                             if (!found_encoder || !found_pwm) {
@@ -4268,7 +4267,6 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                                 LOG_Z2M("dimmer cl8 id=%d -> PWM[%d] = %d%%\r\n",
                                        zbee_id, PinsConf[e].encoderb, mapped);
                             }
-                            break;
                         }
                     }
                 } else {

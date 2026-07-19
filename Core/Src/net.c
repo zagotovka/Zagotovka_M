@@ -409,6 +409,7 @@ static uint32_t s_login_block_until = 0;
 #define TLS_HS_TRACK_MAX 4
 static struct {
 	unsigned long conn_id;
+	uint32_t      accept_cycles;
 	uint64_t      accept_ms;
 } s_tls_hs_track[TLS_HS_TRACK_MAX];
 
@@ -426,6 +427,7 @@ static void tls_hs_track_start(unsigned long conn_id) {
 		if (s_tls_hs_track[i].conn_id == 0) {
 			s_tls_hs_track[i].conn_id = conn_id;
 			s_tls_hs_track[i].accept_ms = mg_millis();
+			s_tls_hs_track[i].accept_cycles = DWT->CYCCNT;
 			return;
 		}
 	}
@@ -440,14 +442,16 @@ static uint32_t tls_hs_get_age_ms(unsigned long conn_id) {
 	return 0;  // не найдено — считаем что только начался
 }
 
-static uint64_t tls_hs_track_finish(unsigned long conn_id) {
+static uint64_t tls_hs_track_finish(unsigned long conn_id, uint32_t *out_cycles) {
 	for (int i = 0; i < TLS_HS_TRACK_MAX; i++) {
 		if (s_tls_hs_track[i].conn_id == conn_id) {
 			uint64_t elapsed = mg_millis() - s_tls_hs_track[i].accept_ms;
+			if (out_cycles) *out_cycles = DWT->CYCCNT - s_tls_hs_track[i].accept_cycles;
 			s_tls_hs_track[i].conn_id = 0;
 			return elapsed;
 		}
 	}
+	if (out_cycles) *out_cycles = 0;
 	return 0;
 }
 
@@ -646,9 +650,18 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
     break;
 
     case MG_EV_TLS_HS: {
-        uint64_t hs_elapsed = tls_hs_track_finish(c->id);
-        MG_INFO(("TLS handshake complete: %llu ms (conn %lu)",
-                 (unsigned long long)hs_elapsed, (unsigned long)c->id));
+        // uint32_t hs_cycles = 0;
+        // uint64_t hs_elapsed = tls_hs_track_finish(c->id, &hs_cycles);
+        // uint32_t hs_ms = (uint32_t)hs_elapsed;
+        // uint32_t hs_us = (SystemCoreClock >= 1000000)
+        //     ? (hs_cycles / (SystemCoreClock / 1000000))
+        //     : (hs_cycles * 1000000 / SystemCoreClock);
+        // printf("[SYSTEM] TLS hs conn=%lu ms=%lu us=%lu cyc=%lu\r\n",
+        //        (unsigned long)c->id,
+        //        (unsigned long)hs_ms,
+        //        (unsigned long)hs_us,
+        //        (unsigned long)hs_cycles);
+        tls_hs_track_finish(c->id, NULL);
     }
     break;
 
@@ -1093,7 +1106,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		}
 		if (s_active_conns > 0) s_active_conns--;
 		// Освобождаем слот трекинга handshake, если соединение было в процессе
-		tls_hs_track_finish(c->id);
+		tls_hs_track_finish(c->id, NULL);
 		MG_INFO(("%lu Connection closed (TLS: %d, listening: %d)",
 		         c->id, c->is_tls, c->is_listening));
 		break;

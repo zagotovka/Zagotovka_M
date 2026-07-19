@@ -44,6 +44,7 @@ _Min_Stack_Size = 0x800; /* required amount of stack */
 /* Memories definition */
 MEMORY
 {
+  ITCM     (rx)     : ORIGIN = 0x00000000,   LENGTH = 16K
   RAM      (xrw)    : ORIGIN = 0x20000000,   LENGTH = 512K
   FLASH    (rx)     : ORIGIN = 0x8000000,    LENGTH = 2048K
   ZERG_FLASH (rx)  : ORIGIN = 0x081C0000,   LENGTH = 256K  /* Sector 11 */
@@ -76,6 +77,18 @@ SECTIONS
     . = ALIGN(4);
     _etext = .;        /* define a global symbols at end of code */
   } >FLASH
+
+  /* ITCM: горячий код (ISR, FreeRTOS kernel, latency-critical functions) */
+  .itcm :
+  {
+    . = ALIGN(4);
+    _sitcm = .;
+    *(.itcm)
+    *(.itcm*)
+    . = ALIGN(4);
+    _eitcm = .;
+  } >ITCM AT> FLASH
+  _sitcm_load = LOADADDR(.itcm);
 
   /* Constant data into "FLASH" Rom type memory */
   .rodata :

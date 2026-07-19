@@ -65,6 +65,7 @@ struct Button button[NUMPIN];
 extern volatile uint8_t onlineFlg;
 extern uint8_t *gsm_rx_buffer;
 extern volatile gsm_rx_buffer_index_t gsm_rx_buffer_head;
+extern uint8_t _sitcm[], _eitcm[];
 uint8_t RxByte; // Буфер для приема одного байта по UART
 
 uint8_t owflag = 0;
@@ -3190,6 +3191,14 @@ static void heap_diagnostic(void)
         printf("[SYSTEM] DTCM alloc fails:   %u\r\n",
                (unsigned)dtcm_alloc_get_fail_count());
 
+        size_t itcm_used  = (size_t)(_eitcm - _sitcm);
+        size_t itcm_total = 16 * 1024;
+        size_t itcm_pct   = itcm_used * 100 / itcm_total;
+        printf("[SYSTEM] ITCM code used:     %u B / %u B (%u%%)\r\n",
+               (unsigned)itcm_used, (unsigned)itcm_total, (unsigned)itcm_pct);
+        printf("[SYSTEM] ITCM code free:     %u B\r\n",
+               (unsigned)(itcm_total - itcm_used));
+
         printf("MQTT TX queue peak: %lu / 32\r\n", mqtt_tx_peak);
         printf("MQTT RX queue peak: %lu / 16\r\n", mqtt_rx_peak);
         printf("Output queue peak:  %lu / 16\r\n", output_peak);
@@ -3327,6 +3336,16 @@ void StartDgnTask(void *argument)
 				       (unsigned)dtcm_used, (unsigned)dtcm_total, (unsigned)dtcm_pct);
 				printf("Free:  %u B\r\n", (unsigned)dtcm_alloc_get_free());
 				printf("Fails: %u\r\n", (unsigned)dtcm_alloc_get_fail_count());
+			}
+
+			{
+				size_t itcm_used  = (size_t)(_eitcm - _sitcm);
+				size_t itcm_total = 16 * 1024;
+				size_t itcm_pct   = itcm_used * 100 / itcm_total;
+				printf("\r\n""=== ITCM CODE ===\r\n");
+				printf("Used:  %u B / %u B (%u%%)\r\n",
+				       (unsigned)itcm_used, (unsigned)itcm_total, (unsigned)itcm_pct);
+				printf("Free:  %u B\r\n", (unsigned)(itcm_total - itcm_used));
 			}
 
 			printf("\r\n""=== QUEUE PEAKS ===\r\n");
