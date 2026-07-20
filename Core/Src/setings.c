@@ -2360,7 +2360,7 @@ void GetPidConfig() {
   }
   struct mg_str arr = mg_str_n(body.buf + arr_ofs, body.len - (size_t)arr_ofs);
 
-  memset(PidConf, 0, sizeof(PidConf));
+  memset(PidConf, 0, sizeof(dbPidConf) * PID_MAX_SLOTS);
 
   int idx = 0;
   size_t pos = 0;

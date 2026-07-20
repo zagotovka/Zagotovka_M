@@ -560,25 +560,32 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
   if (zbi >= 0) {
     ZigbeeConf[zbi].onoff = onoff;
     if (ZigbeeConf[zbi].zbee_ieee[0] != '\0') {
-      /* Проверяем есть ли sclick/dclick/lpress (кнопка) */
-      int is_button = (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_TRIGGER &&
-                       ZigbeeConf[zbi].sclick[0] != '\0');
-
-      if (!is_button) {
-        /* Обычное устройство: ON/OFF */
-        if (ZigbeeConf[zbi].onoff) {
-          const char *cmd = (onoff != 0) ? "ON" : "OFF";
-          uint8_t flags = ZigbeeConf[zbi].cluster_flags;
-          if (flags & ZBEE_CL_ONOFF) {
-            SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
-                              ZigbeeConf[zbi].zbee_endpoint,
-                              6, ZigbeeConf[zbi].zbee_attribute, cmd);
-          }
-        }
+      if (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_SWITCH) {
+        /* Switch: обновляем state и выполняем processPins */
+        ZigbeeConf[zbi].state = onoff;
+        processPins(NUMPIN + zbi, onoff);
+        LOG_Z2M("onoff: SWITCH id=%d state=%d\r\n", NUMPIN + zbi, onoff);
       } else {
-        /* Кнопка: onoff toggle → выполняем sclick */
-        if (onoff) {
-          vbtn_execute(zbi, 0);
+        /* Проверяем есть ли sclick/dclick/lpress (кнопка) */
+        int is_button = (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_TRIGGER &&
+                         ZigbeeConf[zbi].sclick[0] != '\0');
+
+        if (!is_button) {
+          /* Обычное устройство: ON/OFF */
+          if (ZigbeeConf[zbi].onoff) {
+            const char *cmd = (onoff != 0) ? "ON" : "OFF";
+            uint8_t flags = ZigbeeConf[zbi].cluster_flags;
+            if (flags & ZBEE_CL_ONOFF) {
+              SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                                ZigbeeConf[zbi].zbee_endpoint,
+                                6, ZigbeeConf[zbi].zbee_attribute, cmd);
+            }
+          }
+        } else {
+          /* Кнопка: onoff toggle → выполняем sclick */
+          if (onoff) {
+            vbtn_execute(zbi, 0);
+          }
         }
       }
     } else {
@@ -781,8 +788,9 @@ void gen_switch_json(const struct dbPinsInfo *pins_info,
       offset +=
           snprintf(buffer + offset, buffer_size - offset,
                    "{\"topin\":11,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,"
-                   "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
-                   zigbee_id, esc_pins, ZigbeeConf[i].info, ZigbeeConf[i].onoff);
+                   "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d,\"state\":%d}",
+                   zigbee_id, esc_pins, ZigbeeConf[i].info,
+                   ZigbeeConf[i].onoff, ZigbeeConf[i].state);
     }
   }
   
@@ -3746,7 +3754,8 @@ void parse_sim800l_json(const char *buffer) {
 
 // === ZIGBEE PLAN B ===
 #define ZBEE_CMD_MIN_INTERVAL_MS 250
-static uint32_t s_zbee_last_cmd_tick[NUMZBEE] = {0};
+/* s_zbee_last_cmd_tick выделяется в DTCM через dtcm_zbee_last_cmd_tick */
+#define s_zbee_last_cmd_tick dtcm_zbee_last_cmd_tick
 
 static bool zbee_cmd_throttle_ok(int zbee_idx) {
     if (zbee_idx < 0 || zbee_idx >= NUMZBEE) return false;
@@ -4256,8 +4265,8 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                             if (!found_encoder || !found_pwm) {
                                 LOG_Z2M("dimmer id=%d err enc=%d pwm=%d\r\n",
                                        zbee_id, found_encoder, found_pwm);
-                            }
-                        } else {
+            }
+        } else {
                             LOG_Z2M("dimmer id=%d skipped (child=%d parent=%d)\r\n",
                                    NUMPIN + dp_slot, child_on, parent_on);
                         }
@@ -4427,6 +4436,20 @@ static void mqtt_zigbee_trigger_handler(const char *topic, const char *payload) 
             zbee_learn_observe_trigger(payload);
             LOG_Z2M("zbee: LEARN TRIGGER observed ieee=%s payload=%s\r\n",
                     ieee, payload);
+        } else if (ZigbeeConf[i].zbee_role == ZBEE_ROLE_SWITCH) {
+            /* Switch: payload → state → processPins (отдельный слот на каждый payload) */
+            if (ZigbeeConf[i].onoff == 0) {
+                LOG_Z2M("zbee: SWITCH id=%d DISABLED (master off)\r\n", NUMPIN + i);
+            } else if (ZigbeeConf[i].vbtn_mode == VBTN_MODE_PASSTHROUGH &&
+                ZigbeeConf[i].pt_single[0] &&
+                strcmp(payload, ZigbeeConf[i].pt_single) == 0) {
+                /* ep=1 → ON (state=1), ep=2 → OFF (state=0) */
+                uint8_t new_state = (ZigbeeConf[i].ep == 1) ? 1 : 0;
+                ZigbeeConf[i].state = new_state;
+                processPins(NUMPIN + i, new_state);
+                LOG_Z2M("zbee: SWITCH %s ieee=%s slot=%d id=%d payload=%s\r\n",
+                        new_state ? "ON" : "OFF", ieee, i, NUMPIN + i, payload);
+            }
         } else {
             /* Normal mode: delegate to virtual button handler */
             zbee_vbtn_mqtt_event(i, payload);
@@ -4989,15 +5012,16 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
         if (is_passthrough) {
             /* PASSTHROUGH: каждая кнопка = отдельный слот */
             for (int k = 0; k < trigger_count; k++) {
-                int target_zbi = (k == 0) ? zbi : alloc_zbee_slot();
+                /* Для switch: ВСЕ payload'ы = дочерние слоты (k=0 тоже!) */
+                int target_zbi = (k == 0 && !has_switch) ? zbi : alloc_zbee_slot();
                 if (target_zbi < 0) {
                     LOG_Z2M("zbee: LEARN PASSTHROUGH no free slot for '%s'\r\n",
                             trigger_payloads[k]);
                     continue;
                 }
 
-                if (k > 0) {
-                    /* Копируем базовые поля в новый слот */
+                /* Копируем базовые поля в новый слот (всегда для switch, или k>0 для кнопки) */
+                if (k > 0 || has_switch) {
                     memset(&ZigbeeConf[target_zbi], 0, sizeof(ZigbeeConf[target_zbi]));
                     strncpy(ZigbeeConf[target_zbi].zbee_ieee, ZigbeeConf[zbi].zbee_ieee,
                             sizeof(ZigbeeConf[target_zbi].zbee_ieee) - 1);
@@ -5015,6 +5039,17 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                         sizeof(ZigbeeConf[target_zbi].pt_single) - 1);
                 ZigbeeConf[target_zbi].pt_single[sizeof(ZigbeeConf[target_zbi].pt_single) - 1] = '\0';
 
+                /* Для switch: сохраняем payload в switch_payload_on/off в ГОЛОВНОМ слоте */
+                if (has_switch && k < 2) {
+                    if (k == 0) {
+                        strncpy(ZigbeeConf[zbi].switch_payload_on, trigger_payloads[k], 31);
+                        ZigbeeConf[zbi].switch_payload_on[31] = '\0';
+                    } else if (k == 1) {
+                        strncpy(ZigbeeConf[zbi].switch_payload_off, trigger_payloads[k], 31);
+                        ZigbeeConf[zbi].switch_payload_off[31] = '\0';
+                    }
+                }
+
                 /* sclick = "None" (action не настроен) */
                 strncpy(ZigbeeConf[target_zbi].sclick, "None",
                         sizeof(ZigbeeConf[target_zbi].sclick) - 1);
@@ -5031,6 +5066,15 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
 
                 LOG_Z2M("zbee: LEARN PASSTHROUGH %d '%s' -> slot %d (id=%d)\r\n",
                         k, trigger_payloads[k], target_zbi, NUMPIN + target_zbi);
+            }
+            /* Головной слот Switch: ep=0, роль=SWITCH */
+            if (has_switch) {
+                ZigbeeConf[zbi].zbee_role = ZBEE_ROLE_SWITCH;
+                ZigbeeConf[zbi].ep = 0;
+                ZigbeeConf[zbi].topin = 11;
+                ZigbeeConf[zbi].vbtn_mode = VBTN_MODE_PASSTHROUGH;
+                LOG_Z2M("zbee: SWITCH parent slot %d (id=%d) configured\r\n",
+                        zbi, NUMPIN + zbi);
             }
         } else {
             /* RAW: группируем в один слот (старое поведение) */
@@ -5113,6 +5157,16 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                 strncpy(ZigbeeConf[free_zbi].pt_single, trigger_payloads[k],
                         sizeof(ZigbeeConf[free_zbi].pt_single) - 1);
                 ZigbeeConf[free_zbi].pt_single[sizeof(ZigbeeConf[free_zbi].pt_single) - 1] = '\0';
+                /* Для switch: сохраняем payload в switch_payload_on/off */
+                if (has_switch) {
+                    if (k == 0) {
+                        strncpy(ZigbeeConf[free_zbi].switch_payload_on, trigger_payloads[k], 31);
+                        ZigbeeConf[free_zbi].switch_payload_on[31] = '\0';
+                    } else if (k == 1) {
+                        strncpy(ZigbeeConf[free_zbi].switch_payload_off, trigger_payloads[k], 31);
+                        ZigbeeConf[free_zbi].switch_payload_off[31] = '\0';
+                    }
+                }
                 zbee_vbtn_auto_detect(free_zbi, trigger_payloads[k]);
             }
 
@@ -5613,8 +5667,14 @@ void action_handler(uint8_t button_id, const char *action_str,
             break;
           }
 
-          /* No sub-index: check if this is a button */
-          if (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_TRIGGER) {
+          /* No sub-index: check role */
+          if (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_SWITCH) {
+            /* Switch: каскадно управляет всеми привязанными через processPins */
+            if (ZigbeeConf[zbi].onoff == 0) break;
+            ZigbeeConf[zbi].state = (action == 2) ? !ZigbeeConf[zbi].state : action;
+            processPins(id, ZigbeeConf[zbi].state);
+            break;
+          } else if (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_TRIGGER) {
             if (press_type && strcmp(press_type, "trigger") != 0) {
               vbtn_execute(zbi, action);  /* action 0=off=sclick, 1=on=dclick, 2=toggle=lpress */
             } else {
@@ -5838,7 +5898,7 @@ void Check_SunriseSunset_Actions() {
     //    printf("DEBUG: Sunset actions are disabled \r\n");
   }
 }
-void processPins(uint8_t i, uint8_t action) {
+void processPins(uint16_t i, uint8_t action) {
   // Защита от OOB-доступа к PinsConf[] (ZIGBEE PLAN B)
   if (i < NUMPIN) {
     if (PinsConf[i].onoff == 0) {
@@ -7057,8 +7117,8 @@ void check_ds18b20_changes(uint8_t pin_id, uint8_t sensor_id) {
 //  }
 //}
 
-/*** PWM change tracking — публикация при изменении dvalue ***/
-static int prev_pwm_dvalue[NUMPIN]; /* последнее опубликованное значение PWM */
+/*** PWM change tracking — выделяется в DTCM через dtcm_prev_pwm_dvalue ***/
+#define prev_pwm_dvalue dtcm_prev_pwm_dvalue
 
 //void publish_pwm_changes(struct mg_connection *conn) { - НЕ ИСПОЛЬЗУЕТСЯ!
 //  if (!conn || conn->is_closing) return;
@@ -7246,13 +7306,13 @@ void send_mqtt_timer_batch(struct mg_connection *conn) {
 
   char *tbuf = (char *)dtcm_timer_batch;
 
-  /* Отслеживание изменений */
-  static uint8_t  prev_gpio[NUMPIN];
-  static int16_t  prev_duty[NUMPIN];
+  /* Отслеживание изменений — выделяется в DTCM через dtcm_prev_gpio/dtcm_prev_duty */
+#define prev_gpio dtcm_prev_gpio
+#define prev_duty dtcm_prev_duty
   static bool     prev_init = false;
 
   if (!prev_init) {
-    memset(prev_gpio, 0xFF, sizeof(prev_gpio));
+    memset(prev_gpio, 0xFF, sizeof(uint8_t) * NUMPIN);
     for (int i = 0; i < NUMPIN; i++) prev_duty[i] = -1;
     prev_init = true;
   }

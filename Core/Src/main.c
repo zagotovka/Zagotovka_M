@@ -84,7 +84,7 @@ uint8_t usbnum = 0;
 uint8_t mqttnum = 0;
 uint8_t sumowpin = 0;
 /* A3: global data_pin removed — each producer/consumer uses a local copy */
-dbPidConf PidConf[PID_MAX_SLOTS];
+dbPidConf *PidConf = NULL;  /* выделяется в DTCM через dtcm_pid_conf */
 
 #define HTTP_URL "http://0.0.0.0:8000"
 #define HTTPS_URL "https://0.0.0.0:8443"
@@ -282,9 +282,9 @@ static uint32_t usb_peak = 0;
 static uint32_t zbee_cmd_peak = 0;
 static uint32_t mg_conn_peak = 0;
 
-/* Runtime arrays for SecurityTask (节约 BSS — вместо полей в dbPinsConf) */
-static uint32_t sec_deb_tm[NUMPIN];
-static uint32_t sec_lasttrg[NUMPIN];
+/* Runtime arrays for SecurityTask — выделяются в DTCM через dtcm_sec_deb_tm/dtcm_sec_lasttrg */
+#define sec_deb_tm  dtcm_sec_deb_tm
+#define sec_lasttrg dtcm_sec_lasttrg
 static uint32_t mg_conn_cur = 0;
 static uint32_t mg_conn_listeners = 0;
 static uint32_t mg_conn_tls = 0;
@@ -777,6 +777,16 @@ int main(void)
   DWT_Init();
   test_init();
   dtcm_alloc_init();
+  /* BSS → DTCM: присваиваем указатели */
+  PidConf = dtcm_pid_conf;
+  memset(dtcm_sec_deb_tm, 0, sizeof(uint32_t) * NUMPIN);
+  memset(dtcm_sec_lasttrg, 0, sizeof(uint32_t) * NUMPIN);
+  memset(dtcm_fade_state, 0, sizeof(FadeState_t) * NUMPIN);
+  memset(dtcm_cron_ctxs, 0, sizeof(lwdtc_cron_ctx_t) * NUMTASK);
+  memset(dtcm_prev_pwm_dvalue, 0, sizeof(int) * NUMPIN);
+  memset(dtcm_prev_gpio, 0xFF, sizeof(uint8_t) * NUMPIN);
+  for (int i = 0; i < NUMPIN; i++) dtcm_prev_duty[i] = -1;
+  memset(dtcm_zbee_last_cmd_tick, 0, sizeof(uint32_t) * NUMZBEE);
   usart_ring_dtcm_init();
   gsm_dtcm_init();
   net_dtcm_init();
@@ -1252,18 +1262,8 @@ void vApplicationMallocFailedHook(void)
 /*********************** для printf ******************************/
 /* PUTCHAR_PROTOTYPE перенесен в logger.c */
 /************************ PWM Fade *************************************/
-/* PWM Fade state — без динамических задач, без malloc */
-typedef struct {
-    bool     active;
-    float    current_duty;
-    float    delta;
-    uint32_t steps_left;
-    int      end_duty;
-    int      cronindex;
-    uint8_t  saved_pid_duty;   /* pwm_out PID до начала fade */
-} FadeState_t;
-
-static FadeState_t fade_state[NUMPIN] = {0};
+/* FadeState_t определён в dtcm_alloc.h — выделяется в DTCM через dtcm_fade_state */
+#define fade_state dtcm_fade_state
 
 /* Запускает (или перезапускает) плавное изменение PWM.
  * pwm_id       — индекс PWM-пина (topin == 5)
@@ -1964,7 +1964,9 @@ void StartOutputTask(void *argument)
       if (data_pin.id >= 0 && data_pin.id < (NUMPIN + NUMZBEE)) {
         if (IsZigbeePin(data_pin.id)) {
           int zbi = ZbeeIdx(data_pin.id);
-          if (ZigbeeConf[zbi].zbee_ieee[0] != '\0' && ZigbeeConf[zbi].onoff) {
+          if (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_SWITCH) {
+            printf("[OUT] SKIP: slot %d is SWITCH, not actuator\r\n", zbi);
+          } else if (ZigbeeConf[zbi].zbee_ieee[0] != '\0' && ZigbeeConf[zbi].onoff) {
             /* multi-EP команда — отправка на конкретный EP */
             if (ZigbeeConf[zbi].ep > 0) {
               const char *val_str;
@@ -2052,7 +2054,8 @@ void StartCronTask(void *argument)
   /* USER CODE BEGIN StartCronTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
   init_offline_time();
-  static lwdtc_cron_ctx_t cron_ctxs[NUMTASK];
+  /* cron_ctxs выделяется в DTCM через dtcm_cron_ctxs (см. dtcm_alloc.h) */
+  lwdtc_cron_ctx_t *cron_ctxs = dtcm_cron_ctxs;
   int i = 0;
   char str[sizeof(dbCrontxt[0].activ)] = {0};
   int cfg_tasks = NUMTASK; // Количество возможно настроенных cron задач
@@ -2159,7 +2162,7 @@ void StartCronTask(void *argument)
         }
         // Проверка CRON выражений
         i = 0;
-        while (i < LWDTC_ARRAYSIZE(cron_ctxs)) {
+        while (i < NUMTASK) {
           if (lwdtc_cron_is_valid_for_time(&timez_copy, cron_ctxs, &i) == lwdtcOK) {
             taskENTER_CRITICAL();
             memcpy(str, dbCrontxt[i].activ, sizeof(str) - 1);

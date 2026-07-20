@@ -45,7 +45,7 @@ extern struct mg_connection * volatile s_conn;
 
 extern struct Button button[NUMPIN];
 // Прототип функции processPins
-void processPins(uint8_t i, uint8_t action);
+void processPins(uint16_t i, uint8_t action);
 
 // для sim800l
 extern UART_HandleTypeDef huart2;

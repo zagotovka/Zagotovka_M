@@ -328,6 +328,10 @@ typedef struct {
     uint32_t vbtn_last_tick;     // Last event time
     uint32_t vbtn_state_tick;    // Time of state entry
 
+    /* ── Switch payload mapping (when zbee_role == ZBEE_ROLE_SWITCH) ── */
+    char     switch_payload_on[32];    // Payload для state=1 (напр. "btn_double")
+    char     switch_payload_off[32];   // Payload для state=0 (напр. "btn_long")
+
     /* ── Dimmer range auto-detection (from Learning Mode observations) ── */
     uint16_t dimmer_min;         // Минимальное значение яркости (автоопределённое или ручное)
     uint16_t dimmer_max;         // Максимальное значение яркости

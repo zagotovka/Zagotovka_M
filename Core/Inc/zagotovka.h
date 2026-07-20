@@ -40,7 +40,7 @@ extern struct dbCron dbCrontxt[NUMTASK];
 extern struct dbSettings SetSettings;
 extern const char *s_json_header;
 extern struct dbPinToPin PinsLinks[NUMPINLINKS];
-void processPins(uint8_t i, uint8_t action);
+void processPins(uint16_t i, uint8_t action);
 
 void log_headers(const char *headers);
 /******************** Zerg section ****************************/
@@ -193,7 +193,7 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info, const struct dbPinsCon
 void parse_encoder_json(const char* json, struct dbPinsConf* PinsConf, struct dbPinToPin* PinsLinks, struct dbPinsInfo* PinsInfo, uint8_t count);
 
 /* ─── PID Controller ─── */
-extern dbPidConf PidConf[PID_MAX_SLOTS];
+extern dbPidConf *PidConf;  /* выделяется в DTCM через dtcm_pid_conf */
 
 void handle_pid_get(struct mg_connection *c);
 void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm);

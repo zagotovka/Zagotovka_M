@@ -29,6 +29,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
   const [savedType, setSavedType] = useState(null);
   const [error, setError] = useState(null);
   const [rawRanges, setRawRanges] = useState({});  // manual override: { obsKey: { min, max } }
+  const [switchValues, setSwitchValues] = useState({});  // { obsKey: '1' | '0' }
   const pollRef = useRef(null);
   const mergedRef = useRef({});
 
@@ -111,6 +112,9 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
             const override = rawRanges[k];
             base.raw_min = override?.min ?? o.obs_min;
             base.raw_max = override?.max ?? o.obs_max;
+          }
+          if (role === 'switch' && switchValues[k]) {
+            base.switch_value = parseInt(switchValues[k], 10);
           }
           return base;
         }),
@@ -311,18 +315,32 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                                }))} />
                       </td>
                       <td class="py-2">
-                        <select class="border rounded px-2 py-1 text-sm bg-white"
-                                value=${labels[obsKey(o)] || 'ignore'}
-                                onChange=${e => setLabels(prev => ({
-                                  ...prev,
-                                  [obsKey(o)]: e.target.value
-                                }))}>
-                          ${ROLE_OPTIONS.map(opt => html`
-                            <option key=${opt.value} value=${opt.value}>
-                              ${opt.label[lang] || opt.label.en}
-                            </option>
-                          `)}
-                        </select>
+                        <div class="flex items-center gap-1">
+                          <select class="border rounded px-2 py-1 text-sm bg-white"
+                                  value=${labels[obsKey(o)] || 'ignore'}
+                                  onChange=${e => setLabels(prev => ({
+                                    ...prev,
+                                    [obsKey(o)]: e.target.value
+                                  }))}>
+                            ${ROLE_OPTIONS.map(opt => html`
+                              <option key=${opt.value} value=${opt.value}>
+                                ${opt.label[lang] || opt.label.en}
+                              </option>
+                            `)}
+                          </select>
+                          ${labels[obsKey(o)] === 'switch' && html`
+                            <select class="border rounded px-2 py-1 text-sm bg-white"
+                                    value=${switchValues[obsKey(o)] || ''}
+                                    onChange=${e => setSwitchValues(prev => ({
+                                      ...prev,
+                                      [obsKey(o)]: e.target.value
+                                    }))}>
+                              <option value="">—</option>
+                              <option value="1">${lang === 'ru' ? '1 (Вкл)' : '1 (On)'}</option>
+                              <option value="0">${lang === 'ru' ? '0 (Выкл)' : '0 (Off)'}</option>
+                            </select>
+                          `}
+                        </div>
                       </td>
                     </tr>
                   ` : html`
@@ -496,14 +514,22 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
             ${lang === 'ru' ? 'Отмена' : 'Cancel'}
           </button>
           ${hasData && !savedType && html`
-            <button class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm
-                           disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled=${saving}
-                    onClick=${handleSave}>
-              ${saving
-                ? (lang === 'ru' ? 'Сохранение...' : 'Saving...')
-                : (lang === 'ru' ? 'Сохранить' : 'Save')}
-            </button>
+            ${(() => {
+              const switchIncomplete = observations.some(o => {
+                const k = obsKey(o);
+                return labels[k] === 'switch' && !switchValues[k];
+              });
+              return html`
+                <button class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm
+                               disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled=${saving || switchIncomplete}
+                        onClick=${handleSave}>
+                  ${saving
+                    ? (lang === 'ru' ? 'Сохранение...' : 'Saving...')
+                    : (lang === 'ru' ? 'Сохранить' : 'Save')}
+                </button>
+              `;
+            })()}
           `}
         </div>
       </div>

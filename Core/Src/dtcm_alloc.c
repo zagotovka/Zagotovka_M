@@ -8,7 +8,7 @@ extern uint8_t _edtcm_pool[];
 static uint8_t  *dtcm_next       = NULL;
 static uint32_t  dtcm_fail_count = 0;
 
-/* DTCM buffers */
+/* DTCM buffers — существующие */
 uint8_t *dtcm_zbee_body     = NULL;
 uint8_t *dtcm_zbee_raw      = NULL;
 uint8_t *dtcm_sensor_batch  = NULL;
@@ -29,6 +29,17 @@ uint8_t *dtcm_cache_tls_ca  = NULL;
 uint8_t *dtcm_cache_domain  = NULL;
 uint8_t *dtcm_cache_tg_token = NULL;
 uint8_t *dtcm_dbg_rx        = NULL;
+
+/* DTCM buffers — BSS → DTCM переносы */
+dbPidConf           *dtcm_pid_conf        = NULL;
+uint32_t            *dtcm_sec_deb_tm      = NULL;
+uint32_t            *dtcm_sec_lasttrg     = NULL;
+FadeState_t         *dtcm_fade_state      = NULL;
+lwdtc_cron_ctx_t    *dtcm_cron_ctxs       = NULL;
+int                 *dtcm_prev_pwm_dvalue = NULL;
+uint8_t             *dtcm_prev_gpio       = NULL;
+int16_t             *dtcm_prev_duty       = NULL;
+uint32_t            *dtcm_zbee_last_cmd_tick = NULL;
 
 __attribute__((section(".itcm"))) void dtcm_alloc_init(void)
 {
@@ -57,6 +68,17 @@ __attribute__((section(".itcm"))) void dtcm_alloc_init(void)
     dtcm_cache_tg_token = dtcm_malloc(DTCM_BUF_CACHE_TG_TOKEN);
     dtcm_dbg_rx        = dtcm_malloc(DTCM_BUF_DBG_RX);
 
+    /* BSS → DTCM: выделяем массивы */
+    dtcm_pid_conf        = dtcm_malloc(sizeof(dbPidConf) * PID_MAX_SLOTS);
+    dtcm_sec_deb_tm      = dtcm_malloc(sizeof(uint32_t) * NUMPIN);
+    dtcm_sec_lasttrg     = dtcm_malloc(sizeof(uint32_t) * NUMPIN);
+    dtcm_fade_state      = dtcm_malloc(sizeof(FadeState_t) * NUMPIN);
+    dtcm_cron_ctxs       = dtcm_malloc(sizeof(lwdtc_cron_ctx_t) * NUMTASK);
+    dtcm_prev_pwm_dvalue = dtcm_malloc(sizeof(int) * NUMPIN);
+    dtcm_prev_gpio       = dtcm_malloc(sizeof(uint8_t) * NUMPIN);
+    dtcm_prev_duty       = dtcm_malloc(sizeof(int16_t) * NUMPIN);
+    dtcm_zbee_last_cmd_tick = dtcm_malloc(sizeof(uint32_t) * NUMZBEE);
+
     /* Проверяем что всё выделилось */
     if (!dtcm_zbee_body || !dtcm_zbee_raw || !dtcm_sensor_batch ||
         !dtcm_timer_batch || !dtcm_decoded ||
@@ -66,6 +88,15 @@ __attribute__((section(".itcm"))) void dtcm_alloc_init(void)
         !dtcm_tls_cert || !dtcm_tls_key || !dtcm_dbg_rx ||
         !dtcm_cache_tls_ca || !dtcm_cache_domain || !dtcm_cache_tg_token) {
         printf("[DTCM] FATAL: buffer allocation failed! used=%u free=%u\r\n",
+               (unsigned)dtcm_alloc_get_used(), (unsigned)dtcm_alloc_get_free());
+    }
+
+    /* Проверяем BSS → DTCM переносы */
+    if (!dtcm_pid_conf || !dtcm_sec_deb_tm || !dtcm_sec_lasttrg ||
+        !dtcm_fade_state || !dtcm_cron_ctxs ||
+        !dtcm_prev_pwm_dvalue || !dtcm_prev_gpio || !dtcm_prev_duty ||
+        !dtcm_zbee_last_cmd_tick) {
+        printf("[DTCM] FATAL: BSS→DTCM allocation failed! used=%u free=%u\r\n",
                (unsigned)dtcm_alloc_get_used(), (unsigned)dtcm_alloc_get_free());
     }
 }

@@ -3,6 +3,9 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include "db.h"
+#include "lwdtc.h"
 
 extern uint8_t _sdtcm_pool[];
 
@@ -68,5 +71,29 @@ extern uint8_t *dtcm_cache_tls_ca;
 extern uint8_t *dtcm_cache_domain;
 extern uint8_t *dtcm_cache_tg_token;
 extern uint8_t *dtcm_dbg_rx;
+
+/* ── BSS → DTCM: безопасные переносы ── */
+/* main.c */
+typedef struct {
+    bool     active;
+    float    current_duty;
+    float    delta;
+    uint32_t steps_left;
+    int      end_duty;
+    int      cronindex;
+    uint8_t  saved_pid_duty;
+} FadeState_t;
+
+extern dbPidConf           *dtcm_pid_conf;
+extern uint32_t            *dtcm_sec_deb_tm;
+extern uint32_t            *dtcm_sec_lasttrg;
+extern FadeState_t         *dtcm_fade_state;
+extern lwdtc_cron_ctx_t    *dtcm_cron_ctxs;
+
+/* zagotovka.c */
+extern int                  *dtcm_prev_pwm_dvalue;
+extern uint8_t              *dtcm_prev_gpio;
+extern int16_t              *dtcm_prev_duty;
+extern uint32_t             *dtcm_zbee_last_cmd_tick;
 
 #endif // DTCM_ALLOC_H
