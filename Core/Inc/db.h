@@ -42,6 +42,7 @@
 #define ZBEE_ROLE_SENSOR    2
 #define ZBEE_ROLE_TRIGGER   3
 #define ZBEE_ROLE_MFR       4
+#define ZBEE_ROLE_SWITCH    5
 
 #include "stdio.h"
 #include <stdbool.h>

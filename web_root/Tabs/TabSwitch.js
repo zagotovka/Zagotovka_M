@@ -132,6 +132,7 @@ function TabSwitch({ }) {
 
   useEffect(() => {
     let active = true;
+    refresh();
 
     // ── Загрузка + polling через pollQueue (одно соединение, без нового handshake) ──
     registerPoll('switches', '/api/state/switch', function(data) {
@@ -149,21 +150,26 @@ function TabSwitch({ }) {
     };
   }, []);
 
+  const isGpioPin = (pin) => /^P[A-Z]\d+$/i.test(pin);
+
   const getConnectedPins = (switchId) => {
     const connectedPins = new Map();
 
     const switchItem = varswitch.find((sw) => sw.id === switchId);
+    console.log(`[getConnectedPins] switchId=${switchId}`, 'pinact=', switchItem?.pinact, 'pintopin entries=', pintopin.filter(p => p.idin === switchId));
     if (switchItem && switchItem.pinact) {
-      Object.entries(switchItem.pinact).forEach(([pin, relayId]) => {
-        connectedPins.set(pin, { pin, relayId });
+      Object.entries(switchItem.pinact).forEach(([deviceId, pinName]) => {
+        console.log(`[getConnectedPins] pinact entry: deviceId=${deviceId}, pinName=${pinName}, isGpio=${isGpioPin(pinName)}`);
+        if (pinName) {
+          connectedPins.set(parseInt(deviceId), { pin: pinName, relayId: parseInt(deviceId) });
+        }
       });
     }
 
     pintopin.forEach((item) => {
       if (item.idin === switchId) {
-        const key = `${item.pins}(${item.idout})`;
-        if (!connectedPins.has(key)) {
-          connectedPins.set(key, { pin: item.pins, relayId: item.idout });
+        if (!connectedPins.has(item.idout)) {
+          connectedPins.set(item.idout, { pin: item.pins, relayId: item.idout });
         }
       }
     });
@@ -565,13 +571,17 @@ function TabSwitch({ }) {
         </td>
         <td class="px-6 py-2 text-sm text-slate-700 font-mono">
           ${connectedPins.map(
-            ({ pin, relayId }) => html`
+            ({ pin, relayId }) => {
+              const zigbee = !isGpioPin(pin);
+              const label = zigbee ? `Z2M(${relayId})` : `${pin}(${relayId})`;
+              const delKey = `${pin}(${relayId})`;
+              return html`
               <span class="mr-2 inline-flex items-center">
-                ${pin}${relayId !== undefined ? `(${relayId})` : ''}
+                ${label}
                 <button
                   onClick=${(e) => {
                     e.preventDefault();
-                    onsave(d.id, `${pin}(${relayId})`);
+                    onsave(d.id, delKey);
                   }}
                   class="ml-1 text-red-500 hover:text-red-700 transition-colors font-bold"
                   title="Remove connection"
@@ -579,7 +589,7 @@ function TabSwitch({ }) {
                   [x]
                 </button>
               </span>
-            `
+            `}
           )}
         </td>
         <td class="px-6 py-2 text-sm text-slate-600">${d.info}</td>

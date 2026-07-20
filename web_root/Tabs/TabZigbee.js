@@ -41,7 +41,7 @@ export function TabZigbee({}) {
     zbee_ieee: d.ieee || '',
     zbee_endpoint: d.ep || 1,
     clusters: d.clusters || [6],
-    zbee_device_type: d.role === 3 ? 'trigger' : clusterToDeviceType(d.clusters),
+    zbee_device_type: d.role === 3 ? 'trigger' : (d.role === 5 ? 'switch' : clusterToDeviceType(d.clusters)),
     zbee_label: d.info || '',
     onoff: d.onoff || 0,
     brightness: d.brightness || 254,
@@ -217,7 +217,8 @@ export function TabZigbee({}) {
     switch (deviceType) {
       case 'lamp': return 'Color Lamp';
       case 'dimmer': return 'Dimmer';
-      case 'trigger': return 'Кнопка';
+      case 'trigger': return 'Button';
+      case 'switch': return 'Switch';
       default: return 'Socket';
     }
   };

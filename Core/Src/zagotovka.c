@@ -20,6 +20,7 @@
 #include <stdio.h>  /* для printf */
 #include <stdlib.h> // Для функции free()
 #include <string.h>
+#include <strings.h>  /* strncasecmp */
 #include "dtcm_alloc.h"
 /*********************** Moon *****************************/
 #include "net.h"
@@ -673,16 +674,11 @@ void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
 }
 
 void handle_pintopin_get(struct mg_connection *c) {
-  char buf[512];
-  const char *extra_headers =
-      "Connection: close\r\nContent-Type: application/json\r\n";
-  MG_INFO(("Response headers for connection %ld:", c->id));
-  log_headers(extra_headers);
-
-  mg_printf(c, "HTTP/1.1 200 OK\r\n%s\r\n", extra_headers);
-  mg_send(c, "[", 1);
-
+  int pos = 0;
   int elements_added = 0;
+
+  pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "[");
+
   for (int i = 0; i < NUMPINLINKS; i++) {
     struct dbPinToPin link;
     taskENTER_CRITICAL();
@@ -695,17 +691,24 @@ void handle_pintopin_get(struct mg_connection *c) {
     char esc_pp_pins[16];
     json_escape_str(esc_pp_pins, link.pins, sizeof(esc_pp_pins));
 
-    if (elements_added > 0)
-      mg_send(c, ",", 1);
+    int remaining = G_BODY_SIZE - pos;
+    if (remaining < 80)
+      break;
 
-    int len = snprintf(buf, sizeof(buf),
-                       "{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
-                       link.idin, link.idout, esc_pp_pins);
-    mg_http_write_chunk(c, buf, (size_t)len);
+    if (elements_added > 0)
+      pos += snprintf(g_body + pos, G_BODY_SIZE - pos, ",");
+
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                    "{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
+                    link.idin, link.idout, esc_pp_pins);
     elements_added++;
   }
 
-  mg_send(c, "]", 1);
+  pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]");
+
+  const char *extra_headers =
+      "Connection: close\r\nContent-Type: application/json\r\n";
+  mg_http_reply(c, 200, extra_headers, "%s", g_body);
 }
 
 void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm) {
@@ -737,6 +740,8 @@ void gen_switch_json(const struct dbPinsInfo *pins_info,
   int first_switch = 1; // Флаг для определения первого переключателя
   offset += snprintf(buffer + offset, buffer_size - offset,
                      "{\"lang\":\"%s\",\"switches\":[", SetSettings.lang);
+  
+  // Физические пины с topin == 3
   for (uint8_t i = 0; i < num_pins && offset < buffer_size; i++) {
     if (pins_conf[i].topin == 3) { // If pin is a SWITCH
       if (!first_switch) { // Если это не первый элемент, добавляем запятую
@@ -752,6 +757,35 @@ void gen_switch_json(const struct dbPinsInfo *pins_info,
                    pins_conf[i].info, pins_conf[i].onoff);
     }
   }
+  
+  // Zigbee выключатели (zbee_role == ZBEE_ROLE_SWITCH)
+  for (uint8_t i = 0; i < NUMZBEE && offset < buffer_size; i++) {
+    if (ZigbeeConf[i].zbee_role == ZBEE_ROLE_SWITCH) {
+      if (!first_switch) {
+        offset += snprintf(buffer + offset, buffer_size - offset, ",");
+      } else {
+        first_switch = 0;
+      }
+      // ID для Zigbee: NUMPIN + i (виртуальные пины)
+      int zigbee_id = NUMPIN + i;
+      
+      // Payload: если vbtn_mode == PASSTHROUGH и pt_single задан, используем его
+      char esc_pins[64];
+      if (ZigbeeConf[i].vbtn_mode == VBTN_MODE_PASSTHROUGH &&
+          ZigbeeConf[i].pt_single[0] != '\0') {
+        snprintf(esc_pins, sizeof(esc_pins), "%s", ZigbeeConf[i].pt_single);
+      } else {
+        snprintf(esc_pins, sizeof(esc_pins), "ZB_%s", ZigbeeConf[i].zbee_ieee);
+      }
+      
+      offset +=
+          snprintf(buffer + offset, buffer_size - offset,
+                   "{\"topin\":11,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,"
+                   "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
+                   zigbee_id, esc_pins, ZigbeeConf[i].info, ZigbeeConf[i].onoff);
+    }
+  }
+  
   if (offset < buffer_size) {
     offset += snprintf(buffer + offset, buffer_size - offset, "]}");
   }
@@ -785,6 +819,88 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
+
+  /* ── Zigbee выключатель (id >= NUMPIN) ── */
+  if (id_val >= NUMPIN) {
+    int zbi = id_val - NUMPIN;
+    if (zbi < 0 || zbi >= NUMZBEE) {
+      printf("Zigbee switch ID out of bounds %ld\r\n", id_val);
+      if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+      return;
+    }
+    if (mg_json_get(body, "$.onoff", NULL) >= 0) {
+      ZigbeeConf[zbi].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", ZigbeeConf[zbi].onoff);
+      char *info = mg_json_get_str(body, "$.info");
+      if (info) {
+        strncpy(ZigbeeConf[zbi].info, info, sizeof(ZigbeeConf[zbi].info) - 1);
+        ZigbeeConf[zbi].info[sizeof(ZigbeeConf[zbi].info) - 1] = '\0';
+        mg_free(info);
+      }
+      int usbnum = 7;
+      xQueueSend(usbQueueHandle, &usbnum, 0);
+    }
+
+    /* Связи для Zigbee — PinsLinks[idin >= NUMPIN] */
+    if (mg_json_get(body, "$.setrpins", NULL) >= 0) {
+      char *pins = mg_json_get_str(body, "$.pins");
+      if (pins) {
+        /* Очищаем старую связь для этого idin */
+        for (short j = 0; j < NUMPINLINKS; j++) {
+          if (PinsLinks[j].idin == (uint8_t)id_val) {
+            memset(&PinsLinks[j], 0, sizeof(PinsLinks[j]));
+          }
+        }
+        int pa_ofs = mg_json_get(body, "$.pinact", NULL);
+        if (pa_ofs >= 0) {
+          struct mg_str pa = mg_str_n(json + pa_ofs, strlen(json) - (size_t)pa_ofs);
+          size_t pos = 0;
+          struct mg_str key, val;
+          while ((pos = mg_json_next(pa, pos, &key, &val)) > 0) {
+            if (val.len > 0 && key.len > 0) {
+              const char *kbuf = key.buf;
+              size_t klen_raw = key.len;
+              if (klen_raw >= 2 && kbuf[0] == '"' && kbuf[klen_raw - 1] == '"') {
+                kbuf++;
+                klen_raw -= 2;
+              }
+              char keybuf[16];
+              size_t klen = klen_raw < sizeof(keybuf) - 1 ? klen_raw : sizeof(keybuf) - 1;
+              memcpy(keybuf, kbuf, klen);
+              keybuf[klen] = '\0';
+              int pin_id = atoi(keybuf);
+
+              short findex = -1;
+              for (short j = 0; j < NUMPINLINKS; j++) {
+                if (PinsLinks[j].idin == 0 && PinsLinks[j].idout == 0) {
+                  findex = j;
+                  break;
+                }
+              }
+              if (findex != -1) {
+                PinsLinks[findex].idin = (uint8_t)id_val;
+                PinsLinks[findex].idout = (uint8_t)pin_id;
+                if (pin_id < NUMPIN) {
+                  strncpy(PinsLinks[findex].pins, PinsInfo[pin_id].pins,
+                          sizeof(PinsLinks[findex].pins) - 1);
+                } else {
+                  /* Фиксированный маркер — реальное имя собирается в handle_switches() */
+                  memcpy(PinsLinks[findex].pins, "ZBEE", 4);
+                }
+                PinsLinks[findex].pins[sizeof(PinsLinks[findex].pins) - 1] = '\0';
+              }
+            }
+          }
+        }
+        mg_free(pins);
+      }
+      int usbnum = 4;
+      xQueueSend(usbQueueHandle, &usbnum, 0);
+    }
+    if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    return;
+  }
+
+  /* ── Физический пин (id < NUMPIN) ── */
   uint8_t id = (uint8_t)id_val;
   if (id >= count) {
     printf("switch ID out of bounds %d\r\n", id);
@@ -792,6 +908,7 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
+
   if (mg_json_get(body, "$.ptype", NULL) >= 0) {
     long ptype_val = mg_json_get_long(body, "$.ptype", -1);
     if (ptype_val >= 0) {
@@ -820,7 +937,6 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
       struct mg_str key, val;
       while ((pos = mg_json_next(pa, pos, &key, &val)) > 0) {
         if (val.len > 0 && key.len > 0) {
-          // mg_json_next возвращает ключ с кавычками — убираем их
           const char *kbuf = key.buf;
           size_t klen_raw = key.len;
           if (klen_raw >= 2 && kbuf[0] == '"' && kbuf[klen_raw - 1] == '"') {
@@ -833,7 +949,6 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
           keybuf[klen] = '\0';
           uint8_t pin_id = (uint8_t)atoi(keybuf);
           char valbuf[16];
-          // Значение тоже может содержать кавычки (строковый пин)
           const char *vbuf = val.buf;
           size_t vlen_raw = val.len;
           if (vlen_raw >= 2 && vbuf[0] == '"' && vbuf[vlen_raw - 1] == '"') {
@@ -863,8 +978,8 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
               strncpy(PinsLinks[indextu].pins, PinsInfo[pin_id].pins,
                       sizeof(PinsLinks[indextu].pins) - 1);
             } else {
-              strncpy(PinsLinks[indextu].pins, valbuf,
-                      sizeof(PinsLinks[indextu].pins) - 1);
+              /* Фиксированный маркер — реальное имя собирается в handle_switches() */
+              memcpy(PinsLinks[indextu].pins, "ZBEE", 4);
             }
             PinsLinks[indextu].pins[sizeof(PinsLinks[indextu].pins) - 1] = '\0';
           } else {
@@ -872,8 +987,6 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
                    "eindex=%d\r\n",
                    findex, eindex);
           }
-
-          /* pinact removed —节约 1.6 KB BSS, используем sclick/dclick/lpress */
         }
       }
     }
@@ -885,8 +998,6 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
 
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
-
-  /* pinact loop removed */
 }
 /*******************************************************************************************************************/
 void handle_button_get(struct mg_connection *c, struct mg_http_message *hm) {
@@ -2750,7 +2861,7 @@ void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm,
     *bracket_pos = '\0';
   }
 
-  if (id >= NUMPIN) {
+  if (id >= NUMPIN + NUMZBEE) {
     MG_INFO(("Response headers for connection %ld:", c->id));
     log_headers(extra_headers);
     mg_http_reply(c, 400, extra_headers,
@@ -3738,6 +3849,8 @@ typedef struct {
     uint16_t attr;
     int      first_val;
     int      last_val;
+    int      obs_min;    // реальный min за всю сессию
+    int      obs_max;    // реальный max за всю сессию
     uint8_t  changed;
     char     payload[32]; // для trigger-сообщений ("btn_double")
 } ZigbeeLearnObs;
@@ -4001,6 +4114,11 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
     char ieee[18] = {0};
     int ep = 0, cluster = 0, attr = 0;
     if (sscanf(pfx, "%17[^/]/%d/%x/%x", ieee, &ep, &cluster, &attr) != 4) return;
+    /* Нормализуем IEEE из MQTT к lowercase */
+    for (int k = 0; k < 16; k++) {
+        if (ieee[k] >= 'A' && ieee[k] <= 'F') ieee[k] += 32;
+        if (ieee[k] == '\0') ieee[k] = '0';
+    }
 
     /* Наблюдения во время LEARNING_MODE */
     if (s_zbee_learn.active && strcmp(ieee, s_zbee_learn.ieee) == 0) {
@@ -4356,6 +4474,9 @@ static void zbee_learn_observe(uint16_t ep, uint16_t cluster, uint16_t attr, int
             o->ep == ep && o->cluster == cluster && o->attr == attr) {
             if (val != o->last_val) o->changed = 1;
             o->last_val = val;
+            /* Реальный running min/max по всей сессии */
+            if (val < o->obs_min) o->obs_min = val;
+            if (val > o->obs_max) o->obs_max = val;
             return;
         }
         if (!o->used) {
@@ -4363,6 +4484,7 @@ static void zbee_learn_observe(uint16_t ep, uint16_t cluster, uint16_t attr, int
             o->source = OBS_SOURCE_DATA;
             o->ep = ep; o->cluster = cluster; o->attr = attr;
             o->first_val = val; o->last_val = val; o->changed = 0;
+            o->obs_min = val; o->obs_max = val;
             return;
         }
     }
@@ -4476,9 +4598,10 @@ void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm
             off += snprintf(body + off, DTCM_BUF_ZBEE_BODY - off,
                              "{\"source\":\"data\",\"ep\":%d,\"cluster\":\"0x%04X\","
                              "\"cluster_name\":\"%s\",\"attr\":\"0x%04X\","
-                             "\"first_val\":%d,\"last_val\":%d,\"changed\":%s}",
+                             "\"first_val\":%d,\"last_val\":%d,\"obs_min\":%d,\"obs_max\":%d,\"changed\":%s}",
                              o->ep, o->cluster, cl_name, o->attr,
-                             o->first_val, o->last_val, o->changed ? "true" : "false");
+                             o->first_val, o->last_val, o->obs_min, o->obs_max,
+                             o->changed ? "true" : "false");
         }
     }
 
@@ -4544,21 +4667,54 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
     }
     mg_free(ieee);
 
-    /* Найти или создать головной слот (первый для этого IEEE) */
+    /* ── Шаг 0: Найти ВСЕ существующие слоты с этим IEEE ── */
+    /* Приводим искомый IEEE к нижнему регистру + padding нулями */
+    char learn_ieee_lower[17];
+    memset(learn_ieee_lower, '0', 16);
+    learn_ieee_lower[16] = '\0';
+    int len = strlen(s_zbee_learn.ieee);
+    if (len > 16) len = 16;
+    for (int k = 0; k < len; k++) {
+        char c = s_zbee_learn.ieee[k];
+        if (c >= 'A' && c <= 'F') c += 32;
+        learn_ieee_lower[k] = c;
+    }
+    
+    /* Case-insensitive поиск по всему массиву */
     int zbi = -1;
     for (int i = 0; i < NUMZBEE; i++) {
-        if (ZigbeeConf[i].zbee_ieee[0] != '\0' &&
-            strcmp(ZigbeeConf[i].zbee_ieee, s_zbee_learn.ieee) == 0 &&
-            ZigbeeConf[i].ep == 0) {
-            zbi = i;
-            break;
+        if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
+        int match = 1;
+        for (int k = 0; k < 16; k++) {
+            char a = ZigbeeConf[i].zbee_ieee[k];
+            char b = learn_ieee_lower[k];
+            if (a >= 'A' && a <= 'F') a += 32;
+            if (b >= 'A' && b <= 'F') b += 32;
+            if (a == '\0') a = '0';
+            if (b == '\0') b = '0';
+            if (a != b) { match = 0; break; }
+        }
+        if (match) {
+            if (ZigbeeConf[i].ep == 0 && zbi == -1) {
+                zbi = i;
+            }
         }
     }
-    if (zbi < 0) {
-        /* Ищем любой слот с этим IEEE (включая multi-EP) */
+    /* Если головной не найден — берём первый попавшийся */
+    if (zbi == -1) {
         for (int i = 0; i < NUMZBEE; i++) {
-            if (ZigbeeConf[i].zbee_ieee[0] != '\0' &&
-                strcmp(ZigbeeConf[i].zbee_ieee, s_zbee_learn.ieee) == 0) {
+            if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
+            int match = 1;
+            for (int k = 0; k < 16; k++) {
+                char a = ZigbeeConf[i].zbee_ieee[k];
+                char b = learn_ieee_lower[k];
+                if (a >= 'A' && a <= 'F') a += 32;
+                if (b >= 'A' && b <= 'F') b += 32;
+                if (a == '\0') a = '0';
+                if (b == '\0') b = '0';
+                if (a != b) { match = 0; break; }
+            }
+            if (match) {
                 zbi = i;
                 break;
             }
@@ -4571,11 +4727,38 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                           "{\"status\":false,\"message\":\"No free slot\"}");
             return;
         }
-        strncpy(ZigbeeConf[zbi].zbee_ieee, s_zbee_learn.ieee,
-                sizeof(ZigbeeConf[zbi].zbee_ieee) - 1);
+        strncpy(ZigbeeConf[zbi].zbee_ieee, learn_ieee_lower, 16);
         ZigbeeConf[zbi].zbee_ieee[16] = '\0';
         ZigbeeConf[zbi].zbee_endpoint = 1;
-        ZigbeeConf[zbi].topin = 11;
+    } else {
+        /* Нормализуем существующий слот к lowercase + padding */
+        for (int k = 0; k < 16; k++) {
+            if (ZigbeeConf[zbi].zbee_ieee[k] >= 'A' && ZigbeeConf[zbi].zbee_ieee[k] <= 'F')
+                ZigbeeConf[zbi].zbee_ieee[k] += 32;
+            if (ZigbeeConf[zbi].zbee_ieee[k] == '\0')
+                ZigbeeConf[zbi].zbee_ieee[k] = '0';
+        }
+    }
+    /* Всегда устанавливаем topin=11 для Zigbee устройства */
+    ZigbeeConf[zbi].topin = 11;
+
+    /* ── Шаг 0.5: Удалить ВСЕ старые дубли с тем же IEEE, кроме головного ── */
+    for (int i = 0; i < NUMZBEE; i++) {
+        if (i == zbi) continue;
+        if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
+        int match = 1;
+        for (int k = 0; k < 16; k++) {
+            char a = ZigbeeConf[i].zbee_ieee[k];
+            char b = learn_ieee_lower[k];
+            if (a >= 'A' && a <= 'F') a += 32;
+            if (b >= 'A' && b <= 'F') b += 32;
+            if (a == '\0') a = '0';
+            if (b == '\0') b = '0';
+            if (a != b) { match = 0; break; }
+        }
+        if (match) {
+            memset(&ZigbeeConf[i], 0, sizeof(ZigbeeVirtualPin));
+        }
     }
 
     /* ── Шаг 1: Парсим все labels ── */
@@ -4583,6 +4766,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
     int has_brightness = 0, has_color = 0;
     int has_sensor = 0, has_trigger = 0, has_ep = 0;
     int has_cover = 0, has_thermo = 0, has_lock = 0;
+    int has_switch = 0;
 
     char trigger_payloads[8][32];
     char trigger_names[8][30];
@@ -4594,9 +4778,14 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
         int  role_flag;   /* ZBEE_CL_ONOFF / ZBEE_CL_DIMMER / ZBEE_CL_COLOR */
         int  is_button;   /* 1 если это кнопка (trigger), 0 иначе */
         char label[30];
+        long raw_min;     /* ручная коррекция диапазона */
+        long raw_max;
     } EPEntry;
     EPEntry ep_entries[8];
     int ep_count = 0;
+
+    /* Ручная коррекция диапазона от фронта */
+    long user_raw_min = -1, user_raw_max = -1;
 
     int label_count = 0;
     for (int li = 0; li < ZBEE_LEARN_MAX_OBS; li++) {
@@ -4624,6 +4813,16 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             normal_flags |= ZBEE_CL_DIMMER;
             has_brightness = 1;
             if (ep > 0) ZigbeeConf[zbi].ep_brightness = (uint16_t)ep;
+            /* Ручная коррекция диапазона от фронта */
+            char path_rmin[48], path_rmax[48];
+            snprintf(path_rmin, sizeof(path_rmin), "$.labels[%d].raw_min", li);
+            snprintf(path_rmax, sizeof(path_rmax), "$.labels[%d].raw_max", li);
+            long rmin = mg_json_get_long(json, path_rmin, -1);
+            long rmax = mg_json_get_long(json, path_rmax, -1);
+            if (rmin >= 0 && rmax > rmin) {
+                user_raw_min = rmin;
+                user_raw_max = rmax;
+            }
         } else if (strcmp(role_str, "color") == 0) {
             role_flag = ZBEE_CL_COLOR;
             normal_flags |= ZBEE_CL_COLOR;
@@ -4644,6 +4843,20 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             has_sensor = 1;
         } else if (strcmp(role_str, "button") == 0) {
             has_trigger = 1;
+            char *tp = mg_json_get_str(json, path_tp);
+            if (tp && trigger_count < 8) {
+                strncpy(trigger_payloads[trigger_count], tp, 31);
+                trigger_payloads[trigger_count][31] = '\0';
+                trigger_names[trigger_count][0] = '\0';
+                if (label_str && label_str[0]) {
+                    strncpy(trigger_names[trigger_count], label_str, 29);
+                    trigger_names[trigger_count][29] = '\0';
+                }
+                trigger_count++;
+                mg_free(tp);
+            }
+        } else if (strcmp(role_str, "switch") == 0) {
+            has_switch = 1;
             char *tp = mg_json_get_str(json, path_tp);
             if (tp && trigger_count < 8) {
                 strncpy(trigger_payloads[trigger_count], tp, 31);
@@ -4678,6 +4891,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
         if (label_str && label_str[0] &&
             ep == 0 &&
             strcmp(role_str, "button") != 0 &&
+            strcmp(role_str, "switch") != 0 &&
             strcmp(role_str, "ignore") != 0) {
             strncpy(ZigbeeConf[zbi].zbee_label, label_str,
                     sizeof(ZigbeeConf[zbi].zbee_label) - 1);
@@ -4701,8 +4915,14 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             char obs_path_role[48];
             snprintf(obs_path_role, sizeof(obs_path_role), "obs[%d].role", oi);
 
-            /* Проверяем label наблюдения — если это brightness/dimmer, берём first_val/last_val */
-            if (s_zbee_learn.obs[oi].first_val > 0 || s_zbee_learn.obs[oi].last_val > 0) {
+            /* Используем реальный running min/max, а не только first/last */
+            if (s_zbee_learn.obs[oi].obs_min < s_zbee_learn.obs[oi].obs_max) {
+                uint16_t vmin = (uint16_t)s_zbee_learn.obs[oi].obs_min;
+                uint16_t vmax = (uint16_t)s_zbee_learn.obs[oi].obs_max;
+                if (vmin < dmin) dmin = vmin;
+                if (vmax > dmax) dmax = vmax;
+            } else if (s_zbee_learn.obs[oi].first_val > 0 || s_zbee_learn.obs[oi].last_val > 0) {
+                /* Fallback: если obs_min/max ещё не обновлены (одно значение) */
                 uint16_t v1 = (uint16_t)s_zbee_learn.obs[oi].first_val;
                 uint16_t v2 = (uint16_t)s_zbee_learn.obs[oi].last_val;
                 if (v1 < dmin) dmin = v1;
@@ -4723,7 +4943,15 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
         }
 
         /* Если диапазон определён — сохраняем в ZigbeeConf */
-        if (dmin < dmax && dmin != 0xFFFF) {
+        /* Приоритет: ручная коррекция от фронта > автоматическое определение */
+        if (user_raw_min >= 0 && user_raw_max > user_raw_min) {
+            ZigbeeConf[zbi].dimmer_min = (uint16_t)user_raw_min;
+            ZigbeeConf[zbi].dimmer_max = (uint16_t)user_raw_max;
+            ZigbeeConf[zbi].dimmer_cluster = dim_cluster;
+            ZigbeeConf[zbi].dimmer_attr = dim_attr;
+            LOG_Z2M("zbee: LEARN DIMMER user range %u-%u cluster=0x%04X attr=0x%02X\r\n",
+                    (unsigned)user_raw_min, (unsigned)user_raw_max, dim_cluster, dim_attr);
+        } else if (dmin < dmax && dmin != 0xFFFF) {
             ZigbeeConf[zbi].dimmer_min = dmin;
             ZigbeeConf[zbi].dimmer_max = dmax;
             ZigbeeConf[zbi].dimmer_cluster = dim_cluster;
@@ -4774,8 +5002,11 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                     strncpy(ZigbeeConf[target_zbi].zbee_ieee, ZigbeeConf[zbi].zbee_ieee,
                             sizeof(ZigbeeConf[target_zbi].zbee_ieee) - 1);
                     ZigbeeConf[target_zbi].zbee_ieee[16] = '\0';
-                    ZigbeeConf[target_zbi].zbee_role = ZBEE_ROLE_TRIGGER;
+                    ZigbeeConf[target_zbi].zbee_role = has_switch ? ZBEE_ROLE_SWITCH : ZBEE_ROLE_TRIGGER;
                     ZigbeeConf[target_zbi].topin = 11;
+                    if (has_switch) {
+                        ZigbeeConf[target_zbi].ep = k + 1;
+                    }
                 }
 
                 /* Настраиваем PASSTHROUGH mode */
@@ -4857,8 +5088,11 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             strncpy(ZigbeeConf[free_zbi].zbee_ieee, ZigbeeConf[zbi].zbee_ieee,
                     sizeof(ZigbeeConf[free_zbi].zbee_ieee) - 1);
             ZigbeeConf[free_zbi].zbee_ieee[16] = '\0';
-            ZigbeeConf[free_zbi].zbee_role = ZBEE_ROLE_TRIGGER;
+            ZigbeeConf[free_zbi].zbee_role = has_switch ? ZBEE_ROLE_SWITCH : ZBEE_ROLE_TRIGGER;
             ZigbeeConf[free_zbi].topin = 11;
+            if (has_switch) {
+                ZigbeeConf[free_zbi].ep = k + 1;
+            }
 
             if (trigger_names[k][0]) {
                 strncpy(ZigbeeConf[free_zbi].zbee_label, trigger_names[k],
@@ -4873,8 +5107,12 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             strncpy(ZigbeeConf[free_zbi].sclick, "None",
                     sizeof(ZigbeeConf[free_zbi].sclick) - 1);
 
-            /* Auto-detect mode */
+            /* PASSTHROUGH: payload в pt_single для отображения в Switch pin */
+            ZigbeeConf[free_zbi].vbtn_mode = VBTN_MODE_PASSTHROUGH;
             if (trigger_payloads[k][0]) {
+                strncpy(ZigbeeConf[free_zbi].pt_single, trigger_payloads[k],
+                        sizeof(ZigbeeConf[free_zbi].pt_single) - 1);
+                ZigbeeConf[free_zbi].pt_single[sizeof(ZigbeeConf[free_zbi].pt_single) - 1] = '\0';
                 zbee_vbtn_auto_detect(free_zbi, trigger_payloads[k]);
             }
 
@@ -4909,7 +5147,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             ZigbeeConf[slot].ep = (uint16_t)dp;
             ZigbeeConf[slot].cluster_flags = ep_entries[t].role_flag;
             if (ep_entries[t].is_button) {
-                ZigbeeConf[slot].zbee_role = ZBEE_ROLE_TRIGGER;
+                ZigbeeConf[slot].zbee_role = has_switch ? ZBEE_ROLE_SWITCH : ZBEE_ROLE_TRIGGER;
             } else {
                 ZigbeeConf[slot].zbee_role = ZBEE_ROLE_MFR;
             }
@@ -4948,17 +5186,39 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
     else if (has_lock)       device_type = "lock";
     else if (has_sensor)     device_type = "sensor";
     else if (has_trigger)    device_type = "trigger";
+    else if (has_switch)     device_type = "switch";
     else if (has_ep)       device_type = "multi_ep";
 
     uint8_t new_role = ZBEE_ROLE_ACTUATOR;
     if (has_sensor)  new_role = ZBEE_ROLE_SENSOR;
     if (has_trigger) new_role = ZBEE_ROLE_TRIGGER;
+    if (has_switch)  new_role = ZBEE_ROLE_SWITCH;
     if (has_ep)    new_role = ZBEE_ROLE_MFR;
 
     taskENTER_CRITICAL();
     if (ep_count == 0) {
         /* Обычное (не multi-EP) устройство — обновляем головной слот */
+        uint8_t old_role = ZigbeeConf[zbi].zbee_role;
         ZigbeeConf[zbi].cluster_flags = normal_flags;
+        
+        /* Очищаем данные предыдущей роли при смене типа */
+        if (old_role != new_role) {
+            if (new_role == ZBEE_ROLE_SWITCH) {
+                /* Было кнопкой — очищаем данные кнопки (только если НЕ PASSTHROUGH) */
+                if (ZigbeeConf[zbi].vbtn_mode != VBTN_MODE_PASSTHROUGH) {
+                    ZigbeeConf[zbi].sclick[0] = '\0';
+                    ZigbeeConf[zbi].dclick[0] = '\0';
+                    ZigbeeConf[zbi].lpress[0] = '\0';
+                    ZigbeeConf[zbi].pt_single[0] = '\0';
+                    ZigbeeConf[zbi].pt_double[0] = '\0';
+                    ZigbeeConf[zbi].pt_long[0] = '\0';
+                }
+            } else if (new_role == ZBEE_ROLE_TRIGGER) {
+                /* Было выключателем — очищаем данные выключателя */
+                ZigbeeConf[zbi].onoff = 0;
+            }
+        }
+        
         ZigbeeConf[zbi].zbee_role = new_role;
     } else {
         /* Мульти-DP: головной слот — только для идентификации */
@@ -4976,7 +5236,11 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
 
     extern osMessageQueueId_t usbQueueHandle;
     if (usbQueueHandle) {
+        /* Сохраняем Zigbee конфигурацию (включая role) */
         uint32_t usbnum = 7;
+        xQueueSend(usbQueueHandle, &usbnum, 0);
+        /* Также сохраняем PinToPin (связи между пинами) */
+        usbnum = 4;
         xQueueSend(usbQueueHandle, &usbnum, 0);
     }
 

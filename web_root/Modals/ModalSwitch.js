@@ -23,36 +23,52 @@ function ModalSwitch({
   );
   const [pinOptions, setPinOptions] = useState([]);
 
-  useEffect(() => {
-    fetch('/api/select/get', {
-      method: 'GET',
-      cache: 'no-store',
-      headers: {
-        'Content-Type': 'application/json'
+  const fetchWithRetry = async (url, options = {}, retries = 3, delay = 1000) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(url, options);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return response;
+      } catch (error) {
+        if (i === retries - 1) throw error;
+        await new Promise(r => setTimeout(r, delay * (i + 1)));
       }
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((response) => {
-        if (!response || !response.data || !Array.isArray(response.data)) {
-          console.error('Invalid data format:', response);
+    }
+  };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    const loadData = async () => {
+      try {
+        const response = await fetchWithRetry('/api/select/get?limit=200', {
+          method: 'GET',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          signal
+        });
+        const data = await response.json();
+        if (!data || !data.data || !Array.isArray(data.data)) {
+          console.error('Invalid data format:', data);
           setPinOptions([]);
           return;
         }
-        const relayPins = response.data.filter((pin) => pin.topin === 2 || pin.topin === 11);
+        const relayPins = data.data.filter((pin) => pin.topin === 2 || pin.topin === 11 || pin.topin === 3);
         setPinOptions(relayPins);
-      })
-      .catch((error) => {
-        console.error('Error fetching pin config:', error);
-        setPinOptions([]);
-      });
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('Error fetching pin config:', error);
+          setPinOptions([]);
+        }
+      }
+    };
+
+    loadData();
+    return () => controller.abort();
   }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const jsonData = Object.fromEntries(formData);
@@ -64,7 +80,7 @@ function ModalSwitch({
       jsonData.onoff = onoff;
     } else if (modalType === 'connection') {
       const selectedPin = pinOptions.find(
-        (pin) => pin.pins === jsonData.setrpins
+        (pin) => pin.pins === jsonData.setrpins || pin.id.toString() === jsonData.setrpins
       );
       if (selectedPin) {
         jsonData.pinact = {
@@ -74,26 +90,23 @@ function ModalSwitch({
       }
     }
 
-    fetch('/api/switch/set', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(jsonData)
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        console.log('Success:', data);
-        onSwitchChange({
-          ...selectedSwitch,
-          ...jsonData
-        });
-        hideModal();
-        window.location.href = '/#/switch';
-      })
-      .catch((error) => {
-        console.error('Error:', error);
+    try {
+      const response = await fetchWithRetry('/api/switch/set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(jsonData)
       });
+      const data = await response.json();
+      console.log('Success:', data);
+      onSwitchChange({
+        ...selectedSwitch,
+        ...jsonData
+      });
+      hideModal();
+      window.location.href = '/#/switch';
+    } catch (error) {
+      console.error('Error:', error);
+    }
   };
 
   const handleConnectionChange = (e) => {
@@ -125,6 +138,8 @@ function ModalSwitch({
   };
 
   const renderModalContent = () => {
+    const isZigbee = selectedSwitch?.id >= 89;
+
     if (page === 'TabSwitch') {
       if (modalType === 'connection') {
         return html`
@@ -145,17 +160,21 @@ function ModalSwitch({
                     <td class="p-2">
                       <select
                         name="setrpins"
-                        value=${pinOptions.some(opt => opt.pins === selectedConnection) ? selectedConnection : ''}
+                        value=${pinOptions.some(opt => opt.pins === selectedConnection || opt.id.toString() === selectedConnection) ? selectedConnection : ''}
                         onchange=${handleConnectionChange}
                         class="border rounded p-2 w-full"
                       >
                         <option value="">Select a connection</option>
                         ${pinOptions.map(
-          (option) => html`
-                            <option value=${option.pins}>
-                              ${option.pins} (ID: ${option.id})
+          (option) => {
+            const displayLabel = option.pins || option.zbee_label || `ZB Device ${option.id}`;
+            const optionValue = option.pins || option.id.toString();
+            return html`
+                            <option value=${optionValue}>
+                              ${displayLabel} (ID: ${option.id})
                             </option>
-                          `
+                          `;
+          }
         )}
                       </select>
                     </td>
@@ -192,13 +211,16 @@ function ModalSwitch({
                     <td class="p-2">
                       <select
                         name="ptype"
-                        value=${ptype}
+                        value=${isZigbee ? 0 : ptype}
                         onchange=${handlePtypeChange}
-                        class="border rounded p-2 w-full"
+                        class="border rounded p-2 w-full ${isZigbee ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}"
+                        disabled=${isZigbee}
                       >
                         <option value="0">None</option>
-                        <option value="1">GPIO_PULLUP</option>
-                        <option value="2">GPIO_PULLDOWN</option>
+                        ${!isZigbee && html`
+                          <option value="1">GPIO_PULLUP</option>
+                          <option value="2">GPIO_PULLDOWN</option>
+                        `}
                       </select>
                     </td>
                   </tr>

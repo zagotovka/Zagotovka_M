@@ -96,7 +96,7 @@
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
 			<storageModule moduleId="org.eclipse.cdt.managedbuilder.core.buildsteps">
-				<preBuildStep enabled="true" command="bash ${workspace_loc:/Zagotovka_M}/scripts/build_web_and_pack.sh"/>
+				<preBuildStep command="bash ${workspace_loc:/Zagotovka_M}/scripts/build_web_and_pack.sh" enabled="true"/>
 			</storageModule>
 		</cconfiguration>
 		<cconfiguration id="com.st.stm32cube.ide.mcu.gnu.managedbuild.config.exe.release.112394855">
@@ -190,7 +190,7 @@
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
 			<storageModule moduleId="org.eclipse.cdt.managedbuilder.core.buildsteps">
-				<preBuildStep enabled="true" command="bash ${workspace_loc:/Zagotovka_M}/scripts/build_web_and_pack.sh"/>
+				<preBuildStep command="bash ${workspace_loc:/Zagotovka_M}/scripts/build_web_and_pack.sh" enabled="true"/>
 			</storageModule>
 		</cconfiguration>
 	</storageModule>

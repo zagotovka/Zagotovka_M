@@ -5,7 +5,7 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
   const lang = language || 'ru';
   const [isScanning, setIsScanning] = useState(false);
 
-  const isTrigger = device.zbee_role === 3;
+  const isTrigger = device.zbee_role === 3 || device.zbee_role === 5;
   const [triggers, setTriggers] = useState([]);
 
   useEffect(() => {
@@ -39,6 +39,11 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
   /* Для одиночного устройства */
   const hasDimmer = (device.clusters || []).includes(8);
   const hasColor = (device.clusters || []).includes(768);
+
+  /* Калибровка диапазона: для ZCL Level Control (cluster 8) спека фиксирует 1-254.
+     Для Tuya DP dimmer_min/dimmer_max приходят с бэкенда после Learning Mode. */
+  const dMin = (device.dimmer_min != null && device.dimmer_min !== 0) ? device.dimmer_min : 1;
+  const dMax = (device.dimmer_max != null && device.dimmer_max !== 0) ? device.dimmer_max : 254;
 
   const [onoff, setOnoff] = useState(device.onoff || 0);
   const [brightness, setBrightness] = useState(device.brightness || 254);
@@ -232,22 +237,28 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
                   ${(slot.clusters || []).includes(6) && html`
                     <${MyPolzunok} value=${slot.onoff || 0} onChange=${(val) => applyDpOnOff(slot.id, val)} />
                   `}
-                  ${(slot.clusters || []).includes(8) && html`
-                    <div class="mt-3">
-                      <div class="flex justify-between items-center mb-2">
-                        <span class="text-xs text-slate-500">${lang === 'ru' ? 'Яркость' : 'Brightness'}</span>
-                        <span class="text-xs font-mono text-slate-500">${slot.brightness || 0}%</span>
+                  ${(slot.clusters || []).includes(8) && (() => {
+                    const sMin = (slot.dimmer_min != null && slot.dimmer_min !== 0) ? slot.dimmer_min : 1;
+                    const sMax = (slot.dimmer_max != null && slot.dimmer_max !== 0) ? slot.dimmer_max : 254;
+                    const sVal = slot.brightness != null ? slot.brightness : sMax;
+                    const sPct = Math.round(((sVal - sMin) / (sMax - sMin)) * 100);
+                    return html`
+                      <div class="mt-3">
+                        <div class="flex justify-between items-center mb-2">
+                          <span class="text-xs text-slate-500">${lang === 'ru' ? 'Яркость' : 'Brightness'}</span>
+                          <span class="text-xs font-mono text-slate-500">${sPct}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min=${sMin}
+                          max=${sMax}
+                          value=${sVal}
+                          onInput=${(e) => applyDpBrightness(slot.id, parseInt(e.target.value))}
+                          class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                        />
                       </div>
-                      <input
-                        type="range"
-                        min="1"
-                        max="254"
-                        value=${slot.brightness || 254}
-                        onInput=${(e) => applyDpBrightness(slot.id, parseInt(e.target.value))}
-                        class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                      />
-                    </div>
-                  `}
+                    `;
+                  })()}
                 </div>
               `)}
 
@@ -287,12 +298,14 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
                 <div class="bg-slate-50 rounded-xl p-4">
                   <div class="flex justify-between items-center mb-3">
                     <span class="text-sm font-semibold text-slate-600 uppercase tracking-wider">Brightness</span>
-                    <span class="text-sm font-mono text-slate-500">${Math.round((brightness / 254) * 100)}%</span>
+                    <span class="text-sm font-mono text-slate-500">
+                      ${Math.round(((brightness - dMin) / (dMax - dMin)) * 100)}%
+                    </span>
                   </div>
                   <input
                     type="range"
-                    min="1"
-                    max="254"
+                    min=${dMin}
+                    max=${dMax}
                     value=${brightness}
                     onInput=${(e) => applyBrightness(parseInt(e.target.value))}
                     class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"

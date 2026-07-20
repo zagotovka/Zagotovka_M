@@ -10,6 +10,7 @@
 #include "db.h"
 #include "ds18b20Config.h"
 #include "fatfs.h"
+#include "logger.h"
 #include "main.h"
 #include "multi_button.h"
 #include "usb_host.h"
@@ -1410,42 +1411,43 @@ void GetPinToPin() {
 
   fresult = f_stat("pintopin.ini", &finfo);
   if (fresult != FR_OK) {
-    printf("ERROR: pintopin.ini file not found!\r\n");
+    LOG_SYSTEM("[USB] pintopin.ini not found");
     return;
   }
   if (finfo.fsize == 0) {
-    printf("ERROR: pintopin.ini is empty!\r\n");
+    LOG_SYSTEM("[USB] pintopin.ini is empty");
     return;
   }
   if (f_open(&USBHFile, "pintopin.ini", FA_READ) != FR_OK) {
-    printf("ERROR: Cannot open pintopin.ini!\r\n");
+    LOG_SYSTEM("[USB] Cannot open pintopin.ini");
     return;
   }
 
   char *buf = pvPortMalloc(finfo.fsize + 1);
   if (!buf) {
-    printf("ERROR: Out of memory reading pintopin.ini\r\n");
+    LOG_SYSTEM("[USB] Out of memory reading pintopin.ini");
     f_close(&USBHFile);
     return;
   }
-  printf("heap: free=%u min=%u (pintopin alloc %lu)\r\n",
-         (unsigned)xPortGetFreeHeapSize(), (unsigned)xPortGetMinimumEverFreeHeapSize(), (unsigned long)(finfo.fsize + 1));
+  LOG_SYSTEM("[USB] pintopin.ini size=%lu heap=%u",
+               (unsigned long)finfo.fsize, (unsigned)xPortGetFreeHeapSize());
 
   fresult = f_read(&USBHFile, buf, finfo.fsize, &bytesRead);
   f_close(&USBHFile);
 
   if (fresult != FR_OK || bytesRead == 0) {
-    printf("ERROR: Failed to read pintopin.ini\r\n");
+    LOG_SYSTEM("[USB] Failed to read pintopin.ini");
     vPortFree(buf);
     return;
   }
   buf[bytesRead] = '\0';
 
-  memset(PinsLinks, 0, sizeof(PinsLinks)); // Очищаем массив связей
+  memset(PinsLinks, 0, sizeof(PinsLinks));
 
   struct mg_str arr = mg_str_n(buf, strlen(buf));
 
   int i = 0;
+  int loaded = 0;
   size_t pos = 0;
   struct mg_str key, elem;
   while (i < NUMPINLINKS && (pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
@@ -1459,42 +1461,52 @@ void GetPinToPin() {
       PinsLinks[i].pins[sizeof(PinsLinks[i].pins) - 1] = '\0';
       mg_free(pins);
     }
+    if (idin != 0 || idout != 0) loaded++;
     i++;
   }
   vPortFree(buf);
-  printf("GetPinToPin() loaded successfully!\r\n");
+  LOG_SYSTEM("[USB] GetPinToPin: loaded %d entries (%d total)", loaded, i);
   if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 }
 
 // Записываем данные в файл "pintopin.ini", создавая его если его нет.
 void SetPinToPin() {
   UINT bytesWritten;
+  FRESULT fres;
   char buffer[JSON_BUF_SIZE];
+  int saved_count = 0;
 
   if (f_open(&USBHFile, (const TCHAR *)"pintopin.ini",
              FA_CREATE_ALWAYS | FA_WRITE) != FR_OK) {
-    printf("Error opening file for writing\r\n");
+    LOG_SYSTEM("[USB] SetPinToPin open failed");
     return;
   }
-  f_write(&USBHFile, "[", 1, &bytesWritten);
-  for (int i = 0; i < NUMPINLINKS; i++) {
-    // Write opening bracket for object
-    if (i > 0) {
-      f_write(&USBHFile, ",{", 2, &bytesWritten);
-    } else {
-      f_write(&USBHFile, "{", 1, &bytesWritten);
-    }
-    snprintf(buffer, JSON_BUF_SIZE, "\"idin\":%d,", PinsLinks[i].idin);
-    f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
-    snprintf(buffer, JSON_BUF_SIZE, "\"idout\":%d,", PinsLinks[i].idout);
-    f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
-    snprintf(buffer, JSON_BUF_SIZE, "\"pins\":\"%s\"}", PinsLinks[i].pins);
-    f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
+  fres = f_write(&USBHFile, "[", 1, &bytesWritten);
+  if (fres != FR_OK || bytesWritten != 1) {
+    LOG_SYSTEM("[USB] SetPinToPin write '[' failed");
+    f_close(&USBHFile);
+    return;
   }
-  f_write(&USBHFile, "]", 1, &bytesWritten);
+  for (int i = 0; i < NUMPINLINKS; i++) {
+    if (PinsLinks[i].idin == 0 && PinsLinks[i].idout == 0)
+      continue;
+    if (saved_count > 0) {
+      fres = f_write(&USBHFile, ",", 1, &bytesWritten);
+      if (fres != FR_OK) { LOG_SYSTEM("[USB] SetPinToPin write ',' failed"); break; }
+    }
+    int len = snprintf(buffer, JSON_BUF_SIZE,
+                       "{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
+                       PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins);
+    fres = f_write(&USBHFile, buffer, len, &bytesWritten);
+    if (fres != FR_OK || (int)bytesWritten != len) { LOG_SYSTEM("[USB] SetPinToPin write entry[%d] failed", i); break; }
+    saved_count++;
+  }
+  fres = f_write(&USBHFile, "]", 1, &bytesWritten);
+  if (fres != FR_OK) LOG_SYSTEM("[USB] SetPinToPin write ']' failed");
 
+  f_sync(&USBHFile);
   f_close(&USBHFile);
-  printf("File 'PINTOPIN.INI' updated successfully!\r\n");
+  LOG_SYSTEM("[USB] SetPinToPin: saved %d entries", saved_count);
   mark_slice_dirty(&g_ver_switch);
   mark_slice_dirty(&g_ver_encoder);
   mark_slice_dirty(&g_ver_pins);
@@ -2545,6 +2557,11 @@ void GetZigbeeConfig(void) {
     if (ieee) {
       strncpy(ZigbeeConf[idx].zbee_ieee, ieee, sizeof(ZigbeeConf[idx].zbee_ieee) - 1);
       zbee_validate_ieee(ZigbeeConf[idx].zbee_ieee);
+      /* Нормализуем к нижнему регистру */
+      for (int k = 0; k < 16; k++) {
+        if (ZigbeeConf[idx].zbee_ieee[k] >= 'A' && ZigbeeConf[idx].zbee_ieee[k] <= 'F')
+          ZigbeeConf[idx].zbee_ieee[k] += 32;
+      }
       mg_free(ieee);
     }
     
@@ -2580,7 +2597,8 @@ void GetZigbeeConfig(void) {
     ZigbeeConf[idx].dvalue = (int)mg_json_get_long(elem, "$.dvalue", 0);
     ZigbeeConf[idx].color_hex = (uint32_t)mg_json_get_long(elem, "$.color_hex", 0xFFAA00);
     ZigbeeConf[idx].state = (uint8_t)mg_json_get_long(elem, "$.state", 0);
-    ZigbeeConf[idx].topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
+    /* topin всегда 11 для Zigbee устройств */
+    ZigbeeConf[idx].topin = 11;
     ZigbeeConf[idx].ep = (uint16_t)mg_json_get_long(elem, "$.ep", 0);
     ZigbeeConf[idx].ep_onoff = (uint16_t)mg_json_get_long(elem, "$.ep_onoff", 0);
     ZigbeeConf[idx].ep_brightness = (uint16_t)mg_json_get_long(elem, "$.ep_brightness", 0);

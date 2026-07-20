@@ -3,6 +3,7 @@ import { h, useState, useEffect, useRef, html } from '../bundle.js';
 const ROLE_OPTIONS = [
   { value: 'ignore',      label: { ru: 'Игнорировать', en: 'Ignore' } },
   { value: 'onoff',       label: { ru: 'Вкл/Выкл',    en: 'On/Off' } },
+  { value: 'switch',      label: { ru: 'Выключатель',  en: 'Switch' } },
   { value: 'brightness',  label: { ru: 'Яркость',      en: 'Brightness' } },
   { value: 'dimmer',      label: { ru: 'Диммер',       en: 'Dimmer' } },
   { value: 'color',       label: { ru: 'Цвет',         en: 'Color' } },
@@ -27,16 +28,16 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
   const [saving, setSaving] = useState(false);
   const [savedType, setSavedType] = useState(null);
   const [error, setError] = useState(null);
+  const [rawRanges, setRawRanges] = useState({});  // manual override: { obsKey: { min, max } }
   const pollRef = useRef(null);
   const mergedRef = useRef({});
-  const dimmerRef = useRef({ dMin: null, dMax: null });
 
   useEffect(() => {
     mergedRef.current = {};
-    dimmerRef.current = { dMin: null, dMax: null };
     setObservations([]);
     setLabels({});
     setNames({});
+    setRawRanges({});
     setSavedType(null);
     setError(null);
   }, [ieee]);
@@ -88,22 +89,31 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
     try {
       const payload = {
         ieee,
-        labels: observations.map(o => (
-          o.source === 'trigger'
+        labels: observations.map(o => {
+          const k = obsKey(o);
+          const base = o.source === 'trigger'
             ? {
                 source: 'trigger',
                 trigger_payload: o.payload,
-                role: labels[obsKey(o)] || 'ignore',
-                label: names[obsKey(o)] || '',
+                role: labels[k] || 'ignore',
+                label: names[k] || '',
               }
             : {
                 ep: o.cluster === '0xEF00' ? parseInt(o.attr, 16) : o.ep,
                 cluster: o.cluster,
                 attr: o.attr,
-                role: labels[obsKey(o)] || 'ignore',
-                label: names[obsKey(o)] || '',
-              }
-        )),
+                role: labels[k] || 'ignore',
+                label: names[k] || '',
+              };
+          /* Добавляем raw_min/raw_max для Tuya строк с ролью brightness/dimmer */
+          const role = labels[k] || 'ignore';
+          if ((role === 'brightness' || role === 'dimmer') && o.cluster === '0xEF00') {
+            const override = rawRanges[k];
+            base.raw_min = override?.min ?? o.obs_min;
+            base.raw_max = override?.max ?? o.obs_max;
+          }
+          return base;
+        }),
       };
       const r = await fetch('/api/zigbee/learn/label', {
         method: 'POST',
@@ -113,7 +123,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
       const res = await r.json();
       if (res.status) {
         setSavedType(res.device_type);
-        if (res.device_type !== 'trigger' && res.device_type !== 'multi_ep') {
+        if (res.device_type !== 'trigger' && res.device_type !== 'switch' && res.device_type !== 'multi_ep') {
           setTimeout(() => onSaved?.(res.device_type), 2000);
         }
         if (res.ep_slots > 1) {
@@ -135,7 +145,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
 
   const typeIcon = (t) => ({
     dimmer: '🔆', color_lamp: '💡', sensor: '📡',
-    trigger: '🔘', multi_ep: '🏭', cover: '🚪',
+    trigger: '🔘', switch: '🔀', multi_ep: '🏭', cover: '🚪',
     thermostat: '🌡️', lock: '🔒', socket: '🔌',
     multi_ep: '✱',
   }[t] || '🔌');
@@ -145,6 +155,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
     color_lamp: lang === 'ru' ? 'Цветная лампа' : 'Color Lamp',
     sensor: lang === 'ru' ? 'Сенсор' : 'Sensor',
     trigger: lang === 'ru' ? 'Кнопка/Триггер' : 'Trigger',
+    switch: lang === 'ru' ? 'Выключатель' : 'Switch',
     multi_ep: lang === 'ru' ? 'Multi-EP устройство' : 'Multi-EP Device',
     cover: lang === 'ru' ? 'Шторы/Жалюзи' : 'Cover',
     thermostat: lang === 'ru' ? 'Термостат' : 'Thermostat',
@@ -186,18 +197,29 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                 </div>
               `}
 
-              ${(savedType === 'trigger' || savedType === 'multi_ep') && html`
+              ${(savedType === 'trigger' || savedType === 'switch' || savedType === 'multi_ep') && html`
                 <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-2 text-left">
                   <p class="text-sm text-blue-800 mb-3">
                     ${savedType === 'multi_ep'
                       ? (lang === 'ru'
                         ? 'Создано несколько устройств. Если есть кнопки, настройте действия на странице Button pin.'
                         : 'Multiple devices created. If there are buttons, configure actions on the Button pin page.')
-                      : (lang === 'ru'
-                        ? 'Мы только определили устройство. Чтобы кнопка что-то делала при нажатии, настройте действия на странице Button pin.'
-                        : 'We only identified the device. To make the button actually do something, configure actions on the Button pin page.')}
+                      : savedType === 'switch'
+                        ? (lang === 'ru'
+                          ? 'Выключатель определён. Настройте действия на странице Switch pin.'
+                          : 'Switch identified. Configure actions on the Switch pin page.')
+                        : (lang === 'ru'
+                          ? 'Мы только определили устройство. Чтобы кнопка что-то делала при нажатии, настройте действия на странице Button pin.'
+                          : 'We only identified the device. To make the button actually do something, configure actions on the Button pin page.')}
                   </p>
-                  ${onGoToButtonPin && html`
+                  ${savedType === 'switch' && html`
+                    <button
+                      class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+                      onClick=${() => { onClose(); window.location.href = '/#/switch'; }}>
+                      ${lang === 'ru' ? 'Перейти на Switch pin →' : 'Go to Switch pin →'}
+                    </button>
+                  `}
+                  ${savedType === 'trigger' && onGoToButtonPin && html`
                     <button
                       class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
                       onClick=${() => onGoToButtonPin(ieee)}>
@@ -362,22 +384,20 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
             if (dimmerObs.length === 0) return html``;
 
             let currentVal = null;
+            let globalMin = Infinity, globalMax = -Infinity;
             for (const o of dimmerObs) {
-              const v1 = parseInt(o.first_val, 10);
+              const k = obsKey(o);
+              const override = rawRanges[k];
+              const vmin = override?.min ?? o.obs_min;
+              const vmax = override?.max ?? o.obs_max;
+              if (vmin < globalMin) globalMin = vmin;
+              if (vmax > globalMax) globalMax = vmax;
               const v2 = parseInt(o.last_val, 10);
-              if (!isNaN(v1)) {
-                if (dimmerRef.current.dMin === null || v1 < dimmerRef.current.dMin) dimmerRef.current.dMin = v1;
-                if (dimmerRef.current.dMax === null || v1 > dimmerRef.current.dMax) dimmerRef.current.dMax = v1;
-              }
-              if (!isNaN(v2)) {
-                if (dimmerRef.current.dMin === null || v2 < dimmerRef.current.dMin) dimmerRef.current.dMin = v2;
-                if (dimmerRef.current.dMax === null || v2 > dimmerRef.current.dMax) dimmerRef.current.dMax = v2;
-                currentVal = v2;
-              }
+              if (!isNaN(v2)) currentVal = v2;
             }
-            const dMin = dimmerRef.current.dMin;
-            const dMax = dimmerRef.current.dMax;
-            const hasData = dMin !== Infinity;
+            const dMin = globalMin !== Infinity ? globalMin : null;
+            const dMax = globalMax !== -Infinity ? globalMax : null;
+            const hasData = dMin !== null;
             const hasRange = hasData && dMax > dMin;
 
             return html`
@@ -427,6 +447,42 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                     ${lang === 'ru'
                       ? 'Ожидание данных... Вращайте регулятор.'
                       : 'Waiting for data... Rotate the dimmer.'}
+                  </div>
+                `}
+
+                ${dimmerObs.filter(o => o.cluster === '0xEF00').length > 0 && html`
+                  <div class="mt-3 pt-3 border-t border-amber-200">
+                    <div class="text-xs text-amber-700 font-medium mb-2">
+                      ${lang === 'ru' ? 'Ручная коррекция диапазона (Tuya DP)' : 'Manual range correction (Tuya DP)'}
+                    </div>
+                    <div class="text-xs text-amber-600 mb-2">
+                      ${lang === 'ru'
+                        ? 'Если вы крутили регулятор не на весь диапазон — поправьте значения.'
+                        : 'If you did not rotate through the full range — adjust the values.'}
+                    </div>
+                    ${dimmerObs.filter(o => o.cluster === '0xEF00').map(o => {
+                      const k = obsKey(o);
+                      const override = rawRanges[k] || {};
+                      const curMin = override.min ?? o.obs_min;
+                      const curMax = override.max ?? o.obs_max;
+                      return html`
+                        <div class="flex items-center gap-2 mb-1">
+                          <span class="text-xs text-slate-500 w-16">${lang === 'ru' ? 'EP' : 'EP'}${parseInt(o.attr, 16)}:</span>
+                          <label class="text-xs text-slate-500">min</label>
+                          <input type="number" class="border rounded px-1 py-0.5 text-xs w-16 font-mono"
+                                 value=${curMin}
+                                 onInput=${e => setRawRanges(prev => ({
+                                   ...prev, [k]: { ...prev[k], min: parseInt(e.target.value) || 0 }
+                                 }))} />
+                          <label class="text-xs text-slate-500">max</label>
+                          <input type="number" class="border rounded px-1 py-0.5 text-xs w-16 font-mono"
+                                 value=${curMax}
+                                 onInput=${e => setRawRanges(prev => ({
+                                   ...prev, [k]: { ...prev[k], max: parseInt(e.target.value) || 0 }
+                                 }))} />
+                        </div>
+                      `;
+                    })}
                   </div>
                 `}
               </div>

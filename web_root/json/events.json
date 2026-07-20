@@ -1,0 +1,7 @@
+{
+  "arr": [
+    {"type": 0, "prio": 0, "time": 1721400000, "text": "System boot"},
+    {"type": 1, "prio": 1, "time": 1721400100, "text": "MQTT connected"},
+    {"type": 2, "prio": 2, "time": 1721400200, "text": "Network configured"}
+  ]
+}

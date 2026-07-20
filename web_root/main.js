@@ -213,7 +213,7 @@ function Sidebar({ url, show }) {
       <div
         class="flex h-10 shrink-0 items-center gap-x-4 font-bold text-xl text-slate-500"
       >
-        <${Logo} class="h-full" /> Zagotovka <span class="text-xs text-slate-400 font-normal ml-1">v2.0.2w</span>
+        <${Logo} class="h-full" /> Zagotovka <span class="text-xs text-slate-400 font-normal ml-1">v2.0.2y</span>
       <//>
       <div class="flex flex-1 flex-col">
         <${NavLink} title="Dashboard" icon=${Icons.home} href="/" url=${url} />

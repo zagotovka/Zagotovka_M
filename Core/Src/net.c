@@ -1852,6 +1852,44 @@ void handle_buttons(struct mg_connection *c, struct mg_http_message *hm) {
     c->is_draining = 1;
 }
 
+/* ─── Вспомогательная: сборка pinact JSON из PinsLinks[] ─── */
+static int build_pinact_json(char *buf, size_t bufsize, int for_id) {
+    size_t p = 0;
+    if (bufsize < 3) { if (bufsize) buf[0] = '\0'; return 0; }
+    buf[p++] = '{';
+    bool pa_first = true;
+
+    for (int k = 0; k < NUMPINLINKS; k++) {
+        if (PinsLinks[k].idin == 0 && PinsLinks[k].idout == 0) continue;
+        if (PinsLinks[k].idin != for_id) continue;
+        if (bufsize - p < 48) break;
+
+        char name[32];
+        int target = PinsLinks[k].idout;
+        if (target < NUMPIN) {
+            json_escape_str(name, PinsInfo[target].pins, sizeof(name));
+        } else {
+            int zbi = target - NUMPIN;
+            if (zbi >= 0 && zbi < NUMZBEE) {
+                json_escape_str(name,
+                    ZigbeeConf[zbi].zbee_label[0] ? ZigbeeConf[zbi].zbee_label : "Zigbee",
+                    sizeof(name));
+            } else {
+                snprintf(name, sizeof(name), "?");
+            }
+        }
+
+        int written = snprintf(buf + p, bufsize - p, "%s\"%d\":\"%s\"",
+                                pa_first ? "" : ",", target, name);
+        if (written < 0 || (size_t)written >= bufsize - p) break;
+        p += (size_t)written;
+        pa_first = false;
+    }
+
+    if (p < bufsize - 2) { buf[p++] = '}'; buf[p] = '\0'; }
+    return (int)p;
+}
+
 /* ─── /api/state/switch (Keep-Alive polling) ─── */
 void handle_switches(struct mg_connection *c) {
 
@@ -1863,12 +1901,12 @@ void handle_switches(struct mg_connection *c) {
 
     bool first = true;
 
-    /* ── Массив switches ── */
+    /* ── Физические пины с topin == 3 ── */
     for (int i = 0; i < NUMPIN; i++) {
         if (PinsConf[i].topin != 3) continue;
 
         int remaining = (int)G_BODY_SIZE - pos;
-        if (remaining < 150) {
+        if (remaining < 450) {
             MG_ERROR(("switches: OVERFLOW at pin %d, pos=%d remaining=%d",
                       i, pos, remaining));
             break;
@@ -1879,12 +1917,53 @@ void handle_switches(struct mg_connection *c) {
         json_escape_str(esc_info, PinsConf[i].info, sizeof(esc_info));
         json_escape_str(esc_pins, PinsInfo[i].pins, sizeof(esc_pins));
 
+        char pinact_buf[256];
+        build_pinact_json(pinact_buf, sizeof(pinact_buf), i);
+
         pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
-            "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
+            "\"pinact\":%s,\"info\":\"%s\",\"onoff\":%d}",
             first ? "" : ",",
             PinsConf[i].topin, i, esc_pins,
-            PinsConf[i].ptype, esc_info, PinsConf[i].onoff);
+            PinsConf[i].ptype, pinact_buf, esc_info, PinsConf[i].onoff);
+
+        first = false;
+    }
+
+    /* ── Zigbee выключатели (zbee_role == ZBEE_ROLE_SWITCH) ── */
+    for (int i = 0; i < NUMZBEE; i++) {
+        if (ZigbeeConf[i].zbee_role != ZBEE_ROLE_SWITCH) continue;
+
+        int remaining = (int)G_BODY_SIZE - pos;
+        if (remaining < 450) {
+            MG_ERROR(("switches: OVERFLOW at zigbee %d, pos=%d remaining=%d",
+                      i, pos, remaining));
+            break;
+        }
+
+        char esc_info[64];
+        json_escape_str(esc_info, ZigbeeConf[i].info, sizeof(esc_info));
+
+        /* ID для Zigbee: NUMPIN + i (виртуальные пины) */
+        int zigbee_id = NUMPIN + i;
+
+        /* Payload: если vbtn_mode == PASSTHROUGH и pt_single задан, используем его */
+        char esc_pins[64];
+        if (ZigbeeConf[i].vbtn_mode == VBTN_MODE_PASSTHROUGH &&
+            ZigbeeConf[i].pt_single[0] != '\0') {
+            json_escape_str(esc_pins, ZigbeeConf[i].pt_single, sizeof(esc_pins));
+        } else {
+            snprintf(esc_pins, sizeof(esc_pins), "ZB_%s", ZigbeeConf[i].zbee_ieee);
+        }
+
+        char pinact_buf[256];
+        build_pinact_json(pinact_buf, sizeof(pinact_buf), zigbee_id);
+
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+            "%s{\"topin\":11,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,"
+            "\"pinact\":%s,\"info\":\"%s\",\"onoff\":%d}",
+            first ? "" : ",",
+            zigbee_id, esc_pins, pinact_buf, esc_info, ZigbeeConf[i].onoff);
 
         first = false;
     }

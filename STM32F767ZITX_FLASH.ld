@@ -38,7 +38,7 @@ ENTRY(Reset_Handler)
 /* Highest address of the user mode stack */
 _estack = 0x20080000; /* Конец всей физической 512КБ RAM */
 
-_Min_Heap_Size = 0x0; /* newlib malloc() не используется — вся динамика через FreeRTOS pvPortMalloc() */
+_Min_Heap_Size = 0x8000; /* newlib malloc() не используется — вся динамика через FreeRTOS pvPortMalloc() */
 _Min_Stack_Size = 0x800; /* required amount of stack */
 
 /* Memories definition */
