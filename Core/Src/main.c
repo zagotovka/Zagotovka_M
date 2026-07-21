@@ -777,16 +777,16 @@ int main(void)
   DWT_Init();
   test_init();
   dtcm_alloc_init();
-  /* BSS → DTCM: присваиваем указатели */
+  /* BSS → DTCM: присваиваем указатели (с проверкой на overflow) */
   PidConf = dtcm_pid_conf;
-  memset(dtcm_sec_deb_tm, 0, sizeof(uint32_t) * NUMPIN);
-  memset(dtcm_sec_lasttrg, 0, sizeof(uint32_t) * NUMPIN);
-  memset(dtcm_fade_state, 0, sizeof(FadeState_t) * NUMPIN);
-  memset(dtcm_cron_ctxs, 0, sizeof(lwdtc_cron_ctx_t) * NUMTASK);
-  memset(dtcm_prev_pwm_dvalue, 0, sizeof(int) * NUMPIN);
-  memset(dtcm_prev_gpio, 0xFF, sizeof(uint8_t) * NUMPIN);
-  for (int i = 0; i < NUMPIN; i++) dtcm_prev_duty[i] = -1;
-  memset(dtcm_zbee_last_cmd_tick, 0, sizeof(uint32_t) * NUMZBEE);
+  if (dtcm_sec_deb_tm)     memset(dtcm_sec_deb_tm, 0, sizeof(uint32_t) * NUMPIN);
+  if (dtcm_sec_lasttrg)    memset(dtcm_sec_lasttrg, 0, sizeof(uint32_t) * NUMPIN);
+  if (dtcm_fade_state)     memset(dtcm_fade_state, 0, sizeof(FadeState_t) * NUMPIN);
+  if (dtcm_cron_ctxs)      memset(dtcm_cron_ctxs, 0, sizeof(lwdtc_cron_ctx_t) * NUMTASK);
+  if (dtcm_prev_pwm_dvalue) memset(dtcm_prev_pwm_dvalue, 0, sizeof(int) * NUMPIN);
+  if (dtcm_prev_gpio)      memset(dtcm_prev_gpio, 0xFF, sizeof(uint8_t) * NUMPIN);
+  if (dtcm_prev_duty) { for (int i = 0; i < NUMPIN; i++) dtcm_prev_duty[i] = -1; }
+  if (dtcm_zbee_last_cmd_tick) memset(dtcm_zbee_last_cmd_tick, 0, sizeof(uint32_t) * NUMZBEE);
   usart_ring_dtcm_init();
   gsm_dtcm_init();
   net_dtcm_init();

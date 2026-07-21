@@ -98,6 +98,7 @@ __attribute__((section(".itcm"))) void dtcm_alloc_init(void)
         !dtcm_zbee_last_cmd_tick) {
         printf("[DTCM] FATAL: BSS→DTCM allocation failed! used=%u free=%u\r\n",
                (unsigned)dtcm_alloc_get_used(), (unsigned)dtcm_alloc_get_free());
+        while (1) { __asm volatile("bkpt #0"); }  /* Останавливаем систему! */
     }
 }
 
