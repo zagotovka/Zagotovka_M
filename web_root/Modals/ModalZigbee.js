@@ -36,9 +36,28 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
     setDpSlots(dpSlotsRaw);
   }, [allDevices]);
 
+  const [overrideType, setOverrideType] = useState(device.override || 0);
+
+  const applyOverrideType = (e) => {
+    const val = parseInt(e.target.value, 10);
+    setOverrideType(val);
+    fetch('/api/zigbee/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: device.id, override: val })
+    }).then(() => {
+        onUpdate({ ...device, override: val });
+    });
+  };
+
   /* Для одиночного устройства */
-  const hasDimmer = (device.clusters || []).includes(8);
-  const hasColor = (device.clusters || []).includes(768);
+  const effectiveOverride = overrideType;
+  const hasDimmer = effectiveOverride === 0 
+    ? (device.clusters || []).includes(8) 
+    : (effectiveOverride === 2 || effectiveOverride === 3 || effectiveOverride === 4);
+  const hasColor = effectiveOverride === 0 
+    ? (device.clusters || []).includes(768) 
+    : (effectiveOverride === 4);
 
   /* Калибровка диапазона: для ZCL Level Control (cluster 8) спека фиксирует 1-254.
      Для Tuya DP dimmer_min/dimmer_max приходят с бэкенда после Learning Mode. */
@@ -61,6 +80,7 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
     const t = setTimeout(() => setIsScanning(false), 5000);
     return () => clearTimeout(t);
   }, [isScanning]);
+
 
   const portalRef = useRef(null);
   const pendingUpdate = useRef(null);
@@ -162,7 +182,7 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
               <p class="text-sm text-slate-500 mt-1">
                 ID: ${device.displayId || device.id} · ${isMultiDp
                   ? `Multi-EP (${dpSlots.length} EP)`
-                  : (isTrigger ? 'Button' : (hasColor ? 'Color Lamp' : (hasDimmer ? 'Dimmer' : 'On/Off Socket')))}
+                  : (isTrigger ? 'Button' : (hasColor ? 'Лампа (яркость + цвет)' : (hasDimmer ? 'Лампа (яркость)' : 'Розетка (On/Off)')))}
               </p>
             </div>
             <button
@@ -176,6 +196,22 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
           </div>
 
           <div class="space-y-4">
+            
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 flex justify-between items-center">
+              <span class="text-sm font-medium text-slate-600">${lang === 'ru' ? 'Тип устройства:' : 'Device Type:'}</span>
+              <select 
+                class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5"
+                value=${overrideType}
+                onChange=${applyOverrideType}
+              >
+                <option value="0">${lang === 'ru' ? 'Автоматически' : 'Auto-detect'}</option>
+                <option value="1">${lang === 'ru' ? 'Розетка (On/Off)' : 'Socket (On/Off)'}</option>
+                <option value="2">${lang === 'ru' ? 'Диммер' : 'Dimmer'}</option>
+                <option value="3">${lang === 'ru' ? 'Лампа (яркость)' : 'Lamp (brightness)'}</option>
+                <option value="4">${lang === 'ru' ? 'Лампа (яркость + цвет)' : 'Lamp (brightness + color)'}</option>
+              </select>
+            </div>
+
             ${isTrigger ? html`
               <div class="bg-slate-50 rounded-xl p-4">
                 <div class="text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wider">
@@ -320,6 +356,7 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
                     type="color"
                     value=${color}
                     onInput=${(e) => applyColor(e.target.value)}
+                    onChange=${(e) => applyColor(e.target.value)}
                     class="w-16 h-10 rounded-lg border-2 border-slate-200 cursor-pointer"
                   />
                 </div>

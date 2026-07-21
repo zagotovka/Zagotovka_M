@@ -1241,7 +1241,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     for (int i = 0; i < NUMZBEE; i++) {
       if (ZigbeeConf[i].zbee_ieee[0] != '\0') {
         /* multi-EP слоты — подписка на конкретный EP */
-        if (ZigbeeConf[i].ep > 0) {
+        if (ZigbeeConf[i].ep_onoff > 0) {
           char zbee_sub_topic[96];
           snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
                    "%s/data/%s/%d/EF00/%04X",

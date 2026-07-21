@@ -2649,6 +2649,7 @@ void GetZigbeeConfig(void) {
     ZigbeeConf[idx].dimmer_max = (uint16_t)mg_json_get_long(elem, "$.dimmer_max", 0);
     ZigbeeConf[idx].dimmer_cluster = (uint16_t)mg_json_get_long(elem, "$.dimmer_cluster", 0x0008);
     ZigbeeConf[idx].dimmer_attr = (uint8_t)mg_json_get_long(elem, "$.dimmer_attr", 0);
+    ZigbeeConf[idx].device_type_override = (uint8_t)mg_json_get_long(elem, "$.override", 0);
 
     idx++;
   }
@@ -2697,7 +2698,8 @@ void SetZigbeeConfig(void) {
         "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
         "\"vbtn_mode\":%d,"
         "\"pt_single\":\"%s\",\"pt_double\":\"%s\",\"pt_long\":\"%s\","
-        "\"dimmer_min\":%d,\"dimmer_max\":%d,\"dimmer_cluster\":%d,\"dimmer_attr\":%d}",
+        "\"dimmer_min\":%d,\"dimmer_max\":%d,\"dimmer_cluster\":%d,\"dimmer_attr\":%d,"
+        "\"override\":%d}",
         ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint, clbuf,
         ZigbeeConf[i].zbee_attribute, ZigbeeConf[i].zbee_label, ZigbeeConf[i].onoff,
         ZigbeeConf[i].dvalue, (unsigned)ZigbeeConf[i].color_hex,
@@ -2709,7 +2711,8 @@ void SetZigbeeConfig(void) {
         ZigbeeConf[i].vbtn_mode,
         ZigbeeConf[i].pt_single, ZigbeeConf[i].pt_double, ZigbeeConf[i].pt_long,
         ZigbeeConf[i].dimmer_min, ZigbeeConf[i].dimmer_max,
-        ZigbeeConf[i].dimmer_cluster, ZigbeeConf[i].dimmer_attr);
+        ZigbeeConf[i].dimmer_cluster, ZigbeeConf[i].dimmer_attr,
+        ZigbeeConf[i].device_type_override);
     if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_C) continue;
 
     fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);

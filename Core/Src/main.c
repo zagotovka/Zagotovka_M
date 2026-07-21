@@ -1968,7 +1968,7 @@ void StartOutputTask(void *argument)
             printf("[OUT] SKIP: slot %d is SWITCH, not actuator\r\n", zbi);
           } else if (ZigbeeConf[zbi].zbee_ieee[0] != '\0' && ZigbeeConf[zbi].onoff) {
             /* multi-EP команда — отправка на конкретный EP */
-            if (ZigbeeConf[zbi].ep > 0) {
+            if (ZigbeeConf[zbi].ep_onoff > 0) {
               const char *val_str;
               char valbuf[8];
               if (ZigbeeConf[zbi].cluster_flags & ZBEE_CL_ONOFF) {

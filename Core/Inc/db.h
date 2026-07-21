@@ -310,6 +310,7 @@ typedef struct {
     uint16_t ep_brightness; // EP-номер для яркости
     uint16_t ep_color;      // EP-номер для цвета
     uint16_t ep;            // EP-номер этого слота (0 = не sub-slot)
+    uint8_t  device_type_override; // 0=Auto, 1=Socket, 2=Dimmer, 3=Color Lamp
 
     /* ── Button fields (when zbee_role == ZBEE_ROLE_TRIGGER) ── */
     char     sclick[125];         // Single click action (124 симв + '\0')

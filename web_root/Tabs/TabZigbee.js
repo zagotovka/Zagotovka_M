@@ -19,7 +19,11 @@ export function TabZigbee({}) {
   const pendingConfigSave = useRef(null);
   const modalOpenRef = useRef(false);
 
-  const clusterToDeviceType = (clusters) => {
+  const clusterToDeviceType = (clusters, override) => {
+    if (override === 1) return 'socket';
+    if (override === 2) return 'dimmer';
+    if (override === 3) return 'dimmer';
+    if (override === 4) return 'lamp';
     const cl = Array.isArray(clusters) ? clusters : [clusters || 6];
     if (cl.includes(768)) return 'lamp';
     if (cl.includes(8)) return 'dimmer';
@@ -41,13 +45,14 @@ export function TabZigbee({}) {
     zbee_ieee: d.ieee || '',
     zbee_endpoint: d.ep || 1,
     clusters: d.clusters || [6],
-    zbee_device_type: d.role === 3 ? 'trigger' : (d.role === 5 ? 'switch' : clusterToDeviceType(d.clusters)),
+    zbee_device_type: d.role === 3 ? 'trigger' : (d.role === 5 ? 'switch' : clusterToDeviceType(d.clusters, d.override)),
     zbee_label: d.info || '',
     onoff: d.onoff || 0,
     brightness: d.brightness || 254,
     color_hex: d.color_hex || 0xFFAA00,
     zbee_role: d.role || 0,
     ep: d.ep || 0,
+    override: d.override || 0,
   });
 
   const refresh = () =>
@@ -186,8 +191,9 @@ export function TabZigbee({}) {
           clusters: JSON.stringify(cur.clusters),
           info: cur.zbee_label,
           onoff: cur.onoff,
-          brightness: cur.brightness,
-          color_hex: cur.color_hex
+          ...(cur.brightness !== snap.brightness && { brightness: cur.brightness }),
+          ...(cur.color_hex !== snap.color_hex && { color_hex: cur.color_hex }),
+          override: updatedDevice.override
         })
       }).catch(err => console.error('Error saving config:', err));
     }
@@ -215,8 +221,8 @@ export function TabZigbee({}) {
 
   const getDeviceTypeLabel = (deviceType) => {
     switch (deviceType) {
-      case 'lamp': return 'Color Lamp';
-      case 'dimmer': return 'Dimmer';
+      case 'lamp': return 'Лампа (яркость + цвет)';
+      case 'dimmer': return 'Лампа (яркость)';
       case 'trigger': return 'Button';
       case 'switch': return 'Switch';
       default: return 'Socket';
