@@ -439,6 +439,200 @@ void handle_select_set(struct mg_connection *c, struct mg_http_message *hm) {
                   "{\"status\":false,\"message\":\"Empty request body\"}");
   }
 }
+
+/* ── Каскадное удаление связей при установке NONE ── */
+
+// Удаляет из строки "6:1,93:2,94.1:1" все токены с указанным ID
+// Работает in-place. Возвращает количество удалённых токенов.
+static int strip_id_from_action(char *action_str, int target_id) {
+  if (!action_str || action_str[0] == '\0') return 0;
+
+  char buf[256];
+  strncpy(buf, action_str, sizeof(buf) - 1);
+  buf[sizeof(buf) - 1] = '\0';
+
+  int removed = 0;
+  char *out = action_str;
+  char *saveptr = NULL;
+  char *token = strtok_r(buf, ",", &saveptr);
+
+  while (token) {
+    int id = 0;
+
+    if (sscanf(token, "%d", &id) == 1 && id == target_id) {
+      removed++;
+    } else if (strncmp(token, "pwm:", 4) == 0) {
+      int pwm_id = 0;
+      if (sscanf(token + 4, "%d", &pwm_id) == 1 && pwm_id == target_id) {
+        removed++;
+        for (int skip = 0; skip < 3; skip++) {
+          token = strtok_r(NULL, ",", &saveptr);
+        }
+      } else {
+        if (out != action_str) *out++ = ',';
+        out += snprintf(out, 256 - (out - action_str), "%s", token);
+        for (int skip = 0; skip < 3; skip++) {
+          token = strtok_r(NULL, ",", &saveptr);
+          if (token) {
+            *out++ = ',';
+            out += snprintf(out, 256 - (out - action_str), "%s", token);
+          }
+        }
+      }
+    } else {
+      if (out != action_str) *out++ = ',';
+      out += snprintf(out, 256 - (out - action_str), "%s", token);
+    }
+    token = strtok_r(NULL, ",", &saveptr);
+  }
+  *out = '\0';
+  return removed;
+}
+
+// Формат srise_pins/sset_pins: "offset/actions" (напр. "30/6:1,93:2")
+static int strip_id_from_sunrise_sunset(char *str, int target_id) {
+  if (!str || str[0] == '\0') return 0;
+
+  char *slash = strchr(str, '/');
+  if (!slash) {
+    return strip_id_from_action(str, target_id);
+  }
+
+  char offset_buf[20];
+  size_t offset_len = slash - str;
+  if (offset_len >= sizeof(offset_buf)) offset_len = sizeof(offset_buf) - 1;
+  memcpy(offset_buf, str, offset_len);
+  offset_buf[offset_len] = '\0';
+
+  char *actions_part = slash + 1;
+  int removed = strip_id_from_action(actions_part, target_id);
+
+  if (removed > 0) {
+    char new_str[256];
+    snprintf(new_str, sizeof(new_str), "%s/%s", offset_buf, actions_part);
+    strncpy(str, new_str, 255);
+    str[255] = '\0';
+  }
+
+  return removed;
+}
+
+// Каскадная очистка всех связей для удалённого пина (физического или Zigbee)
+static void cascade_delete_pin_id(int deleted_id) {
+  extern struct dbPinToPin PinsLinks[NUMPINLINKS];
+  extern struct dbCron dbCrontxt[NUMTASK];
+  extern struct dbSettings SetSettings;
+  extern osMessageQueueId_t usbQueueHandle;
+  extern volatile uint32_t g_ver_pins;
+  extern volatile uint32_t g_ver_button;
+  extern volatile uint32_t g_ver_encoder;
+  extern volatile uint32_t g_ver_security;
+  extern volatile uint32_t g_ver_switch;
+  extern volatile uint32_t g_ver_onewire;
+  extern volatile uint32_t g_ver_sensors;
+  extern volatile uint32_t g_ver_zigbee;
+  extern volatile uint32_t g_ver_select;
+  extern volatile uint32_t g_ver_common;
+
+  bool changed_pins = false;
+  bool changed_pintopin = false;
+  bool changed_cron = false;
+  bool changed_onewire = false;
+  bool changed_zigbee = false;
+  bool changed_settings = false;
+
+  // 1. Физический пин: полная очистка собственных полей
+  if (deleted_id >= 0 && deleted_id < NUMPIN) {
+    PinsConf[deleted_id].topin = 0;
+    PinsConf[deleted_id].sclick[0] = '\0';
+    PinsConf[deleted_id].dclick[0] = '\0';
+    PinsConf[deleted_id].lpress[0] = '\0';
+    PinsConf[deleted_id].zbee_bind_id = 0;
+    PinsConf[deleted_id].info[0] = '\0';
+    PinsConf[deleted_id].onoff = 0;
+    PinsConf[deleted_id].dvalue = 0;
+    changed_pins = true;
+  }
+
+  // 2. PinsLinks — обнулить записи с idin или idout == deleted_id
+  for (int i = 0; i < NUMPINLINKS; i++) {
+    if (PinsLinks[i].idin == deleted_id || PinsLinks[i].idout == deleted_id) {
+      memset(&PinsLinks[i], 0, sizeof(PinsLinks[i]));
+      changed_pintopin = true;
+    }
+  }
+
+  // 3. Encoder zbee_bind — сбросить zbee_bind_id
+  for (int i = 0; i < NUMPIN; i++) {
+    if (PinsConf[i].zbee_bind_id == (uint8_t)deleted_id) {
+      PinsConf[i].zbee_bind_id = 0;
+      changed_pins = true;
+    }
+  }
+
+  // 4. Button/Security actions — очистить sclick/dclick/lpress
+  for (int i = 0; i < NUMPIN; i++) {
+    if (strip_id_from_action(PinsConf[i].sclick, deleted_id) > 0) changed_pins = true;
+    if (strip_id_from_action(PinsConf[i].dclick, deleted_id) > 0) changed_pins = true;
+    if (strip_id_from_action(PinsConf[i].lpress, deleted_id) > 0) changed_pins = true;
+  }
+
+  // 5. Timer/Cron — очистить activ
+  for (int i = 0; i < NUMTASK; i++) {
+    if (strip_id_from_action(dbCrontxt[i].activ, deleted_id) > 0) changed_cron = true;
+  }
+
+  // 6. OneWire DS18B20 — очистить actup/actlow
+  for (int i = 0; i < MAX_DS18B20_P; i++) {
+    for (int j = 0; j < ds18b20[i].numsens; j++) {
+      if (strip_id_from_action(ds18b20[i].sensors[j].actup, deleted_id) > 0) changed_onewire = true;
+      if (strip_id_from_action(ds18b20[i].sensors[j].actlow, deleted_id) > 0) changed_onewire = true;
+    }
+  }
+
+  // 7. OneWire DHT22 — очистить actup/actlow/actuh/actlh
+  for (int i = 0; i < MAX_DHT22_P; i++) {
+    if (strip_id_from_action(dht22[i].actup, deleted_id) > 0) changed_onewire = true;
+    if (strip_id_from_action(dht22[i].actlow, deleted_id) > 0) changed_onewire = true;
+    if (strip_id_from_action(dht22[i].actuh, deleted_id) > 0) changed_onewire = true;
+    if (strip_id_from_action(dht22[i].actlh, deleted_id) > 0) changed_onewire = true;
+  }
+
+  // 8. Zigbee Virtual Buttons — очистить sclick/dclick/lpress
+  for (int i = 0; i < NUMZBEE; i++) {
+    if (strip_id_from_action(ZigbeeConf[i].sclick, deleted_id) > 0) changed_zigbee = true;
+    if (strip_id_from_action(ZigbeeConf[i].dclick, deleted_id) > 0) changed_zigbee = true;
+    if (strip_id_from_action(ZigbeeConf[i].lpress, deleted_id) > 0) changed_zigbee = true;
+  }
+
+  // 9. Sunrise/Sunset — очистить srise_pins/sset_pins
+  if (strip_id_from_sunrise_sunset(SetSettings.srise_pins, deleted_id) > 0) changed_settings = true;
+  if (strip_id_from_sunrise_sunset(SetSettings.sset_pins, deleted_id) > 0) changed_settings = true;
+
+  // 10. Сохранение изменений на флешку
+  if (usbQueueHandle) {
+    uint8_t usbnum;
+    if (changed_pins)     { usbnum = 1; xQueueSend(usbQueueHandle, &usbnum, 0); }
+    if (changed_settings) { usbnum = 2; xQueueSend(usbQueueHandle, &usbnum, 0); }
+    if (changed_cron)     { usbnum = 3; xQueueSend(usbQueueHandle, &usbnum, 0); }
+    if (changed_pintopin) { usbnum = 4; xQueueSend(usbQueueHandle, &usbnum, 0); }
+    if (changed_onewire)  { usbnum = 5; xQueueSend(usbQueueHandle, &usbnum, 0); }
+    if (changed_zigbee)   { usbnum = 7; xQueueSend(usbQueueHandle, &usbnum, 0); }
+  }
+
+  // 11. Инкремент версий (dirty status для ETag)
+  mark_slice_dirty(&g_ver_pins);
+  mark_slice_dirty(&g_ver_button);
+  mark_slice_dirty(&g_ver_encoder);
+  mark_slice_dirty(&g_ver_security);
+  mark_slice_dirty(&g_ver_switch);
+  mark_slice_dirty(&g_ver_onewire);
+  mark_slice_dirty(&g_ver_sensors);
+  mark_slice_dirty(&g_ver_zigbee);
+  mark_slice_dirty(&g_ver_select);
+  mark_slice_dirty(&g_ver_common);
+}
+
 void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
                        uint8_t num_pins) {
   struct mg_str body = mg_str_n(json_string, strlen(json_string));
@@ -466,7 +660,11 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
   while ((pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
     long id = mg_json_get_long(elem, "$.id", -1);
     if (id >= 0 && id < num_pins) {
-      PinsConf[id].topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
+      uint8_t new_topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
+      if (new_topin == 0 && PinsConf[id].topin != 0) {
+        cascade_delete_pin_id((int)id);
+      }
+      PinsConf[id].topin = new_topin;
     } else if (id >= num_pins) {
       int zbi = id - num_pins;
       if (zbi < 0 || zbi >= NUMZBEE) {
@@ -475,13 +673,9 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
       }
       long zb_topin = mg_json_get_long(elem, "$.topin", -1);
       if (zb_topin == 0) {
-        ZigbeeConf[zbi].zbee_ieee[0] = '\0';
-        ZigbeeConf[zbi].zbee_label[0] = '\0';
+        memset(&ZigbeeConf[zbi], 0, sizeof(ZigbeeConf[zbi]));
         ZigbeeConf[zbi].zbee_endpoint = 1;
-        ZigbeeConf[zbi].cluster_flags = 0;
-        ZigbeeConf[zbi].zbee_attribute = 0;
-        ZigbeeConf[zbi].topin = 0;
-        ZigbeeConf[zbi].zbee_role = ZBEE_ROLE_UNKNOWN;
+        cascade_delete_pin_id((int)id);
       } else {
         char *ieee = mg_json_get_str(elem, "$.zbee_ieee");
         bool ieee_changed = false;
