@@ -353,6 +353,7 @@ const TabOneWire = () => {
             <span class="text-slate-300">|</span>
             <${ActionBadge} isUpper=${true} value=${s.ut} unit="°C" str=${s.action_ut} />
             <${ActionBadge} isUpper=${false} value=${s.lt} unit="°C" str=${s.action_lt} />
+            ${s.info ? html`<span class="text-slate-300">|</span><span class="font-semibold text-sm text-amber-600" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:2px 10px;white-space:nowrap;">${s.info}</span>` : ''}
             <a href="#" class="ml-auto text-blue-600 font-semibold text-sm uppercase px-3 py-1 bg-white/70 rounded-lg" onclick=${(e) => {
               e.preventDefault();
               setSelectedSensor({ ...s, oneWireId: d.id, sensorType, pins: d.pins || d.pin });

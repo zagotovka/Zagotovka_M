@@ -179,6 +179,114 @@ const ArraySelect = ({ d, selectedValues, isRowDisabled, handleRadioChange, hand
 `;
 };
 
+// ---------------------------------------------------------------------------
+// Help Content
+// ---------------------------------------------------------------------------
+const HELP_CONTENT = {
+  ru: html`
+    <div style="line-height:1.8; font-size:14px; color:#334155;">
+      <p style="margin-bottom:12px; font-weight:700; font-size:15px;">Select pin — справка</p>
+
+      <p style="margin-bottom:10px;">На этой странице вы назначаете роль каждому пину контроллера: физическому или виртуальному Zigbee.</p>
+
+      <div style="margin-bottom:14px; line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">Типы пинов:</p>
+        <span style="display:block;"><b style="color:#16a34a;">NONE</b> — пин не используется. Все связи этого пина автоматически удаляются!</span>
+        <span style="display:block;"><b>SWITCH</b> — управляемое реле / выключатель</span>
+        <span style="display:block;"><b>BUTTON</b> — физическая кнопка</span>
+        <span style="display:block;"><b>DEVICE</b> — Zigbee-устройство (лампа, реле и т.д.)</span>
+        <span style="display:block;"><b>1-WIRE</b> — температурный датчик DS18B20 или DHT22</span>
+        <span style="display:block;"><b>PWM</b> — ШИМ-выход (яркость, скорость вентилятора)</span>
+        <span style="display:block;"><b>Enc.OutA / Enc.OutB</b> — выход энкодера</span>
+        <span style="display:block;"><b>Security</b> — это пин, к которому подключаются геркон или датчики движения для отслеживания изменения их состояния.</span>
+      </div>
+
+      <div style="margin-bottom:14px; line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">Как удалить Zigbee-устройство:</p>
+        <ol style="padding-left:20px; margin:0;">
+          <li>Найдите устройство в разделе <b>«Виртуальные пины Zigbee»</b>.</li>
+          <li>Установите тип пина на <b style="color:#16a34a;">NONE</b>.</li>
+          <li>Нажмите <b>Submit</b>.</li>
+          <li>Все связи этого устройства на других страницах (Таймеры, OneWire, Zigbee-кнопки и т.д.) <b>удаляются автоматически</b>.</li>
+        </ol>
+      </div>
+
+      <div style="margin-bottom:14px; line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">Автоматическая очистка связей:</p>
+        <div class="bg-amber-50 p-4 rounded-lg border border-amber-200 text-sm">
+          <p style="margin-bottom:6px;">При установке любого пина (физического или Zigbee) в <b style="color:#16a34a;">NONE</b>, контроллер автоматически удаляет все ссылки на этот ID:</p>
+          <ul class="list-disc pl-5 space-y-1 text-slate-700">
+            <li>Связи между пинами (PinsLinks)</li>
+            <li>Действия кнопок (single click / double click / long press)</li>
+            <li>Таймеры и крон-задачи</li>
+            <li>Действия датчиков温度 (OneWire DS18B20 / DHT22)</li>
+            <li>Zigbee-кнопки (виртуальные пины)</li>
+            <li>Рассвет / Закат (Sunrise / Sunset)</li>
+            <li>Привязка энкодеров к Zigbee</li>
+          </ul>
+          <p style="margin-top:8px; color:#92400e;">Вам <b>не нужно</b> вручную заходить на каждую страницу и искать, где этот пин используется — всё очищается за одно действие!</p>
+        </div>
+      </div>
+
+      <div style="line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">IEEE Address:</p>
+        <p>Уникальный 64-битный адрес Zigbee-устройства (например, <b>588e81fffe36a343</b>). Найдите его в Zigbee2MQTT или на наклейке устройства.</p>
+      </div>
+    </div>
+  `,
+  en: html`
+    <div style="line-height:1.8; font-size:14px; color:#334155;">
+      <p style="margin-bottom:12px; font-weight:700; font-size:15px;">Select pin — Help</p>
+
+      <p style="margin-bottom:10px;">On this page you assign a role to each controller pin — physical or virtual Zigbee.</p>
+
+      <div style="margin-bottom:14px; line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">Pin types:</p>
+        <span style="display:block;"><b style="color:#16a34a;">NONE</b> — pin is not used. All connections for this pin are automatically deleted!</span>
+        <span style="display:block;"><b>SWITCH</b> — controllable relay / switch</span>
+        <span style="display:block;"><b>BUTTON</b> — physical button</span>
+        <span style="display:block;"><b>DEVICE</b> — Zigbee device (lamp, relay, etc.)</span>
+        <span style="display:block;"><b>1-WIRE</b> — DS18B20 or DHT22 temperature sensor</span>
+        <span style="display:block;"><b>PWM</b> — PWM output (brightness, fan speed)</span>
+        <span style="display:block;"><b>Enc.OutA / Enc.OutB</b> — encoder output</span>
+        <span style="display:block;"><b>Security</b> — a pin for connecting reed switches or motion sensors to monitor their state changes.</span>
+      </div>
+
+      <div style="margin-bottom:14px; line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">How to delete a Zigbee device:</p>
+        <ol style="padding-left:20px; margin:0;">
+          <li>Find the device in the <b>«Virtual pins of Zigbee»</b> section.</li>
+          <li>Set the pin type to <b style="color:#16a34a;">NONE</b>.</li>
+          <li>Click <b>Submit</b>.</li>
+          <li>All connections for this device on other pages (Timers, OneWire, Zigbee buttons, etc.) are <b>automatically removed</b>.</li>
+        </ol>
+      </div>
+
+      <div style="margin-bottom:14px; line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">Automatic connection cleanup:</p>
+        <div class="bg-amber-50 p-4 rounded-lg border border-amber-200 text-sm">
+          <p style="margin-bottom:6px;">When any pin (physical or Zigbee) is set to <b style="color:#16a34a;">NONE</b>, the controller automatically removes all references to that ID:</p>
+          <ul class="list-disc pl-5 space-y-1 text-slate-700">
+            <li>Device connections (PinsLinks)</li>
+            <li>Button actions (single click / double click / long press)</li>
+            <li>Timers and cron tasks</li>
+            <li>Sensor actions (OneWire DS18B20 / DHT22)</li>
+            <li>Zigbee virtual buttons</li>
+            <li>Sunrise / Sunset actions</li>
+            <li>Encoder-to-Zigbee bindings</li>
+          </ul>
+          <p style="margin-top:8px; color:#92400e;">You <b>don't need</b> to manually visit each page to find where this pin is used — everything is cleaned up in one action!</p>
+        </div>
+      </div>
+
+      <div style="line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">IEEE Address:</p>
+        <p>The unique 64-bit address of a Zigbee device (e.g. <b>588e81fffe36a343</b>). Find it in Zigbee2MQTT or on the device label.</p>
+      </div>
+    </div>
+  `
+};
+
 function TabSelect({ }) {
   const [varselect, setSelect] = useState(null);
   const [selectedValues, setSelectedValues] = useState({});
@@ -188,6 +296,7 @@ function TabSelect({ }) {
   const [gpsEnabled, setGpsEnabled] = useState(false);
   const [language, setLanguage] = useState('ru');
   const [expandedSections, setExpandedSections] = useState({ physical: false, zigbee: false });
+  const [showHelp, setShowHelp] = useState(false);
   const lastChangeTime = useRef(0);
   const lastPollData = useRef(null);
   const serverSnapshot = useRef({});
@@ -497,20 +606,29 @@ function TabSelect({ }) {
               </div>
             </div>
 
-            <div class="flex justify-end">
-              <button
-                type="submit"
-                class=${`px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${isButtonDisabled
-                  ? 'bg-gray-400 cursor-not-allowed opacity-70 hover:scale-100 hover:shadow-none'
-                  : 'bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40'
-                }`}
-                disabled=${isButtonDisabled}
-              >
-                ${isButtonDisabled ? `Please wait ${countdown} sec.` : 'Submit'}
-              </button>
+            <div class="flex justify-between items-center mb-4 mt-2">
+              <div class="flex justify-end flex-1">
+                <button
+                  type="submit"
+                  class=${`px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${isButtonDisabled
+                    ? 'bg-gray-400 cursor-not-allowed opacity-70 hover:scale-100 hover:shadow-none'
+                    : 'bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40'
+                  }`}
+                  disabled=${isButtonDisabled}
+                >
+                  ${isButtonDisabled ? `Please wait ${countdown} sec.` : 'Submit'}
+                </button>
+              </div>
             </div>
           </div>
         </form>
+
+        <div class="w-full flex justify-between items-center mb-4 mt-2 bg-white/40 backdrop-blur-md border border-white/60 p-4 rounded-2xl">
+          <button class="px-8 py-2.5 rounded-full text-sm font-bold text-white bg-gradient-to-r from-teal-400 to-cyan-500" onclick=${() => setShowHelp(!showHelp)}>
+            ${showHelp ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help') : (language === 'ru' ? 'Показать справку' : 'Show Help')}
+          </button>
+        </div>
+        ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
       </div>
     </div>
   `;

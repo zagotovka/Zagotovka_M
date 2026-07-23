@@ -3649,7 +3649,7 @@ bool parse_sensor_json(const char *json_string) {
       for (int j = 0; j < ds18b20[i].numsens; j++) {
         char sensor_addr_str[17] = {0};
         for (int k = 0; k < 8; k++) {
-          sprintf(sensor_addr_str + (k * 2), "%04X",
+          sprintf(sensor_addr_str + (k * 2), "%02X",
                   ds18b20[i].sensors[j].addr[k]);
         }
         if (strcasecmp(sensor_addr_str, sensorNumber) == 0) {

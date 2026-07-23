@@ -5,10 +5,110 @@ import { MyPolzunok } from '../main.js';
 import { ModalZigbee } from '../Modals/ModalZigbee.js';
 import { ModalLearn } from '../Modals/ModalLearn.js';
 
+const HELP_CONTENT = {
+  ru: html`
+    <div style="line-height:1.8; font-size:14px; color:#334155;">
+      <p style="margin-bottom:12px; font-weight:700; font-size:15px;">Zigbee Devices — справка</p>
+
+      <p style="margin-bottom:10px;">На этой странице отображаются все Zigbee-устройства, добавленные на странице <b>Select pin</b>. Здесь вы управляете их состоянием и параметрами.</p>
+
+      <div style="margin-bottom:14px; line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">Колонки таблицы:</p>
+        <span style="display:block;"><b>ID</b> — внутренний идентификатор устройства в контроллере</span>
+        <span style="display:block;"><b>IEEE Address</b> — уникальный 64-битный адрес Zigbee-устройства</span>
+        <span style="display:block;"><b>Type</b> — тип устройства (Socket, Lamp, Dimmer, Button, Switch)</span>
+        <span style="display:block;"><b>Info</b> — подпись / название устройства (например, «Лампа кухня»)</span>
+        <span style="display:block;"><b>On/Off</b> — переключатель состояния устройства</span>
+      </div>
+
+      <div style="margin-bottom:14px; line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">Кнопка «Управление»:</p>
+        <div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-sm">
+          <p>Открывает окно настройки устройства. Здесь можно:</p>
+          <ul class="list-disc pl-5 space-y-1 text-slate-700 mt-2">
+            <li>Изменить IEEE Address и Endpoint</li>
+            <li>Выбрать тип устройства (лампа / реле / диммер)</li>
+            <li>Установить подпись (Info)</li>
+            <li>Управление яркостью и цветом (для ламп)</li>
+            <li>Перезапросить кластеры устройства (Rescan)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px; line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">Кнопка «Обучение»:</p>
+        <div class="bg-violet-50 p-4 rounded-lg border border-violet-200 text-sm">
+          <p>Запускает режим обучения для Zigbee-кнопок и переключателей. После нажатия:</p>
+          <ol style="padding-left:20px; margin-top:6px;" class="text-slate-700">
+            <li>Нажмите физическую кнопку на Zigbee-устройстве</li>
+            <li>Контроллер автоматически определит тип нажатия (single click, double click, long press)</li>
+            <li>Связанное действие можно настроить на странице <b>Zigbee Buttons</b></li>
+          </ol>
+          <p style="margin-top:8px; color:#6b21a8;">Обучение доступно только для устройств с ролью <b>Button</b> или <b>Switch</b>.</p>
+        </div>
+      </div>
+
+      <div style="line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">Мульти-устройства (Multi):</p>
+        <p>Если одно физическое Zigbee-устройство имеет несколько эндпоинтов (например, лампа с управлением яркостью + цветом), строки группируются. Нажмите на строку чтобы развернуть группу.</p>
+      </div>
+    </div>
+  `,
+  en: html`
+    <div style="line-height:1.8; font-size:14px; color:#334155;">
+      <p style="margin-bottom:12px; font-weight:700; font-size:15px;">Zigbee Devices — Help</p>
+
+      <p style="margin-bottom:10px;">This page displays all Zigbee devices added on the <b>Select pin</b> page. Here you can control their state and configure parameters.</p>
+
+      <div style="margin-bottom:14px; line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">Table columns:</p>
+        <span style="display:block;"><b>ID</b> — internal device identifier in the controller</span>
+        <span style="display:block;"><b>IEEE Address</b> — unique 64-bit address of the Zigbee device</span>
+        <span style="display:block;"><b>Type</b> — device type (Socket, Lamp, Dimmer, Button, Switch)</span>
+        <span style="display:block;"><b>Info</b> — device label / name (e.g. "Kitchen lamp")</span>
+        <span style="display:block;"><b>On/Off</b> — device state toggle</span>
+      </div>
+
+      <div style="margin-bottom:14px; line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">«Control» button:</p>
+        <div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-sm">
+          <p>Opens the device configuration window. Here you can:</p>
+          <ul class="list-disc pl-5 space-y-1 text-slate-700 mt-2">
+            <li>Change IEEE Address and Endpoint</li>
+            <li>Select device type (lamp / relay / dimmer)</li>
+            <li>Set a label (Info)</li>
+            <li>Adjust brightness and color (for lamps)</li>
+            <li>Re-scan device clusters (Rescan)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px; line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">«Learn» button:</p>
+        <div class="bg-violet-50 p-4 rounded-lg border border-violet-200 text-sm">
+          <p>Starts learning mode for Zigbee buttons and switches. After pressing:</p>
+          <ol style="padding-left:20px; margin-top:6px;" class="text-slate-700">
+            <li>Press the physical button on the Zigbee device</li>
+            <li>The controller automatically detects the press type (single click, double click, long press)</li>
+            <li>The associated action can be configured on the <b>Zigbee Buttons</b> page</li>
+          </ol>
+          <p style="margin-top:8px; color:#6b21a8;">Learning is only available for devices with <b>Button</b> or <b>Switch</b> role.</p>
+        </div>
+      </div>
+
+      <div style="line-height:1.6;">
+        <p style="font-weight:700; margin-bottom:6px;">Multi-device groups:</p>
+        <p>If a physical Zigbee device has multiple endpoints (e.g. a lamp with brightness + color control), rows are grouped together. Click on a row to expand the group.</p>
+      </div>
+    </div>
+  `
+};
+
 export function TabZigbee({}) {
   const [devices, setDevices] = useState([]);
   const [language, setLanguage] = useState('ru');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [learnIeee, setLearnIeee] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState({});
@@ -404,6 +504,13 @@ export function TabZigbee({}) {
           }}
         />
       `}
+
+      <div class="w-full flex justify-between items-center mb-4 mt-6 bg-white/40 backdrop-blur-md border border-white/60 p-4 rounded-2xl">
+        <button class="px-8 py-2.5 rounded-full text-sm font-bold text-white bg-gradient-to-r from-teal-400 to-cyan-500" onclick=${() => setShowHelp(!showHelp)}>
+          ${showHelp ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help') : (language === 'ru' ? 'Показать справку' : 'Show Help')}
+        </button>
+      </div>
+      ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
     </div>
   `;
 }
