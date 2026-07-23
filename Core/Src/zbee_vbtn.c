@@ -95,9 +95,9 @@ void vbtn_execute(int slot, int event_type) {
     const char *press_type = NULL;
 
     switch (event_type) {
-    case 0: action_str = ZigbeeConf[slot].sclick; press_type = "sclick press"; break;
-    case 1: action_str = ZigbeeConf[slot].dclick; press_type = "double press"; break;
-    case 2: action_str = ZigbeeConf[slot].lpress; press_type = "long press"; break;
+    case 0: action_str = zbee_action_sclick(slot); press_type = "sclick press"; break;
+    case 1: action_str = zbee_action_dclick(slot); press_type = "double press"; break;
+    case 2: action_str = zbee_action_lpress(slot); press_type = "long press"; break;
     default: return;
     }
 

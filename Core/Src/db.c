@@ -17,6 +17,55 @@ struct dbPinToPin PinsLinks[NUMPINLINKS];
 /* ── ZIGBEE PLAN B ── */
 ZigbeeVirtualPin ZigbeeConf[NUMZBEE];
 
+/* ── Action pool for Zigbee triggers ── */
+ZigbeeActionPool ZigbeeActionPoolArr[NUMACTIONPOOL];
+
+const char *zbee_action_sclick(int zbi) {
+    if (zbi < 0 || zbi >= NUMZBEE) return "";
+    uint8_t idx = ZigbeeConf[zbi].action_pool_idx;
+    if (idx >= NUMACTIONPOOL) return "";
+    return ZigbeeActionPoolArr[idx].sclick;
+}
+
+const char *zbee_action_dclick(int zbi) {
+    if (zbi < 0 || zbi >= NUMZBEE) return "";
+    uint8_t idx = ZigbeeConf[zbi].action_pool_idx;
+    if (idx >= NUMACTIONPOOL) return "";
+    return ZigbeeActionPoolArr[idx].dclick;
+}
+
+const char *zbee_action_lpress(int zbi) {
+    if (zbi < 0 || zbi >= NUMZBEE) return "";
+    uint8_t idx = ZigbeeConf[zbi].action_pool_idx;
+    if (idx >= NUMACTIONPOOL) return "";
+    return ZigbeeActionPoolArr[idx].lpress;
+}
+
+uint8_t zbee_action_alloc(void) {
+    for (int i = 0; i < NUMACTIONPOOL; i++) {
+        if (ZigbeeActionPoolArr[i].sclick[0] == '\0' &&
+            ZigbeeActionPoolArr[i].dclick[0] == '\0' &&
+            ZigbeeActionPoolArr[i].lpress[0] == '\0') {
+            return (uint8_t)i;
+        }
+    }
+    return ACTION_POOL_IDX_NONE;
+}
+
+void zbee_action_free(uint8_t idx) {
+    if (idx >= NUMACTIONPOOL) return;
+    ZigbeeActionPoolArr[idx].sclick[0] = '\0';
+    ZigbeeActionPoolArr[idx].dclick[0] = '\0';
+    ZigbeeActionPoolArr[idx].lpress[0] = '\0';
+}
+
+void zbee_action_clear(uint8_t idx) {
+    if (idx >= NUMACTIONPOOL) return;
+    ZigbeeActionPoolArr[idx].sclick[0] = '\0';
+    ZigbeeActionPoolArr[idx].dclick[0] = '\0';
+    ZigbeeActionPoolArr[idx].lpress[0] = '\0';
+}
+
 PinView GetPinView(int id) {
     PinView v = {0};
     if (id < NUMPIN) {

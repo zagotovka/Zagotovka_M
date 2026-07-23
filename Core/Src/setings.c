@@ -2605,24 +2605,33 @@ void GetZigbeeConfig(void) {
     ZigbeeConf[idx].ep_color = (uint16_t)mg_json_get_long(elem, "$.ep_color", 0);
     ZigbeeConf[idx].zbee_role = (uint8_t)mg_json_get_long(elem, "$.role", 0);
 
-    /* Читаем sclick/dclick/lpress для кнопок */
+    /* Читаем sclick/dclick/lpress для кнопок через пул */
     char *sclick = mg_json_get_str(elem, "$.sclick");
-    if (sclick) {
-      strncpy(ZigbeeConf[idx].sclick, sclick, sizeof(ZigbeeConf[idx].sclick) - 1);
-      mg_free(sclick);
-    }
-
     char *dclick = mg_json_get_str(elem, "$.dclick");
-    if (dclick) {
-      strncpy(ZigbeeConf[idx].dclick, dclick, sizeof(ZigbeeConf[idx].dclick) - 1);
-      mg_free(dclick);
-    }
-
     char *lpress = mg_json_get_str(elem, "$.lpress");
-    if (lpress) {
-      strncpy(ZigbeeConf[idx].lpress, lpress, sizeof(ZigbeeConf[idx].lpress) - 1);
-      mg_free(lpress);
+    if ((sclick && sclick[0]) || (dclick && dclick[0]) || (lpress && lpress[0])) {
+      if (ZigbeeConf[idx].action_pool_idx == ACTION_POOL_IDX_NONE) {
+        ZigbeeConf[idx].action_pool_idx = zbee_action_alloc();
+      }
+      uint8_t aidx = ZigbeeConf[idx].action_pool_idx;
+      if (aidx < NUMACTIONPOOL) {
+        if (sclick) {
+          strncpy(ZigbeeActionPoolArr[aidx].sclick, sclick, sizeof(ZigbeeActionPoolArr[aidx].sclick) - 1);
+          ZigbeeActionPoolArr[aidx].sclick[sizeof(ZigbeeActionPoolArr[aidx].sclick) - 1] = '\0';
+        }
+        if (dclick) {
+          strncpy(ZigbeeActionPoolArr[aidx].dclick, dclick, sizeof(ZigbeeActionPoolArr[aidx].dclick) - 1);
+          ZigbeeActionPoolArr[aidx].dclick[sizeof(ZigbeeActionPoolArr[aidx].dclick) - 1] = '\0';
+        }
+        if (lpress) {
+          strncpy(ZigbeeActionPoolArr[aidx].lpress, lpress, sizeof(ZigbeeActionPoolArr[aidx].lpress) - 1);
+          ZigbeeActionPoolArr[aidx].lpress[sizeof(ZigbeeActionPoolArr[aidx].lpress) - 1] = '\0';
+        }
+      }
     }
+    if (sclick) mg_free(sclick);
+    if (dclick) mg_free(dclick);
+    if (lpress) mg_free(lpress);
 
     ZigbeeConf[idx].vbtn_mode = (uint8_t)mg_json_get_long(elem, "$.vbtn_mode", 0);
 
@@ -2707,7 +2716,7 @@ void SetZigbeeConfig(void) {
         ZigbeeConf[i].ep, ZigbeeConf[i].ep_onoff,
         ZigbeeConf[i].ep_brightness, ZigbeeConf[i].ep_color,
         ZigbeeConf[i].zbee_role,
-        ZigbeeConf[i].sclick, ZigbeeConf[i].dclick, ZigbeeConf[i].lpress,
+        zbee_action_sclick(i), zbee_action_dclick(i), zbee_action_lpress(i),
         ZigbeeConf[i].vbtn_mode,
         ZigbeeConf[i].pt_single, ZigbeeConf[i].pt_double, ZigbeeConf[i].pt_long,
         ZigbeeConf[i].dimmer_min, ZigbeeConf[i].dimmer_max,

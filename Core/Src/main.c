@@ -263,6 +263,11 @@ osMessageQueueId_t zbeeCmdQueueHandle;
 const osMessageQueueAttr_t zbeeCmdQueue_attributes = {
   .name = "zbeeCmdQueue"
 };
+/* Definitions for actionMutexHandle */
+osMutexId_t actionMutexHandle;
+const osMutexAttr_t actionMutexHandle_attributes = {
+  .name = "actionMutexHandle"
+};
 /* USER CODE BEGIN PV */
 extern struct dbSettings SetSettings;
 extern struct dbCron dbCrontxt[NUMTASK];
@@ -800,6 +805,9 @@ int main(void)
 
   /* Init scheduler */
   osKernelInitialize();
+  /* Create the mutex(es) */
+  /* creation of actionMutexHandle */
+  actionMutexHandle = osMutexNew(&actionMutexHandle_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -815,7 +823,7 @@ int main(void)
 
   /* Create the queue(s) */
   /* creation of outputQueue */
-  outputQueueHandle = osMessageQueueNew (16, sizeof(struct data_pin_t), &outputQueue_attributes);
+  outputQueueHandle = osMessageQueueNew (64, sizeof(struct data_pin_t), &outputQueue_attributes);
 
   /* creation of usbQueue */
   usbQueueHandle = osMessageQueueNew (16, sizeof(uint8_t), &usbQueue_attributes);
@@ -824,10 +832,10 @@ int main(void)
   mqttQueueHandle = osMessageQueueNew (32, sizeof(MqttMessage_t), &mqttQueue_attributes);
 
   /* creation of mqttRxQueue */
-  mqttRxQueueHandle = osMessageQueueNew (16, sizeof(MqttRxMsg_t), &mqttRxQueue_attributes);
+  mqttRxQueueHandle = osMessageQueueNew (32, sizeof(MqttRxMsg_t), &mqttRxQueue_attributes);
 
   /* creation of zbeeCmdQueue */
-  zbeeCmdQueueHandle = osMessageQueueNew (32, sizeof(ZbeeCmdMsg_t), &zbeeCmdQueue_attributes);
+  zbeeCmdQueueHandle = osMessageQueueNew (64, sizeof(ZbeeCmdMsg_t), &zbeeCmdQueue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -3203,10 +3211,10 @@ static void heap_diagnostic(void)
                (unsigned)(itcm_total - itcm_used));
 
         printf("MQTT TX queue peak: %lu / 32\r\n", mqtt_tx_peak);
-        printf("MQTT RX queue peak: %lu / 16\r\n", mqtt_rx_peak);
-        printf("Output queue peak:  %lu / 16\r\n", output_peak);
+        printf("MQTT RX queue peak: %lu / 32\r\n", mqtt_rx_peak);
+        printf("Output queue peak:  %lu / 64\r\n", output_peak);
         printf("USB queue peak:     %lu / 16\r\n", usb_peak);
-        printf("Zbee cmd peak:      %lu / 32\r\n", zbee_cmd_peak);
+        printf("Zbee cmd peak:      %lu / 64\r\n", zbee_cmd_peak);
         printf("Mongoose conns peak: %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu]\r\n",
                mg_conn_peak, mg_conn_cur,
                mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other);

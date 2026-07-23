@@ -227,6 +227,7 @@ const ModalButton = ({
         ? 'border-red-500'
         : ''}"
                       placeholder="None, 6:1, 93.1:2"
+                      maxLength="124"
                     />
                     ${errors[type] &&
       html`<p class="text-red-500 text-sm">${errors[type]}</p>`}

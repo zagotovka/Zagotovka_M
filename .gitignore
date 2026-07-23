@@ -8,3 +8,4 @@
 # Web build
 /web_root/dist/
 /web_root/node_modules/
+*.o

@@ -141,6 +141,18 @@ const HELP_CONTENT = {
               </ul>
             </div>
           </div>
+          <div style="margin-top:12px;">
+            <h2 style="font-weight:700; font-size:15px; margin-bottom:8px;">Формат полей Action</h2>
+            <p style="margin-bottom:8px;">Максимальное количество записей в формате <code>ID:Action</code> с разделителем <code>,</code> ограничено длиной строки — <b>124 символа</b>.</p>
+            <table style="width:100%; font-size:13px; border-collapse:collapse;">
+              <thead><tr><th style="border:1px solid #cbd5e1; padding:4px 8px;">Длина ID</th><th style="border:1px solid #cbd5e1; padding:4px 8px;">Пример</th><th style="border:1px solid #cbd5e1; padding:4px 8px;">Байт на запись</th><th style="border:1px solid #cbd5e1; padding:4px 8px;">Записей в строке</th></tr></thead>
+              <tbody>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 8px;">1 знак</td><td style="border:1px solid #cbd5e1; padding:4px 8px;"><code>5:1</code></td><td style="border:1px solid #cbd5e1; padding:4px 8px;">3 + запятая = 4</td><td style="border:1px solid #cbd5e1; padding:4px 8px;">до 31</td></tr>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 8px;">2 знака</td><td style="border:1px solid #cbd5e1; padding:4px 8px;"><code>15:1</code></td><td style="border:1px solid #cbd5e1; padding:4px 8px;">4 + запятая = 5</td><td style="border:1px solid #cbd5e1; padding:4px 8px;">до 24</td></tr>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 8px;">3 знака</td><td style="border:1px solid #cbd5e1; padding:4px 8px;"><code>155:1</code></td><td style="border:1px solid #cbd5e1; padding:4px 8px;">5 + запятая = 6</td><td style="border:1px solid #cbd5e1; padding:4px 8px;">до 20</td></tr>
+              </tbody>
+            </table>
+          </div>
     </div>
   `,
   en: html`
@@ -169,6 +181,18 @@ const HELP_CONTENT = {
                 <li><b>pid</b> — PWM output : (Duty value 0–100%)</li>
               </ul>
             </div>
+          </div>
+          <div style="margin-top:12px;">
+            <h2 style="font-weight:700; font-size:15px; margin-bottom:8px;">Action Field Format</h2>
+            <p style="margin-bottom:8px;">Maximum number of entries in <code>ID:Action</code> format with <code>,</code> separator is limited by string length — <b>124 characters</b>.</p>
+            <table style="width:100%; font-size:13px; border-collapse:collapse;">
+              <thead><tr><th style="border:1px solid #cbd5e1; padding:4px 8px;">ID Length</th><th style="border:1px solid #cbd5e1; padding:4px 8px;">Example</th><th style="border:1px solid #cbd5e1; padding:4px 8px;">Bytes per entry</th><th style="border:1px solid #cbd5e1; padding:4px 8px;">Entries in string</th></tr></thead>
+              <tbody>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 8px;">1 digit</td><td style="border:1px solid #cbd5e1; padding:4px 8px;"><code>5:1</code></td><td style="border:1px solid #cbd5e1; padding:4px 8px;">3 + comma = 4</td><td style="border:1px solid #cbd5e1; padding:4px 8px;">up to 31</td></tr>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 8px;">2 digits</td><td style="border:1px solid #cbd5e1; padding:4px 8px;"><code>15:1</code></td><td style="border:1px solid #cbd5e1; padding:4px 8px;">4 + comma = 5</td><td style="border:1px solid #cbd5e1; padding:4px 8px;">up to 24</td></tr>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 8px;">3 digits</td><td style="border:1px solid #cbd5e1; padding:4px 8px;"><code>155:1</code></td><td style="border:1px solid #cbd5e1; padding:4px 8px;">5 + comma = 6</td><td style="border:1px solid #cbd5e1; padding:4px 8px;">up to 20</td></tr>
+              </tbody>
+            </table>
           </div>
     </div>
   `

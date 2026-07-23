@@ -1817,9 +1817,9 @@ void handle_buttons(struct mg_connection *c, struct mg_http_message *hm) {
 
         char esc_sclick[260], esc_dclick[260], esc_lpress[260];
         char esc_label[64];
-        json_escape_str(esc_sclick, ZigbeeConf[i].sclick, sizeof(esc_sclick));
-        json_escape_str(esc_dclick, ZigbeeConf[i].dclick, sizeof(esc_dclick));
-        json_escape_str(esc_lpress, ZigbeeConf[i].lpress, sizeof(esc_lpress));
+        json_escape_str(esc_sclick, zbee_action_sclick(i), sizeof(esc_sclick));
+        json_escape_str(esc_dclick, zbee_action_dclick(i), sizeof(esc_dclick));
+        json_escape_str(esc_lpress, zbee_action_lpress(i), sizeof(esc_lpress));
         json_escape_str(esc_label, ZigbeeConf[i].zbee_label, sizeof(esc_label));
 
         int zbee_id = NUMPIN + i;

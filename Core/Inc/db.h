@@ -289,7 +289,7 @@ struct dbSettings {	// Cтруктура для setting
 /* ═══════════════════════════════════════════════════════════════════════════
  *  ZIGBEE PLAN B — отдельный массив ZigbeeConf[NUMZBEE]
  * ═══════════════════════════════════════════════════════════════════════════ */
-#define NUMZBEE 100
+#define NUMZBEE 201
 
 typedef struct {
     char     zbee_ieee[17];      // IEEE-адрес без "0x", 16 hex + '\0'
@@ -312,10 +312,8 @@ typedef struct {
     uint16_t ep;            // EP-номер этого слота (0 = не sub-slot)
     uint8_t  device_type_override; // 0=Auto, 1=Socket, 2=Dimmer, 3=Color Lamp
 
-    /* ── Button fields (when zbee_role == ZBEE_ROLE_TRIGGER) ── */
-    char     sclick[125];         // Single click action (124 симв + '\0')
-    char     dclick[125];         // Double click action (124 симв + '\0')
-    char     lpress[125];         // Long press action   (124 симв + '\0')
+    /* ── Button action pool index (when zbee_role == ZBEE_ROLE_TRIGGER) ── */
+    uint8_t  action_pool_idx;     // Index into ZigbeeActionPool[] (0xFF = no actions)
 
     uint8_t  vbtn_mode;          // 0 = PASSTHROUGH, 1 = RAW (auto-detected)
     char     pt_single[12];      // Payload for single click (PASSTHROUGH)
@@ -341,6 +339,25 @@ typedef struct {
 } ZigbeeVirtualPin;
 
 extern ZigbeeVirtualPin ZigbeeConf[NUMZBEE];
+
+/* ── Action pool for Zigbee triggers (saves ~56 KB RAM) ── */
+#define NUMACTIONPOOL       50
+#define ACTION_POOL_IDX_NONE 0xFF
+
+typedef struct {
+    char     sclick[125];
+    char     dclick[125];
+    char     lpress[125];
+} ZigbeeActionPool;
+
+extern ZigbeeActionPool ZigbeeActionPoolArr[NUMACTIONPOOL];
+
+const char *zbee_action_sclick(int zbi);
+const char *zbee_action_dclick(int zbi);
+const char *zbee_action_lpress(int zbi);
+uint8_t zbee_action_alloc(void);
+void zbee_action_free(uint8_t idx);
+void zbee_action_clear(uint8_t idx);
 
 /* ── Virtual button constants ── */
 #define VBTN_STATE_IDLE        0

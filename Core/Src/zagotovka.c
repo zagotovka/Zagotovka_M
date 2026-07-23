@@ -598,11 +598,20 @@ static void cascade_delete_pin_id(int deleted_id) {
     if (strip_id_from_action(dht22[i].actlh, deleted_id) > 0) changed_onewire = true;
   }
 
-  // 8. Zigbee Virtual Buttons — очистить sclick/dclick/lpress
+  // 8. Zigbee Virtual Buttons — очистить action pool
   for (int i = 0; i < NUMZBEE; i++) {
-    if (strip_id_from_action(ZigbeeConf[i].sclick, deleted_id) > 0) changed_zigbee = true;
-    if (strip_id_from_action(ZigbeeConf[i].dclick, deleted_id) > 0) changed_zigbee = true;
-    if (strip_id_from_action(ZigbeeConf[i].lpress, deleted_id) > 0) changed_zigbee = true;
+    uint8_t idx = ZigbeeConf[i].action_pool_idx;
+    if (idx < NUMACTIONPOOL) {
+      if (strip_id_from_action(ZigbeeActionPoolArr[idx].sclick, deleted_id) > 0) changed_zigbee = true;
+      if (strip_id_from_action(ZigbeeActionPoolArr[idx].dclick, deleted_id) > 0) changed_zigbee = true;
+      if (strip_id_from_action(ZigbeeActionPoolArr[idx].lpress, deleted_id) > 0) changed_zigbee = true;
+      if (ZigbeeActionPoolArr[idx].sclick[0] == '\0' &&
+          ZigbeeActionPoolArr[idx].dclick[0] == '\0' &&
+          ZigbeeActionPoolArr[idx].lpress[0] == '\0') {
+        zbee_action_free(idx);
+        ZigbeeConf[i].action_pool_idx = ACTION_POOL_IDX_NONE;
+      }
+    }
   }
 
   // 9. Sunrise/Sunset — очистить srise_pins/sset_pins
@@ -762,7 +771,7 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
       } else {
         /* Проверяем есть ли sclick/dclick/lpress (кнопка) */
         int is_button = (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_TRIGGER &&
-                         ZigbeeConf[zbi].sclick[0] != '\0');
+                         zbee_action_sclick(zbi)[0] != '\0');
 
         if (!is_button) {
           /* Обычное устройство: ON/OFF */
@@ -1216,27 +1225,31 @@ void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
     if (id_val >= NUMPIN && id_val < NUMPIN + NUMZBEE) {
       int zbi = (int)id_val - NUMPIN;
       if (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_TRIGGER) {
+        if (ZigbeeConf[zbi].action_pool_idx == ACTION_POOL_IDX_NONE) {
+          ZigbeeConf[zbi].action_pool_idx = zbee_action_alloc();
+        }
+        uint8_t idx = ZigbeeConf[zbi].action_pool_idx;
         char *action_str = mg_json_get_str(body, "$.sclick");
-        if (action_str) {
-          strncpy(ZigbeeConf[zbi].sclick, action_str,
-                  sizeof(ZigbeeConf[zbi].sclick) - 1);
-          ZigbeeConf[zbi].sclick[sizeof(ZigbeeConf[zbi].sclick) - 1] = '\0';
+        if (action_str && idx < NUMACTIONPOOL) {
+          strncpy(ZigbeeActionPoolArr[idx].sclick, action_str,
+                  sizeof(ZigbeeActionPoolArr[idx].sclick) - 1);
+          ZigbeeActionPoolArr[idx].sclick[sizeof(ZigbeeActionPoolArr[idx].sclick) - 1] = '\0';
           mg_free(action_str);
-        }
+        } else if (action_str) { mg_free(action_str); }
         char *dclick_str = mg_json_get_str(body, "$.dclick");
-        if (dclick_str) {
-          strncpy(ZigbeeConf[zbi].dclick, dclick_str,
-                  sizeof(ZigbeeConf[zbi].dclick) - 1);
-          ZigbeeConf[zbi].dclick[sizeof(ZigbeeConf[zbi].dclick) - 1] = '\0';
+        if (dclick_str && idx < NUMACTIONPOOL) {
+          strncpy(ZigbeeActionPoolArr[idx].dclick, dclick_str,
+                  sizeof(ZigbeeActionPoolArr[idx].dclick) - 1);
+          ZigbeeActionPoolArr[idx].dclick[sizeof(ZigbeeActionPoolArr[idx].dclick) - 1] = '\0';
           mg_free(dclick_str);
-        }
+        } else if (dclick_str) { mg_free(dclick_str); }
         char *lpress_str = mg_json_get_str(body, "$.lpress");
-        if (lpress_str) {
-          strncpy(ZigbeeConf[zbi].lpress, lpress_str,
-                  sizeof(ZigbeeConf[zbi].lpress) - 1);
-          ZigbeeConf[zbi].lpress[sizeof(ZigbeeConf[zbi].lpress) - 1] = '\0';
+        if (lpress_str && idx < NUMACTIONPOOL) {
+          strncpy(ZigbeeActionPoolArr[idx].lpress, lpress_str,
+                  sizeof(ZigbeeActionPoolArr[idx].lpress) - 1);
+          ZigbeeActionPoolArr[idx].lpress[sizeof(ZigbeeActionPoolArr[idx].lpress) - 1] = '\0';
           mg_free(lpress_str);
-        }
+        } else if (lpress_str) { mg_free(lpress_str); }
         char *info = mg_json_get_str(body, "$.info");
         if (info) {
           strncpy(ZigbeeConf[zbi].zbee_label, info,
@@ -5187,10 +5200,11 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
 
     /* ── Шаг 2: Кнопки → сохраняем прямо в ZigbeeConf[zbi] ── */
 
-    /* Очищаем старые sclick/dclick/lpress */
-    ZigbeeConf[zbi].sclick[0] = '\0';
-    ZigbeeConf[zbi].dclick[0] = '\0';
-    ZigbeeConf[zbi].lpress[0] = '\0';
+    /* Очищаем старый action pool */
+    if (ZigbeeConf[zbi].action_pool_idx < NUMACTIONPOOL) {
+      zbee_action_free(ZigbeeConf[zbi].action_pool_idx);
+    }
+    ZigbeeConf[zbi].action_pool_idx = ACTION_POOL_IDX_NONE;
     ZigbeeConf[zbi].pt_single[0] = '\0';
     ZigbeeConf[zbi].pt_double[0] = '\0';
     ZigbeeConf[zbi].pt_long[0] = '\0';
@@ -5245,8 +5259,14 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                 }
 
                 /* sclick = "None" (action не настроен) */
-                strncpy(ZigbeeConf[target_zbi].sclick, "None",
-                        sizeof(ZigbeeConf[target_zbi].sclick) - 1);
+                if (ZigbeeConf[target_zbi].action_pool_idx == ACTION_POOL_IDX_NONE) {
+                  ZigbeeConf[target_zbi].action_pool_idx = zbee_action_alloc();
+                }
+                if (ZigbeeConf[target_zbi].action_pool_idx < NUMACTIONPOOL) {
+                  uint8_t tidx = ZigbeeConf[target_zbi].action_pool_idx;
+                  strncpy(ZigbeeActionPoolArr[tidx].sclick, "None",
+                          sizeof(ZigbeeActionPoolArr[tidx].sclick) - 1);
+                }
 
                 /* Label из trigger_names или payload */
                 if (trigger_names[k][0]) {
@@ -5272,31 +5292,37 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             }
         } else {
             /* RAW: группируем в один слот (старое поведение) */
-            for (int k = 0; k < trigger_count; k++) {
-                if (k == 0) {
-                    strncpy(ZigbeeConf[zbi].sclick, "None",
-                            sizeof(ZigbeeConf[zbi].sclick) - 1);
-                } else if (k == 1) {
-                    strncpy(ZigbeeConf[zbi].dclick, "None",
-                            sizeof(ZigbeeConf[zbi].dclick) - 1);
-                } else if (k == 2) {
-                    strncpy(ZigbeeConf[zbi].lpress, "None",
-                            sizeof(ZigbeeConf[zbi].lpress) - 1);
+            if (ZigbeeConf[zbi].action_pool_idx == ACTION_POOL_IDX_NONE) {
+                ZigbeeConf[zbi].action_pool_idx = zbee_action_alloc();
+            }
+            uint8_t aidx = ZigbeeConf[zbi].action_pool_idx;
+            if (aidx < NUMACTIONPOOL) {
+                for (int k = 0; k < trigger_count; k++) {
+                    if (k == 0) {
+                        strncpy(ZigbeeActionPoolArr[aidx].sclick, "None",
+                                sizeof(ZigbeeActionPoolArr[aidx].sclick) - 1);
+                    } else if (k == 1) {
+                        strncpy(ZigbeeActionPoolArr[aidx].dclick, "None",
+                                sizeof(ZigbeeActionPoolArr[aidx].dclick) - 1);
+                    } else if (k == 2) {
+                        strncpy(ZigbeeActionPoolArr[aidx].lpress, "None",
+                                sizeof(ZigbeeActionPoolArr[aidx].lpress) - 1);
+                    }
+                    LOG_Z2M("zbee: LEARN BUTTON %d '%s' -> slot %d (id=%d)\r\n",
+                            k, trigger_payloads[k], zbi, NUMPIN + zbi);
                 }
-                LOG_Z2M("zbee: LEARN BUTTON %d '%s' -> slot %d (id=%d)\r\n",
-                        k, trigger_payloads[k], zbi, NUMPIN + zbi);
-            }
 
-            /* Инициализируем оставшиеся поля "None" если trigger_count < 3 */
-            if (trigger_count < 3) {
-                if (ZigbeeConf[zbi].dclick[0] == '\0')
-                    strncpy(ZigbeeConf[zbi].dclick, "None", sizeof(ZigbeeConf[zbi].dclick) - 1);
-                if (ZigbeeConf[zbi].lpress[0] == '\0')
-                    strncpy(ZigbeeConf[zbi].lpress, "None", sizeof(ZigbeeConf[zbi].lpress) - 1);
-            }
-            if (trigger_count < 2) {
-                if (ZigbeeConf[zbi].sclick[0] == '\0')
-                    strncpy(ZigbeeConf[zbi].sclick, "None", sizeof(ZigbeeConf[zbi].sclick) - 1);
+                /* Инициализируем оставшиеся поля "None" если trigger_count < 3 */
+                if (trigger_count < 3) {
+                    if (ZigbeeActionPoolArr[aidx].dclick[0] == '\0')
+                        strncpy(ZigbeeActionPoolArr[aidx].dclick, "None", sizeof(ZigbeeActionPoolArr[aidx].dclick) - 1);
+                    if (ZigbeeActionPoolArr[aidx].lpress[0] == '\0')
+                        strncpy(ZigbeeActionPoolArr[aidx].lpress, "None", sizeof(ZigbeeActionPoolArr[aidx].lpress) - 1);
+                }
+                if (trigger_count < 2) {
+                    if (ZigbeeActionPoolArr[aidx].sclick[0] == '\0')
+                        strncpy(ZigbeeActionPoolArr[aidx].sclick, "None", sizeof(ZigbeeActionPoolArr[aidx].sclick) - 1);
+                }
             }
 
             /* Auto-detect RAW/PASSTHROUGH from first payload */
@@ -5342,8 +5368,14 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             ZigbeeConf[free_zbi].zbee_label[sizeof(ZigbeeConf[free_zbi].zbee_label) - 1] = '\0';
 
             /* sclick = "None" (actions not configured yet) */
-            strncpy(ZigbeeConf[free_zbi].sclick, "None",
-                    sizeof(ZigbeeConf[free_zbi].sclick) - 1);
+            if (ZigbeeConf[free_zbi].action_pool_idx == ACTION_POOL_IDX_NONE) {
+                ZigbeeConf[free_zbi].action_pool_idx = zbee_action_alloc();
+            }
+            if (ZigbeeConf[free_zbi].action_pool_idx < NUMACTIONPOOL) {
+                uint8_t fidx = ZigbeeConf[free_zbi].action_pool_idx;
+                strncpy(ZigbeeActionPoolArr[fidx].sclick, "None",
+                        sizeof(ZigbeeActionPoolArr[fidx].sclick) - 1);
+            }
 
             /* PASSTHROUGH: payload в pt_single для отображения в Switch pin */
             ZigbeeConf[free_zbi].vbtn_mode = VBTN_MODE_PASSTHROUGH;
@@ -5454,9 +5486,10 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             if (new_role == ZBEE_ROLE_SWITCH) {
                 /* Было кнопкой — очищаем данные кнопки (только если НЕ PASSTHROUGH) */
                 if (ZigbeeConf[zbi].vbtn_mode != VBTN_MODE_PASSTHROUGH) {
-                    ZigbeeConf[zbi].sclick[0] = '\0';
-                    ZigbeeConf[zbi].dclick[0] = '\0';
-                    ZigbeeConf[zbi].lpress[0] = '\0';
+                    if (ZigbeeConf[zbi].action_pool_idx < NUMACTIONPOOL) {
+                        zbee_action_free(ZigbeeConf[zbi].action_pool_idx);
+                    }
+                    ZigbeeConf[zbi].action_pool_idx = ACTION_POOL_IDX_NONE;
                     ZigbeeConf[zbi].pt_single[0] = '\0';
                     ZigbeeConf[zbi].pt_double[0] = '\0';
                     ZigbeeConf[zbi].pt_long[0] = '\0';
