@@ -109,15 +109,41 @@ void vbtn_execute(int slot, int event_type) {
     }
 }
 
+/* ── PASSTHROUGH mode: universal payload matcher ── */
+static int match_payload_word(const char *payload, const char *target_word, int ep) {
+    if (!payload || !target_word || target_word[0] == '\0') return 0;
+
+    /* 1. Прямое полное совпадение */
+    if (strcmp(payload, target_word) == 0) return 1;
+
+    /* 2. Подстрока (слово внутри JSON/строки) */
+    if (strstr(payload, target_word) != NULL) return 1;
+
+    /* 3. Обобщенное сопоставление JSON data.val с pt_single ("1", "EP1", "EP5" и т.д.) */
+    long v;
+    if (json_find_val_path(payload, "data.val", &v)) {
+        char numbuf[16];
+        snprintf(numbuf, sizeof(numbuf), "%ld", v);
+        if (strcmp(numbuf, target_word) == 0) return 1;
+
+        char epbuf[16];
+        snprintf(epbuf, sizeof(epbuf), "EP%d", ep);
+        if (strcmp(epbuf, target_word) == 0 && v != 0) return 1;
+    }
+
+    return 0;
+}
+
 /* ── PASSTHROUGH mode: match payload to configured words ── */
 static void vbtn_execute_payload(int slot, const char *payload) {
-    if (strcmp(payload, ZigbeeConf[slot].pt_single) == 0) {
+    int ep = ZigbeeConf[slot].ep;
+    if (match_payload_word(payload, ZigbeeConf[slot].pt_single, ep)) {
         vbtn_execute(slot, 0);
     } else if (ZigbeeConf[slot].pt_double[0] &&
-               strcmp(payload, ZigbeeConf[slot].pt_double) == 0) {
+               match_payload_word(payload, ZigbeeConf[slot].pt_double, ep)) {
         vbtn_execute(slot, 1);
     } else if (ZigbeeConf[slot].pt_long[0] &&
-               strcmp(payload, ZigbeeConf[slot].pt_long) == 0) {
+               match_payload_word(payload, ZigbeeConf[slot].pt_long, ep)) {
         vbtn_execute(slot, 2);
     }
 }
@@ -134,6 +160,14 @@ void zbee_vbtn_tick(void) {
         if (zb->zbee_role != ZBEE_ROLE_TRIGGER) continue;
         if (zb->vbtn_mode != VBTN_MODE_RAW) continue;
         if (zb->zbee_ieee[0] == '\0') continue;
+
+        /* Импульсный авто-сброс нажатого состояния (для устройств без явного release) */
+        if (zb->vbtn_level == 1 && zb->vbtn_auto_release) {
+            if (now - zb->vbtn_state_tick >= 50) {
+                zb->vbtn_level = 0;
+                zb->vbtn_auto_release = 0;
+            }
+        }
 
         uint32_t elapsed = now - zb->vbtn_state_tick;
 
@@ -219,17 +253,23 @@ void zbee_vbtn_mqtt_event(int slot, const char *payload) {
         uint32_t now = HAL_GetTick();
 
         int click_state = click_state_from_payload(payload);
-        if (click_state == 1) {
-            zb->vbtn_level = 1;
-        } else if (click_state == 0) {
-            zb->vbtn_level = 0;
-        }
 
-        if (zb->vbtn_level != old_level) {
-            zb->vbtn_last_tick = now;
+        zb->vbtn_last_tick = now;
+
+        /* Универсальная кнопка: любой payload (val:0 ИЛИ val:1) = нажатие */
+        if (zb->vbtn_state == VBTN_STATE_IDLE &&
+            (click_state == 0 || click_state == 1)) {
+            zb->vbtn_level = 1;
+            zb->vbtn_state = VBTN_STATE_PRESSED;
+            zb->vbtn_state_tick = now;
+            zb->vbtn_auto_release = 1;
+        } else if (zb->vbtn_level != old_level) {
             if (zb->vbtn_level == 1 && zb->vbtn_state == VBTN_STATE_IDLE) {
                 zb->vbtn_state = VBTN_STATE_PRESSED;
                 zb->vbtn_state_tick = now;
+            }
+            if (zb->vbtn_level == 1 && old_level == 0) {
+                zb->vbtn_auto_release = 1;
             }
         }
     } else {

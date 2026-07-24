@@ -1827,8 +1827,9 @@ void handle_buttons(struct mg_connection *c, struct mg_http_message *hm) {
         snprintf(display_id, sizeof(display_id), "%d", zbee_id);
 
         char esc_pins[64];
-        if (ZigbeeConf[i].vbtn_mode == VBTN_MODE_PASSTHROUGH &&
-            ZigbeeConf[i].pt_single[0] != '\0') {
+        if (ZigbeeConf[i].ep > 0) {
+            snprintf(esc_pins, sizeof(esc_pins), "EP%d", ZigbeeConf[i].ep);
+        } else if (ZigbeeConf[i].pt_single[0] != '\0') {
             json_escape_str(esc_pins, ZigbeeConf[i].pt_single, sizeof(esc_pins));
         } else {
             snprintf(esc_pins, sizeof(esc_pins), "ZB_%s", ZigbeeConf[i].zbee_ieee);

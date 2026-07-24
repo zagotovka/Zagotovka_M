@@ -324,6 +324,7 @@ typedef struct {
     uint8_t  vbtn_state;         // 0=IDLE, 1=PRESSED, 2=WAIT_REPEAT, 3=RE_PRESSED, 5=LONG_HOLD
     uint8_t  vbtn_repeat;        // Click counter (1 or 2)
     uint8_t  vbtn_level;         // Current level (1=pressed, 0=released)
+    uint8_t  vbtn_auto_release;  // Auto-release flag for pulse click events
     uint32_t vbtn_last_tick;     // Last event time
     uint32_t vbtn_state_tick;    // Time of state entry
 
