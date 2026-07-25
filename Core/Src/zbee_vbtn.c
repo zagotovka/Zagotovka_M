@@ -103,7 +103,8 @@ void vbtn_execute(int slot, int event_type) {
 
     if (action_str && action_str[0] && strcmp(action_str, "None") != 0) {
         uint8_t btn_id = (uint8_t)(NUMPIN + slot);
-        printf("[VBTN] slot=%d event=%d action='%s'\r\n", slot, event_type, action_str);
+        const char *event_name[] = {"[SINGLE CLICK]", "[DOUBLE CLICK]", "[LONG PRESS]"};
+        LOG_SYSTEM("%s Zigbee Button %d: %s", event_name[event_type], btn_id, action_str);
         action_handler(btn_id, action_str, press_type);
         mqtt_queue_send_safe((uint8_t)(3 + event_type), btn_id, (uint8_t)(1 + event_type), 0);
     }
@@ -128,7 +129,7 @@ static int match_payload_word(const char *payload, const char *target_word, int 
 
         char epbuf[16];
         snprintf(epbuf, sizeof(epbuf), "EP%d", ep);
-        if (strcmp(epbuf, target_word) == 0 && v != 0) return 1;
+        if (strcmp(epbuf, target_word) == 0) return 1;
     }
 
     return 0;

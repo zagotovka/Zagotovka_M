@@ -1786,48 +1786,32 @@ void InitPin() {
   }
 }
 
+static inline bool is_action_set(const char *action) {
+  return action && action[0] != '\0' && strcmp(action, "None") != 0;
+}
+
 void InitMultibutton(void) {
   for (uint8_t i = 0; i < NUMPIN; i++) {
-    // Инциализация кнопки PULLDOWN
-    if (PinsConf[i].ptype == 2) {
-      button_init(&button[i], read_button_level, 1, i);
-      // просто кнопка
-      button_attach(&button[i], PRESS_DOWN, (BtnCallback)button_event_handler);
-      button_attach(&button[i], PRESS_UP, (BtnCallback)button_event_handler);
-      button_attach(&button[i], LONG_PRESS_START,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], LONG_PRESS_HOLD,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], SINGLE_CLICK,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], DOUBLE_CLICK,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], PRESS_REPEAT,
-                    (BtnCallback)button_event_handler);
-      button_start(&button[i]);
-      // инициализация Multibutton flag
-      PinsConf[i].act = 1;
+    if (PinsConf[i].ptype != 1 && PinsConf[i].ptype != 2) continue;
+
+    uint8_t active_level = (PinsConf[i].ptype == 2) ? 1 : 0;
+    button_init(&button[i], read_button_level, active_level, i);
+
+    button_attach(&button[i], PRESS_DOWN, (BtnCallback)button_event_handler);
+    button_attach(&button[i], PRESS_UP, (BtnCallback)button_event_handler);
+    button_attach(&button[i], SINGLE_CLICK, (BtnCallback)button_event_handler);
+    button_attach(&button[i], PRESS_REPEAT, (BtnCallback)button_event_handler);
+
+    if (is_action_set(PinsConf[i].dclick)) {
+      button_attach(&button[i], DOUBLE_CLICK, (BtnCallback)button_event_handler);
     }
-    // Инциализация кнопки PULLUP
-    if (PinsConf[i].ptype == 1) {
-      button_init(&button[i], read_button_level, 0, i);
-      // просто кнопка
-      button_attach(&button[i], PRESS_DOWN, (BtnCallback)button_event_handler);
-      button_attach(&button[i], PRESS_UP, (BtnCallback)button_event_handler);
-      button_attach(&button[i], LONG_PRESS_START,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], LONG_PRESS_HOLD,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], SINGLE_CLICK,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], DOUBLE_CLICK,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], PRESS_REPEAT,
-                    (BtnCallback)button_event_handler);
-      button_start(&button[i]);
-      // инициализация Multibutton flag
-      PinsConf[i].act = 1;
+    if (is_action_set(PinsConf[i].lpress)) {
+      button_attach(&button[i], LONG_PRESS_START, (BtnCallback)button_event_handler);
+      button_attach(&button[i], LONG_PRESS_HOLD, (BtnCallback)button_event_handler);
     }
+
+    button_start(&button[i]);
+    PinsConf[i].act = 1;
   }
 }
 

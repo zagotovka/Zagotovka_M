@@ -480,6 +480,10 @@ static bool check_mqtt_connection(void *conn) {
   return true;
 }
 
+static inline bool is_action_set(const char *action) {
+  return action && action[0] != '\0' && strcmp(action, "None") != 0;
+}
+
 void button_event_handler(
     Button *handle) { // Функция callback для обработки событий кнопки
   if (handle->button_id >= NUMPIN) {
@@ -498,36 +502,30 @@ void button_event_handler(
                  //       printf("Button %d: PRESS_UP!\r\n", handle->button_id);
     break;
   case LONG_PRESS_START: // Начало долгого нажатия
-    printf("[BTN] Button %d: LONG_PRESS_START lpress='%s'\r\n", handle->button_id, PinsConf[handle->button_id].lpress);
-    if (handle->button_id < NUMPIN) {
+    if (is_action_set(PinsConf[handle->button_id].lpress)) {
+      LOG_SYSTEM("[LONG PRESS] Button %d: %s", handle->button_id, PinsConf[handle->button_id].lpress);
       action_handler(handle->button_id, PinsConf[handle->button_id].lpress,
                      "long press");
       mqtt_queue_send_safe(3, handle->button_id, 1, 0);
-    } else {
-      printf("[BTN] Invalid button ID: %d\r\n", handle->button_id);
     }
     break;
   case LONG_PRESS_HOLD: // Продолжение долгого нажатия
     //       printf("Button %d: LONG_PRESS_HOLD!\r\n", handle->button_id);
     break;
   case SINGLE_CLICK: // Одиночное нажатие кнопки
-    printf("[BTN] Button %d: SINGLE_CLICK sclick='%s'\r\n", handle->button_id, PinsConf[handle->button_id].sclick);
-    if (handle->button_id < NUMPIN) {
+    if (is_action_set(PinsConf[handle->button_id].sclick)) {
+      LOG_SYSTEM("[SINGLE CLICK] Button %d: %s", handle->button_id, PinsConf[handle->button_id].sclick);
       action_handler(handle->button_id, PinsConf[handle->button_id].sclick,
                      "sclick press");
       mqtt_queue_send_safe(4, handle->button_id, 2, 0);
-    } else {
-      printf("[BTN] Invalid button ID: %d\r\n", handle->button_id);
     }
     break;
   case DOUBLE_CLICK: // Двойное нажатие кнопки
-    printf("[BTN] Button %d: DOUBLE_CLICK dclick='%s'\r\n", handle->button_id, PinsConf[handle->button_id].dclick);
-    if (handle->button_id < NUMPIN) {
+    if (is_action_set(PinsConf[handle->button_id].dclick)) {
+      LOG_SYSTEM("[DOUBLE CLICK] Button %d: %s", handle->button_id, PinsConf[handle->button_id].dclick);
       action_handler(handle->button_id, PinsConf[handle->button_id].dclick,
                      "double press");
       mqtt_queue_send_safe(5, handle->button_id, 3, 0);
-    } else {
-      printf("[BTN] Invalid button ID: %d\r\n", handle->button_id);
     }
     break;
   case PRESS_REPEAT: // Повторное нажатие кнопки

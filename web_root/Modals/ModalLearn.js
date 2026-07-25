@@ -14,6 +14,12 @@ const ROLE_OPTIONS = [
   { value: 'ep',          label: { ru: 'EP',             en: 'EP' } },
 ];
 
+const CLICK_TYPE_OPTIONS = [
+  { value: 'single', label: { ru: 'Одиночное нажатие', en: 'Single click' } },
+  { value: 'double', label: { ru: 'Двойное нажатие',   en: 'Double click' } },
+  { value: 'long',   label: { ru: 'Долгое нажатие',    en: 'Long press' } },
+];
+
 function obsKey(o) {
   if (o.source === 'trigger') return `trigger_${o.payload}`;
   return `${o.ep}_${o.cluster}_${o.attr}`;
@@ -30,6 +36,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
   const [error, setError] = useState(null);
   const [rawRanges, setRawRanges] = useState({});  // manual override: { obsKey: { min, max } }
   const [switchValues, setSwitchValues] = useState({});  // { obsKey: '1' | '0' }
+  const [clickTypes, setClickTypes] = useState({});  // { obsKey: 'single' | 'double' | 'long' }
   const pollRef = useRef(null);
   const mergedRef = useRef({});
 
@@ -39,6 +46,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
     setLabels({});
     setNames({});
     setRawRanges({});
+    setClickTypes({});
     setSavedType(null);
     setError(null);
   }, [ieee]);
@@ -106,8 +114,12 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                 role: labels[k] || 'ignore',
                 label: names[k] || '',
               };
-          /* Добавляем raw_min/raw_max для Tuya строк с ролью brightness/dimmer */
+          /* Добавляем click_type для кнопок */
           const role = labels[k] || 'ignore';
+          if (role === 'button' && o.source === 'trigger') {
+            base.click_type = clickTypes[k] || 'single';
+          }
+          /* Добавляем raw_min/raw_max для Tuya строк с ролью brightness/dimmer */
           if ((role === 'brightness' || role === 'dimmer') && o.cluster === '0xEF00') {
             const override = rawRanges[k];
             base.raw_min = override?.min ?? o.obs_min;
@@ -340,6 +352,20 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                               <option value="0">${lang === 'ru' ? '0 (Выкл)' : '0 (Off)'}</option>
                             </select>
                           `}
+                          ${labels[obsKey(o)] === 'button' && html`
+                            <select class="border rounded px-2 py-1 text-sm bg-white"
+                                    value=${clickTypes[obsKey(o)] || 'single'}
+                                    onChange=${e => setClickTypes(prev => ({
+                                      ...prev,
+                                      [obsKey(o)]: e.target.value
+                                    }))}>
+                              ${CLICK_TYPE_OPTIONS.map(opt => html`
+                                <option key=${opt.value} value=${opt.value}>
+                                  ${opt.label[lang] || opt.label.en}
+                                </option>
+                              `)}
+                            </select>
+                          `}
                         </div>
                       </td>
                     </tr>
@@ -370,18 +396,34 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                                }))} />
                       </td>
                       <td class="py-2">
-                        <select class="border rounded px-2 py-1 text-sm bg-white"
-                                value=${labels[obsKey(o)] || 'ignore'}
-                                onChange=${e => setLabels(prev => ({
-                                  ...prev,
-                                  [obsKey(o)]: e.target.value
-                                }))}>
-                          ${ROLE_OPTIONS.map(opt => html`
-                            <option key=${opt.value} value=${opt.value}>
-                              ${opt.label[lang] || opt.label.en}
-                            </option>
-                          `)}
-                        </select>
+                        <div class="flex items-center gap-1">
+                          <select class="border rounded px-2 py-1 text-sm bg-white"
+                                  value=${labels[obsKey(o)] || 'ignore'}
+                                  onChange=${e => setLabels(prev => ({
+                                    ...prev,
+                                    [obsKey(o)]: e.target.value
+                                  }))}>
+                            ${ROLE_OPTIONS.map(opt => html`
+                              <option key=${opt.value} value=${opt.value}>
+                                ${opt.label[lang] || opt.label.en}
+                              </option>
+                            `)}
+                          </select>
+                          ${labels[obsKey(o)] === 'button' && html`
+                            <select class="border rounded px-2 py-1 text-sm bg-white"
+                                    value=${clickTypes[obsKey(o)] || 'single'}
+                                    onChange=${e => setClickTypes(prev => ({
+                                      ...prev,
+                                      [obsKey(o)]: e.target.value
+                                    }))}>
+                              ${CLICK_TYPE_OPTIONS.map(opt => html`
+                                <option key=${opt.value} value=${opt.value}>
+                                  ${opt.label[lang] || opt.label.en}
+                                </option>
+                              `)}
+                            </select>
+                          `}
+                        </div>
                       </td>
                     </tr>
                   `)}
