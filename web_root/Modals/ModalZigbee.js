@@ -5,11 +5,12 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
   const lang = language || 'ru';
   const [isScanning, setIsScanning] = useState(false);
 
-  const isTrigger = device.zbee_role === 3 || device.zbee_role === 5;
+  const isTrigger = device.zbee_role === 3 || device.override === 6;
+  const isSwitch = device.zbee_role === 5 || device.override === 5;
   const [triggers, setTriggers] = useState([]);
 
   useEffect(() => {
-    if (!isTrigger) return;
+    if (!isTrigger && !isSwitch) return;
     fetch('/api/button/get')
       .then(r => r.json())
       .then(data => {
@@ -20,23 +21,24 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
         }
       })
       .catch(() => {});
-  }, [isTrigger, device.id]);
+  }, [isTrigger, isSwitch, device.id]);
 
   /* Определяем, мульти-EP группа или одиночное устройство */
   const siblings = (allDevices || []).filter(d => d.zbee_ieee === device.zbee_ieee);
-  const isMultiDp = siblings.length > 1 && siblings.some(d => d.ep > 0);
+  const isMultiDp = siblings.length > 1;
 
-  /* Для мульти-EP: собираем подслоты с ep > 0 */
-  const dpSlotsRaw = isMultiDp
-    ? siblings.filter(d => d.ep > 0)
-    : [];
+  /* Для мульти-EP: собираем все слоты группы (включая родительский/головной элемент) */
+  const dpSlotsRaw = isMultiDp ? siblings : [];
   const [dpSlots, setDpSlots] = useState(dpSlotsRaw);
 
   useEffect(() => {
     setDpSlots(dpSlotsRaw);
   }, [allDevices]);
 
-  const [overrideType, setOverrideType] = useState(device.override || 0);
+  const initialOverride = device.override !== 0 
+    ? device.override 
+    : (isSwitch ? 5 : (isTrigger ? 6 : 0));
+  const [overrideType, setOverrideType] = useState(initialOverride);
 
   const applyOverrideType = (e) => {
     const val = parseInt(e.target.value, 10);
@@ -49,6 +51,16 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
         onUpdate({ ...device, override: val });
     });
   };
+
+  /* Маршрут и подписи для кнопки перехода (Switch pin vs Button pin) */
+  const hasSwitchRole = isSwitch || dpSlots.some(s => s.zbee_role === 5 || s.override === 5);
+  const targetPinPage = hasSwitchRole ? '/#/switch' : '/#/button';
+  const targetPinLabel = hasSwitchRole 
+    ? (lang === 'ru' ? 'Перейти на Switch pin →' : 'Go to Switch pin →')
+    : (lang === 'ru' ? 'Перейти на Button pin →' : 'Go to Button pin →');
+  const targetPinDesc = hasSwitchRole
+    ? (lang === 'ru' ? 'Настройте привязки переключателя на странице Switch pin.' : 'Configure switch links on the Switch pin page.')
+    : (lang === 'ru' ? 'Настройте действия для каждого payload на странице Button pin.' : 'Configure actions for each payload on the Button pin page.');
 
   /* Для одиночного устройства */
   const effectiveOverride = overrideType;
@@ -111,11 +123,12 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
   };
 
   const applyOnOff = (value) => {
-    setOnoff(value);
+    const val = value ? 1 : 0;
+    setOnoff(val);
     fetch('/api/zigbee/command', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: device.id, onoff: value ? 1 : 0 })
+      body: JSON.stringify({ id: device.id, onoff: val })
     }).catch(err => console.error('Error sending command:', err));
   };
 
@@ -132,11 +145,12 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
 
   /* Команды для мульти-EP слотов */
   const applyDpOnOff = (slotId, value) => {
-    setDpSlots(prev => prev.map(s => s.id === slotId ? { ...s, onoff: value ? 1 : 0 } : s));
+    const val = value ? 1 : 0;
+    setDpSlots(prev => prev.map(s => s.id === slotId ? { ...s, onoff: val } : s));
     fetch('/api/zigbee/command', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: slotId, onoff: value ? 1 : 0 })
+      body: JSON.stringify({ id: slotId, onoff: val })
     }).catch(err => console.error('Error sending ep command:', err));
   };
 
@@ -147,6 +161,16 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: slotId, brightness: value })
     }).catch(err => console.error('Error sending ep brightness:', err));
+  };
+
+  const applyDpColor = (slotId, value) => {
+    const hex = parseInt(value.replace('#', ''), 16);
+    setDpSlots(prev => prev.map(s => s.id === slotId ? { ...s, color: value, color_hex: hex } : s));
+    fetch('/api/zigbee/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: slotId, color_hex: hex })
+    }).catch(err => console.error('Error sending ep color:', err));
   };
 
   const handleOverlayClick = (e) => {
@@ -174,15 +198,15 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
           <div class="flex justify-between items-center mb-6">
             <div>
               <h2 class="text-xl font-bold text-slate-800">
-                ${isMultiDp ? html`✱ ${device.zbee_label || 'Smart Switch'}` : html`
-                  ${isTrigger ? '🔘' : (hasColor ? '💡' : (hasDimmer ? '🔆' : '🔌'))}
+                ${isMultiDp ? html`✱ ${device.zbee_label || 'Smart Device'}` : html`
+                  ${isTrigger ? '🔘' : (isSwitch ? '🔀' : (hasColor ? '💡' : (hasDimmer ? '🔆' : '🔌')))}
                   ${device.zbee_label || 'Device ' + device.id}
                 `}
               </h2>
               <p class="text-sm text-slate-500 mt-1">
                 ID: ${device.displayId || device.id} · ${isMultiDp
                   ? `Multi-EP (${dpSlots.length} EP)`
-                  : (isTrigger ? 'Button' : (hasColor ? 'Лампа (яркость + цвет)' : (hasDimmer ? 'Лампа (яркость)' : 'Розетка (On/Off)')))}
+                  : (isTrigger ? 'Button' : (isSwitch ? 'Switch' : (hasColor ? 'Лампа (яркость + цвет)' : (hasDimmer ? 'Лампа (яркость)' : 'Розетка (On/Off)'))))}
               </p>
             </div>
             <button
@@ -209,10 +233,97 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
                 <option value="2">${lang === 'ru' ? 'Диммер' : 'Dimmer'}</option>
                 <option value="3">${lang === 'ru' ? 'Лампа (яркость)' : 'Lamp (brightness)'}</option>
                 <option value="4">${lang === 'ru' ? 'Лампа (яркость + цвет)' : 'Lamp (brightness + color)'}</option>
+                <option value="5">${lang === 'ru' ? 'Выключатель (Switch)' : 'Switch'}</option>
+                <option value="6">${lang === 'ru' ? 'Кнопка (Button)' : 'Button'}</option>
               </select>
             </div>
 
-            ${isTrigger ? html`
+            ${isMultiDp ? html`
+              <!-- Мульти-EP: групповая модалка -->
+              ${dpSlots.map(slot => {
+                const sClusters = (slot.clusters && slot.clusters.length) ? slot.clusters : [6];
+                return html`
+                  <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                    <div class="flex items-center justify-between mb-3">
+                      <div class="flex items-center gap-2">
+                        ${dpIcon(sClusters[0] || 6)}
+                        <span class="text-sm font-semibold text-slate-700">${slot.zbee_label || 'EP' + (slot.ep || 1)}</span>
+                      </div>
+                      <span class="text-xs text-slate-400 font-mono">EP${slot.ep || 1}</span>
+                    </div>
+                    ${sClusters.includes(6) && html`
+                      <${MyPolzunok} value=${slot.onoff || 0} onChange=${(val) => applyDpOnOff(slot.id, val)} />
+                    `}
+                    ${sClusters.includes(8) && (() => {
+                      const sMin = (slot.dimmer_min != null && slot.dimmer_min !== 0) ? slot.dimmer_min : 1;
+                      const sMax = (slot.dimmer_max != null && slot.dimmer_max !== 0) ? slot.dimmer_max : 254;
+                      const sVal = slot.brightness != null ? slot.brightness : sMax;
+                      const sPct = Math.round(((sVal - sMin) / (sMax - sMin)) * 100);
+                      return html`
+                        <div class="mt-3">
+                          <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs text-slate-500">${lang === 'ru' ? 'Яркость' : 'Brightness'}</span>
+                            <span class="text-xs font-mono text-slate-500">${sPct}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min=${sMin}
+                            max=${sMax}
+                            value=${sVal}
+                            onInput=${(e) => applyDpBrightness(slot.id, parseInt(e.target.value))}
+                            class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                          />
+                        </div>
+                      `;
+                    })()}
+                    ${sClusters.includes(768) && (() => {
+                      const sColor = slot.color || '#' + (slot.color_hex || 0xFFAA00).toString(16).padStart(6, '0');
+                      return html`
+                        <div class="mt-3">
+                          <div class="text-xs text-slate-500 mb-1">${lang === 'ru' ? 'Цвет' : 'Color'}</div>
+                          <input
+                            type="color"
+                            value=${sColor}
+                            onInput=${(e) => applyDpColor(slot.id, e.target.value)}
+                            onChange=${(e) => applyDpColor(slot.id, e.target.value)}
+                            class="w-16 h-10 rounded-lg border-2 border-slate-200 cursor-pointer"
+                          />
+                        </div>
+                      `;
+                    })()}
+                  </div>
+                `;
+              })}
+
+              <div class="bg-slate-50 rounded-xl p-4">
+                <div class="text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wider">${language === 'ru' ? 'Возможности' : 'Capabilities'}</div>
+                <div class="flex gap-3 flex-wrap">
+                  ${dpSlots.filter(s => (s.clusters || []).includes(6)).length > 0 && html`
+                    <span class="px-3 py-1 rounded-full text-sm font-medium bg-teal-100 text-teal-700">
+                      🔘 ${language === 'ru' ? 'Вкл/Выкл' : 'On/Off'} ×${dpSlots.filter(s => (s.clusters || []).includes(6)).length}
+                    </span>
+                  `}
+                  ${dpSlots.filter(s => (s.clusters || []).includes(8)).length > 0 && html`
+                    <span class="px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-700">
+                      🔆 ${language === 'ru' ? 'Яркость' : 'Brightness'} ×${dpSlots.filter(s => (s.clusters || []).includes(8)).length}
+                    </span>
+                  `}
+                  ${dpSlots.filter(s => (s.clusters || []).includes(768)).length > 0 && html`
+                    <span class="px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-700">
+                      🎨 ${language === 'ru' ? 'Цвет' : 'Color'} ×${dpSlots.filter(s => (s.clusters || []).includes(768)).length}
+                    </span>
+                  `}
+                </div>
+              </div>
+
+              <div class="flex justify-center">
+                <button
+                  onClick=${() => { onClose(); window.location.href = targetPinPage; }}
+                  class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
+                  ${targetPinLabel}
+                </button>
+              </div>
+            ` : isTrigger ? html`
               <div class="bg-slate-50 rounded-xl p-4">
                 <div class="text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wider">
                   ${lang === 'ru' ? 'Тестирование' : 'Testing'}
@@ -249,80 +360,65 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
                   ${lang === 'ru' ? 'Настройка действий' : 'Configure Actions'}
                 </div>
                 <p class="text-sm text-blue-600 mb-3">
-                  ${lang === 'ru'
-                    ? 'Настройте действия для каждого payload на странице Button pin.'
-                    : 'Configure actions for each payload on the Button pin page.'}
+                  ${targetPinDesc}
                 </p>
                 <button
-                  onClick=${() => { onClose(); window.location.href = '/#/button'; }}
+                  onClick=${() => { onClose(); window.location.href = targetPinPage; }}
                   class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
-                  ${lang === 'ru' ? 'Перейти на Button pin →' : 'Go to Button pin →'}
+                  ${targetPinLabel}
                 </button>
               </div>
-            ` : isMultiDp ? html`
-              <!-- Мульти-EP: групповая модалка -->
-              ${dpSlots.map(slot => html`
-                <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                  <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center gap-2">
-                      ${dpIcon(slot.clusters[0] || 6)}
-                      <span class="text-sm font-semibold text-slate-700">${slot.zbee_label || 'EP' + slot.ep}</span>
-                    </div>
-                    <span class="text-xs text-slate-400 font-mono">EP${slot.ep}</span>
-                  </div>
-                  ${(slot.clusters || []).includes(6) && html`
-                    <${MyPolzunok} value=${slot.onoff || 0} onChange=${(val) => applyDpOnOff(slot.id, val)} />
-                  `}
-                  ${(slot.clusters || []).includes(8) && (() => {
-                    const sMin = (slot.dimmer_min != null && slot.dimmer_min !== 0) ? slot.dimmer_min : 1;
-                    const sMax = (slot.dimmer_max != null && slot.dimmer_max !== 0) ? slot.dimmer_max : 254;
-                    const sVal = slot.brightness != null ? slot.brightness : sMax;
-                    const sPct = Math.round(((sVal - sMin) / (sMax - sMin)) * 100);
-                    return html`
-                      <div class="mt-3">
-                        <div class="flex justify-between items-center mb-2">
-                          <span class="text-xs text-slate-500">${lang === 'ru' ? 'Яркость' : 'Brightness'}</span>
-                          <span class="text-xs font-mono text-slate-500">${sPct}%</span>
-                        </div>
-                        <input
-                          type="range"
-                          min=${sMin}
-                          max=${sMax}
-                          value=${sVal}
-                          onInput=${(e) => applyDpBrightness(slot.id, parseInt(e.target.value))}
-                          class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                        />
-                      </div>
-                    `;
-                  })()}
-                </div>
-              `)}
+            ` : isSwitch ? html`
+              <!-- Switch: On/Off + Тестирование -->
+              <div class="bg-slate-50 rounded-xl p-4">
+                <div class="text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wider">Power</div>
+                <${MyPolzunok} value=${onoff} onChange=${applyOnOff} />
+              </div>
 
               <div class="bg-slate-50 rounded-xl p-4">
-                <div class="text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wider">${language === 'ru' ? 'Возможности' : 'Capabilities'}</div>
+                <div class="text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wider">
+                  ${lang === 'ru' ? 'Тестирование' : 'Testing'}
+                </div>
+                <p class="text-sm text-slate-500 mb-3">
+                  ${lang === 'ru'
+                    ? 'Нажмите кнопку на устройстве и наблюдайте за событиями. Или отправьте команду для тестирования:'
+                    : 'Press the button on the device and observe events. Or send a command for testing:'}
+                </p>
                 <div class="flex gap-3 flex-wrap">
-                  ${dpSlots.filter(s => (s.clusters || []).includes(6)).length > 0 && html`
-                    <span class="px-3 py-1 rounded-full text-sm font-medium bg-teal-100 text-teal-700">
-                      🔘 ${language === 'ru' ? 'Вкл/Выкл' : 'On/Off'} ×${dpSlots.filter(s => (s.clusters || []).includes(6)).length}
-                    </span>
-                  `}
-                  ${dpSlots.filter(s => (s.clusters || []).includes(8)).length > 0 && html`
-                    <span class="px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-700">
-                      🔆 ${language === 'ru' ? 'Яркость' : 'Brightness'} ×${dpSlots.filter(s => (s.clusters || []).includes(8)).length}
+                  ${triggers.map(t => html`
+                    <button
+                      onClick=${() => {
+                        fetch('/api/zigbee/command', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ id: t.id, trigger: t.payload })
+                        });
+                      }}
+                      class="px-4 py-2 rounded-lg bg-teal-500 text-white text-sm font-medium hover:bg-teal-600 transition-colors">
+                      ${t.label || t.payload}
+                    </button>
+                  `)}
+                  ${triggers.length === 0 && html`
+                    <span class="text-sm text-slate-400 italic">
+                      ${lang === 'ru' ? 'Нет триггеров — нажмите кнопку на устройстве' : 'No triggers — press a button on the device'}
                     </span>
                   `}
                 </div>
               </div>
 
-              ${dpSlots.filter(s => (s.clusters || []).includes(6)).length > 0 && html`
-                <div class="flex justify-center">
-                  <button
-                    onClick=${() => { onClose(); window.location.href = '/#/button'; }}
-                    class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
-                    ${language === 'ru' ? 'Перейти на Button pin →' : 'Go to Button pin →'}
-                  </button>
+              <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <div class="text-sm font-semibold text-blue-700 mb-2">
+                  ${lang === 'ru' ? 'Настройка действий' : 'Configure Actions'}
                 </div>
-              `}
+                <p class="text-sm text-blue-600 mb-3">
+                  ${targetPinDesc}
+                </p>
+                <button
+                  onClick=${() => { onClose(); window.location.href = targetPinPage; }}
+                  class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
+                  ${targetPinLabel}
+                </button>
+              </div>
             ` : html`
               <!-- Одиночное устройство -->
               <div class="bg-slate-50 rounded-xl p-4">
@@ -372,7 +468,7 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
               </div>
             `}
 
-            ${!isTrigger && html`
+            ${(!isTrigger || isMultiDp) && html`
               <div class="flex justify-center">
                 <button
                 onClick=${() => {

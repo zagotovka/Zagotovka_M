@@ -2532,6 +2532,9 @@ void GetZigbeeConfig(void) {
   struct mg_str arr = mg_str_n(body.buf + arr_ofs, body.len - (size_t)arr_ofs);
 
   memset(ZigbeeConf, 0, sizeof(ZigbeeConf));
+  for (int i = 0; i < NUMZBEE; i++) {
+    ZigbeeConf[i].action_pool_idx = ACTION_POOL_IDX_NONE;
+  }
 
   int idx = 0;
   size_t pos = 0;
@@ -2593,7 +2596,7 @@ void GetZigbeeConfig(void) {
     char *sclick = mg_json_get_str(elem, "$.sclick");
     char *dclick = mg_json_get_str(elem, "$.dclick");
     char *lpress = mg_json_get_str(elem, "$.lpress");
-    if ((sclick && sclick[0]) || (dclick && dclick[0]) || (lpress && lpress[0])) {
+    if (ZigbeeConf[idx].zbee_role == ZBEE_ROLE_TRIGGER || (sclick && sclick[0]) || (dclick && dclick[0]) || (lpress && lpress[0])) {
       if (ZigbeeConf[idx].action_pool_idx == ACTION_POOL_IDX_NONE) {
         ZigbeeConf[idx].action_pool_idx = zbee_action_alloc();
       }

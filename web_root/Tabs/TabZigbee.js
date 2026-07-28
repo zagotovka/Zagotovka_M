@@ -142,7 +142,7 @@ export function TabZigbee({}) {
 
   const normalizeDevice = (d) => ({
     id: d.id,
-    zbee_ieee: d.ieee || '',
+    zbee_ieee: (d.ieee || '').toLowerCase().trim(),
     zbee_endpoint: d.ep || 1,
     clusters: d.clusters || [6],
     zbee_device_type: d.role === 3 ? 'trigger' : (d.role === 5 ? 'switch' : clusterToDeviceType(d.clusters, d.override)),
@@ -290,7 +290,6 @@ export function TabZigbee({}) {
           ep: cur.zbee_endpoint,
           clusters: JSON.stringify(cur.clusters),
           info: cur.zbee_label,
-          onoff: cur.onoff,
           ...(cur.brightness !== snap.brightness && { brightness: cur.brightness }),
           ...(cur.color_hex !== snap.color_hex && { color_hex: cur.color_hex }),
           override: updatedDevice.override
@@ -376,14 +375,15 @@ export function TabZigbee({}) {
                       /* Группировка: { ieee → [device, ...] } */
                       const groups = {};
                       devices.forEach(d => {
-                        if (!groups[d.zbee_ieee]) groups[d.zbee_ieee] = [];
-                        groups[d.zbee_ieee].push(d);
+                        const ieeeKey = (d.zbee_ieee || '').toLowerCase().trim();
+                        if (!groups[ieeeKey]) groups[ieeeKey] = [];
+                        groups[ieeeKey].push(d);
                       });
 
                       const rows = [];
                       Object.values(groups).forEach(group => {
                         const head = group[0];
-                        const hasMultiDp = group.length > 1 && group.some(d => d.ep > 0);
+                        const hasMultiDp = group.length > 1;
                         const deviceType = head.zbee_device_type || 'socket';
                         const typeLabel = hasMultiDp ? 'Multi' : deviceType;
 
@@ -395,7 +395,9 @@ export function TabZigbee({}) {
                             <td class="px-6 py-2 text-sm text-slate-800" style="position:relative">
                               ${hasMultiDp ? html`<span style="position:absolute;left:60px" class="text-slate-500">${isExpanded ? '▼' : '▶'}</span>` : ''}${head.display_id || head.id}
                             </td>
-                            <td class="px-6 py-2 text-sm text-slate-800 font-mono">${head.zbee_ieee || '—'}</td>
+                            <td class="px-6 py-2 text-sm text-slate-800 font-mono">
+                              ${head.zbee_ieee || '—'}${hasMultiDp ? html`<span class="text-xs text-slate-400 font-sans ml-1.5">(EP${head.ep || 1})</span>` : ''}
+                            </td>
                             <td class="px-6 py-2 text-sm text-slate-700">
                               ${hasMultiDp
                                 ? html`Multi <span class="text-xs text-slate-400">×${group.length}</span>`
@@ -440,8 +442,10 @@ export function TabZigbee({}) {
                         /* Sub-строки для мульти-EP */
                         if (hasMultiDp && isExpanded) {
                           group.slice(1).forEach((d, idx) => {
-                            const subType = (d.clusters || []).includes(8) ? 'Dimmer'
+                            const subType = d.zbee_device_type === 'trigger' ? 'Button'
+                                          : d.zbee_device_type === 'switch' ? 'Switch'
                                           : (d.clusters || []).includes(768) ? 'Color'
+                                          : (d.clusters || []).includes(8) ? 'Dimmer'
                                           : 'On/Off';
                             rows.push(html`
                               <tr class="hover:bg-slate-200/80 transition-colors bg-white/60"
@@ -455,13 +459,7 @@ export function TabZigbee({}) {
                                 <td class="px-6 py-2" style="padding-left:60px;">
                                   <${MyPolzunok} value=${d.onoff || 0} disabled=${(head.onoff || 0) === 0 || dirtyIds.current.has(d.id)} activeColor="linear-gradient(to right, #5b7093, #8599b8)" onChange=${(val) => handleToggle(d, val)} />
                                 </td>
-                                <td class="px-6 py-2 text-sm flex gap-2">
-                                  <button
-                                    onClick=${() => handleEdit(d)}
-                                    class="px-4 py-1.5 rounded-full text-xs font-bold text-white shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600"
-                                  >
-                                    ${language === 'ru' ? 'Управление' : 'Control'}
-                                  </button>
+                                <td class="px-6 py-2 text-sm">
                                 </td>
                               </tr>
                             `);

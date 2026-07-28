@@ -247,33 +247,41 @@ void zbee_vbtn_mqtt_event(int slot, const char *payload) {
     if (slot < 0 || slot >= NUMZBEE) return;
     ZigbeeVirtualPin *zb = &ZigbeeConf[slot];
 
+    // Обрабатываем только Zigbee-устройства с ролью триггера (кнопки)
     if (zb->zbee_role != ZBEE_ROLE_TRIGGER) return;
 
     if (zb->vbtn_mode == VBTN_MODE_RAW) {
+        // 1. Извлекаем уровень (1-нажато, 0-отпущено) из payload [2]
+        int level = click_state_from_payload(payload);
+        if (level == -1) return; // Игнорируем payload, не подходящий для RAW-режима
+
+        uint8_t new_level = (uint8_t)level;
         uint8_t old_level = zb->vbtn_level;
         uint32_t now = HAL_GetTick();
 
-        int click_state = click_state_from_payload(payload);
+        // 2. Проверяем факт изменения уровня сигнала [1]
+        if (new_level != old_level) {
+            zb->vbtn_level = new_level;
+            zb->vbtn_last_tick = now;
 
-        zb->vbtn_last_tick = now;
-
-        /* Универсальная кнопка: любой payload (val:0 ИЛИ val:1) = нажатие */
-        if (zb->vbtn_state == VBTN_STATE_IDLE &&
-            (click_state == 0 || click_state == 1)) {
-            zb->vbtn_level = 1;
-            zb->vbtn_state = VBTN_STATE_PRESSED;
-            zb->vbtn_state_tick = now;
-            zb->vbtn_auto_release = 1;
-        } else if (zb->vbtn_level != old_level) {
-            if (zb->vbtn_level == 1 && zb->vbtn_state == VBTN_STATE_IDLE) {
-                zb->vbtn_state = VBTN_STATE_PRESSED;
-                zb->vbtn_state_tick = now;
+            // 3. Логика переходов конечного автомата [3]
+            if (zb->vbtn_state == VBTN_STATE_IDLE) {
+                // Стартуем автомат при первом нажатии (переход из IDLE в 1)
+                if (new_level == 1) {
+                    zb->vbtn_state = VBTN_STATE_PRESSED;
+                }
             }
-            if (zb->vbtn_level == 1 && old_level == 0) {
-                zb->vbtn_auto_release = 1;
+            else if (zb->vbtn_state == VBTN_STATE_WAIT_REPEAT) {
+                // Если мы ждем повторного клика (300мс) и пришло новое нажатие (1)
+                // Теперь эта ветка достижима, что позволяет детектировать DOUBLE_CLICK [1]
+                if (new_level == 1) {
+                    zb->vbtn_state = VBTN_STATE_RE_PRESSED;
+                }
             }
+            // Остальные переходы (отпускание, таймауты) обрабатываются в zbee_vbtn_tick()
         }
     } else {
+        // Режим PASSTHROUGH: сопоставление строковых команд (pt_single/double/long) [4]
         vbtn_execute_payload(slot, payload);
     }
 }

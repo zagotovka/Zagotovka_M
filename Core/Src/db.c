@@ -43,6 +43,16 @@ const char *zbee_action_lpress(int zbi) {
 
 uint8_t zbee_action_alloc(void) {
     for (int i = 0; i < NUMACTIONPOOL; i++) {
+        /* Проверяем, не назначен ли этот индекс уже какому-либо слоту ZigbeeConf */
+        bool is_used = false;
+        for (int z = 0; z < NUMZBEE; z++) {
+            if (ZigbeeConf[z].action_pool_idx == i) {
+                is_used = true;
+                break;
+            }
+        }
+        if (is_used) continue;
+
         if (ZigbeeActionPoolArr[i].sclick[0] == '\0' &&
             ZigbeeActionPoolArr[i].dclick[0] == '\0' &&
             ZigbeeActionPoolArr[i].lpress[0] == '\0') {
