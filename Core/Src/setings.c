@@ -2640,6 +2640,26 @@ void GetZigbeeConfig(void) {
       mg_free(pt_long);
     }
 
+    /* switch_payload_on/off — payload'ы ON/OFF для Zigbee-выключателя (Switch).
+     * Раньше не читались из zigbee.ini: после ребута оба поля оставались
+     * пустыми ("" после общего memset(ZigbeeConf, 0, ...) выше), из-за чего
+     * mqtt_zigbee_trigger_handler() переставал распознавать явный OFF-payload
+     * и переключатель "вырождался" в тумблер только по ON-payload —
+     * логика менялась по сравнению с состоянием сразу после обучения. */
+    char *switch_payload_on = mg_json_get_str(elem, "$.switch_payload_on");
+    if (switch_payload_on) {
+      strncpy(ZigbeeConf[idx].switch_payload_on, switch_payload_on,
+              sizeof(ZigbeeConf[idx].switch_payload_on) - 1);
+      mg_free(switch_payload_on);
+    }
+
+    char *switch_payload_off = mg_json_get_str(elem, "$.switch_payload_off");
+    if (switch_payload_off) {
+      strncpy(ZigbeeConf[idx].switch_payload_off, switch_payload_off,
+              sizeof(ZigbeeConf[idx].switch_payload_off) - 1);
+      mg_free(switch_payload_off);
+    }
+
     /* Читаем dimmer поля */
     ZigbeeConf[idx].dimmer_min = (uint16_t)mg_json_get_long(elem, "$.dimmer_min", 0);
     ZigbeeConf[idx].dimmer_max = (uint16_t)mg_json_get_long(elem, "$.dimmer_max", 0);
@@ -2694,6 +2714,7 @@ void SetZigbeeConfig(void) {
         "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
         "\"vbtn_mode\":%d,"
         "\"pt_single\":\"%s\",\"pt_double\":\"%s\",\"pt_long\":\"%s\","
+        "\"switch_payload_on\":\"%s\",\"switch_payload_off\":\"%s\","
         "\"dimmer_min\":%d,\"dimmer_max\":%d,\"dimmer_cluster\":%d,\"dimmer_attr\":%d,"
         "\"override\":%d}",
         ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint, clbuf,
@@ -2706,6 +2727,7 @@ void SetZigbeeConfig(void) {
         zbee_action_sclick(i), zbee_action_dclick(i), zbee_action_lpress(i),
         ZigbeeConf[i].vbtn_mode,
         ZigbeeConf[i].pt_single, ZigbeeConf[i].pt_double, ZigbeeConf[i].pt_long,
+        ZigbeeConf[i].switch_payload_on, ZigbeeConf[i].switch_payload_off,
         ZigbeeConf[i].dimmer_min, ZigbeeConf[i].dimmer_max,
         ZigbeeConf[i].dimmer_cluster, ZigbeeConf[i].dimmer_attr,
         ZigbeeConf[i].device_type_override);
