@@ -681,8 +681,17 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
         continue;
       }
       long zb_topin = mg_json_get_long(elem, "$.topin", -1);
-      if (zb_topin == 0) {
-        memset(&ZigbeeConf[zbi], 0, sizeof(ZigbeeConf[zbi]));
+	if (zb_topin == 0) {
+		/* Освобождаем запись пула ДО обнуления структуры — иначе action_pool_idx
+		 * "зависает" в 0 (memset обнуляет в 0, а не в ACTION_POOL_IDX_NONE=0xFF),
+		 * и следующее новое устройство, попавшее в этот слот через
+		 * alloc_zbee_slot(), может молча унаследовать чужие SINGLE/DOUBLE/LONG
+		 * CLICK из ZigbeeActionPoolArr[0]. */
+		if (ZigbeeConf[zbi].action_pool_idx < NUMACTIONPOOL) {
+			zbee_action_free(ZigbeeConf[zbi].action_pool_idx);
+		}
+		memset(&ZigbeeConf[zbi], 0, sizeof(ZigbeeConf[zbi]));
+        ZigbeeConf[zbi].action_pool_idx = ACTION_POOL_IDX_NONE;
         ZigbeeConf[zbi].zbee_endpoint = 1;
         cascade_delete_pin_id((int)id);
       } else {
@@ -4884,7 +4893,15 @@ static void clear_ep_subslots(const char *ieee, int parent_slot) {
         if (i == parent_slot) continue;
         if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
         if (strcmp(ZigbeeConf[i].zbee_ieee, ieee) == 0) {
+            /* См. комментарий в handle_button_set / Шаг 3 выше: memset обнуляет
+             * action_pool_idx в 0, а не в ACTION_POOL_IDX_NONE — освобождаем
+             * старую запись пула и явно сбрасываем индекс, иначе слот-сирота
+             * молча "делит" ZigbeeActionPoolArr[0] со следующим устройством. */
+            if (ZigbeeConf[i].action_pool_idx < NUMACTIONPOOL) {
+                zbee_action_free(ZigbeeConf[i].action_pool_idx);
+            }
             memset(&ZigbeeConf[i], 0, sizeof(ZigbeeConf[i]));
+            ZigbeeConf[i].action_pool_idx = ACTION_POOL_IDX_NONE;
         }
     }
 }
@@ -4977,6 +4994,17 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                           "{\"status\":false,\"message\":\"No free slot\"}");
             return;
         }
+        /* Страховка: alloc_zbee_slot() считает слот свободным только по
+         * zbee_ieee[0]=='\0' и не трогает action_pool_idx. Если этот слот
+         * ранее принадлежал другому (уже удалённому) устройству и его
+         * action_pool_idx случайно остался не сброшенным в ACTION_POOL_IDX_NONE,
+         * новое устройство молча унаследовало бы чужой ZigbeeActionPoolArr[idx]
+         * и делило бы с ним SINGLE/DOUBLE/LONG CLICK. Явно освобождаем и
+         * сбрасываем на всякий случай. */
+        if (ZigbeeConf[zbi].action_pool_idx < NUMACTIONPOOL) {
+            zbee_action_free(ZigbeeConf[zbi].action_pool_idx);
+        }
+        ZigbeeConf[zbi].action_pool_idx = ACTION_POOL_IDX_NONE;
         strncpy(ZigbeeConf[zbi].zbee_ieee, learn_ieee_lower, 16);
         ZigbeeConf[zbi].zbee_ieee[16] = '\0';
         ZigbeeConf[zbi].zbee_endpoint = 1;
@@ -5006,10 +5034,18 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             if (b == '\0') b = '0';
             if (a != b) { match = 0; break; }
         }
-        if (match) {
-            memset(&ZigbeeConf[i], 0, sizeof(ZigbeeVirtualPin));
-        }
-    }
+		if (match) {
+			/* Тот же паттерн: освобождаем старую запись пула и явно сбрасываем
+			 * action_pool_idx в ACTION_POOL_IDX_NONE, чтобы этот "сиротский"
+			 * слот не унаследовал/не расшарил чужой ZigbeeActionPoolArr[0]
+			 * при следующем alloc_zbee_slot(). */
+			if (ZigbeeConf[i].action_pool_idx < NUMACTIONPOOL) {
+				zbee_action_free(ZigbeeConf[i].action_pool_idx);
+			}
+			memset(&ZigbeeConf[i], 0, sizeof(ZigbeeVirtualPin));
+			ZigbeeConf[i].action_pool_idx = ACTION_POOL_IDX_NONE;
+		}
+	}
 
     /* ── Шаг 1: Парсим все labels ── */
     uint8_t normal_flags = 0;
@@ -5576,6 +5612,12 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             }
 
             memset(&ZigbeeConf[slot], 0, sizeof(ZigbeeConf[slot]));
+            /* ВАЖНО: memset обнуляет action_pool_idx в 0, а не в ACTION_POOL_IDX_NONE (0xFF).
+             * Без явного сброса все multi-EP слоты одного устройства (EP1, EP5, ...)
+             * неявно "делят" ZigbeeActionPoolArr[0], из-за чего SINGLE/DOUBLE/LONG
+             * CLICK, назначенный одной кнопке, отображается и срабатывает у всех
+             * остальных EP этого устройства. */
+            ZigbeeConf[slot].action_pool_idx = ACTION_POOL_IDX_NONE;//TODO после memset явно проставлять, а не полагаться на нулевой байт после memset.
             strncpy(ZigbeeConf[slot].zbee_ieee, s_zbee_learn.ieee,
                     sizeof(ZigbeeConf[slot].zbee_ieee) - 1);
             ZigbeeConf[slot].zbee_ieee[16] = '\0';
