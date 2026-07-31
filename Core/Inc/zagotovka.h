@@ -22,7 +22,7 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 
-#define FW_VERSION "v2.0.2y"
+#include "version_gen.h"
 #define BUFFER_SIZE 10000 /* max Button = 9835 символов, это не точно! */
 #define SECURITY_BODY_MAX 4096U /* max body для handle_security_set (heap) */
 #define ENTER_CRITICAL() taskENTER_CRITICAL()
@@ -59,12 +59,21 @@ typedef struct __attribute__((packed)) {
     uint32_t timeout;
     uint8_t retry_cnt;
     uint8_t connection_mode;
+    uint8_t ota_state;  // 0=нет данных, 1=первая загрузка, 3=подтверждено
     uint8_t version;    // Номер версии настроек (0-94)
-    uint8_t padding[1]; // Остаток для выравнивания чтобы размер стал 2728 байт (кратен 4)
-} HTTPSsettings; // ~11КБ
+    // padding[1] убран: ota_state занял освободившееся место, суммарный
+    // размер структуры снова кратен 4 (2728 байт) без ручного паддинга.
+} HTTPSsettings;
 
 // Проверка, что размер структуры не превышает размер сектора (256 КБ)
 STATIC_ASSERT(sizeof(HTTPSsettings) <= 256 * 1024, structure_size_exceeds_flash_sector);
+
+// Проверка, что размер структуры кратен 4 байтам — write_flash_data() и
+// HAL_FLASH_Program(..., FLASH_TYPEPROGRAM_WORD, ...) требуют этого строго.
+// Структура packed, поэтому компилятор сам не добивает выравнивание —
+// при добавлении/удалении полей проверяйте вручную (или см. padding[] ниже,
+// если ассерт вдруг сработает — верните недостающие байты туда).
+STATIC_ASSERT(sizeof(HTTPSsettings) % 4 == 0, structure_size_not_word_aligned);
 
 // Определяем функции доступа к полям настроек
 bool https_get_domain(char *domain, size_t max_len);
@@ -101,6 +110,8 @@ bool reset_to_defaults(void);
 bool backup_settings(void);
 bool restore_from_backup(void);
 
+const HTTPSsettings *get_valid_settings(void);
+bool update_and_write_settings(HTTPSsettings *settings);
 /****************** End Zerg section **************************/
 
 /******************** moon ****************************/

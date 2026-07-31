@@ -319,34 +319,146 @@ void handle_settings_get(struct mg_connection *c) {
                 MG_ESC("device_name"), MG_ESC(s_settings.device_name));
 }
 
+/* ---- OTA upload session tracking (app layer, independent of the
+ * mongoose-internal s_size flag) -------------------------------------------
+ * last_ofs/s_ota_written track how many bytes we have ACTUALLY flashed so
+ * far, so duplicate/replayed/out-of-order chunks can be detected properly
+ * instead of only comparing against the single previous offset.
+ * s_ota_owner_id + s_ota_last_activity_ms let a stale session (client
+ * vanished mid-upload without sending the final 0-byte chunk) be detected
+ * and cleared automatically by ota_watchdog_fn(), instead of requiring a
+ * device reboot before the next OTA attempt can succeed. */
+static long          last_ofs               = -1; // last chunk offset actually written
+static size_t        s_ota_written          = 0;   // bytes actually flashed so far
+static size_t        s_ota_expected         = 0;   // expected firmware size, 0 = no session
+static unsigned long s_ota_owner_id         = 0;   // connection id that owns the session
+static uint64_t      s_ota_last_activity_ms = 0;
+
+#define OTA_SESSION_IDLE_TIMEOUT_MS (20 * 1000)  // abort if no activity for 20s
+
+static void ota_session_clear(void) {
+  last_ofs = -1;
+  s_ota_written = 0;
+  s_ota_expected = 0;
+  s_ota_owner_id = 0;
+}
+
+// Called from a repeating timer (see web_init()/ setup) to reclaim a
+// session that was abandoned mid-upload (dropped connection, closed tab,
+// etc.) without ever sending the terminating 0-byte chunk.
+void ota_watchdog_fn(void *arg) {
+  (void) arg;
+  if (s_ota_expected != 0 &&
+      mg_millis() - s_ota_last_activity_ms > OTA_SESSION_IDLE_TIMEOUT_MS) {
+    LOG_OTA("OTA session idle for >%dms, aborting stale session (owner conn=%lu, %u/%u bytes)\n",
+            OTA_SESSION_IDLE_TIMEOUT_MS, s_ota_owner_id,
+            (unsigned) s_ota_written, (unsigned) s_ota_expected);
+    mg_ota_end();      // clears the mongoose-internal s_size flag; CRC/size
+                        // mismatch is expected and harmless here, it will
+                        // just fail to swap partitions.
+    ota_session_clear();
+  }
+}
+
 void handle_firmware_upload(struct mg_connection *c,
                                    struct mg_http_message *hm) {
   char name[64], offset[20], total[20];
   struct mg_str data = hm->body;
   long ofs = -1, tot = -1;
+
   name[0] = offset[0] = '\0';
   mg_http_get_var(&hm->query, "name", name, sizeof(name));
   mg_http_get_var(&hm->query, "offset", offset, sizeof(offset));
   mg_http_get_var(&hm->query, "total", total, sizeof(total));
-  MG_INFO(("File %s, offset %s, len %lu", name, offset, data.len));
+
   if ((ofs = mg_json_get_long(mg_str(offset), "$", -1)) < 0 ||
       (tot = mg_json_get_long(mg_str(total), "$", -1)) < 0) {
+    LOG_OTA("Upload error: offset or total not set\n");
     mg_http_reply(c, 500, "", "offset and total not set\n");
-  } else if (ofs == 0 && mg_ota_begin((size_t) tot) == false) {
-    mg_http_reply(c, 500, "", "mg_ota_begin(%ld) failed\n", tot);
-  } else if (data.len > 0 && mg_ota_write(data.buf, data.len) == false) {
-    mg_http_reply(c, 500, "", "mg_ota_write(%lu) @%ld failed\n", data.len, ofs);
-    mg_ota_end();
-  } else if (data.len == 0 && mg_ota_end() == false) {
-    mg_http_reply(c, 500, "", "mg_ota_end() failed\n", tot);
-  } else {
-    mg_http_reply(c, 200, s_json_header, "true\n");
-    if (data.len == 0) {
-      // Successful mg_ota_end() called, schedule device reboot
-      mg_timer_add(c->mgr, 500, 0, (void (*)(void *)) mg_device_reset, NULL);
-    }
+    return;
   }
-}
+
+  s_ota_last_activity_ms = mg_millis();
+
+  if (ofs == 0) {
+    // Start of a new OTA session.
+    if (s_ota_expected != 0) {
+      LOG_OTA("Aborting stale OTA session (owner conn=%lu, %u/%u bytes) to start a new one\n",
+              s_ota_owner_id, (unsigned) s_ota_written, (unsigned) s_ota_expected);
+      mg_ota_end();
+      ota_session_clear();
+    }
+    if (mg_ota_begin((size_t) tot) == false) {
+      // At this point we know (from the check above) no session was
+      // active at the app layer, so a false return here means the
+      // firmware is simply too big for the staging area, not a
+      // in-progress conflict -- there is nothing of ours to clean up.
+      LOG_OTA("Upload error: mg_ota_begin(%ld) failed (firmware too big?)\n", tot);
+      mg_http_reply(c, 500, "", "mg_ota_begin(%ld) failed\n", tot);
+      return;
+    }
+    last_ofs = -1;
+    s_ota_written = 0;
+    s_ota_expected = (size_t) tot;
+    s_ota_owner_id = c->id;
+    LOG_OTA("OTA session started by conn=%lu, expecting %ld bytes\n", c->id, tot);
+  }
+  
+  if (data.len > 0) {
+    if (s_ota_expected == 0) {
+      LOG_OTA("Upload error: chunk offset=%ld received but no session active\n", ofs);
+      mg_http_reply(c, 409, "", "No OTA session in progress, restart upload from offset 0\n");
+      return;
+    }
+    if ((size_t) ofs < s_ota_written) {
+      // Already-written data being retransmitted -- safe to ignore.
+      LOG_OTA("Duplicate chunk offset=%ld ignored (already at %u)\n",
+              ofs, (unsigned) s_ota_written);
+      mg_http_reply(c, 200, s_json_header, "true\n");
+    } else if ((size_t) ofs > s_ota_written) {
+      // Gap: client and device disagree on how much has been flashed.
+      // Writing here would silently corrupt the image (flash writes are
+      // sequential and ignore `ofs`), so abort instead of guessing.
+      LOG_OTA("Upload error: offset gap (got %ld, expected %u), aborting session\n",
+              ofs, (unsigned) s_ota_written);
+      mg_ota_end();
+      ota_session_clear();
+      mg_http_reply(c, 400, "", "Offset gap detected, restart upload from offset 0\n");
+    } else {
+      LOG_OTA("Writing chunk: offset=%ld, len=%lu\n", ofs, data.len);
+      if (mg_ota_write(data.buf, data.len) == false) {
+        LOG_OTA("Upload error: mg_ota_write(%lu) @%ld failed\n", data.len, ofs);
+        mg_http_reply(c, 500, "", "mg_ota_write(%lu) @%ld failed\n", data.len, ofs);
+        mg_ota_end();
+        ota_session_clear();
+      } else {
+        last_ofs = ofs;
+        s_ota_written += data.len;
+        mg_http_reply(c, 200, s_json_header, "true\n");
+      }
+    }
+  } else if (data.len == 0) {
+	    LOG_OTA("Final chunk received. Total size: %ld. Verifying...\n", tot);
+	#if defined(__CORTEX_M) && (__CORTEX_M == 7U)
+	    SCB_CleanInvalidateDCache();
+	#endif
+	    if (mg_ota_end() == false) {
+	      LOG_OTA("Upload error: mg_ota_end() failed, CRC or size mismatch\n");
+	      mg_http_reply(c, 500, "", "mg_ota_end() failed, CRC or size mismatch\n");
+	      ota_session_clear();
+	    } else {
+	      LOG_OTA("OTA SUCCESS! Rebooting device...\n");
+	      mg_http_reply(c, 200, s_json_header, "true\n");
+	      ota_session_clear();
+
+	      mg_ota_mark_pending(); // 1 = First boot (uncommitted)
+
+	      // Successful mg_ota_end() called, schedule device reboot
+	      mg_timer_add(c->mgr, 500, 0, (void (*)(void *)) mg_device_reset, NULL);
+	    }
+	  }
+	}
+
 
 void handle_firmware_commit(struct mg_connection *c, struct mg_http_message *hm) {
   if (!require_post_json(c, hm)) return;
@@ -362,10 +474,11 @@ void handle_firmware_rollback(struct mg_connection *c, struct mg_http_message *h
 
 static size_t print_status(void (*out)(char, void *), void *ptr, va_list *ap) {
   int fw = va_arg(*ap, int);
-  return mg_xprintf(out, ptr, "{%m:%d,%m:%c%lx%c,%m:%u,%m:%u}\n",
+  return mg_xprintf(out, ptr, "{%m:%d,%m:%c%lx%c,%m:%u,%m:%u,%m:%m}\n",
                     MG_ESC("status"), mg_ota_status(fw), MG_ESC("crc32"), '"',
                     mg_ota_crc32(fw), '"', MG_ESC("size"), mg_ota_size(fw),
-                    MG_ESC("timestamp"), mg_ota_timestamp(fw));
+                    MG_ESC("timestamp"), mg_ota_timestamp(fw),
+                    MG_ESC("version"), MG_ESC(FW_VERSION));
 }
 
 void handle_firmware_status(struct mg_connection *c) {
@@ -533,7 +646,8 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
             // Кандидат на вытеснение: idle, буферы пусты, был хотя бы 1 запрос
             uint32_t last_used = *(uint32_t *)t->data;
-            if (t->send.len == 0 && t->recv.len == 0 && last_used > 0) {
+            if (t->send.len == 0 && t->recv.len == 0 && last_used > 0 &&
+                !(s_ota_expected != 0 && t->id == s_ota_owner_id)) {
                 if (last_used < oldest_time) {
                     oldest_time  = last_used;
                     oldest_idle  = t;
@@ -1570,7 +1684,7 @@ void timer_fn_mqtt(void *arg) {
  Returns false if data changed — caller proceeds with full chunked response. */
 static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
                            volatile uint32_t *ver) {
-    char etag[16], hdr[128];
+    char etag[16], hdr[160];
     snprintf(etag, sizeof(etag), "\"%lu\"", (unsigned long)*ver);
     struct mg_str *inm = mg_http_get_header(hm, "If-None-Match");
     int match = (inm && mg_strcmp(*inm, mg_str(etag)) == 0) ? 1 : 0;
@@ -1583,7 +1697,7 @@ static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
             "ETag: %s\r\nCache-Control: no-cache\r\n",
             etag);
         mg_http_reply(c, 304, hdr, "");
-        return true;  /* 304 sent, Keep-Alive — caller stops */
+        return true;  /* 304 sent, caller stops */
     }
     return false;     /* data changed, caller sends full response */
 }
@@ -2349,11 +2463,15 @@ close_ds18b20:
     /* НЕТ c->is_draining = 1 — соединение остаётся живым! */
 }
 
-/* ─── /api/state/common ─── */
+/* ─── /api/state/common ───
+ * Поллинг-эндпоинт, опрашивается каждые 2с.
+ * Работает в режиме Keep-Alive. Защита от гонки OTA (когда upload-запрос
+ * попадает на закрывающийся сокет) реализована на фронтенде
+ * через pauseAll() перед аплоадом и защиту OTA-owner в MG_EV_ACCEPT. */
 static void handle_common(struct mg_connection *c) {
     char b[400];
     char tbuf[256];
-    char extra[160];
+    char extra[192];
     parse_stm32time(tbuf, sizeof(tbuf), &SetSettings);
     unsigned long uptime = (unsigned long)(HAL_GetTick() / 1000);
     unsigned long heap = (unsigned long)xPortGetFreeHeapSize();

@@ -1,5 +1,5 @@
 // NOTE: API calls must start with 'api/' in order to serve the app at any URI
-import { registerPoll, unregisterPoll } from './pollQueue.js';
+import { registerPoll, unregisterPoll, pauseAll, resumeAll } from './pollQueue.js';
 import { StateContext } from './context.js';
 
 ('use strict');
@@ -70,6 +70,7 @@ import { ModalEditSensor } from './Modals/ModalEditSensor.js';
 import { ModalSIM800L } from './Modals/ModalSIM800L.js';
 import { ModalButton } from './Modals/ModalButton.js';
 import { ModalSecurity } from './Modals/ModalSecurity.js';
+import { FirmwareUpdate } from './Tabs/update_page.js';
 
 const Logo = (props) =>
   html`<svg
@@ -213,7 +214,7 @@ function Sidebar({ url, show }) {
       <div
         class="flex h-10 shrink-0 items-center gap-x-4 font-bold text-xl text-slate-500"
       >
-        <${Logo} class="h-full" /> Zagotovka <span class="text-xs text-slate-400 font-normal ml-1">v2.0.2y</span>
+        <${Logo} class="h-full" /> Zagotovka <span class="text-xs text-slate-400 font-normal ml-1">${typeof __FW_VERSION__ !== 'undefined' ? __FW_VERSION__ : 'dev'}</span>
       <//>
       <div class="flex flex-1 flex-col">
         <${NavLink} title="Dashboard" icon=${Icons.home} href="/" url=${url} />
@@ -588,262 +589,7 @@ const HelpInfo = ({ language }) => {
   `;
 };
 
-function FirmwareStatus({ title, info, children }) {
-  return html`
-    <div class="bg-white xm-4 divide-y border rounded flex flex-col">
-      <div
-        class="font-light uppercase flex items-center text-gray-600 px-4 py-2"
-      >
-        ${title}
-      </div>
-      <div class="px-4 py-3 flex flex-col gap-2 grow">
-        <div>Version: ${info.version || 'N/A'}</div>
-        <div>Status: ${info.status || 'N/A'}</div>
-        ${children}
-      </div>
-    </div>
-  `;
-}
-
-function FirmwareUpdate({ }) {
-  const [info, setInfo] = useState([{}, {}]);
-  const [alert, setAlert] = useState(null);
-
-  const refresh = () =>
-    fetch('api/firmware/status')
-      .then((r) => r.json())
-      .then((r) => setInfo(r));
-
-  useEffect(refresh, []);
-
-  useEffect(() => {
-    if (alert) {
-      const timer = setTimeout(() => {
-        setAlert(null);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [alert]);
-
-  const oncommit = (ev) =>
-    fetch('api/firmware/commit', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({})
-    })
-      .then((r) => r.json())
-      .then(refresh);
-
-  const onreboot = (ev) =>
-    fetch('api/device/reset', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ reboot: 1 })
-    })
-      .then((r) => r.json())
-      .then(
-        (r) =>
-          new Promise((resolve) =>
-            setTimeout(() => {
-              refresh();
-              resolve();
-            }, 5000)
-          )
-      );
-
-  const onrollback = (ev) =>
-    fetch('api/firmware/rollback', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({})
-    }).then(onreboot);
-  const onerase = (ev) => fetch('api/device/eraselast').then(refresh);
-
-  const onupload = function (file) {
-    if (!file) {
-      setAlert({ type: 'yellow', message: 'Error: No file selected.' });
-      return;
-    }
-
-    const fileExtension = file.name.split('.').pop().toLowerCase();
-
-    if (fileExtension !== 'bin' && fileExtension !== 'hex') {
-      setAlert({
-        type: 'red',
-        message: 'Error: Only .bin and .hex files are allowed!'
-      });
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    fetch('api/firmware/upload', {
-      method: 'POST',
-      body: formData
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then(() => {
-        setAlert({ type: 'green', message: 'Firmware uploaded successfully!' });
-        refresh();
-      })
-      .catch((error) => {
-        setAlert({
-          type: 'yellow',
-          message: `Error: Upload failed. ${error.message}`
-        });
-      });
-  };
-
-  const AlertComponent = ({ type, message }) => {
-    const bgColor =
-      type === 'red'
-        ? 'bg-red-100 border-red-500 text-red-700'
-        : type === 'yellow'
-          ? 'bg-yellow-100 border-yellow-500 text-yellow-700'
-          : 'bg-green-100 border-green-500 text-green-700';
-
-    return html`
-      <div
-        class=${`fixed top-0 left-0 right-0 z-50 border-b-4 p-4 ${bgColor}`}
-        role="alert"
-      >
-        <p class="font-bold text-center">${message}</p>
-      </div>
-    `;
-  };
-
-  const UploadFileButton = ({ title, onupload }) => {
-    const handleFileChange = (event) => {
-      const file = event.target.files[0];
-      if (file) {
-        onupload(file);
-      }
-    };
-
-    return html`
-      <label
-        class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded cursor-pointer"
-      >
-        ${title}
-        <input
-          type="file"
-          class="hidden"
-          accept=".bin,.hex"
-          onChange=${handleFileChange}
-        />
-      </label>
-    `;
-  };
-
-  return html`
-    ${alert &&
-    html`<${AlertComponent} type=${alert.type} message=${alert.message} />`}
-    <div class="m-4 gap-4 grid grid-cols-1 lg:grid-cols-3">
-      <${FirmwareStatus} title="Current firmware image" info=${info[0]}>
-        <div class="flex flex-wrap gap-2">
-          <${Button}
-            title="Commit this firmware"
-            onclick=${oncommit}
-            icon=${Icons.thumbUp}
-            disabled=${info[0].status == 3}
-            cls="w-full"
-          />
-        </div>
-      <//>
-      <${FirmwareStatus} title="Previous firmware image" info=${info[1]}>
-        <${Button}
-          title="Rollback to this firmware"
-          onclick=${onrollback}
-          icon=${Icons.backward}
-          disabled=${info[1].status == 0}
-          cls="w-full"
-        />
-      <//>
-      <div class="bg-white xm-4 divide-y border rounded flex flex-col">
-        <div
-          class="font-light uppercase flex items-center text-gray-600 px-4 py-2"
-        >
-          Device control
-        </div>
-        <div class="px-4 py-3 flex flex-col gap-2 grow">
-          <${UploadFileButton}
-            title="Upload new firmware (.bin or .hex)"
-            onupload=${onupload}
-          />
-          <div class="grow"></div>
-          <${Button}
-            title="Reboot device"
-            onclick=${onreboot}
-            icon=${Icons.refresh}
-            cls="w-full"
-          />
-          <${Button}
-            title="Erase last sector"
-            onclick=${onerase}
-            icon=${Icons.doc}
-            cls="w-full hidden"
-          />
-        </div>
-      </div>
-    </div>
-
-    <div class="m-4 gap-4 grid grid-cols-1 lg:grid-cols-2">
-      <div class="bg-white border shadow-lg">
-        <${DeveloperNote}>
-          <div class="my-2">
-            Firmware status and other information is stored in the last sector
-            of flash
-          </div>
-          <div class="my-2">
-            Firmware status can be FIRST_BOOT, UNCOMMITTED or COMMITTED. If no
-            information is available, it is UNAVAILABLE.
-          </div>
-          <div class="my-2">
-            This GUI loads a firmware file and sends it chunk by chunk to the
-            device, passing current chunk offset, total firmware size and a file
-            name: api/firmware/upload?offset=X&total=Y&name=Z
-          </div>
-        <//>
-      </div>
-
-      <div class="bg-white border shadow-lg">
-        <${DeveloperNote}>
-          <div>
-            Firmware update mechanism defines 3 API functions that the target
-            device must implement: mg_ota_begin(), mg_ota_write() and
-            mg_ota_end()
-          </div>
-          <div class="my-2">
-            RESTful API handlers use ota_xxx() API to save firmware to flash.
-            The last 0-length chunk triggers ota_end() which performs firmware
-            update using saved firmware image
-          </div>
-          <div class="my-2">
-            <a
-              class="link text-blue-600 underline"
-              href="https://mongoose.ws/webinars/"
-              >Join our free webinar</a
-            >
-            to get detailed explanations about possible firmware updates
-            strategies and implementation demo
-          </div>
-        <//>
-      </div>
-    </div>
-  `;
-}
+const FIRMWARE_UPLOAD_CHUNK_SIZE = 4096; // байт на POST; лимит тела запроса для /api/firmware/upload на устройстве не действует
 
 export const pageSetting = ({ value, setfn, type, options, error, ...props }) => {
   let inputElement;

@@ -155,7 +155,8 @@ const LOG_CATEGORIES = [
   { id: 7, key: 'SETTINGS',  labelEn: 'Settings',  labelRu: 'Настройки' },
   { id: 8, key: 'ETH',       labelEn: 'Ethernet',  labelRu: 'Ethernet' },
   { id: 9, key: 'PHY',       labelEn: 'PHY',       labelRu: 'PHY' },
-  { id: 10, key: 'Z2M',      labelEn: 'Z2M',       labelRu: 'Z2M' }
+  { id: 10, key: 'Z2M',      labelEn: 'Z2M',       labelRu: 'Z2M' },
+  { id: 11, key: 'OTA',      labelEn: 'OTA',       labelRu: 'OTA' }
 ];
 
 function Settings({ }) {

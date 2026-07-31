@@ -10,6 +10,20 @@ PACK_DIR="$PROJECT_DIR/scripts/_pack_work"
 PACK_TOOL="$PROJECT_DIR/pack"
 PACKED_C="$PROJECT_DIR/Core/Src/packed_fs.c"
 
+# 0. Генерация version_gen.h из файла VERSION (источник правды для FW_VERSION)
+VER=$(cat "$PROJECT_DIR/VERSION" | tr -d '[:space:]')
+VERSION_HEADER="$PROJECT_DIR/Core/Inc/version_gen.h"
+NEW_CONTENT="// AUTO-GENERATED from VERSION file. Do not edit manually.
+#pragma once
+#define FW_VERSION \"v${VER}\""
+
+if [ ! -f "$VERSION_HEADER" ] || [ "$(cat "$VERSION_HEADER")" != "$NEW_CONTENT" ]; then
+    echo "$NEW_CONTENT" > "$VERSION_HEADER"
+    echo "  ✓ version_gen.h updated: v${VER}"
+else
+    echo "  ✓ version_gen.h unchanged: v${VER}"
+fi
+
 # Очистка предыдущей рабочей директории
 rm -rf "$PACK_DIR"
 

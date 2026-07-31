@@ -36,7 +36,8 @@ const char* cat_prefixes[] = {
     "[SETTINGS] ",
     "[ETH] ",
     "[PHY] ",
-    "[Z2M] "
+    "[Z2M] ",
+    "[OTA] "
 };
 
 const char* logger_get_category_name(LogCategory_t cat) {
@@ -52,6 +53,7 @@ const char* logger_get_category_name(LogCategory_t cat) {
         case LOG_CAT_ETH:       return "ETH";
         case LOG_CAT_PHY:       return "PHY";
         case LOG_CAT_Z2M:       return "Z2M";
+        case LOG_CAT_OTA:       return "OTA";
         default:                return "UNKNOWN";
     }
 }
@@ -162,6 +164,7 @@ static LogCategory_t parse_category_from_string(const char *str, int *prefix_len
     if (strncmp(str, "[SETTINGS]", 10) == 0) { *prefix_len = 10; return LOG_CAT_SETTINGS; }
     if (strncmp(str, "[ETH]", 5) == 0) { *prefix_len = 5; return LOG_CAT_ETH; }
     if (strncmp(str, "[PHY]", 5) == 0) { *prefix_len = 5; return LOG_CAT_PHY; }
+    if (strncmp(str, "[OTA]", 5) == 0) { *prefix_len = 5; return LOG_CAT_OTA; }
     *prefix_len = 0;
     return LOG_CAT_SYSTEM;
 }

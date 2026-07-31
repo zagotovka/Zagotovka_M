@@ -18,6 +18,11 @@
 // SPDX-License-Identifier: GPL-2.0-only or commercial
 
 #include "mongoose.h"
+#include "logger.h"
+#include "stm32f7xx_hal.h" /* UART_HandleTypeDef, HAL_UART_Transmit() */
+#include <string.h>        /* strlen */
+
+extern UART_HandleTypeDef huart3;
 
 #ifdef MG_ENABLE_LINES
 #line 1 "src/base64.c"
@@ -939,8 +944,7 @@ bool mg_ota_flash_end(struct mg_flash *flash) {
     size_t size = (size_t) (s_addr - base);
     uint32_t crc32 = mg_crc32(0, base, s_size);
     if (size == s_size && crc32 == s_crc32) ok = true;
-    MG_DEBUG(("CRC: %x/%x, size: %lu/%lu, status: %s", s_crc32, crc32, s_size,
-              size, ok ? "ok" : "fail"));
+    LOG_OTA("CRC: %lx/%lx, size: %u/%u, status: %s\n", s_crc32, crc32, (unsigned)s_size, (unsigned)size, ok ? "ok" : "fail");
     s_size = 0;
     if (ok) ok = flash->swap_fn();
   }
@@ -9899,7 +9903,7 @@ static struct mg_flash s_mg_flash_stm32f = {
 #define MG_FLASH_SIZE_REG_LOCATION \
   ((STM_DEV_ID >= 0x449) ? MG_FLASH_SIZE_REG_F7 : MG_FLASH_SIZE_REG_F4)
 
-static size_t flash_size(void) {
+static size_t __attribute__((unused)) flash_size(void) {
   return (MG_REG(MG_FLASH_SIZE_REG_LOCATION) & 0xFFFF) * 1024;
 }
 
@@ -10002,16 +10006,32 @@ MG_IRAM static bool mg_stm32f_erase(void *addr) {
       sector_reg -= 12;
       sector_reg |= MG_BIT(4);
     }
+
+    // Прямой вывод через HAL_UART_Transmit удален: во время OTA
+    // прерывания (в т.ч. SysTick) выключены (cpsid i), вызов HAL_UART_Transmit
+    // может привести к lockup, если таймаут зависит от uwTick, а mg_snprintf
+    // выполняется не из IRAM.
+    // Записываем маркер сектора в DTCM для диагностики (выживает после ресета).
+    extern uint32_t dtcm_ota_sector;
+    extern uint32_t dtcm_ota_magic;
+    dtcm_ota_sector = sector;
+    dtcm_ota_magic = 0xDEADBEEF;
+
     flash_unlock();
     flash_wait();
     uint32_t cr = MG_BIT(1);       // SER
     cr |= MG_BIT(16);              // STRT
     cr |= (sector_reg & 31) << 3;  // sector
     MG_REG(MG_FLASH_BASE + MG_FLASH_CR) = cr;
+    
+    // ДОБАВЛЕНО: Явное ожидание завершения стирания! 
+    // Без этого при выполнении кода из IRAM (во время single_bank_swap) 
+    // процессор не блокировался и следующая команда записи в FLASH_CR 
+    // игнорировалась (так как BSY был еще установлен).
+    flash_wait();
+    
     ok = !flash_is_err();
-    MG_DEBUG(("Erase sector %lu @ %p %s. CR %#lx SR %#lx", sector, addr,
-              ok ? "ok" : "fail", MG_REG(MG_FLASH_BASE + MG_FLASH_CR),
-              MG_REG(MG_FLASH_BASE + MG_FLASH_SR)));
+    // Убрали MG_DEBUG() отсюда, так как вызов mg_log не-IRAM функции при стирании приведет к BusFault/Stall
     // After we have erased the sector, set CR flags for programming
     // 2 << 8 is word write parallelism, bit(0) is PG. RM0385, section 3.7.5
     MG_REG(MG_FLASH_BASE + MG_FLASH_CR) = MG_BIT(0) | (2 << 8);
@@ -10043,7 +10063,7 @@ MG_IRAM static bool mg_stm32f_write(void *addr, const void *buf, size_t len) {
   flash_clear_err();
   MG_REG(MG_FLASH_BASE + MG_FLASH_CR) = MG_BIT(0) | MG_BIT(9);  // PG, 32-bit
   flash_wait();
-  MG_DEBUG(("Writing flash @ %p, %lu bytes", addr, len));
+  // Убрали MG_DEBUG() отсюда, так как IRQ отключены и не-IRAM код может привести к BusFault
   while (ok && src < end) {
     if (flash_page_start(dst) && mg_stm32f_erase(dst) == false) break;
     *(volatile uint32_t *) dst++ = *src++;
@@ -10052,9 +10072,7 @@ MG_IRAM static bool mg_stm32f_write(void *addr, const void *buf, size_t len) {
     if (flash_is_err()) ok = false;
   }
   if (!s_flash_irq_disabled) MG_ARM_ENABLE_IRQ();
-  MG_DEBUG(("Flash write %lu bytes @ %p: %s. CR %#lx SR %#lx", len, dst,
-            ok ? "ok" : "fail", MG_REG(MG_FLASH_BASE + MG_FLASH_CR),
-            MG_REG(MG_FLASH_BASE + MG_FLASH_SR)));
+  // Убрали MG_DEBUG(), так как оно могло вызываться сразу после выхода из flash операций
   MG_REG(MG_FLASH_BASE + MG_FLASH_CR) &= ~MG_BIT(0);  // Clear programming flag
   return ok;
 }
@@ -10067,7 +10085,16 @@ MG_IRAM void single_bank_swap(char *p1, char *p2, size_t size) {
 }
 
 bool mg_ota_begin(size_t new_firmware_size) {
-  s_mg_flash_stm32f.size = flash_size();
+  /* ПРАВКА ПРОЕКТА (не апстрим Mongoose): жестко задаем размер видимой
+   * OTA-драйверу flash = 0x180000 (1536 КБ). Тогда staging-область
+   * (верхняя половина) начнется с 0x08000000 + 0xC0000 = 0x080C0000.
+   * Это ровно начало Sector 7!
+   * Если мы использовали flash_size() - 0x40000 (размер 0x1C0000),
+   * staging-область начиналась бы с 0x080E0000, что в СЕРЕДИНЕ Sector 7,
+   * из-за чего Mongoose не стирал бы сектор (flash_page_start возвращал false)
+   * и OTA молча писал бы мусор, после чего падала CRC-проверка.
+   * Размер 768 КБ (0xC0000) достаточен для прошивки в 680 КБ. */
+  s_mg_flash_stm32f.size = 0x180000;
 #ifdef __ZEPHYR__
   *((uint32_t *)0xE000ED94) = 0;
   MG_DEBUG(("Jailbreak %s", *((uint32_t *)0xE000ED94) == 0 ? "successful" : "failed"));

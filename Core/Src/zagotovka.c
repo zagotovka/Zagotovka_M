@@ -2694,14 +2694,12 @@ static bool write_flash_data(uint32_t address, const uint8_t *data,
     return false;
   }
 
-  if (size % 4 != 0) {
-    printf("Error: Size %u is not aligned to 4 bytes\n", size);
-    return false;
-  }
+  size_t full_words = size / 4;
+  size_t tail_bytes = size % 4;
 
   uint32_t *source = (uint32_t *)data;
   uint32_t *destination = (uint32_t *)address;
-  for (size_t i = 0; i < size / 4; i++) {
+  for (size_t i = 0; i < full_words; i++) {
     status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t)destination,
                                *source);
     if (status != HAL_OK) {
@@ -2714,10 +2712,34 @@ static bool write_flash_data(uint32_t address, const uint8_t *data,
     destination++;
   }
 
+  if (tail_bytes != 0) {
+    // Размер не кратен 4 (не должно случаться для HTTPSsettings — за этим
+    // следит STATIC_ASSERT в zagotovka.h, — но это подстраховка на будущее
+    // для других вызовов write_flash_data()). Раньше в этом случае функция
+    // просто отказывала (return false), что для write_settings_to_flash()
+    // означало, что initialize_https_settings() возвращала false, а это
+    // роняло всё устройство через Error_Handler() в StartWebServerTask.
+    // Вместо этого дописываем последний неполный "хвост", дополняя его
+    // нулевыми байтами до целого 32-битного слова.
+    printf("Warning: size %u not aligned to 4 bytes, zero-padding last word\n",
+           (unsigned) size);
+    uint32_t tail_word = 0;
+    memcpy(&tail_word, (const uint8_t *)source, tail_bytes);
+
+    status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t)destination,
+                               tail_word);
+    if (status != HAL_OK) {
+      printf("Error: HAL_FLASH_Program failed at address 0x%08lx, status %d\n",
+             (uint32_t)destination, status);
+      printf("Flash error flags: 0x%08lx\n", HAL_FLASH_GetError());
+      return false;
+    }
+  }
+
   return true;
 }
 // Функция получения указателя на действительные настройки
-static const HTTPSsettings *get_valid_settings(void) {
+const HTTPSsettings *get_valid_settings(void) {
   const HTTPSsettings *valid_settings = NULL;
   uint8_t max_version = 0;
   bool found_valid = false;
@@ -2811,7 +2833,7 @@ static bool write_settings_to_flash(const HTTPSsettings *settings) {
 }
 
 // Функция обновления настроек с записью во флеш
-static bool update_and_write_settings(HTTPSsettings *settings) {
+bool update_and_write_settings(HTTPSsettings *settings) {
   // Обновляем магическое значение
   settings->magic = SETTINGS_MAGIC_VALUE;
 

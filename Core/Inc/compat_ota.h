@@ -38,6 +38,16 @@ void mg_device_reset(void);
 #define MG_OTA_UNCOMMITTED 2
 #define MG_OTA_COMMITTED   3
 
+/* Помечает "первая загрузка после OTA / не подтверждено" и возвращает
+ * ПРЕДЫДУЩЕЕ значение флага (для отката в mg_ota_cancel_pending(),
+ * если своп в итоге не состоялся). */
+uint32_t mg_ota_mark_pending(void);
+
+/* Откатывает флаг состояния OTA к значению prev_state, полученному
+ * ранее от mg_ota_mark_pending(). Вызывать только если mg_ota_end()
+ * вернул false (своп не произошёл, текущая прошивка не менялась). */
+void mg_ota_cancel_pending(uint32_t prev_state);
+
 /* ---- OTA query stubs ---------------------------------------------------- */
 int      mg_ota_status(int firmware);
 uint32_t mg_ota_crc32(int firmware);

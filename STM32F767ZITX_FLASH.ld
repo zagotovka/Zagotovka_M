@@ -45,7 +45,7 @@ _Min_Stack_Size = 0x800; /* required amount of stack */
 MEMORY
 {
   ITCM     (rx)     : ORIGIN = 0x00000000,   LENGTH = 16K
-  RAM      (xrw)    : ORIGIN = 0x20000000,   LENGTH = 512K
+  RAM      (rw)    : ORIGIN = 0x20000000,   LENGTH = 512K
   FLASH    (rx)     : ORIGIN = 0x8000000,    LENGTH = 2048K
   ZERG_FLASH (rx)  : ORIGIN = 0x081C0000,   LENGTH = 256K  /* Sector 11 */
 }
@@ -89,6 +89,18 @@ SECTIONS
     _eitcm = .;
   } >ITCM AT> FLASH
   _sitcm_load = LOADADDR(.itcm);
+
+  /* Флаг подтверждения OTA (compat_ota.c): NOLOAD — не копируется из Flash
+     и не обнуляется как .bss, поэтому переживает mg_device_reset()
+     (NVIC_SystemReset). Не переживает реальную потерю питания — для этого
+     в compat_ota.c используется magic-число. Лежит сразу за .itcm в том же
+     регионе ITCM, свободного места достаточно (~1.2 КБ). */
+  .noinit_itcm (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.noinit_itcm)
+    . = ALIGN(4);
+  } >ITCM
 
   /* Constant data into "FLASH" Rom type memory */
   .rodata :

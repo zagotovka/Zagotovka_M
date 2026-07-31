@@ -21,9 +21,16 @@
 
 const _registered = new Map();  // key → { url, callback, etag, oneShot, failCount, backoffMs }
 let _active = false;
+let _paused = false;
 let _timer = null;
 let _keys = [];
 let _idx = 0;
+
+export function pauseAll() { _paused = true; }
+export function resumeAll() {
+  _paused = false;
+  if (!_timer && _keys.length > 0) _schedule(0);
+}
 
 const MAX_FAILS = 3;           // остановка после N подряд ошибок
 const BASE_BACKOFF = 2000;     // начальный backoff (мс)
@@ -92,6 +99,7 @@ function _schedule(ms) {
 
 async function _tick() {
   if (_active) { _schedule(); return; }
+  if (_paused) { _schedule(); return; }
   if (_keys.length === 0) { _clearTimer(); return; }
 
   _active = true;

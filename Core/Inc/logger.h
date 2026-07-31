@@ -17,7 +17,8 @@ typedef enum {
     LOG_CAT_ETH       = 8,
     LOG_CAT_PHY       = 9,
     LOG_CAT_Z2M       = 10,
-    LOG_CAT_COUNT     = 11
+    LOG_CAT_OTA       = 11,
+    LOG_CAT_COUNT     = 12
 } LogCategory_t;
 
 #define LOG_MASK_SYSTEM    (1u << LOG_CAT_SYSTEM)
@@ -31,7 +32,8 @@ typedef enum {
 #define LOG_MASK_ETH       (1u << LOG_CAT_ETH)
 #define LOG_MASK_PHY       (1u << LOG_CAT_PHY)
 #define LOG_MASK_Z2M       (1u << LOG_CAT_Z2M)
-#define LOG_MASK_ALL       0x7FFu
+#define LOG_MASK_OTA       (1u << LOG_CAT_OTA)
+#define LOG_MASK_ALL       0xFFFu
 
 // Compile-time controls (1 - enabled, 0 - disabled)
 #define LOG_CONF_SYSTEM_EN    1
@@ -45,6 +47,7 @@ typedef enum {
 #define LOG_CONF_ETH_EN       1
 #define LOG_CONF_PHY_EN       1
 #define LOG_CONF_Z2M_EN       1
+#define LOG_CONF_OTA_EN       1
 
 extern volatile uint32_t g_log_filter_mask;
 
@@ -103,5 +106,9 @@ extern const char* cat_prefixes[];
 #define LOG_Z2M(fmt, ...) \
     do { if (LOG_CONF_Z2M_EN && (g_log_filter_mask & LOG_MASK_Z2M)) \
         logger_send(LOG_CAT_Z2M, fmt, ##__VA_ARGS__); } while(0)
+
+#define LOG_OTA(fmt, ...) \
+    do { if (LOG_CONF_OTA_EN && (g_log_filter_mask & LOG_MASK_OTA)) \
+        logger_send(LOG_CAT_OTA, fmt, ##__VA_ARGS__); } while(0)
 
 #endif /* INC_LOGGER_H_ */

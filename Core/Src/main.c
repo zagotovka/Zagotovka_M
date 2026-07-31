@@ -675,6 +675,9 @@ uint32_t swarm_t; /* используется в gsm.c через extern */
 static uint32_t reset_csr_value = 0;
 static char reset_reason_str[128] = "Unknown";
 
+__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_sector;
+__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_magic;
+
 static void read_reset_reason(void) {
     reset_csr_value = RCC->CSR;
     __HAL_RCC_CLEAR_RESET_FLAGS();
@@ -709,6 +712,12 @@ static void read_reset_reason(void) {
     if (reset_csr_value & RCC_CSR_PINRSTF) {
         len = strlen(reset_reason_str);
         snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len, "PINRST ");
+    }
+
+    if (dtcm_ota_magic == 0xDEADBEEF) {
+        len = strlen(reset_reason_str);
+        snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len, "[OTA Crash Sector %lu] ", dtcm_ota_sector);
+        dtcm_ota_magic = 0;
     }
 
     // Trim trailing space
