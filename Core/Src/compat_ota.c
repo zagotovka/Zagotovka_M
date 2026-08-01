@@ -36,8 +36,6 @@
 extern UART_HandleTypeDef huart3;
 
 /* ---- Персистентный флаг состояния OTA ------------------------------------
- * Раньше хранился в секции .noinit_itcm (ITCM RAM) — переживал только
- * программный NVIC_SystemReset(), но не реальную потерю питания.
  * Теперь хранится во flash-структуре HTTPSsettings (поле ota_state, сектор
  * 11 / ZERG_FLASH), которая уже защищена magic+CRC+wear-leveling в
  * zagotovka.c — переживает и программный ресет, и полное отключение
@@ -94,6 +92,10 @@ void mg_ota_cancel_pending(uint32_t prev_state) {
     ota_flag_write(prev_state);
 }
 
+/* ---- Сброс статуса в 0 при старте новой записи прошивки -------------- */
+void mg_ota_reset_status(void) {
+    ota_flag_write(0); // 0 = Нет данных / флаг сброшен
+}
 
 /* ---- OTA query stubs ---------------------------------------------------- */
 int mg_ota_status(int firmware) {

@@ -48,6 +48,9 @@ uint32_t mg_ota_mark_pending(void);
  * вернул false (своп не произошёл, текущая прошивка не менялась). */
 void mg_ota_cancel_pending(uint32_t prev_state);
 
+/* Сбрасывает статус OTA в 0 ("нет данных"). вызывается сразу после успешного mg_ota_begin(), до начала записи чанков */
+void mg_ota_reset_status(void);
+
 /* ---- OTA query stubs ---------------------------------------------------- */
 int      mg_ota_status(int firmware);
 uint32_t mg_ota_crc32(int firmware);

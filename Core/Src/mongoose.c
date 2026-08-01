@@ -9913,11 +9913,9 @@ MG_IRAM static int is_dualbank(void) {
 }
 
 MG_IRAM static void flash_unlock(void) {
-  static bool unlocked = false;
-  if (unlocked == false) {
+  if (MG_REG(MG_FLASH_BASE + MG_FLASH_CR) & MG_BIT(31)) {
     MG_REG(MG_FLASH_BASE + MG_FLASH_KEYR) = 0x45670123;
     MG_REG(MG_FLASH_BASE + MG_FLASH_KEYR) = 0xcdef89ab;
-    unlocked = true;
   }
 }
 
@@ -10014,8 +10012,10 @@ MG_IRAM static bool mg_stm32f_erase(void *addr) {
     // Записываем маркер сектора в DTCM для диагностики (выживает после ресета).
     extern uint32_t dtcm_ota_sector;
     extern uint32_t dtcm_ota_magic;
+    extern uint32_t dtcm_ota_addr;
     dtcm_ota_sector = sector;
     dtcm_ota_magic = 0xDEADBEEF;
+    dtcm_ota_addr = (uint32_t) addr;
 
     flash_unlock();
     flash_wait();

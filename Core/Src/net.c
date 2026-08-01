@@ -360,104 +360,116 @@ void ota_watchdog_fn(void *arg) {
   }
 }
 
-void handle_firmware_upload(struct mg_connection *c,
-                                   struct mg_http_message *hm) {
-  char name[64], offset[20], total[20];
-  struct mg_str data = hm->body;
-  long ofs = -1, tot = -1;
+void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm) {
+	char name[64], offset[20], total[20];
+	struct mg_str data = hm->body;
+	long ofs = -1, tot = -1;
 
-  name[0] = offset[0] = '\0';
-  mg_http_get_var(&hm->query, "name", name, sizeof(name));
-  mg_http_get_var(&hm->query, "offset", offset, sizeof(offset));
-  mg_http_get_var(&hm->query, "total", total, sizeof(total));
+	name[0] = offset[0] = '\0';
+	mg_http_get_var(&hm->query, "name", name, sizeof(name));
+	mg_http_get_var(&hm->query, "offset", offset, sizeof(offset));
+	mg_http_get_var(&hm->query, "total", total, sizeof(total));
 
-  if ((ofs = mg_json_get_long(mg_str(offset), "$", -1)) < 0 ||
-      (tot = mg_json_get_long(mg_str(total), "$", -1)) < 0) {
-    LOG_OTA("Upload error: offset or total not set\n");
-    mg_http_reply(c, 500, "", "offset and total not set\n");
-    return;
-  }
-
-  s_ota_last_activity_ms = mg_millis();
-
-  if (ofs == 0) {
-    // Start of a new OTA session.
-    if (s_ota_expected != 0) {
-      LOG_OTA("Aborting stale OTA session (owner conn=%lu, %u/%u bytes) to start a new one\n",
-              s_ota_owner_id, (unsigned) s_ota_written, (unsigned) s_ota_expected);
-      mg_ota_end();
-      ota_session_clear();
-    }
-    if (mg_ota_begin((size_t) tot) == false) {
-      // At this point we know (from the check above) no session was
-      // active at the app layer, so a false return here means the
-      // firmware is simply too big for the staging area, not a
-      // in-progress conflict -- there is nothing of ours to clean up.
-      LOG_OTA("Upload error: mg_ota_begin(%ld) failed (firmware too big?)\n", tot);
-      mg_http_reply(c, 500, "", "mg_ota_begin(%ld) failed\n", tot);
-      return;
-    }
-    last_ofs = -1;
-    s_ota_written = 0;
-    s_ota_expected = (size_t) tot;
-    s_ota_owner_id = c->id;
-    LOG_OTA("OTA session started by conn=%lu, expecting %ld bytes\n", c->id, tot);
-  }
-  
-  if (data.len > 0) {
-    if (s_ota_expected == 0) {
-      LOG_OTA("Upload error: chunk offset=%ld received but no session active\n", ofs);
-      mg_http_reply(c, 409, "", "No OTA session in progress, restart upload from offset 0\n");
-      return;
-    }
-    if ((size_t) ofs < s_ota_written) {
-      // Already-written data being retransmitted -- safe to ignore.
-      LOG_OTA("Duplicate chunk offset=%ld ignored (already at %u)\n",
-              ofs, (unsigned) s_ota_written);
-      mg_http_reply(c, 200, s_json_header, "true\n");
-    } else if ((size_t) ofs > s_ota_written) {
-      // Gap: client and device disagree on how much has been flashed.
-      // Writing here would silently corrupt the image (flash writes are
-      // sequential and ignore `ofs`), so abort instead of guessing.
-      LOG_OTA("Upload error: offset gap (got %ld, expected %u), aborting session\n",
-              ofs, (unsigned) s_ota_written);
-      mg_ota_end();
-      ota_session_clear();
-      mg_http_reply(c, 400, "", "Offset gap detected, restart upload from offset 0\n");
-    } else {
-      LOG_OTA("Writing chunk: offset=%ld, len=%lu\n", ofs, data.len);
-      if (mg_ota_write(data.buf, data.len) == false) {
-        LOG_OTA("Upload error: mg_ota_write(%lu) @%ld failed\n", data.len, ofs);
-        mg_http_reply(c, 500, "", "mg_ota_write(%lu) @%ld failed\n", data.len, ofs);
-        mg_ota_end();
-        ota_session_clear();
-      } else {
-        last_ofs = ofs;
-        s_ota_written += data.len;
-        mg_http_reply(c, 200, s_json_header, "true\n");
-      }
-    }
-  } else if (data.len == 0) {
-	    LOG_OTA("Final chunk received. Total size: %ld. Verifying...\n", tot);
-	#if defined(__CORTEX_M) && (__CORTEX_M == 7U)
-	    SCB_CleanInvalidateDCache();
-	#endif
-	    if (mg_ota_end() == false) {
-	      LOG_OTA("Upload error: mg_ota_end() failed, CRC or size mismatch\n");
-	      mg_http_reply(c, 500, "", "mg_ota_end() failed, CRC or size mismatch\n");
-	      ota_session_clear();
-	    } else {
-	      LOG_OTA("OTA SUCCESS! Rebooting device...\n");
-	      mg_http_reply(c, 200, s_json_header, "true\n");
-	      ota_session_clear();
-
-	      mg_ota_mark_pending(); // 1 = First boot (uncommitted)
-
-	      // Successful mg_ota_end() called, schedule device reboot
-	      mg_timer_add(c->mgr, 500, 0, (void (*)(void *)) mg_device_reset, NULL);
-	    }
-	  }
+	if ((ofs = mg_json_get_long(mg_str(offset), "$", -1)) < 0 || (tot =
+			mg_json_get_long(mg_str(total), "$", -1)) < 0) {
+		LOG_OTA("Upload error: offset or total not set\n");
+		mg_http_reply(c, 500, "", "offset and total not set\n");
+		return;
 	}
+
+	s_ota_last_activity_ms = mg_millis();
+
+	if (ofs == 0) {
+		// Start of a new OTA session.
+		if (s_ota_expected != 0) {
+			LOG_OTA(
+					"Aborting stale OTA session (owner conn=%lu, %u/%u bytes) to start a new one\n",
+					s_ota_owner_id, (unsigned ) s_ota_written,
+					(unsigned ) s_ota_expected);
+			mg_ota_end();
+			ota_session_clear();
+		}
+		if (mg_ota_begin((size_t) tot) == false) {
+			// At this point we know (from the check above) no session was
+			// active at the app layer, so a false return here means the
+			// firmware is simply too big for the staging area, not a
+			// in-progress conflict -- there is nothing of ours to clean up.
+			LOG_OTA(
+					"Upload error: mg_ota_begin(%ld) failed (firmware too big?)\n",
+					tot);
+			mg_http_reply(c, 500, "", "mg_ota_begin(%ld) failed\n", tot);
+			return;
+		}
+		last_ofs = -1;
+		s_ota_written = 0;
+		s_ota_expected = (size_t) tot;
+		s_ota_owner_id = c->id;
+		LOG_OTA("OTA session started by conn=%lu, expecting %ld bytes\n", c->id,
+				tot);
+		mg_ota_reset_status();   // сбрасываем статус ДО начала записи чанков,чтобы не пересекаться по flash с mg_ota_write()
+	}
+
+	if (data.len > 0) {
+		if (s_ota_expected == 0) {
+			LOG_OTA(
+					"Upload error: chunk offset=%ld received but no session active\n",
+					ofs);
+			mg_http_reply(c, 409, "",
+					"No OTA session in progress, restart upload from offset 0\n");
+			return;
+		}
+		if ((size_t) ofs < s_ota_written) {
+			// Already-written data being retransmitted -- safe to ignore.
+			LOG_OTA("Duplicate chunk offset=%ld ignored (already at %u)\n", ofs,
+					(unsigned ) s_ota_written);
+			mg_http_reply(c, 200, s_json_header, "true\n");
+		} else if ((size_t) ofs > s_ota_written) {
+			// Gap: client and device disagree on how much has been flashed.
+			// Writing here would silently corrupt the image (flash writes are
+			// sequential and ignore `ofs`), so abort instead of guessing.
+			LOG_OTA(
+					"Upload error: offset gap (got %ld, expected %u), aborting session\n",
+					ofs, (unsigned ) s_ota_written);
+			mg_ota_end();
+			ota_session_clear();
+			mg_http_reply(c, 400, "",
+					"Offset gap detected, restart upload from offset 0\n");
+		} else {
+			LOG_OTA("Writing chunk: offset=%ld, len=%lu\n", ofs, data.len);
+			if (mg_ota_write(data.buf, data.len) == false) {
+				LOG_OTA("Upload error: mg_ota_write(%lu) @%ld failed\n",
+						data.len, ofs);
+				mg_http_reply(c, 500, "", "mg_ota_write(%lu) @%ld failed\n",
+						data.len, ofs);
+				mg_ota_end();
+				ota_session_clear();
+			} else {
+				last_ofs = ofs;
+				s_ota_written += data.len;
+				mg_http_reply(c, 200, s_json_header, "true\n");
+			}
+		}
+	} else if (data.len == 0) {
+		LOG_OTA("Final chunk received. Total size: %ld. Verifying...\n", tot);
+#if defined(__CORTEX_M) && (__CORTEX_M == 7U)
+		SCB_CleanInvalidateDCache();
+#endif
+    uint32_t prev_ota_state = mg_ota_mark_pending();  // выставляем ДО mg_ota_end()
+    if (mg_ota_end() == false) {
+        LOG_OTA("Upload error: mg_ota_end() failed, CRC or size mismatch\n");
+        mg_ota_cancel_pending(prev_ota_state);        // откатываем, свопа не было
+        mg_http_reply(c, 500, "", "mg_ota_end() failed, CRC or size mismatch\n");
+        ota_session_clear();
+    } else {
+        // На STM32F (single-bank) сюда не дойдёт — MCU уже
+        // перезагрузился внутри mg_ota_end()/single_bank_swap().
+        LOG_OTA("OTA SUCCESS! Rebooting device...\n");
+        mg_http_reply(c, 200, s_json_header, "true\n");
+        ota_session_clear();
+        mg_timer_add(c->mgr, 500, 0, (void (*)(void*)) mg_device_reset, NULL);
+    }
+}
+}
 
 
 void handle_firmware_commit(struct mg_connection *c, struct mg_http_message *hm) {
@@ -2722,6 +2734,7 @@ void web_init(struct mg_mgr *mgr) {
     // Добавление таймеров
     mg_timer_add(mgr, 10 * 1000, MG_TIMER_RUN_NOW | MG_TIMER_REPEAT, timer_sntp_fn, mgr);
     mg_timer_add(mgr, 1000, MG_TIMER_REPEAT | MG_TIMER_RUN_NOW, timer_fn_mqtt, mgr); // Не дублирует в web_init() т.к. setup_mqtt() не вызывается нигде в коде проекта!
+    mg_timer_add(mgr, 5000, MG_TIMER_REPEAT | MG_TIMER_RUN_NOW, ota_watchdog_fn, NULL);
 }
 /*********************************** From Zagotovka ****************************************************/
 extern bool *flagmqtt;

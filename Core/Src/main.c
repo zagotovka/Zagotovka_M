@@ -677,6 +677,7 @@ static char reset_reason_str[128] = "Unknown";
 
 __attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_sector;
 __attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_magic;
+__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_addr;
 
 static void read_reset_reason(void) {
     reset_csr_value = RCC->CSR;
@@ -716,7 +717,7 @@ static void read_reset_reason(void) {
 
     if (dtcm_ota_magic == 0xDEADBEEF) {
         len = strlen(reset_reason_str);
-        snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len, "[OTA Crash Sector %lu] ", dtcm_ota_sector);
+        snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len, "[OTA Crash Sector %lu @0x%08lX] ", dtcm_ota_sector, dtcm_ota_addr);
         dtcm_ota_magic = 0;
     }
 
