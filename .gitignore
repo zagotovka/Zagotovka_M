@@ -10,3 +10,5 @@
 /web_root/node_modules/
 *.o
 .aider*
+/Bank_A/
+/Release_OTA/

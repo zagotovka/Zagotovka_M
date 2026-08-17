@@ -59,10 +59,12 @@ typedef struct __attribute__((packed)) {
     uint32_t timeout;
     uint8_t retry_cnt;
     uint8_t connection_mode;
-    uint8_t ota_state;  // 0=нет данных, 1=первая загрузка, 3=подтверждено
-    uint8_t version;    // Номер версии настроек (0-94)
-    // padding[1] убран: ota_state занял освободившееся место, суммарный
-    // размер структуры снова кратен 4 (2728 байт) без ручного паддинга.
+    uint8_t ota_state;       // 0=нет данных, 1=первая загрузка, 3=подтверждено
+    uint8_t version;         // Номер версии настроек (0-94)
+    uint8_t ota_active_bank; // 0=Bank A (по умолчанию), 1=Bank B
+    uint8_t ota_pending;     // 1=есть незавершённое обновление
+    uint8_t ota_boot_retries; // счётчик перезапусков для OTA
+    uint8_t padding[1];      // выравнивание до кратного 4
 } HTTPSsettings;
 
 // Проверка, что размер структуры не превышает размер сектора (256 КБ)

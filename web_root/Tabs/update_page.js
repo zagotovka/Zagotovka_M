@@ -33,9 +33,13 @@ export function FirmwareUpdate({ }) {
 
   useEffect(() => {
     if (alert) {
+      // Зелёные алерты (OTA success) показываем дольше — 60 сек,
+      // чтобы пользователь успел увидеть до редиректа.
+      // Ошибки/предупреждения — 5 сек.
+      const timeout = alert.type === 'green' ? 60000 : 5000;
       const timer = setTimeout(() => {
         setAlert(null);
-      }, 3000);
+      }, timeout);
       return () => clearTimeout(timer);
     }
   }, [alert]);
@@ -162,7 +166,7 @@ export function FirmwareUpdate({ }) {
 
         setProgress(total ? Math.round((offset / total) * 100) : 100);
 
-        if (buf.byteLength === 0) break; // нулевой чанк => mg_ota_end() на устройстве
+        if (buf.byteLength === 0) break;
         offset += buf.byteLength;
       }
 
@@ -186,7 +190,7 @@ export function FirmwareUpdate({ }) {
         } catch (e) {
           // Игнорируем ошибки сети во время перезагрузки
         }
-        
+
         retryCount++;
         if (retryCount < 60) {
           setTimeout(checkStatus, 1000);
@@ -197,7 +201,7 @@ export function FirmwareUpdate({ }) {
           });
         }
       };
-      
+
       setTimeout(checkStatus, 3000);
     } catch (error) {
       setAlert({

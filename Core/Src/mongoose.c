@@ -930,7 +930,36 @@ bool mg_ota_flash_write(const void *buf, size_t len, struct mg_flash *flash) {
       memcpy(tmp, (char *) buf + len_aligned_down, left);
       ok = flash->write_fn(s_addr + len_aligned_down, tmp, sizeof(tmp));
     }
-    s_crc32 = mg_crc32(s_crc32, (char *) buf, len);  // Update CRC
+    // Direct UART debug for non-aligned writes
+    if (len_aligned_down < len && (g_log_filter_mask & LOG_MASK_OTA)) {
+        char dbg[128];
+        int n;
+        const char *prefix = cat_prefixes[LOG_CAT_OTA];
+        HAL_UART_Transmit(&huart3, (uint8_t *) prefix, strlen(prefix), 50);
+        n = snprintf(dbg, sizeof(dbg),
+                     "WRITE_PAD: addr=%p len=%u aligned=%u left=%u ok=%d\r\n",
+                     s_addr, (unsigned)len, (unsigned)len_aligned_down, (unsigned)(len - len_aligned_down), ok);
+        HAL_UART_Transmit(&huart3, (uint8_t *) dbg, (uint16_t) n, 200);
+        // Read back the FULL 32-byte padded block from flash to verify
+        HAL_UART_Transmit(&huart3, (uint8_t *) "WRITE_VERIFY: ", 14, 50);
+        volatile char *faddr = (volatile char *)(s_addr + len_aligned_down);
+        for (size_t i = 0; i < flash->align; i++) {
+            n = snprintf(dbg, sizeof(dbg), "%02x ", (uint8_t)faddr[i]);
+            HAL_UART_Transmit(&huart3, (uint8_t *) dbg, (uint16_t) n, 50);
+        }
+        HAL_UART_Transmit(&huart3, (uint8_t *) "\r\n", 2, 20);
+        // Also verify the LAST 16 bytes of the aligned write
+        HAL_UART_Transmit(&huart3, (uint8_t *) "WRITE_ALIGNED_TAIL: ", 19, 50);
+        volatile char *atail = (volatile char *)(s_addr + len_aligned_down - 16);
+        for (size_t i = 0; i < 16; i++) {
+            n = snprintf(dbg, sizeof(dbg), "%02x ", (uint8_t)atail[i]);
+            HAL_UART_Transmit(&huart3, (uint8_t *) dbg, (uint16_t) n, 50);
+        }
+        HAL_UART_Transmit(&huart3, (uint8_t *) "\r\n", 2, 20);
+    }
+    // CRC over the original received data — matches mg_ota_flash_end() which
+    // reads exactly s_size bytes from flash (padding is beyond s_size).
+    s_crc32 = mg_crc32(s_crc32, (char *) buf, len);
     MG_DEBUG(("%#x %p %lu -> %d", s_addr - len, buf, len, ok));
     s_addr += len;
   }
@@ -942,7 +971,38 @@ bool mg_ota_flash_end(struct mg_flash *flash) {
   bool ok = false;
   if (s_size) {
     size_t size = (size_t) (s_addr - base);
+#if defined(__CORTEX_M) && (__CORTEX_M == 7U)
+    SCB_CleanInvalidateDCache();
+#endif
     uint32_t crc32 = mg_crc32(0, base, s_size);
+    // Direct UART debug dump — guaranteed delivery, bypasses MessageBuffer
+    if (g_log_filter_mask & LOG_MASK_OTA) {
+        char dbg[128];
+        int n;
+        const char *prefix = cat_prefixes[LOG_CAT_OTA];
+        HAL_UART_Transmit(&huart3, (uint8_t *) prefix, strlen(prefix), 50);
+        n = snprintf(dbg, sizeof(dbg),
+                     "FLASH_END: s_crc32=%lx crc32=%lx size=%u/%u\r\n",
+                     s_crc32, crc32, (unsigned)s_size, (unsigned)size);
+        HAL_UART_Transmit(&huart3, (uint8_t *) dbg, (uint16_t) n, 200);
+        // Dump first 32 bytes from flash staging area
+        HAL_UART_Transmit(&huart3, (uint8_t *) "FLASH_HEAD: ", 12, 50);
+        for (size_t i = 0; i < 32 && i < s_size; i++) {
+            n = snprintf(dbg, sizeof(dbg), "%02x ", (uint8_t)base[i]);
+            HAL_UART_Transmit(&huart3, (uint8_t *) dbg, (uint16_t) n, 50);
+        }
+        HAL_UART_Transmit(&huart3, (uint8_t *) "\r\n", 2, 20);
+        // Dump last 32 bytes from flash staging area
+        HAL_UART_Transmit(&huart3, (uint8_t *) "FLASH_TAIL: ", 12, 50);
+        char *tail = s_addr - 32;
+        if (tail > base) {
+            for (size_t i = 0; i < 32; i++) {
+                n = snprintf(dbg, sizeof(dbg), "%02x ", (uint8_t)tail[i]);
+                HAL_UART_Transmit(&huart3, (uint8_t *) dbg, (uint16_t) n, 50);
+            }
+        }
+        HAL_UART_Transmit(&huart3, (uint8_t *) "\r\n", 2, 20);
+    }
     if (size == s_size && crc32 == s_crc32) ok = true;
     LOG_OTA("CRC: %lx/%lx, size: %u/%u, status: %s\n", s_crc32, crc32, (unsigned)s_size, (unsigned)size, ok ? "ok" : "fail");
     s_size = 0;
@@ -5884,7 +5944,9 @@ void mg_multicast_restore(struct mg_connection *c, uint8_t *from) {
 #define MG_TCPIP_ACK_MS 150    // Timeout for ACKing
 #define MG_TCPIP_ARP_MS 100    // Timeout for ARP response
 #define MG_TCPIP_SYN_MS 15000  // Timeout for connection establishment
+#ifndef MG_TCPIP_FIN_MS
 #define MG_TCPIP_FIN_MS 1000   // Timeout for closing connection
+#endif
 
 #ifndef MG_TCPIP_WIN
 #define MG_TCPIP_WIN 6000  // TCP window size
@@ -9908,8 +9970,17 @@ static size_t __attribute__((unused)) flash_size(void) {
 }
 
 MG_IRAM static int is_dualbank(void) {
-  // only F42x/F43x series (0x419) support dual bank
-  return STM_DEV_ID == 0x419;
+  // F42x/F43x (0x419)
+  if (STM_DEV_ID == 0x419) return 1;
+  // F746/F756 (0x449), F767/F769 (0x451)
+  if (STM_DEV_ID == 0x449 || STM_DEV_ID == 0x451) {
+    // Check nDBANK bit (bit 29) in FLASH_OPTCR. 1 = Single Bank, 0 = Dual Bank
+    if ((MG_REG(MG_FLASH_BASE + MG_FLASH_OPTCR) & MG_BIT(29)) != 0) {
+      return 0; // Single bank
+    }
+    return 1; // Dual bank
+  }
+  return 0;
 }
 
 MG_IRAM static void flash_unlock(void) {
@@ -9919,8 +9990,8 @@ MG_IRAM static void flash_unlock(void) {
   }
 }
 
-#define MG_FLASH_CONFIG_16_64_128 1   // used by STM32F7
-#define MG_FLASH_CONFIG_32_128_256 2  // used by STM32F4 and F2
+#define MG_FLASH_CONFIG_16_64_128 1   // used by STM32F7 dual bank
+#define MG_FLASH_CONFIG_32_128_256 2  // used by STM32F4, F2, and F7 single bank
 
 MG_IRAM static bool flash_page_start(volatile uint32_t *dst) {
   char *base = (char *) s_mg_flash_stm32f.start;
@@ -9931,7 +10002,7 @@ MG_IRAM static bool flash_page_start(volatile uint32_t *dst) {
   }
 
   uint32_t flash_config = MG_FLASH_CONFIG_16_64_128;
-  if (STM_DEV_ID >= 0x449) {
+  if (STM_DEV_ID < 0x449 || !is_dualbank()) {
     flash_config = MG_FLASH_CONFIG_32_128_256;
   }
 
@@ -9958,7 +10029,7 @@ MG_IRAM static int flash_sector(volatile uint32_t *addr) {
   }
   volatile char *p = (char *) addr;
   uint32_t flash_config = MG_FLASH_CONFIG_16_64_128;
-  if (STM_DEV_ID >= 0x449) {
+  if (STM_DEV_ID < 0x449 || !is_dualbank()) {
     flash_config = MG_FLASH_CONFIG_32_128_256;
   }
   int sector = -1;
@@ -9999,29 +10070,42 @@ MG_IRAM static bool mg_stm32f_erase(void *addr) {
     if (sector < 0) return false;
     uint32_t sector_reg = sector;
     if (is_dualbank() && sector >= 12) {
-      // 3.9.8 Flash control register (FLASH_CR) for F42xxx and F43xxx
-      // BITS[7:3]
-      sector_reg -= 12;
-      sector_reg |= MG_BIT(4);
+      // For F42x/F43x (0x419), BKSEL is bit 7 in FLASH_CR. SNB is bits 6:3.
+      // For F767/F769 (0x451), SNB is 5 bits (7:3). Sector 12 has SNB=16 (10000b).
+      // In both cases, the value shifted into bits 7:3 must be (sector - 12) + 16.
+      // So sector_reg should simply have 4 added to it.
+      sector_reg += 4;
     }
 
-    // Прямой вывод через HAL_UART_Transmit удален: во время OTA
-    // прерывания (в т.ч. SysTick) выключены (cpsid i), вызов HAL_UART_Transmit
-    // может привести к lockup, если таймаут зависит от uwTick, а mg_snprintf
-    // выполняется не из IRAM.
-    // Записываем маркер сектора в DTCM для диагностики (выживает после ресета).
+    // Diagnostics: extern DTCM markers (survive NVIC reset)
     extern uint32_t dtcm_ota_sector;
     extern uint32_t dtcm_ota_magic;
     extern uint32_t dtcm_ota_addr;
+    extern uint32_t dtcm_ota_sr_erase;
+    extern uint32_t dtcm_ota_cr_erase;
+    extern uint32_t dtcm_ota_pre_erase0;
     dtcm_ota_sector = sector;
     dtcm_ota_magic = 0xDEADBEEF;
     dtcm_ota_addr = (uint32_t) addr;
+    dtcm_ota_sr_erase = 0;
+    dtcm_ota_cr_erase = 0;
+    
+    // ПРОВЕРКА OPTCR и OPTCR1
+    extern uint32_t dtcm_ota_sr_write;
+    extern uint32_t dtcm_ota_write_addr;
+    dtcm_ota_sr_write = MG_REG(MG_FLASH_BASE + 0x14); // OPTCR
+    dtcm_ota_write_addr = MG_REG(MG_FLASH_BASE + 0x18); // OPTCR1
+
+    // Pre-erase verification: read8 bytes at sector start
+    dtcm_ota_pre_erase0 = *(volatile uint32_t *) addr;
+    dtcm_ota_pre_erase0 = dtcm_ota_pre_erase0;  // volatile read
 
     flash_unlock();
     flash_wait();
     uint32_t cr = MG_BIT(1);       // SER
     cr |= MG_BIT(16);              // STRT
     cr |= (sector_reg & 31) << 3;  // sector
+    dtcm_ota_cr_erase = cr;        // save CR value BEFORE writing
     MG_REG(MG_FLASH_BASE + MG_FLASH_CR) = cr;
     
     // ДОБАВЛЕНО: Явное ожидание завершения стирания! 
@@ -10030,8 +10114,25 @@ MG_IRAM static bool mg_stm32f_erase(void *addr) {
     // игнорировалась (так как BSY был еще установлен).
     flash_wait();
     
+    // Diagnostics: capture FLASH_SR after erase
+    dtcm_ota_sr_erase = MG_REG(MG_FLASH_BASE + MG_FLASH_SR);
+
     ok = !flash_is_err();
-    // Убрали MG_DEBUG() отсюда, так как вызов mg_log не-IRAM функции при стирании приведет к BusFault/Stall
+
+    // Verify erase
+#if defined(__CORTEX_M) && (__CORTEX_M == 7U)
+    SCB_CleanInvalidateDCache();
+#endif
+    volatile uint32_t *check = (volatile uint32_t *) addr;
+    volatile uint32_t *check_end = check + (16 * 1024) / 4;
+    while (check < check_end) {
+      if (*check != 0xFFFFFFFF) {
+        dtcm_ota_sr_erase |= 0x80000000;  // marker: post-erase verify failed
+        return false;
+      }
+      check++;
+    }
+
     // After we have erased the sector, set CR flags for programming
     // 2 << 8 is word write parallelism, bit(0) is PG. RM0385, section 3.7.5
     MG_REG(MG_FLASH_BASE + MG_FLASH_CR) = MG_BIT(0) | (2 << 8);
@@ -10058,21 +10159,31 @@ MG_IRAM static bool mg_stm32f_write(void *addr, const void *buf, size_t len) {
   uint32_t *src = (uint32_t *) buf;
   uint32_t *end = (uint32_t *) ((char *) buf + len);
   bool ok = true;
+  extern uint32_t dtcm_ota_sr_write;
+  extern uint32_t dtcm_ota_write_addr;
+  extern uint32_t dtcm_ota_write_word;
   MG_ARM_DISABLE_IRQ();
   flash_unlock();
   flash_clear_err();
   MG_REG(MG_FLASH_BASE + MG_FLASH_CR) = MG_BIT(0) | MG_BIT(9);  // PG, 32-bit
   flash_wait();
-  // Убрали MG_DEBUG() отсюда, так как IRQ отключены и не-IRAM код может привести к BusFault
   while (ok && src < end) {
-    if (flash_page_start(dst) && mg_stm32f_erase(dst) == false) break;
+    if (flash_page_start(dst) && mg_stm32f_erase(dst) == false) {
+      ok = false;
+      break;
+    }
     *(volatile uint32_t *) dst++ = *src++;
     MG_DSB();  // ensure flash is written with no errors
     flash_wait();
-    if (flash_is_err()) ok = false;
+    if (flash_is_err()) {
+      // Diagnostics: capture FLASH_SR and address of failed write
+      dtcm_ota_sr_write = MG_REG(MG_FLASH_BASE + MG_FLASH_SR);
+      dtcm_ota_write_addr = (uint32_t)(dst - 1);
+      dtcm_ota_write_word = *(dst - 1);
+      ok = false;
+    }
   }
   if (!s_flash_irq_disabled) MG_ARM_ENABLE_IRQ();
-  // Убрали MG_DEBUG(), так как оно могло вызываться сразу после выхода из flash операций
   MG_REG(MG_FLASH_BASE + MG_FLASH_CR) &= ~MG_BIT(0);  // Clear programming flag
   return ok;
 }
@@ -10085,16 +10196,12 @@ MG_IRAM void single_bank_swap(char *p1, char *p2, size_t size) {
 }
 
 bool mg_ota_begin(size_t new_firmware_size) {
-  /* ПРАВКА ПРОЕКТА (не апстрим Mongoose): жестко задаем размер видимой
-   * OTA-драйверу flash = 0x180000 (1536 КБ). Тогда staging-область
-   * (верхняя половина) начнется с 0x08000000 + 0xC0000 = 0x080C0000.
-   * Это ровно начало Sector 7!
-   * Если мы использовали flash_size() - 0x40000 (размер 0x1C0000),
-   * staging-область начиналась бы с 0x080E0000, что в СЕРЕДИНЕ Sector 7,
-   * из-за чего Mongoose не стирал бы сектор (flash_page_start возвращал false)
-   * и OTA молча писал бы мусор, после чего падала CRC-проверка.
-   * Размер 768 КБ (0xC0000) достаточен для прошивки в 680 КБ. */
-  s_mg_flash_stm32f.size = 0x180000;
+  /* ПРАВКА ПРОЕКТА (не апстрим Mongoose): жестко задаем размер flash = 0x200000
+   * (2 МБ). Тогда staging-область (верхняя половина) начнется с
+   * 0x08000000 + 0x100000 = 0x08100000 — это Bank B (1 МБ).
+   * Раньше было 0x180000 → staging на 0x080C0000 (Sector 10, внутри Bank A),
+   * что приводило к записи поверх работающей прошивки → HardFault. */
+  s_mg_flash_stm32f.size = 0x200000;
 #ifdef __ZEPHYR__
   *((uint32_t *)0xE000ED94) = 0;
   MG_DEBUG(("Jailbreak %s", *((uint32_t *)0xE000ED94) == 0 ? "successful" : "failed"));
@@ -10107,18 +10214,20 @@ bool mg_ota_write(const void *buf, size_t len) {
 }
 
 bool mg_ota_end(void) {
+  // Double Bank: прошивка уже записана в Bank B (staging area).
+  // Вместо копирования 768 КБ (single_bank_swap) просто перезагружаемся —
+  // Bootloader прочитает ota_pending/ota_active_bank из Flash Sector 11
+  // и сделает jump_to_app(BANK_B_ADDR).
+  //
+  // ВНИМАНИЕ: вызов mg_device_reset() здесь НЕВОЗМОЖЕН —
+  // mg_ota_end() вызывается из handle_firmware_upload() ДО mg_http_reply().
+  // NVIC_SystemReset() прервёт отправку HTTP 200 OK → браузер увидит разрыв.
+  // Ребут планируется из handle_firmware_upload() через mg_timer_add()
+  // после mg_http_reply(), чтобы TCP-стек успел отправить ответ.
+
   if (mg_ota_flash_end(&s_mg_flash_stm32f)) {
-    // Swap partitions. Pray power does not go away
-    MG_INFO(("Swapping partitions, size %u (%u sectors)",
-             s_mg_flash_stm32f.size, STM_DEV_ID == 0x449 ? 8 : 12));
-    MG_INFO(("Do NOT power off..."));
-    mg_log_level = MG_LL_NONE;
-    s_flash_irq_disabled = true;
-    char *p1 = (char *) s_mg_flash_stm32f.start;
-    char *p2 = p1 + s_mg_flash_stm32f.size / 2;
-    size_t size = s_mg_flash_stm32f.size / 2;
-    // Runs in RAM, will reset when finished
-    single_bank_swap(p1, p2, size);
+    MG_INFO(("OTA CRC+size OK, ready to reboot"));
+    return true;  //告诉caller: всё ОК, перезагружайся когда будешь готов
   }
   return false;
 }

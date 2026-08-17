@@ -115,6 +115,17 @@ void logger_send(LogCategory_t cat, const char *fmt, ...) {
 }
 
 static TaskLogBuffer_t* get_task_buffer(void) {
+    /* Без этой проверки printf() до старта планировщика (до osKernelStart)
+     * попадал в полный пайплайн: буферизация в g_task_bufs, парсинг
+     * префикса, memcpy в send_buf, xMessageBufferSend/HAL_UART_Transmit
+     * с cat_prefixes. В результате первый символ \r\n оказывался
+     * записанным по нулевому указателю → corruption word[0] ITCM.
+     * Теперь до запуска планировщика всегда safe path — прямой
+     * HAL_UART_Transmit в __io_putchar. */
+    if (xTaskGetSchedulerState() == taskSCHEDULER_NOT_STARTED) {
+        return NULL;
+    }
+
     TaskHandle_t current_task = xTaskGetCurrentTaskHandle();
     if (current_task == NULL) {
         return NULL;

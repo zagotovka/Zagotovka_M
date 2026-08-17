@@ -1998,13 +1998,12 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
   xQueueSend(usbQueueHandle, &usbnum, 0);
 }
 
-/* ──── emit_escaped_blob: ключ + строка с экранированием \n \" \\ ──── */
+/* ──── emit_escaped_blob: ключ + строка с JSON-экранированием ──── */
 static void emit_escaped_blob(struct mg_connection *c,
                               const char *name,
                               const char *src,
                               char *out, int out_sz) {
   int pos;
-  /* ключ + открывающая кавычка */
   pos = snprintf(out, out_sz, "\"%s\":\"", name);
   mg_http_write_chunk(c, out, (size_t)pos);
 
@@ -2014,12 +2013,20 @@ static void emit_escaped_blob(struct mg_connection *c,
       mg_http_write_chunk(c, out, (size_t)pos);
       pos = 0;
     }
-    switch (*src) {
-    case '\n': out[pos++] = '\\'; out[pos++] = 'n';  break;
-    case '"':  out[pos++] = '\\'; out[pos++] = '"';  break;
-    case '\\': out[pos++] = '\\'; out[pos++] = '\\'; break;
-    case '\r': /* skip */                              break;
-    default:   out[pos++] = *src;                      break;
+    if (*src == '"') {
+      out[pos++] = '\\'; out[pos++] = '"';
+    } else if (*src == '\\') {
+      out[pos++] = '\\'; out[pos++] = '\\';
+    } else if (*src == '\n') {
+      out[pos++] = '\\'; out[pos++] = 'n';
+    } else if (*src == '\r') {
+      out[pos++] = '\\'; out[pos++] = 'r';
+    } else if (*src == '\t') {
+      out[pos++] = '\\'; out[pos++] = 't';
+    } else if ((unsigned char)*src < 0x20) {
+      pos += snprintf(out + pos, out_sz - pos, "\\u%04x", (unsigned char)*src);
+    } else {
+      out[pos++] = *src;
     }
     src++;
   }
@@ -2033,42 +2040,43 @@ static void emit_escaped_blob(struct mg_connection *c,
 
 static void emit_system_basic(struct mg_connection *c,
                               const struct dbSettings *s, char *buf) {
+  emit_escaped_blob(c, "lang", s->lang, buf, 512);
   char s_ln[16]; fmt_float(s_ln, sizeof(s_ln), s->lon_de, 6);
   char s_lt[16]; fmt_float(s_lt, sizeof(s_lt), s->lat_de, 6);
-  int len = snprintf(buf, 512,
-      "\"lang\":\"%s\",\"lon_de\":%s,\"lat_de\":%s,"
-      "\"sunrise\":\"%s\",\"onsunrise\":%d,"
-      "\"sunset\":\"%s\",\"onsunset\":%d,"
-      "\"dlength\":\"%s\",",
-      s->lang, s_ln, s_lt,
-      s->sunrise, s->onsunrise,
-      s->sunset, s->onsunset,
-      s->dlength);
+  int len = snprintf(buf, 512, "\"lon_de\":%s,\"lat_de\":%s,", s_ln, s_lt);
   mg_http_write_chunk(c, buf, (size_t)len);
+  emit_escaped_blob(c, "sunrise", s->sunrise, buf, 512);
+  len = snprintf(buf, 512, "\"onsunrise\":%d,", s->onsunrise);
+  mg_http_write_chunk(c, buf, (size_t)len);
+  emit_escaped_blob(c, "sunset", s->sunset, buf, 512);
+  len = snprintf(buf, 512, "\"onsunset\":%d,", s->onsunset);
+  mg_http_write_chunk(c, buf, (size_t)len);
+  emit_escaped_blob(c, "dlength", s->dlength, buf, 512);
 }
 
 static void emit_sunrise_pins(struct mg_connection *c,
                               const struct dbSettings *s, char *buf) {
-  int len = snprintf(buf, 512, "\"sunrise_pins\":\"%s\",", s->srise_pins);
-  mg_http_write_chunk(c, buf, (size_t)len);
+  emit_escaped_blob(c, "sunrise_pins", s->srise_pins, buf, 512);
 }
 
 static void emit_sunset_pins(struct mg_connection *c,
                              const struct dbSettings *s, char *buf) {
-  int len = snprintf(buf, 512, "\"sunset_pins\":\"%s\",", s->sset_pins);
-  mg_http_write_chunk(c, buf, (size_t)len);
+  emit_escaped_blob(c, "sunset_pins", s->sset_pins, buf, 512);
 }
 
 static void emit_mqtt(struct mg_connection *c,
                       const struct dbSettings *s, char *buf) {
   int len = snprintf(buf, 512,
-      "\"check_mqtt\":%d,\"mqtt_prt\":%d,"
-      "\"mqtt_clt\":\"%s\",\"mqtt_usr\":\"%s\",\"mqtt_pswd\":\"%s\","
-      "\"txmqttop\":\"%s\",\"rxmqttop\":\"%s\",\"rxzbtop\":\"%s\",\"mqtt_hst\":\"%s\",",
-      s->check_mqtt, s->mqtt_prt,
-      s->mqtt_clt, s->mqtt_usr, s->mqtt_pswd,
-      s->txmqttop, s->rxmqttop, s->rxzbtop, s->mqtt_hst);
+      "\"check_mqtt\":%d,\"mqtt_prt\":%d,",
+      s->check_mqtt, s->mqtt_prt);
   mg_http_write_chunk(c, buf, (size_t)len);
+  emit_escaped_blob(c, "mqtt_clt", s->mqtt_clt, buf, 512);
+  emit_escaped_blob(c, "mqtt_usr", s->mqtt_usr, buf, 512);
+  emit_escaped_blob(c, "mqtt_pswd", s->mqtt_pswd, buf, 512);
+  emit_escaped_blob(c, "txmqttop", s->txmqttop, buf, 512);
+  emit_escaped_blob(c, "rxmqttop", s->rxmqttop, buf, 512);
+  emit_escaped_blob(c, "rxzbtop", s->rxzbtop, buf, 512);
+  emit_escaped_blob(c, "mqtt_hst", s->mqtt_hst, buf, 512);
 }
 
 __attribute__((section(".itcm"))) static void emit_ip(struct mg_connection *c,
@@ -2088,15 +2096,14 @@ __attribute__((section(".itcm"))) static void emit_ip(struct mg_connection *c,
 static void emit_admin(struct mg_connection *c,
                        const struct dbSettings *s, char *buf) {
   char s_tz[16]; fmt_float(s_tz, sizeof(s_tz), s->timezone, 0);
-  int len = snprintf(buf, 512,
-      "\"macaddr\":\"00-00-00-00-00-00\","
-      "\"adm_name\":\"%s\",\"adm_pswd\":\"%s\","
-      "\"token\":\"%s\",\"timezone\":%s,"
-      "\"fullmoon\":\"%s\",",
-      s->adm_name, s->adm_pswd,
-      s->token, s_tz,
-      s->fullmoon);
+  int len = snprintf(buf, 512, "\"macaddr\":\"00-00-00-00-00-00\",");
   mg_http_write_chunk(c, buf, (size_t)len);
+  emit_escaped_blob(c, "adm_name", s->adm_name, buf, 512);
+  emit_escaped_blob(c, "adm_pswd", s->adm_pswd, buf, 512);
+  emit_escaped_blob(c, "token", s->token, buf, 512);
+  len = snprintf(buf, 512, "\"timezone\":%s,", s_tz);
+  mg_http_write_chunk(c, buf, (size_t)len);
+  emit_escaped_blob(c, "fullmoon", s->fullmoon, buf, 512);
 }
 
 static void emit_offldt(struct mg_connection *c,
@@ -2191,9 +2198,8 @@ static void stream_mysett_json(struct mg_connection *c,
   }
 
   {
-    int len = snprintf(buf, sizeof(buf),
-                       "\"domain\":\"%s\"",
-                       s_cached_domain[0] ? s_cached_domain : "");
+    const char *d = s_cached_domain[0] ? s_cached_domain : "";
+    int len = snprintf(buf, sizeof(buf), "\"domain\":\"%s\"", d);
     mg_http_write_chunk(c, buf, (size_t)len);
   }
 
@@ -2807,7 +2813,8 @@ static bool write_settings_to_flash(const HTTPSsettings *settings) {
   if (need_erase) {
     FLASH_EraseInitTypeDef EraseInitStruct = {0};
     EraseInitStruct.TypeErase = FLASH_TYPEERASE_SECTORS;
-    EraseInitStruct.Sector = FLASH_SECTOR_11;
+    EraseInitStruct.Banks = FLASH_BANK_2;
+    EraseInitStruct.Sector = FLASH_SECTOR_20;
     EraseInitStruct.NbSectors = 1;
     EraseInitStruct.VoltageRange = FLASH_VOLTAGE_RANGE_3;
 
@@ -8020,6 +8027,17 @@ bool initialize_https_settings(void) {
   if (valid_settings == NULL) {
     printf("No valid settings found, resetting to defaults\n");
     return reset_to_defaults();
+  }
+
+  if (valid_settings->ota_pending == 1) {
+    // During OTA trial — do NOT write anything to Flash here.
+    // Bootloader tracks ota_boot_retries; mg_ota_commit() clears ota_pending.
+    // Writing Flash here would break the retry counter.
+    uint32_t vtor = *(volatile uint32_t *)0xE000ED08;
+    uint8_t current_bank = (vtor == 0x08100000) ? 1 : 0;
+    printf("[OTA] Trial boot: bank=%u pending=%u state=%u retries=%u\n",
+           current_bank, valid_settings->ota_pending,
+           valid_settings->ota_state, valid_settings->ota_boot_retries);
   }
 
   return true;

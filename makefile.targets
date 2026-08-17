@@ -1,0 +1,11 @@
+################################################################################
+# Custom build targets — вставляется в конец auto-generated makefile
+################################################################################
+
+# Генерация .bin из .elf
+Zagotovka_M.bin: $(EXECUTABLES)
+	arm-none-eabi-objcopy -O binary $(EXECUTABLES) $@
+	@echo 'Generated: $@'
+
+# Расширяем secondary-outputs чтобы .bin создавался при каждом билде
+secondary-outputs: Zagotovka_M.bin

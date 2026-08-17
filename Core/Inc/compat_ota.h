@@ -53,6 +53,8 @@ void mg_ota_reset_status(void);
 
 /* ---- OTA query stubs ---------------------------------------------------- */
 int      mg_ota_status(int firmware);
+void     mg_ota_set_pending_bank(uint8_t target_bank);
+uint8_t  mg_ota_get_active_bank(void);
 uint32_t mg_ota_crc32(int firmware);
 uint32_t mg_ota_timestamp(int firmware);
 size_t   mg_ota_size(int firmware);

@@ -91,8 +91,11 @@
 #else
 #define VECT_TAB_BASE_ADDRESS   FLASH_BASE      /*!< Vector Table base address field.
                                                      This value must be a multiple of 0x200. */
-#define VECT_TAB_OFFSET         0x00000000U     /*!< Vector Table base offset field.
-                                                     This value must be a multiple of 0x200. */
+#if defined(BUILD_BANK_B)
+#define VECT_TAB_OFFSET         0x00100000U     /*!< Vector Table base offset field for Bank B (Sectors 8-10) */
+#else
+#define VECT_TAB_OFFSET         0x00040000U     /*!< Vector Table base offset field for Bank A (Sectors 5-7) */
+#endif
 #endif /* VECT_TAB_SRAM */
 #endif /* USER_VECT_TAB_ADDRESS */
 /******************************************************************************/
@@ -156,9 +159,29 @@ void SystemInit(void)
 #endif
 
   /* Configure the Vector Table location -------------------------------------*/
-#if defined(USER_VECT_TAB_ADDRESS)
-  SCB->VTOR = VECT_TAB_BASE_ADDRESS | VECT_TAB_OFFSET; /* Vector Table Relocation in Internal SRAM */
-#endif /* USER_VECT_TAB_ADDRESS */
+  extern uint32_t g_pfnVectors;
+  SCB->VTOR = (uint32_t)&g_pfnVectors;
+
+  // Very early log to see if we reached SystemInit
+  RCC->APB1ENR |= RCC_APB1ENR_USART3EN;
+  (void)RCC->APB1ENR; // dummy read for delay
+  RCC->AHB1ENR |= RCC_AHB1ENR_GPIODEN;
+  (void)RCC->AHB1ENR; // dummy read
+  GPIOD->MODER &= ~(GPIO_MODER_MODER8_Msk | GPIO_MODER_MODER9_Msk);
+  GPIOD->MODER |= (2U << GPIO_MODER_MODER8_Pos) | (2U << GPIO_MODER_MODER9_Pos);
+  GPIOD->AFR[1] &= ~(0xFFU);
+  GPIOD->AFR[1] |= (7U << 0) | (7U << 4);
+  USART3->BRR = 0x8B;
+  USART3->CR1 = USART_CR1_UE | USART_CR1_TE;
+
+  const char *str = "[SYSTEM] SystemInit() executed!\r\n";
+  volatile uint32_t *ISR = (volatile uint32_t *)(0x40004800 + 0x1C);
+  volatile uint32_t *TDR = (volatile uint32_t *)(0x40004800 + 0x28);
+  while (*str) {
+      volatile uint32_t t = 100000;
+      while (!((*ISR) & (1 << 7)) && --t) {}
+      *TDR = *str++;
+  }
 }
 
 /**

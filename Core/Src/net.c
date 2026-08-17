@@ -9,6 +9,7 @@
 #include "compat_ota.h"
 #include "fmt_float.h"
 #include <stdlib.h>   // rand()
+#include <stdarg.h>   // va_list for ota_log_direct()
 #include "dtcm_alloc.h"
 
 struct user {
@@ -360,6 +361,41 @@ void ota_watchdog_fn(void *arg) {
   }
 }
 
+/* One-shot health-check timer: fires on the 3rd trial boot of Bank B.
+   If firmware survived OTA_BOOT_COMMIT_DELAY_MS with pending=1 state=1
+   retries=3, the new bank is considered healthy and committed.
+   Bootloader retry loop no longer increments, future boots use active bank. */
+#define OTA_BOOT_COMMIT_DELAY_MS  60000  /* 60 seconds after boot */
+#define OTA_BOOT_RETRY_MAX        3
+
+void ota_health_check_fn(void *arg) {
+  (void) arg;
+  const HTTPSsettings *s = get_valid_settings();
+  if (s && s->ota_pending == 1 && s->ota_state == 1
+      && s->ota_boot_retries >= OTA_BOOT_RETRY_MAX) {
+    LOG_OTA("Health-check: firmware stable for %lums, committing OTA "
+            "(retries=%u)\n",
+            (unsigned long) OTA_BOOT_COMMIT_DELAY_MS,
+            (unsigned) s->ota_boot_retries);
+    mg_ota_commit();
+  }
+}
+
+extern UART_HandleTypeDef huart3;
+
+static void ota_log_direct(const char *fmt, ...) {
+    if (!(g_log_filter_mask & LOG_MASK_OTA)) return;
+    char msg[160];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(msg, sizeof(msg), fmt, ap);
+    va_end(ap);
+    if (n < 0) return;
+    const char *prefix = cat_prefixes[LOG_CAT_OTA];
+    HAL_UART_Transmit(&huart3, (uint8_t *) prefix, strlen(prefix), 50);
+    HAL_UART_Transmit(&huart3, (uint8_t *) msg, (uint16_t) n, 200);
+}
+
 void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm) {
 	char name[64], offset[20], total[20];
 	struct mg_str data = hm->body;
@@ -372,7 +408,7 @@ void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm)
 
 	if ((ofs = mg_json_get_long(mg_str(offset), "$", -1)) < 0 || (tot =
 			mg_json_get_long(mg_str(total), "$", -1)) < 0) {
-		LOG_OTA("Upload error: offset or total not set\n");
+		ota_log_direct("Upload error: offset or total not set\n");
 		mg_http_reply(c, 500, "", "offset and total not set\n");
 		return;
 	}
@@ -382,7 +418,7 @@ void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm)
 	if (ofs == 0) {
 		// Start of a new OTA session.
 		if (s_ota_expected != 0) {
-			LOG_OTA(
+			ota_log_direct(
 					"Aborting stale OTA session (owner conn=%lu, %u/%u bytes) to start a new one\n",
 					s_ota_owner_id, (unsigned ) s_ota_written,
 					(unsigned ) s_ota_expected);
@@ -394,7 +430,7 @@ void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm)
 			// active at the app layer, so a false return here means the
 			// firmware is simply too big for the staging area, not a
 			// in-progress conflict -- there is nothing of ours to clean up.
-			LOG_OTA(
+			ota_log_direct(
 					"Upload error: mg_ota_begin(%ld) failed (firmware too big?)\n",
 					tot);
 			mg_http_reply(c, 500, "", "mg_ota_begin(%ld) failed\n", tot);
@@ -404,14 +440,14 @@ void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm)
 		s_ota_written = 0;
 		s_ota_expected = (size_t) tot;
 		s_ota_owner_id = c->id;
-		LOG_OTA("OTA session started by conn=%lu, expecting %ld bytes\n", c->id,
+		ota_log_direct("OTA session started by conn=%lu, expecting %ld bytes\n", c->id,
 				tot);
 		mg_ota_reset_status();   // сбрасываем статус ДО начала записи чанков,чтобы не пересекаться по flash с mg_ota_write()
 	}
 
 	if (data.len > 0) {
 		if (s_ota_expected == 0) {
-			LOG_OTA(
+			ota_log_direct(
 					"Upload error: chunk offset=%ld received but no session active\n",
 					ofs);
 			mg_http_reply(c, 409, "",
@@ -420,14 +456,14 @@ void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm)
 		}
 		if ((size_t) ofs < s_ota_written) {
 			// Already-written data being retransmitted -- safe to ignore.
-			LOG_OTA("Duplicate chunk offset=%ld ignored (already at %u)\n", ofs,
+			ota_log_direct("Duplicate chunk offset=%ld ignored (already at %u)\n", ofs,
 					(unsigned ) s_ota_written);
 			mg_http_reply(c, 200, s_json_header, "true\n");
 		} else if ((size_t) ofs > s_ota_written) {
 			// Gap: client and device disagree on how much has been flashed.
 			// Writing here would silently corrupt the image (flash writes are
 			// sequential and ignore `ofs`), so abort instead of guessing.
-			LOG_OTA(
+			ota_log_direct(
 					"Upload error: offset gap (got %ld, expected %u), aborting session\n",
 					ofs, (unsigned ) s_ota_written);
 			mg_ota_end();
@@ -435,9 +471,9 @@ void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm)
 			mg_http_reply(c, 400, "",
 					"Offset gap detected, restart upload from offset 0\n");
 		} else {
-			LOG_OTA("Writing chunk: offset=%ld, len=%lu\n", ofs, data.len);
+			ota_log_direct("Writing chunk: offset=%ld, len=%lu\n", ofs, data.len);
 			if (mg_ota_write(data.buf, data.len) == false) {
-				LOG_OTA("Upload error: mg_ota_write(%lu) @%ld failed\n",
+				ota_log_direct("Upload error: mg_ota_write(%lu) @%ld failed\n",
 						data.len, ofs);
 				mg_http_reply(c, 500, "", "mg_ota_write(%lu) @%ld failed\n",
 						data.len, ofs);
@@ -450,20 +486,21 @@ void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm)
 			}
 		}
 	} else if (data.len == 0) {
-		LOG_OTA("Final chunk received. Total size: %ld. Verifying...\n", tot);
+		ota_log_direct("Final chunk received. Total size: %ld. Verifying...\n", tot);
 #if defined(__CORTEX_M) && (__CORTEX_M == 7U)
 		SCB_CleanInvalidateDCache();
 #endif
     uint32_t prev_ota_state = mg_ota_mark_pending();  // выставляем ДО mg_ota_end()
     if (mg_ota_end() == false) {
-        LOG_OTA("Upload error: mg_ota_end() failed, CRC or size mismatch\n");
+        ota_log_direct("Upload error: mg_ota_end() failed, CRC or size mismatch\n");
         mg_ota_cancel_pending(prev_ota_state);        // откатываем, свопа не было
         mg_http_reply(c, 500, "", "mg_ota_end() failed, CRC or size mismatch\n");
         ota_session_clear();
     } else {
-        // На STM32F (single-bank) сюда не дойдёт — MCU уже
-        // перезагрузился внутри mg_ota_end()/single_bank_swap().
-        LOG_OTA("OTA SUCCESS! Rebooting device...\n");
+        // Double Bank: mg_ota_end() вернул true — CRC+size ОК.
+        // HTTP 200 OK отправляется ПЕРВЫМ, потом через 500мс — ребут.
+        // Это даёт TCP-стеку время отправить ответ браузеру.
+        ota_log_direct("OTA SUCCESS! Rebooting device...\n");
         mg_http_reply(c, 200, s_json_header, "true\n");
         ota_session_clear();
         mg_timer_add(c->mgr, 500, 0, (void (*)(void*)) mg_device_reset, NULL);
@@ -1009,6 +1046,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/upload"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/upload", c->id));
 				handle_firmware_upload(c, hm);
+				keep_alive = true;  // Keep-Alive для чанкового OTA: не закрывать TCP-соединение между чанками
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/commit"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/commit", c->id));
 				handle_firmware_commit(c, hm);
@@ -2735,6 +2773,22 @@ void web_init(struct mg_mgr *mgr) {
     mg_timer_add(mgr, 10 * 1000, MG_TIMER_RUN_NOW | MG_TIMER_REPEAT, timer_sntp_fn, mgr);
     mg_timer_add(mgr, 1000, MG_TIMER_REPEAT | MG_TIMER_RUN_NOW, timer_fn_mqtt, mgr); // Не дублирует в web_init() т.к. setup_mqtt() не вызывается нигде в коде проекта!
     mg_timer_add(mgr, 5000, MG_TIMER_REPEAT | MG_TIMER_RUN_NOW, ota_watchdog_fn, NULL);
+
+    /* OTA health-check: register ONLY on 3rd trial boot (retries >= 3).
+       On boots 1 and 2 no timer is created — user can still rollback via
+       future web-UI button (mg_ota_rollback). */
+    {
+        const HTTPSsettings *s = get_valid_settings();
+        if (s && s->ota_pending == 1 && s->ota_state == 1
+            && s->ota_boot_retries >= OTA_BOOT_RETRY_MAX) {
+            LOG_OTA("3rd trial boot (retries=%u), registering health-check "
+                    "timer (%lums)\n",
+                    (unsigned) s->ota_boot_retries,
+                    (unsigned long) OTA_BOOT_COMMIT_DELAY_MS);
+            mg_timer_add(mgr, OTA_BOOT_COMMIT_DELAY_MS, 0,
+                         ota_health_check_fn, NULL);
+        }
+    }
 }
 /*********************************** From Zagotovka ****************************************************/
 extern bool *flagmqtt;

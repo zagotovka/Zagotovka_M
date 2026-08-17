@@ -46,7 +46,7 @@ MEMORY
 {
   ITCM     (rx)     : ORIGIN = 0x00000000,   LENGTH = 16K
   RAM      (rw)    : ORIGIN = 0x20000000,   LENGTH = 512K
-  FLASH    (rx)     : ORIGIN = 0x08040000,  LENGTH = 768K  /* Active: Sectors 5-7 (0x08040000..0x080FFFFF) */
+  FLASH    (rx)     : ORIGIN = 0x08100000,   LENGTH = 768K  /* Bank B: Sectors 8-10 */
   ZERG_FLASH (rx)  : ORIGIN = 0x081C0000,   LENGTH = 256K  /* Sector 11 */
 }
 
@@ -228,14 +228,13 @@ SECTIONS
     __bss_end__ = _ebss;
   } >RAM
 
-  /* Секция .zagotovka_section в области ZERG_FLASH (Sector 11).
-     NOLOAD — не попадает в .bin, т.к. настройки пишутся в рантайме через HAL_FLASH_Program. */
-  .zagotovka_section 0x081C0000 (NOLOAD) :
+  /* Секция .zagotovka_section в области ZERG_FLASH */
+  .zagotovka_section ORIGIN(ZERG_FLASH) :
   {
       . = ALIGN(8);
       KEEP(*(.zagotovka_section))
       . = ALIGN(8);
-  }
+  } >ZERG_FLASH AT> FLASH
 
   /* Remove information from the compiler libraries */
   /DISCARD/ :

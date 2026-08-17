@@ -80,10 +80,28 @@ void mg_device_reset(void) {
     /* Never returns */
 }
 
+/* ---- OTA Rollback helpers ----------------------------------------------- */
+void mg_ota_set_pending_bank(uint8_t target_bank) {
+    const HTTPSsettings *current = get_valid_settings();
+    HTTPSsettings tmp;
+    if (current) memcpy(&tmp, current, sizeof(tmp));
+    else memset(&tmp, 0, sizeof(tmp));
+    
+    tmp.ota_pending = 1;
+    tmp.ota_active_bank = target_bank;
+    tmp.ota_state = 1; // MG_OTA_FIRST_BOOT
+    update_and_write_settings(&tmp);
+}
+
+uint8_t mg_ota_get_active_bank(void) {
+    uint32_t vtor = *(volatile uint32_t *)0xE000ED08; // SCB->VTOR
+    return (vtor == 0x08100000) ? 1 : 0; // 0=Bank A, 1=Bank B
+}
+
 /* ---- Публичный вызов: пометить "первая загрузка после OTA" -------------- */
 uint32_t mg_ota_mark_pending(void) {
     uint32_t prev = ota_flag_read();
-    ota_flag_write(1); // 1 = First boot (uncommitted)
+    mg_ota_set_pending_bank(1); // 1 = BANK_B (staging), ota_pending=1, ota_state=1
     return prev;
 }
 
@@ -121,21 +139,36 @@ size_t mg_ota_size(int firmware) {
 }
 
 bool mg_ota_commit(void) {
-    ota_flag_write(3); // 3 = Committed
-    return true;
+    const HTTPSsettings *current = get_valid_settings();
+    HTTPSsettings tmp;
+    if (current) memcpy(&tmp, current, sizeof(tmp));
+    else memset(&tmp, 0, sizeof(tmp));
+    
+    tmp.ota_state = 3; // Committed
+    tmp.ota_pending = 0;
+    return update_and_write_settings(&tmp);
 }
 
 bool mg_ota_rollback(void) {
-    return false;
+    const HTTPSsettings *current = get_valid_settings();
+    HTTPSsettings tmp;
+    if (current) memcpy(&tmp, current, sizeof(tmp));
+    else memset(&tmp, 0, sizeof(tmp));
+    
+    tmp.ota_state = 2; // Uncommitted (rollback)
+    tmp.ota_pending = 1;
+    bool ok = update_and_write_settings(&tmp);
+    if (ok) mg_device_reset();
+    return ok;
 }
 
 /* ---- Flash stubs -------------------------------------------------------- */
 void *mg_flash_start(void) {
-    return (void *) 0x08000000;  /* STM32F7 flash base */
+    return (void *) 0x08040000;  /* Active firmware start (Sector 5) */
 }
 
 size_t mg_flash_size(void) {
-    return 2 * 1024 * 1024;  /* 2 MB for STM32F767 */
+    return 1536 * 1024;  /* 1536 KB: Sectors 5-10 (active + staging) */
 }
 
 size_t mg_flash_sector_size(void) {

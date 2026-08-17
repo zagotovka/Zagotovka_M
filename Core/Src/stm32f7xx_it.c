@@ -163,9 +163,12 @@ static void fault_decode_hfsr(uint32_t hfsr) {
 /*
  * Главная функция диагностики.
  * Вызывается из всех Fault Handlers.
- * stack_ptr — указатель на стек-фрейм исключения (8 слов).
+ * stack_frame — указатель на стек-фрейм исключения (8 слов).
+ * r4_r11 — указатель на сохранённые R4-R11 (8 слов).
+ * exc_return — значение LR на входе в exception.
  */
-static void fault_report(const char *fault_name, uint32_t *stack_ptr) {
+static void fault_report(const char *fault_name, uint32_t *stack_frame,
+                         uint32_t *r4_r11, uint32_t exc_return) {
   /* Регистры системы управления отказами Cortex-M7 */
   volatile uint32_t cfsr  = *(volatile uint32_t *)0xE000ED28;  /* CFSR  */
   volatile uint32_t hfsr  = *(volatile uint32_t *)0xE000ED2C;  /* HFSR  */
@@ -173,42 +176,76 @@ static void fault_report(const char *fault_name, uint32_t *stack_ptr) {
   volatile uint32_t bfar  = *(volatile uint32_t *)0xE000ED38;  /* BFAR  */
   volatile uint32_t afsr  = *(volatile uint32_t *)0xE000ED3C;  /* AFSR  */
 
-  fault_puts("\n\n");
-  fault_puts("╔══════════════════════════════════════════════════════════════╗\n");
-  fault_puts("║            !!! SYSTEM FAULT DETECTED !!!                    ║\n");
-  fault_puts("╚══════════════════════════════════════════════════════════════╝\n");
+  fault_puts("\r\n\r\n");
+  fault_puts("========== HARDFAULT ==========\r\n");
+
+  fault_puts("EXC_RETURN = ");
+  fault_print_hex(exc_return);
+  fault_puts("\r\n");
+
+  fault_puts("Stack frame = ");
+  fault_print_hex((uint32_t)stack_frame);
+  fault_puts("\r\n");
+
   fault_puts("  Fault Type: ");
   fault_puts(fault_name);
-  fault_puts("\n");
+  fault_puts("\r\n");
 
   /* ── Стек-фрейм исключения (CPU сохранил при входе в ISR) ── */
-  if (stack_ptr != NULL) {
-    fault_puts("\n  === Exception Stack Frame ===");
-    fault_puts("\n");
-    fault_print_reg("R0 ", stack_ptr[0]);
-    fault_print_reg("R1 ", stack_ptr[1]);
-    fault_print_reg("R2 ", stack_ptr[2]);
-    fault_print_reg("R3 ", stack_ptr[3]);
-    fault_print_reg("R12", stack_ptr[4]);
-    fault_print_reg("LR ", stack_ptr[5]);
-    fault_puts("  PC  = ");
-    fault_print_hex(stack_ptr[6]);
-    fault_puts(fault_addr_region(stack_ptr[6]));
-    fault_puts("  <<< FAULTING INSTRUCTION\n");
-    fault_print_reg("PSR", stack_ptr[7]);
+  if (stack_frame != NULL) {
+    fault_puts("\r\n[Exception Stack Frame]\r\n");
+    fault_print_reg("R0 ", stack_frame[0]);
+    fault_print_reg("R1 ", stack_frame[1]);
+    fault_print_reg("R2 ", stack_frame[2]);
+    fault_print_reg("R3 ", stack_frame[3]);
+    fault_print_reg("R12", stack_frame[4]);
 
-    /* Ретроспектива: куда собиралась вернуться функция */
     fault_puts("  LR  = ");
-    fault_print_hex(stack_ptr[5]);
-    fault_puts(fault_addr_region(stack_ptr[5]));
-    fault_puts("  <<< CALLER\n");
+    fault_print_hex(stack_frame[5]);
+    fault_puts(fault_addr_region(stack_frame[5]));
+    fault_puts("  <<< CALLER\r\n");
+
+    fault_puts("  PC  = ");
+    fault_print_hex(stack_frame[6]);
+    fault_puts(fault_addr_region(stack_frame[6]));
+    fault_puts("  <<< FAULTING INSTRUCTION\r\n");
+
+    fault_print_reg("xPSR", stack_frame[7]);
   } else {
-    fault_puts("  WARNING: stack_ptr is NULL — cannot read frame\n");
+    fault_puts("  WARNING: stack_frame is NULL — cannot read frame\r\n");
+  }
+
+  /* ── Сохранённые R4-R11 ── */
+  if (r4_r11 != NULL) {
+    fault_puts("\r\n[Saved R4-R11]\r\n");
+    fault_print_reg("R4 ", r4_r11[0]);
+    fault_print_reg("R5 ", r4_r11[1]);
+    fault_print_reg("R6 ", r4_r11[2]);
+    fault_print_reg("R7 ", r4_r11[3]);
+    fault_print_reg("R8 ", r4_r11[4]);
+    fault_print_reg("R9 ", r4_r11[5]);
+    fault_print_reg("R10", r4_r11[6]);
+    fault_print_reg("R11", r4_r11[7]);
+  }
+
+  /* ── Дамп стека: 16 слов после фрейма исключения ── */
+  if (stack_frame != NULL) {
+    fault_puts("\r\n[Stack dump]\r\n");
+    for (uint32_t i = 0; i < 16; i++) {
+      if ((i % 4) == 0) {
+        fault_puts("SP+");
+        fault_print_hex(i * 4);
+        fault_puts(": ");
+      }
+      fault_print_hex(stack_frame[i]);
+      fault_puts(" ");
+      if ((i % 4) == 3)
+        fault_puts("\r\n");
+    }
   }
 
   /* ── Указатели стека ── */
-  fault_puts("\n  === Stack Pointers ===");
-  fault_puts("\n");
+  fault_puts("\r\n[Stack Pointers]\r\n");
   uint32_t msp_val, psp_val, control_val;
   __asm volatile ("MRS %0, MSP" : "=r" (msp_val));
   __asm volatile ("MRS %0, PSP" : "=r" (psp_val));
@@ -218,16 +255,16 @@ static void fault_report(const char *fault_name, uint32_t *stack_ptr) {
   fault_print_reg("CONTROL", control_val);
   fault_puts("  Active SP: ");
   fault_puts((control_val & 2) ? "PSP (Thread mode)" : "MSP (Handler mode)");
-  fault_puts("\n");
+  fault_puts("\r\n");
 
   /* ── Регистры управления отказами ── */
-  fault_puts("\n  === Fault Status Registers ===");
-  fault_puts("\n");
+  fault_puts("\r\n[Fault status]\r\n");
   fault_print_reg("CFSR ", cfsr);
   fault_print_reg("HFSR ", hfsr);
+  fault_print_reg("DFSR ", *(volatile uint32_t *)0xE000ED30);
+  fault_print_reg("AFSR ", afsr);
   fault_print_reg("MMFAR", mmfar);
   fault_print_reg("BFAR ", bfar);
-  fault_print_reg("AFSR ", afsr);
 
   /* Декодирование битовых полей */
   if (cfsr != 0) fault_decode_cfsr(cfsr);
@@ -235,21 +272,20 @@ static void fault_report(const char *fault_name, uint32_t *stack_ptr) {
 
   /* Адрес виновника (если доступен) */
   if (cfsr & (1 << 7)) {
-    fault_puts("\n  >>> MemManage Fault Address: ");
+    fault_puts("\r\n  >>> MemManage Fault Address: ");
     fault_print_hex(mmfar);
     fault_puts(fault_addr_region(mmfar));
-    fault_puts("\n");
+    fault_puts("\r\n");
   }
   if (cfsr & (1 << 15)) {
-    fault_puts("\n  >>> BusFault Address: ");
+    fault_puts("\r\n  >>> BusFault Address: ");
     fault_print_hex(bfar);
     fault_puts(fault_addr_region(bfar));
-    fault_puts("\n");
+    fault_puts("\r\n");
   }
 
   /* ── Информация о FreeRTOS ── */
-  fault_puts("\n  === FreeRTOS Info ===");
-  fault_puts("\n");
+  fault_puts("\r\n[FreeRTOS Info]\r\n");
 
   /* Имя текущей задачи (может быть повреждено, оборачиваем) */
   TaskHandle_t current_task = xTaskGetCurrentTaskHandle();
@@ -267,67 +303,73 @@ static void fault_report(const char *fault_name, uint32_t *stack_ptr) {
         else
           fault_putchar('?');
       }
-      fault_puts("\n");
+      fault_puts("\r\n");
     } else {
-      fault_puts("  Current Task: <name ptr corrupt>\n");
+      fault_puts("  Current Task: <name ptr corrupt>\r\n");
     }
   } else {
-    fault_puts("  Current Task: <none / ISR>\n");
+    fault_puts("  Current Task: <none / ISR>\r\n");
   }
 
   /* FreeRTOS heap info */
   fault_puts("  FreeRTOS Heap Free:     ");
   fault_print_dec(xPortGetFreeHeapSize());
-  fault_puts(" bytes\n");
+  fault_puts(" bytes\r\n");
   fault_puts("  FreeRTOS Heap Min Ever: ");
   fault_print_dec(xPortGetMinimumEverFreeHeapSize());
-  fault_puts(" bytes\n");
+  fault_puts(" bytes\r\n");
 
   /* ── Stack High Water Mark текущей задачи ── */
   if (current_task != NULL) {
     UBaseType_t hwm = uxTaskGetStackHighWaterMark(current_task);
     fault_puts("  Stack HWM (words left): ");
     fault_print_dec((uint32_t)hwm);
-    fault_puts("\n");
+    fault_puts("\r\n");
     if (hwm == 0) {
-      fault_puts("  >>> STACK OVERFLOW CONFIRMED! <<<\n");
+      fault_puts("  >>> STACK OVERFLOW CONFIRMED! <<<\r\n");
     } else if (hwm < 32) {
-      fault_puts("  >>> STACK NEARLY EXHAUSTED! <<<\n");
+      fault_puts("  >>> STACK NEARLY EXHAUSTED! <<<\r\n");
     }
   }
 
-  /* ── Подсказки ── */
-  fault_puts("\n  === How to debug ===");
-  fault_puts("\n");
-  fault_puts("  1. Look at PC value — this is the faulting instruction\n");
-  fault_puts("  2. In STM32CubeIDE: Debug > Disassembly > Go to address [PC]\n");
-  fault_puts("  3. Or run: arm-none-eabi-addr2line -e firmware.elf [PC] [LR]\n");
-  fault_puts("  4. CFSR bits tell you the TYPE of fault\n");
-  fault_puts("  5. BFAR/MMFAR tell you the TARGET address that caused it\n");
+  fault_puts("\r\n================================\r\n");
+  fault_puts("FAULT HALTED\r\n");
 
-  fault_puts("\n══════════════════════════════════════════════════════════════\n");
-  fault_puts("  System halted. Reset to continue.\n");
-  fault_puts("══════════════════════════════════════════════════════════════\n\n");
+  while (1)
+  {
+    __NOP();
+  }
 }
 
 /* C-обработчик для HardFault, вызываемый из ASM-обёртки */
-static void fault_handler_c(uint32_t *sp) __attribute__((used));
-static void fault_handler_c(uint32_t *sp) {
-  fault_report("HardFault (escalated from configurable fault)", sp);
+static void fault_handler_c(uint32_t *stack_frame,
+                            uint32_t *r4_r11,
+                            uint32_t exc_return) __attribute__((used));
+static void fault_handler_c(uint32_t *stack_frame,
+                            uint32_t *r4_r11,
+                            uint32_t exc_return) {
+  fault_report("HardFault (escalated from configurable fault)", stack_frame, r4_r11, exc_return);
 }
 
 /*
- * ASM-обёртка: извлекает PSP или MSP в зависимости от EXC_RETURN.LR[2]
- * и передаёт как аргумент в C-функцию.
+ * ASM-обёртка: извлекает PSP или MSP, сохраняет R4-R11,
+ * передаёт (sp, r4_r11, exc_return) в C-функцию.
  */
 __attribute__((naked))
 static void fault_handler_asm(void) {
   __asm volatile (
-    "TST   LR, #4       \n"   /* Проверяем бит 2 EXC_RETURN */
-    "ITE   EQ           \n"
-    "MRSEQ R0, MSP      \n"   /* Если 0 → использовался MSP */
-    "MRSNE R0, PSP      \n"   /* Если 1 → использовался PSP */
-    "B     fault_handler_c \n" /* Переходим в C-обработчик */
+    "tst     lr, #4                  \n"
+    "ite     eq                      \n"
+    "mrseq   r0, msp                 \n"
+    "mrsne   r0, psp                 \n"
+
+    "push    {r4-r11}                \n"
+
+    "mov     r1, sp                  \n"
+
+    "mov     r2, lr                  \n"
+
+    "b       fault_handler_c         \n"
   );
 }
 
@@ -393,7 +435,9 @@ void MemManage_Handler(void)
   /* Извлекаем стек-фрейм */
   uint32_t *sp;
   __asm volatile ("TST LR, #4 \n ITE EQ \n MRSEQ %0, MSP \n MRSNE %0, PSP" : "=r" (sp));
-  fault_report("MemManage Fault (MPU violation / stack overflow)", sp);
+  uint32_t exc_ret;
+  __asm volatile ("MOV %0, LR" : "=r" (exc_ret));
+  fault_report("MemManage Fault (MPU violation / stack overflow)", sp, NULL, exc_ret);
   /* Мигание LD3 медленно — паттерн MemManage */
   while (1) {
     HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
@@ -415,7 +459,9 @@ void BusFault_Handler(void)
   /* USER CODE BEGIN BusFault_IRQn 0 */
   uint32_t *sp;
   __asm volatile ("TST LR, #4 \n ITE EQ \n MRSEQ %0, MSP \n MRSNE %0, PSP" : "=r" (sp));
-  fault_report("BusFault (invalid memory access)", sp);
+  uint32_t exc_ret;
+  __asm volatile ("MOV %0, LR" : "=r" (exc_ret));
+  fault_report("BusFault (invalid memory access)", sp, NULL, exc_ret);
   /* Мигание LD2 (синий) — паттерн BusFault */
   while (1) {
     HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
@@ -437,7 +483,9 @@ void UsageFault_Handler(void)
   /* USER CODE BEGIN UsageFault_IRQn 0 */
   uint32_t *sp;
   __asm volatile ("TST LR, #4 \n ITE EQ \n MRSEQ %0, MSP \n MRSNE %0, PSP" : "=r" (sp));
-  fault_report("UsageFault (illegal instruction / div by zero / unaligned)", sp);
+  uint32_t exc_ret;
+  __asm volatile ("MOV %0, LR" : "=r" (exc_ret));
+  fault_report("UsageFault (illegal instruction / div by zero / unaligned)", sp, NULL, exc_ret);
   /* Мигание LD1 (зелёный) — паттерн UsageFault */
   while (1) {
     HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);

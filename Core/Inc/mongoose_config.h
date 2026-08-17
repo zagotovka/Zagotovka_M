@@ -90,11 +90,12 @@
  * CMSIS), и mg_ota_begin/write/end остаются объявленными, но не
  * реализованными нигде — net.c, вызывающий их напрямую, не слинкуется.
  *
- * ВАЖНО: смотри правку в mg_ota_begin() внутри mongoose.c — там размер
- * flash, видимый OTA-драйверу, урезан на 256 КБ, чтобы staging-область
- * (верхняя половина flash) не пересекалась с сектором настроек
- * (zagotovka.c, FLASH_SECTOR_11_START_ADDR = 0x081C0000).
+ * ВАЖНО: в mg_ota_begin() flash->start = 0x08040000, size = 0x180000 (1536 КБ).
+ * Это даёт active = Sectors 5-7 [0x08040000..0x080FFFFF],
+ * staging = Sectors 8-10 [0x08100000..0x081BFFFF].
+ * Sector 11 (ZERG_FLASH, 0x081C0000) зарезервирован под настройки.
  */
 #define MG_OTA MG_OTA_STM32F
 
 // See https://mongoose.ws/documentation/#build-options
+#define MG_TCPIP_FIN_MS 200

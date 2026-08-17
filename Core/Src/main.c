@@ -66,6 +66,7 @@ extern volatile uint8_t onlineFlg;
 extern uint8_t *gsm_rx_buffer;
 extern volatile gsm_rx_buffer_index_t gsm_rx_buffer_head;
 extern uint8_t _sitcm[], _eitcm[];
+extern uint32_t _sitcm_load;
 uint8_t RxByte; // Буфер для приема одного байта по UART
 
 uint8_t owflag = 0;
@@ -264,7 +265,7 @@ const osMessageQueueAttr_t zbeeCmdQueue_attributes = {
   .name = "zbeeCmdQueue"
 };
 /* Definitions for actionMutexHandle */
-osMutexId_t actionMutexHandle;
+osMutexId_t actionMutexHandleHandle;
 const osMutexAttr_t actionMutexHandle_attributes = {
   .name = "actionMutexHandle"
 };
@@ -678,6 +679,12 @@ static char reset_reason_str[128] = "Unknown";
 __attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_sector;
 __attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_magic;
 __attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_addr;
+__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_sr_erase;    /* FLASH_SR after sector erase */
+__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_cr_erase;    /* FLASH_CR written for erase */
+__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_sr_write;    /* FLASH_SR after failed write */
+__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_write_addr;  /* address of failed write */
+__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_write_word;  /* word that failed to write */
+__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_pre_erase0; /* first8 bytes before erase */
 
 static void read_reset_reason(void) {
     reset_csr_value = RCC->CSR;
@@ -717,7 +724,11 @@ static void read_reset_reason(void) {
 
     if (dtcm_ota_magic == 0xDEADBEEF) {
         len = strlen(reset_reason_str);
-        snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len, "[OTA Crash Sector %lu @0x%08lX] ", dtcm_ota_sector, dtcm_ota_addr);
+        snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len,
+                 "[OTA S%lu@0x%08lX SR_e=0x%08lX CR_e=0x%08lX SR_w=0x%08lX Pre=0x%08lX] ",
+                 dtcm_ota_sector, dtcm_ota_addr,
+                 dtcm_ota_sr_erase, dtcm_ota_cr_erase,
+                 dtcm_ota_sr_write, dtcm_ota_pre_erase0);
         dtcm_ota_magic = 0;
     }
 
@@ -731,6 +742,143 @@ static void read_reset_reason(void) {
         strcpy(reset_reason_str, "None");
     }
 }
+
+void early_uart_print(const char *str) {
+    volatile uint32_t *ISR = (volatile uint32_t *)(0x40004800 + 0x1C);
+    volatile uint32_t *TDR = (volatile uint32_t *)(0x40004800 + 0x28);
+    while (*str) {
+        volatile uint32_t t = 100000;
+        while (!((*ISR) & (1 << 7)) && --t) {}
+        *TDR = *str++;
+    }
+}
+#define EARLY_LOG_SYSTEM(fmt) do { if (LOG_CONF_SYSTEM_EN && (g_log_filter_mask & LOG_MASK_SYSTEM)) { early_uart_print(fmt); } } while(0)
+
+/* 
+ * 0 = Ничего не делать
+ * 1 = Принудительно установить Dual Bank Mode (рекомендуется для вашего проекта)
+ * 2 = Принудительно установить Single Bank Mode
+ */
+#define FORCE_FLASH_BANK_MODE 0
+
+void Flash_DecodeError(uint32_t error_mask)
+{
+    char _ebuf[80];
+    if (error_mask == HAL_FLASH_ERROR_NONE)
+    {
+        early_uart_print("[FLASH_ERR] No errors (0x00000000)\r\n");
+        return;
+    }
+
+    snprintf(_ebuf, sizeof(_ebuf), "[FLASH_ERR] Raw mask = 0x%08lX\r\n", (unsigned long)error_mask);
+    early_uart_print(_ebuf);
+
+#if defined(HAL_FLASH_ERROR_RD)
+    if (error_mask & HAL_FLASH_ERROR_RD)
+        early_uart_print("  - RDERR: PCROP violation\r\n");
+#endif
+#if defined(HAL_FLASH_ERROR_PGS)
+    if (error_mask & HAL_FLASH_ERROR_PGS)
+        early_uart_print("  - PGSERR: programming sequence error\r\n");
+#endif
+#if defined(HAL_FLASH_ERROR_PGP)
+    if (error_mask & HAL_FLASH_ERROR_PGP)
+        early_uart_print("  - PGPERR: parallelism error\r\n");
+#endif
+#if defined(HAL_FLASH_ERROR_PGA)
+    if (error_mask & HAL_FLASH_ERROR_PGA)
+        early_uart_print("  - PGAERR: alignment error\r\n");
+#endif
+#if defined(HAL_FLASH_ERROR_WRP)
+    if (error_mask & HAL_FLASH_ERROR_WRP)
+        early_uart_print("  - WRPERR: write protection error\r\n");
+#endif
+#if defined(HAL_FLASH_ERROR_OPERATION)
+    if (error_mask & HAL_FLASH_ERROR_OPERATION)
+        early_uart_print("  - OPERR: operation error\r\n");
+#endif
+#if defined(HAL_FLASH_ERROR_ERS)
+    if (error_mask & HAL_FLASH_ERROR_ERS)
+        early_uart_print("  - ERSERR: erase error\r\n");
+#endif
+}
+
+HAL_StatusTypeDef Switch_To_DualBank(void)
+{
+    HAL_StatusTypeDef status;
+    FLASH_OBProgramInitTypeDef ob_init = {0};
+    char _sbuf[80];
+
+    HAL_FLASH_Unlock();
+    HAL_FLASH_OB_Unlock();
+    HAL_FLASHEx_OBGetConfig(&ob_init);
+    
+    snprintf(_sbuf, sizeof(_sbuf), "[OB] USERConfig before = 0x%08lX\r\n", (unsigned long)ob_init.USERConfig);
+    early_uart_print(_sbuf);
+    ob_init.OptionType = OPTIONBYTE_USER;
+
+#if defined(OB_NDBANK_DUAL_BANK)
+    ob_init.USERConfig = (ob_init.USERConfig & ~OB_NDBANK_SINGLE_BANK) | OB_NDBANK_DUAL_BANK;
+#else
+    #define MY_NDBANK_BIT   (1UL << 29)
+    ob_init.USERConfig &= ~MY_NDBANK_BIT;
+#endif
+
+    status = HAL_FLASHEx_OBProgram(&ob_init);
+    if (status != HAL_OK)
+    {
+        snprintf(_sbuf, sizeof(_sbuf), "[OB] HAL_FLASHEx_OBProgram failed: %ld\r\n", (long)status);
+        early_uart_print(_sbuf);
+        Flash_DecodeError(HAL_FLASH_GetError());
+        HAL_FLASH_OB_Lock();
+        HAL_FLASH_Lock();
+        return status;
+    }
+
+    early_uart_print("[OB] Option bytes programmed OK (Dual Bank). Launching OBL_LAUNCH (reset)...\r\n");
+    HAL_FLASH_OB_Lock();
+    HAL_FLASH_Lock();
+    HAL_FLASH_OB_Launch();
+    return HAL_OK;
+}
+
+HAL_StatusTypeDef Switch_To_SingleBank(void)
+{
+    HAL_StatusTypeDef status;
+    FLASH_OBProgramInitTypeDef ob_init = {0};
+    char _sbuf[80];
+
+    HAL_FLASH_Unlock();
+    HAL_FLASH_OB_Unlock();
+    HAL_FLASHEx_OBGetConfig(&ob_init);
+
+    ob_init.OptionType = OPTIONBYTE_USER;
+
+#if defined(OB_NDBANK_SINGLE_BANK)
+    ob_init.USERConfig = (ob_init.USERConfig & ~OB_NDBANK_DUAL_BANK) | OB_NDBANK_SINGLE_BANK;
+#else
+    #define MY_NDBANK_BIT   (1UL << 29)
+    ob_init.USERConfig |= MY_NDBANK_BIT;
+#endif
+
+    status = HAL_FLASHEx_OBProgram(&ob_init);
+    if (status != HAL_OK)
+    {
+        snprintf(_sbuf, sizeof(_sbuf), "[OB] HAL_FLASHEx_OBProgram failed: %ld\r\n", (long)status);
+        early_uart_print(_sbuf);
+        Flash_DecodeError(HAL_FLASH_GetError());
+        HAL_FLASH_OB_Lock();
+        HAL_FLASH_Lock();
+        return status;
+    }
+
+    early_uart_print("[OB] Option bytes programmed OK (Single Bank). Launching OBL_LAUNCH (reset)...\r\n");
+    HAL_FLASH_OB_Lock();
+    HAL_FLASH_Lock();
+    HAL_FLASH_OB_Launch();
+    return HAL_OK;
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -741,7 +889,45 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+	/* ── Очистка после Bootloader (программный переход, не аппаратный reset) ──
+	 * Bootloader использует SysTick как HAL timebase. В приложении
+	 * SysTick_Handler = xPortSysTickHandler (FreeRTOS tick). Если SysTick
+	 * останется запущенным/pending, он вызовет FreeRTOS до osKernelStart() → crash.
+	 *
+	 * Порядок критичен:
+	 * 1. SysTick остановить и сбросить pending (пока PRIMASK=1 от bootloader'а)
+	 * 2. Только потом __enable_irq() — безопасно, SysTick уже не стрельнёт
+	 */
+	SysTick->CTRL = 0;                          // Стоп SysTick
+	SysTick->LOAD = 0;
+	SysTick->VAL  = 0;
+	SCB->ICSR = SCB_ICSR_PENDSTCLR_Msk;         // Сбросить pending SysTick
+
+    // Early UART Init (115200 baud @ 16MHz HSI)
+    RCC->APB1ENR |= RCC_APB1ENR_USART3EN;
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIODEN;
+    GPIOD->MODER &= ~(GPIO_MODER_MODER8_Msk | GPIO_MODER_MODER9_Msk);
+    GPIOD->MODER |= (2U << GPIO_MODER_MODER8_Pos) | (2U << GPIO_MODER_MODER9_Pos);
+    GPIOD->AFR[1] &= ~(0xFFU);
+    GPIOD->AFR[1] |= (7U << 0) | (7U << 4);
+    USART3->BRR = 0x8B;
+    USART3->CR1 = USART_CR1_UE | USART_CR1_TE;
+
+    EARLY_LOG_SYSTEM("[SYSTEM] Entered main() - SysTick cleared\r\n");
+
+  /* ── ITCM check #0: сразу после входа в main() ── */
+  {
+    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+    uint32_t *itcm_dst  = (uint32_t *)_sitcm;
+    if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
+      EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT ENTRY #0 ***\r\n");
+      while (1) { __NOP(); }
+    }
+    EARLY_LOG_SYSTEM("[SYSTEM] ITCM check #0 OK\r\n");
+  }
+
   read_reset_reason();
+  EARLY_LOG_SYSTEM("[SYSTEM] 1: read_reset_reason done\r\n");
   /* USER CODE END 1 */
 
   /* MPU Configuration--------------------------------------------------------*/
@@ -784,11 +970,132 @@ int main(void)
   MX_USART2_UART_Init();
   MX_CRC_Init();
   /* USER CODE BEGIN 2 */
+  // Проверка режима Bank флеш-памяти (всегда, логирование + опциональное переключение)
+  {
+      FLASH_OBProgramInitTypeDef ob_test = {0};
+      HAL_FLASHEx_OBGetConfig(&ob_test);
+
+      /* ── ITCM check 1d1: сразу после HAL_FLASHEx_OBGetConfig, до printf ── */
+      {
+        uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+        uint32_t *itcm_dst  = (uint32_t *)_sitcm;
+        if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
+          EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1d1 (after HAL_FLASHEx_OBGetConfig) ***\r\n");
+          while (1) { __NOP(); }
+        }
+        EARLY_LOG_SYSTEM("[SYSTEM] 1d1: ITCM OK\r\n");
+      }
+
+      // bit 29: 0 = Dual Bank, 1 = Single Bank
+      uint32_t is_single_bank = (ob_test.USERConfig & (1UL << 29)) ? 1 : 0;
+
+#if FORCE_FLASH_BANK_MODE == 1
+      if (is_single_bank) {
+          early_uart_print("\r\n[SYSTEM] Warning: Flash is Single Bank. Forcing Dual Bank mode!\r\n");
+          Switch_To_DualBank();
+      } else {
+          early_uart_print("\r\n[SYSTEM] Flash is already in Dual Bank mode (OK).\r\n");
+      }
+#elif FORCE_FLASH_BANK_MODE == 2
+      if (!is_single_bank) {
+          early_uart_print("\r\n[SYSTEM] Warning: Flash is Dual Bank. Forcing Single Bank mode!\r\n");
+          Switch_To_SingleBank();
+      } else {
+          early_uart_print("\r\n[SYSTEM] Flash is already in Single Bank mode (OK).\r\n");
+      }
+#else
+      if (is_single_bank) {
+          early_uart_print("\r\n[SYSTEM] Warning: Flash is Single Bank (no auto-fix).\r\n");
+      } else {
+          early_uart_print("\r\n[SYSTEM] Flash is Dual Bank (OK).\r\n");
+      }
+#endif
+
+      /* ── ITCM check 1d2: сразу после printf (теперь early_uart_print) ── */
+      {
+        uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+        uint32_t *itcm_dst  = (uint32_t *)_sitcm;
+        if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
+          EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1d2 (after bank print) ***\r\n");
+          while (1) { __NOP(); }
+        }
+        EARLY_LOG_SYSTEM("[SYSTEM] 1d2: ITCM OK\r\n");
+      }
+  }
+  EARLY_LOG_SYSTEM("[SYSTEM] 14: flash bank check done\r\n");
+
   // Инициализация массивов датчиков
   memset(ds18b20, 0, sizeof(ds18b20));
+
+  /* ── ITCM check 1e: после memset(ds18b20) ── */
+  {
+    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+    uint32_t *itcm_dst  = (uint32_t *)_sitcm;
+    if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
+      EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1e (after memset ds18b20) ***\r\n");
+      while (1) { __NOP(); }
+    }
+    EARLY_LOG_SYSTEM("[SYSTEM] 1e: ITCM OK\r\n");
+  }
+
   memset(dht22, 0, sizeof(dht22));
+
+  /* ── ITCM check 1f: после memset(dht22) ── */
+  {
+    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+    uint32_t *itcm_dst  = (uint32_t *)_sitcm;
+    if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
+      EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1f (after memset dht22) ***\r\n");
+      while (1) { __NOP(); }
+    }
+    EARLY_LOG_SYSTEM("[SYSTEM] 1f: ITCM OK\r\n");
+  }
+
+  EARLY_LOG_SYSTEM("[SYSTEM] 15: sensor arrays zeroed\r\n");
   DWT_Init();
+
+  /* ── ITCM check 1g: после DWT_Init() ── */
+  {
+    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+    uint32_t *itcm_dst  = (uint32_t *)_sitcm;
+    if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
+      EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1g (after DWT_Init) ***\r\n");
+      while (1) { __NOP(); }
+    }
+    EARLY_LOG_SYSTEM("[SYSTEM] 1g: ITCM OK\r\n");
+  }
+
+  EARLY_LOG_SYSTEM("[SYSTEM] 16: DWT done\r\n");
   test_init();
+  EARLY_LOG_SYSTEM("[SYSTEM] 17: test_init done\r\n");
+
+  /* ── ITCM check #2: перед dtcm_alloc_init() ── */
+  {
+    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+    uint32_t *itcm_dst  = (uint32_t *)_sitcm;
+    uint32_t  itcm_size = (uint32_t)(_eitcm - _sitcm);
+    uint32_t  nwords    = itcm_size / 4;
+    uint32_t  errors    = 0;
+    for (uint32_t i = 0; i < nwords; i++) {
+      if (flash_src[i] != itcm_dst[i]) {
+        char buf[80];
+        snprintf(buf, sizeof(buf),
+                 "[SYSTEM] *** ITCM BAD [%lu] flash=0x%08lX itcm=0x%08lX\r\n",
+                 (unsigned long)i, (unsigned long)flash_src[i],
+                 (unsigned long)itcm_dst[i]);
+        EARLY_LOG_SYSTEM(buf);
+        errors++;
+        if (errors >= 8) break;
+      }
+    }
+    if (errors == 0) {
+      EARLY_LOG_SYSTEM("[SYSTEM] 17a: ITCM verify OK\r\n");
+    } else {
+      EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED ***\r\n");
+      while (1) { __NOP(); }
+    }
+  }
+
   dtcm_alloc_init();
   /* BSS → DTCM: присваиваем указатели (с проверкой на overflow) */
   PidConf = dtcm_pid_conf;
@@ -804,18 +1111,46 @@ int main(void)
   gsm_dtcm_init();
   net_dtcm_init();
   zagotovka_dtcm_init();
-  printf("[SYSTEM] DTCM pool: %u B total at 0x%08lX\r\n",
-         (unsigned)dtcm_alloc_get_total(), (unsigned long)_sdtcm_pool);
-  printf("[SYSTEM] Reset CSR=0x%08lX\r\n", reset_csr_value);
-  printf("[SYSTEM] Reset flags: %s\r\n", reset_reason_str);
-  printf("[SYSTEM] Reset reason: %s (CSR=0x%08lX)\r\n", reset_reason_str, reset_csr_value);
+  {
+    char _sbuf[192];
+    snprintf(_sbuf, sizeof(_sbuf), "[SYSTEM] DTCM pool: %u B total at 0x%08lX\r\n",
+             (unsigned)dtcm_alloc_get_total(), (unsigned long)_sdtcm_pool);
+    early_uart_print(_sbuf);
+    snprintf(_sbuf, sizeof(_sbuf), "[SYSTEM] Reset CSR=0x%08lX\r\n", reset_csr_value);
+    early_uart_print(_sbuf);
+    snprintf(_sbuf, sizeof(_sbuf), "[SYSTEM] Reset flags: %s\r\n", reset_reason_str);
+    early_uart_print(_sbuf);
+    snprintf(_sbuf, sizeof(_sbuf), "[SYSTEM] Reset reason: %s (CSR=0x%08lX)\r\n", reset_reason_str, reset_csr_value);
+    early_uart_print(_sbuf);
+    /* OTA crash diagnostics (survives NVIC reset, lives in noinit_itcm) */
+    if (dtcm_ota_magic == 0xDEADBEEF) {
+      snprintf(_sbuf, sizeof(_sbuf), "[OTA-DIAG] sector=%lu addr=0x%08lX\r\n", dtcm_ota_sector, dtcm_ota_addr);
+      early_uart_print(_sbuf);
+      snprintf(_sbuf, sizeof(_sbuf), "[OTA-DIAG] sr_erase=0x%08lX cr_erase=0x%08lX\r\n", dtcm_ota_sr_erase, dtcm_ota_cr_erase);
+      early_uart_print(_sbuf);
+      snprintf(_sbuf, sizeof(_sbuf), "[OTA-DIAG] sr_write=0x%08lX wr_addr=0x%08lX wr_word=0x%08lX\r\n",
+               dtcm_ota_sr_write, dtcm_ota_write_addr, dtcm_ota_write_word);
+      early_uart_print(_sbuf);
+      snprintf(_sbuf, sizeof(_sbuf), "[OTA-DIAG] pre_erase=0x%08lX\r\n", dtcm_ota_pre_erase0);
+      early_uart_print(_sbuf);
+      if (dtcm_ota_sr_erase & 0x80000000) {
+        early_uart_print("[OTA-DIAG] ** POST-ERASE VERIFY FAILED: sector NOT erased to 0xFF! **\r\n");
+      }
+      if (dtcm_ota_sr_erase & 0x7E) {
+        snprintf(_sbuf, sizeof(_sbuf), "[OTA-DIAG] ** FLASH_SR errors after erase: 0x%02lX **\r\n",
+                 (dtcm_ota_sr_erase >> 1) & 0x3F);
+        early_uart_print(_sbuf);
+      }
+      dtcm_ota_magic = 0;
+    }
+  }
   /* USER CODE END 2 */
 
   /* Init scheduler */
   osKernelInitialize();
   /* Create the mutex(es) */
   /* creation of actionMutexHandle */
-  actionMutexHandle = osMutexNew(&actionMutexHandle_attributes);
+  actionMutexHandleHandle = osMutexNew(&actionMutexHandle_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
