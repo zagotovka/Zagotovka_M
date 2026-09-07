@@ -668,6 +668,19 @@ uint8_t read_button_level(uint8_t button_id) {
 uint32_t zerg_t;  /* используется в gsm.c через extern */
 uint32_t swarm_t; /* используется в gsm.c через extern */
 
+/* OTA crash diagnostics: NOLOAD-переменные, переживают NVIC_SystemReset().
+ * Перенесены из ITCM (.noinit_itcm) в SRAM (.noinit_ram), чтобы MPU мог
+ * защитить весь ITCM как Read-Only и ловить дикие записи. */
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_sector;
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_magic;
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_addr;
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_sr_erase;    /* FLASH_SR after sector erase */
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_cr_erase;    /* FLASH_CR written for erase */
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_sr_write;    /* FLASH_SR after failed write */
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_write_addr;  /* address of failed write */
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_write_word;  /* word that failed to write */
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_pre_erase0; /* first8 bytes before erase */
+
 /* clear_string перенесена в gsm.c */
 /* check_speed перенесена в gsm.c */
 /*************************** END GSM ************************************/
@@ -675,16 +688,6 @@ uint32_t swarm_t; /* используется в gsm.c через extern */
 /* Reset reason ---------------------------------------------------------*/
 static uint32_t reset_csr_value = 0;
 static char reset_reason_str[128] = "Unknown";
-
-__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_sector;
-__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_magic;
-__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_addr;
-__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_sr_erase;    /* FLASH_SR after sector erase */
-__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_cr_erase;    /* FLASH_CR written for erase */
-__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_sr_write;    /* FLASH_SR after failed write */
-__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_write_addr;  /* address of failed write */
-__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_write_word;  /* word that failed to write */
-__attribute__((section(".noinit_itcm"))) uint32_t dtcm_ota_pre_erase0; /* first8 bytes before erase */
 
 static void read_reset_reason(void) {
     reset_csr_value = RCC->CSR;
@@ -1122,7 +1125,7 @@ int main(void)
     early_uart_print(_sbuf);
     snprintf(_sbuf, sizeof(_sbuf), "[SYSTEM] Reset reason: %s (CSR=0x%08lX)\r\n", reset_reason_str, reset_csr_value);
     early_uart_print(_sbuf);
-    /* OTA crash diagnostics (survives NVIC reset, lives in noinit_itcm) */
+    /* OTA crash diagnostics (survives NVIC reset, lives in noinit_ram) */
     if (dtcm_ota_magic == 0xDEADBEEF) {
       snprintf(_sbuf, sizeof(_sbuf), "[OTA-DIAG] sector=%lu addr=0x%08lX\r\n", dtcm_ota_sector, dtcm_ota_addr);
       early_uart_print(_sbuf);
@@ -3583,6 +3586,31 @@ static void heap_diagnostic(void)
     }
 }
 /* USER CODE END Header_StartDgnTask */
+/* ═══ ITCM runtime integrity check ═══
+ * Сравнивает ITCM-код с загрузочным образом во Flash (тот же принцип, что
+ * проверка 17a при старте). Ловит порчу ITCM в рантайме wild-записями,
+ * которая проявлялась как HardFault UNDEFINSTR (PC=0x24, dtcm_malloc).
+ * Возвращает число несовпавших слов (макс. 8), details первого несовпадения. */
+static uint32_t itcm_check_words(uint32_t *first_idx, uint32_t *exp_word, uint32_t *got_word)
+{
+  const uint32_t *flash_src = (const uint32_t *)&_sitcm_load;
+  const uint32_t *itcm_dst  = (const uint32_t *)_sitcm;
+  uint32_t n = (uint32_t)(_eitcm - _sitcm) / 4;
+  uint32_t errors = 0;
+  for (uint32_t i = 0; i < n; i++) {
+    if (flash_src[i] != itcm_dst[i]) {
+      if (errors == 0 && first_idx != NULL) {
+        *first_idx = i;
+        if (exp_word) *exp_word = flash_src[i];
+        if (got_word) *got_word = itcm_dst[i];
+      }
+      errors++;
+      if (errors >= 8) break;
+    }
+  }
+  return errors;
+}
+
 void StartDgnTask(void *argument)
 {
   /* USER CODE BEGIN StartDgnTask */
@@ -3629,7 +3657,23 @@ void StartDgnTask(void *argument)
 
       heap_diagnostic();
 
-		int printed_header = 0;
+      /* Проверка целостности ITCM в рантайме (подстраховка для DMA).
+       * MPU теперь ловит запись из CPU-кода мгновенно (MemManage Fault),
+       * но DMA не проходит через MPU — эта проверка ловит DMA-порчу.
+       * Без reset: если MPU не сработал, значит это DMA, и нужен лог
+       * для диагностики, а не слепой ребут-цикл. */
+      {
+        uint32_t fi = 0, fe = 0, fg = 0;
+        uint32_t itcm_errs = itcm_check_words(&fi, &fe, &fg);
+        if (itcm_errs != 0) {
+          printf("\r\n*** ITCM CORRUPTED (DMA?): %lu words, first @ITCM+0x%08lX (flash=0x%08lX itcm=0x%08lX) ***\r\n",
+                 (unsigned long)itcm_errs, (unsigned long)(fi * 4u),
+                 (unsigned long)fe, (unsigned long)fg);
+          printf("*** MPU did not catch this — likely DMA wild write ***\r\n");
+        }
+      }
+
+      int printed_header = 0;
 
 		for (size_t i = 0; i < num_tasks; i++) {
 			if (tasks[i].handle_ptr && *(tasks[i].handle_ptr)) {
@@ -3798,9 +3842,30 @@ void MPU_Config(void)
   MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
+
+  /* Region 1: ITCM Read-Only — ловушка для «дикой записи».
+   * OTA-переменные перенесены в .noinit_ram (SRAM), в ITCM остался
+   * только .itcm код → весь регион можно защитить. Любая запись
+   * вызовет MemManage Fault с PC виновника в стек-фрейме и MMFAR
+   * (адрес записи). Execute разрешён — здесь горячий код. */
+  MPU_InitStruct.Number = MPU_REGION_NUMBER1;
+  MPU_InitStruct.BaseAddress = 0x00000000;
+  MPU_InitStruct.Size = MPU_REGION_SIZE_16KB;
+  MPU_InitStruct.SubRegionDisable = 0x0;
+  MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL0;
+  MPU_InitStruct.AccessPermission = MPU_REGION_PRIV_RO_URO;   /* Read-Only */
+  MPU_InitStruct.DisableExec = MPU_INSTRUCTION_ACCESS_ENABLE; /* Execute OK */
+  MPU_InitStruct.IsShareable = MPU_ACCESS_NOT_SHAREABLE;
+  MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
+  MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
+  HAL_MPU_ConfigRegion(&MPU_InitStruct);
+
   /* Enables the MPU */
   HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
 
+  /* Включаем исключение MemManage: без SHCSR.MEMFAULTENA нарушения
+   * доступа эскалируются в HardFault, минуя MemManage_Handler. */
+  SCB->SHCSR |= SCB_SHCSR_MEMFAULTENA_Msk;
 }
 
 /**

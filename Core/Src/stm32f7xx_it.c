@@ -333,15 +333,20 @@ static void fault_report(const char *fault_name, uint32_t *stack_frame,
   }
 
   fault_puts("\r\n================================\r\n");
-  fault_puts("FAULT HALTED\r\n");
+  fault_puts("FAULT: RESETTING (bootloader trial-boot can rollback)\r\n");
 
+  /* Даём UART дописать буфер, затем reset: bootloader инкрементирует
+   * ota_boot_retries и после максимума откатится на Bank A (dual bank).
+   * Вечное зависание здесь блокировало механизм отката до снятия питания. */
+  for (volatile uint32_t i = 0; i < 20000000; i++) { __NOP(); }
+  NVIC_SystemReset();
   while (1)
   {
     __NOP();
   }
 }
 
-/* C-обработчик для HardFault, вызываемый из ASM-обёртки */
+/* C-обработчики фолтов, вызываемые из ASM-обёрток */
 static void fault_handler_c(uint32_t *stack_frame,
                             uint32_t *r4_r11,
                             uint32_t exc_return) __attribute__((used));
@@ -351,11 +356,22 @@ static void fault_handler_c(uint32_t *stack_frame,
   fault_report("HardFault (escalated from configurable fault)", stack_frame, r4_r11, exc_return);
 }
 
+/* MemManage: MPU-нарушение (дикая запись в ITCM RO и т.п.).
+ * fault_report() печатает PC виновника и MMFAR, затем NVIC_SystemReset(). */
+static void memmanage_handler_c(uint32_t *stack_frame,
+                                uint32_t *r4_r11,
+                                uint32_t exc_return) __attribute__((used));
+static void memmanage_handler_c(uint32_t *stack_frame,
+                                uint32_t *r4_r11,
+                                uint32_t exc_return) {
+  fault_report("MemManage Fault (MPU violation / wild write to ITCM)", stack_frame, r4_r11, exc_return);
+}
+
 /*
  * ASM-обёртка: извлекает PSP или MSP, сохраняет R4-R11,
  * передаёт (sp, r4_r11, exc_return) в C-функцию.
  */
-__attribute__((naked))
+__attribute__((naked, used))
 static void fault_handler_asm(void) {
   __asm volatile (
     "tst     lr, #4                  \n"
@@ -370,6 +386,26 @@ static void fault_handler_asm(void) {
     "mov     r2, lr                  \n"
 
     "b       fault_handler_c         \n"
+  );
+}
+
+/* ASM-обёртка для MemManage: та же схема, что fault_handler_asm,
+ * но с отдельным C-обработчиком и точным именем фолта в дампе. */
+__attribute__((naked, used))
+static void memmanage_handler_asm(void) {
+  __asm volatile (
+    "tst     lr, #4                  \n"
+    "ite     eq                      \n"
+    "mrseq   r0, msp                 \n"
+    "mrsne   r0, psp                 \n"
+
+    "push    {r4-r11}                \n"
+
+    "mov     r1, sp                  \n"
+
+    "mov     r2, lr                  \n"
+
+    "b       memmanage_handler_c     \n"
   );
 }
 
@@ -414,41 +450,30 @@ void NMI_Handler(void)
 /**
   * @brief This function handles Hard fault interrupt.
   */
+/* naked + прямой branch: LR (EXC_RETURN) не затирается BL-ом из C-обёртки.
+ * Раньше fault_handler_asm() читал уже испорченный LR (адрес возврата внутри
+ * HardFault_Handler), из-за чего в дамп печатался неверный EXC_RETURN
+ * (например 0x08120E8F) и мог ошибочно выбираться MSP вместо PSP. */
+__attribute__((naked))
 void HardFault_Handler(void)
 {
-  /* USER CODE BEGIN HardFault_IRQn 0 */
-  fault_handler_asm();
-  /* USER CODE END HardFault_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_HardFault_IRQn 0 */
-    /* USER CODE END W1_HardFault_IRQn 0 */
-  }
+  __asm volatile (
+    "b fault_handler_asm \n"
+  );
 }
 
 /**
   * @brief This function handles Memory management fault.
   */
+/* naked + прямой branch: LR (EXC_RETURN) не затирается BL-ом из C-обёртки
+ * (как у HardFault_Handler). Дамп (PC + MMFAR) затем NVIC_SystemReset()
+ * внутри fault_report() — вместо вечного while(1). */
+__attribute__((naked))
 void MemManage_Handler(void)
 {
-  /* USER CODE BEGIN MemoryManagement_IRQn 0 */
-  /* Извлекаем стек-фрейм */
-  uint32_t *sp;
-  __asm volatile ("TST LR, #4 \n ITE EQ \n MRSEQ %0, MSP \n MRSNE %0, PSP" : "=r" (sp));
-  uint32_t exc_ret;
-  __asm volatile ("MOV %0, LR" : "=r" (exc_ret));
-  fault_report("MemManage Fault (MPU violation / stack overflow)", sp, NULL, exc_ret);
-  /* Мигание LD3 медленно — паттерн MemManage */
-  while (1) {
-    HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-    for(volatile uint32_t i = 0; i < 1000000; i++);
-  }
-  /* USER CODE END MemoryManagement_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_MemoryManagement_IRQn 0 */
-    /* USER CODE END W1_MemoryManagement_IRQn 0 */
-  }
+  __asm volatile (
+    "b memmanage_handler_asm \n"
+  );
 }
 
 /**

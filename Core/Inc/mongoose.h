@@ -3776,7 +3776,7 @@ struct mg_tcpip_if {
   bool enable_fcs_check;           // Do a FCS check on RX frames and strip it
   bool enable_mac_check;           // Do a hw addr check on RX frames
   bool update_mac_hash_table;      // Signal drivers to update MAC controller
-  struct mg_tcpip_driver *driver;  // Low level driver
+  const struct mg_tcpip_driver *driver;  // Low level driver
   void *driver_data;               // Driver-specific data
   mg_tcpip_event_handler_t pfn;    // Driver-specific event handler function
   mg_tcpip_event_handler_t fn;     // User-specified event handler function
@@ -3827,7 +3827,7 @@ void mg_tcpip_free(struct mg_tcpip_if *);
 void mg_tcpip_qwrite(void *buf, size_t len, struct mg_tcpip_if *ifp);
 void mg_tcpip_arp_request(struct mg_tcpip_if *ifp, uint32_t ip, uint8_t *mac);
 
-extern struct mg_tcpip_driver mg_tcpip_driver_stm32f;
+extern const struct mg_tcpip_driver mg_tcpip_driver_stm32f;
 extern struct mg_tcpip_driver mg_tcpip_driver_w5500;
 extern struct mg_tcpip_driver mg_tcpip_driver_w5100;
 extern struct mg_tcpip_driver mg_tcpip_driver_tm4c;

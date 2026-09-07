@@ -7930,6 +7930,15 @@ static void mg_tcpip_poll(struct mg_tcpip_if *ifp, uint64_t now) {
 // our lock-free queue with preallocated buffer to copy data and return asap
 void mg_tcpip_qwrite(void *buf, size_t len, struct mg_tcpip_if *ifp) {
   char *p;
+  // Guard: RX queue not allocated yet (IRQ fired before mg_tcpip_init
+  // finished) or bad interface pointer. Drop the frame instead of
+  // memcpy'ing it into a near-NULL address (low RAM / ITCM) — that used
+  // to overwrite resident code (dtcm_malloc literal pool / driver struct)
+  // and later cause HardFault (UNDEFINSTR, PC=0x24).
+  if (ifp == NULL || ifp->recv_queue.buf == NULL) {
+    if (ifp != NULL) ifp->ndrop++;
+    return;
+  }
   if (mg_queue_book(&ifp->recv_queue, &p, len) >= len) {
     memcpy(p, buf, len);
     mg_queue_add(&ifp->recv_queue, len);
@@ -7947,14 +7956,23 @@ void mg_tcpip_init(struct mg_mgr *mgr, struct mg_tcpip_if *ifp) {
     memcpy(ifp->dhcp_name, "mip", 4);
   ifp->dhcp_name[sizeof(ifp->dhcp_name) - 1] = '\0';  // Just in case
 
+  // Allocate RX queue and TX buffer BEFORE driver init: the driver enables
+  // ETH RX interrupts (ETH->DMAIER), so frames can arrive from IRQ context
+  // (ETH_IRQHandler -> mg_tcpip_qwrite) before this function returns.
+  // With recv_queue.buf == NULL mg_tcpip_qwrite() would memcpy the frame
+  // into a near-NULL address (low RAM / ITCM) and corrupt resident code.
+  if (ifp->tx.buf == NULL) {
+    ifp->tx.buf = (char *) mg_calloc(1, ifp->framesize);
+    ifp->tx.len = ifp->framesize;
+  }
+  if (ifp->recv_queue.size == 0)
+    ifp->recv_queue.size = ifp->driver->rx ? ifp->framesize : 8192;
+  if (ifp->recv_queue.buf == NULL)
+    ifp->recv_queue.buf = (char *) mg_calloc(1, ifp->recv_queue.size);
+
   if (ifp->driver->init && !ifp->driver->init(ifp)) {
     MG_ERROR(("driver init failed"));
   } else {
-    ifp->tx.buf = (char *) mg_calloc(1, ifp->framesize),
-    ifp->tx.len = ifp->framesize;
-    if (ifp->recv_queue.size == 0)
-      ifp->recv_queue.size = ifp->driver->rx ? ifp->framesize : 8192;
-    ifp->recv_queue.buf = (char *) mg_calloc(1, ifp->recv_queue.size);
     ifp->timer_1000ms = mg_millis();
     mgr->ifp = ifp;
     ifp->mgr = mgr;
@@ -28531,7 +28549,7 @@ void ETH_IRQHandler(void) {
   ETH->DMARPDR = 0;          // and resume RX
 }
 
-struct mg_tcpip_driver mg_tcpip_driver_stm32f = {
+const struct mg_tcpip_driver mg_tcpip_driver_stm32f = {
     mg_tcpip_driver_stm32f_init, mg_tcpip_driver_stm32f_tx, NULL,
     mg_tcpip_driver_stm32f_poll};
 #endif

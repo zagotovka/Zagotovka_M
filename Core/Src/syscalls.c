@@ -97,12 +97,19 @@ void *_sbrk(ptrdiff_t incr) {
  * Без этой заглушки ЛЮБОЙ printf() вызывает __smakebuf_r → _malloc_r →
  * _sbrk, а при завершении _free_r. Установка __SNBF (unbuffered) заставляет
  * printf писать посимвольно через _write(), полностью исключая malloc/free.
+ *
+ * ВАЖНО: fp->_p обязателен! Оригинальный newlib делает _p = _bf._base = p.
+ * Без него _p остаётся NULL, а __swsetup_r считает _w = _size - (_p - _base) —
+ * огромное положительное. _puts_r пишет символы по fp->_p == NULL, т.е. по
+ * адресу 0x00000000 — В ITCM! Именно это портило первые байты .itcm кода
+ * (printf из USBH_UserProcess → wild write → MPU MemManage DACCVIOL,
+ * MMFAR=0x00000000, а до включения MPU — тихая порча и ребуты каждые ~7 c).
  */
 struct _reent;
 void __smakebuf_r(struct _reent *r, FILE *fp) {
     (void)r;
     fp->_flags |= __SNBF;
-    fp->_bf._base = (unsigned char *)fp->_nbuf;
+    fp->_p = fp->_bf._base = (unsigned char *)fp->_nbuf;
     fp->_bf._size = 1;
 }
 

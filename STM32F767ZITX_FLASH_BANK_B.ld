@@ -228,6 +228,17 @@ SECTIONS
     __bss_end__ = _ebss;
   } >RAM
 
+  /* NOLOAD-переменные в SRAM: переживают NVIC_SystemReset(), но не POR.
+     Перенесены из ITCM (.noinit_itcm), чтобы MPU мог защитить весь ITCM
+     как Read-Only и ловить дикие записи через MemManage Fault. */
+  .noinit_ram (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.noinit_ram)
+    *(.noinit_ram*)
+    . = ALIGN(4);
+  } >RAM
+
   /* Секция .zagotovka_section в области ZERG_FLASH */
   .zagotovka_section ORIGIN(ZERG_FLASH) :
   {
