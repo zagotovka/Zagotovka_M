@@ -511,14 +511,32 @@ void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm)
 
 void handle_firmware_commit(struct mg_connection *c, struct mg_http_message *hm) {
   if (!require_post_json(c, hm)) return;
+  if (s_ota_expected != 0) {
+    mg_http_reply(c, 409, "", "OTA upload in progress, wait until it finishes\n");
+    return;
+  }
   mg_http_reply(c, 200, s_json_header, "%s\n",
                 mg_ota_commit() ? "true" : "false");
 }
 
 void handle_firmware_rollback(struct mg_connection *c, struct mg_http_message *hm) {
   if (!require_post_json(c, hm)) return;
+  if (s_ota_expected != 0) {
+    mg_http_reply(c, 409, "", "OTA upload in progress, wait until it finishes\n");
+    return;
+  }
   mg_http_reply(c, 200, s_json_header, "%s\n",
                 mg_ota_rollback() ? "true" : "false");
+}
+
+void handle_firmware_switch_bank(struct mg_connection *c, struct mg_http_message *hm) {
+  if (!require_post_json(c, hm)) return;
+  if (s_ota_expected != 0) {
+    mg_http_reply(c, 409, "", "OTA upload in progress, wait until it finishes\n");
+    return;
+  }
+  mg_http_reply(c, 200, s_json_header, "%s\n",
+                mg_ota_switch_bank() ? "true" : "false");
 }
 
 static size_t print_status(void (*out)(char, void *), void *ptr, va_list *ap) {
@@ -531,8 +549,20 @@ static size_t print_status(void (*out)(char, void *), void *ptr, va_list *ap) {
 }
 
 void handle_firmware_status(struct mg_connection *c) {
-  mg_http_reply(c, 200, s_json_header, "[%M,%M]\n", print_status,
-                MG_FIRMWARE_CURRENT, print_status, MG_FIRMWARE_PREVIOUS);
+  const HTTPSsettings *s = get_valid_settings();
+  uint8_t active = mg_ota_get_active_bank();
+  /* Форма ответа изменилась: массив статусов теперь вложен в поле
+   * "firmwares" объекта + добавлены active_bank и версии банков.
+   * Версии печатаются через %m (MG_ESC) — JSON-экранированные строки. */
+  mg_http_reply(c, 200, s_json_header,
+                "{%m:[%M,%M],%m:%d,%m:%m,%m:%m}\n",
+                MG_ESC("firmwares"), print_status, MG_FIRMWARE_CURRENT,
+                          print_status, MG_FIRMWARE_PREVIOUS,
+                MG_ESC("active_bank"), (int) active,
+                MG_ESC("bank_a_version"),
+                    MG_ESC(s ? s->ota_bank_a_version : ""),
+                MG_ESC("bank_b_version"),
+                    MG_ESC(s ? s->ota_bank_b_version : ""));
 }
 
 void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm) {
@@ -1050,6 +1080,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/commit"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/commit", c->id));
 				handle_firmware_commit(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/firmware/switch-bank"), NULL)) {
+				MG_INFO(("%lu Processing /api/firmware/switch-bank", c->id));
+				handle_firmware_switch_bank(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/rollback"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/rollback", c->id));
 				handle_firmware_rollback(c, hm);

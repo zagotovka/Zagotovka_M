@@ -26,6 +26,7 @@
 
 #include "compat_ota.h"
 #include "zagotovka.h" /* HTTPSsettings, get_valid_settings(), update_and_write_settings() */
+#include "version_gen.h" /* FW_VERSION */
 #include "logger.h"    /* LOG_CAT_OTA, LOG_MASK_OTA, cat_prefixes[], g_log_filter_mask */
 #include <string.h>    /* strlen */
 /* Cortex-M CMSIS header for NVIC_SystemReset() */
@@ -81,15 +82,24 @@ void mg_device_reset(void) {
 }
 
 /* ---- OTA Rollback helpers ----------------------------------------------- */
-void mg_ota_set_pending_bank(uint8_t target_bank) {
+/* target_bank — банк-кандидат (противоположный активному),
+ * prev_bank — банк, активный ДО текущего OTA-цикла (для отката). */
+void mg_ota_set_pending_bank(uint8_t target_bank, uint8_t prev_bank) {
     const HTTPSsettings *current = get_valid_settings();
     HTTPSsettings tmp;
     if (current) memcpy(&tmp, current, sizeof(tmp));
     else memset(&tmp, 0, sizeof(tmp));
-    
+
     tmp.ota_pending = 1;
     tmp.ota_active_bank = target_bank;
+    tmp.ota_prev_active_bank = prev_bank;
     tmp.ota_state = 1; // MG_OTA_FIRST_BOOT
+    /* Явное обнуление: каждый новый OTA-цикл стартует с чистым счётчиком
+     * попыток, независимо от того, чем закончился предыдущий цикл
+     * (иначе, например, перепрошивка поверх незавершённого trial-цикла
+     * с retries=2 унаследует счётчик, и после первого падения нового
+     * образа bootloader откатится сразу, не дав трёх свежих попыток). */
+    tmp.ota_boot_retries = 0;
     update_and_write_settings(&tmp);
 }
 
@@ -101,7 +111,9 @@ uint8_t mg_ota_get_active_bank(void) {
 /* ---- Публичный вызов: пометить "первая загрузка после OTA" -------------- */
 uint32_t mg_ota_mark_pending(void) {
     uint32_t prev = ota_flag_read();
-    mg_ota_set_pending_bank(1); // 1 = BANK_B (staging), ota_pending=1, ota_state=1
+    uint8_t current = mg_ota_get_active_bank();
+    uint8_t target   = current ? 0 : 1; // кандидат = противоположный активному
+    mg_ota_set_pending_bank(target, current);
     return prev;
 }
 
@@ -143,10 +155,53 @@ bool mg_ota_commit(void) {
     HTTPSsettings tmp;
     if (current) memcpy(&tmp, current, sizeof(tmp));
     else memset(&tmp, 0, sizeof(tmp));
-    
+
     tmp.ota_state = 3; // Committed
     tmp.ota_pending = 0;
+
+    /* Запоминаем версию образа в активном банке — её показывает
+     * /api/firmware/status и использует кнопка switch-bank в UI. */
+    uint8_t active = mg_ota_get_active_bank();
+    char *slot = active ? tmp.ota_bank_b_version : tmp.ota_bank_a_version;
+    strncpy(slot, FW_VERSION, sizeof(tmp.ota_bank_a_version) - 1);
+    slot[sizeof(tmp.ota_bank_a_version) - 1] = '\0';
+
     return update_and_write_settings(&tmp);
+}
+
+/* Валидность образа по начальному MSP: обязан указывать в SRAM (0x200xxxxx).
+ * Адреса банков: Bank A = 0x08040000, Bank B = 0x08100000 (как в bootloader). */
+static bool bank_image_valid(uint8_t bank) {
+    uint32_t addr = bank ? 0x08100000u : 0x08040000u;
+    uint32_t msp  = *(volatile uint32_t *)addr;
+    return (msp & 0xFFF00000u) == 0x20000000u;
+}
+
+/* Переключение на противоположный банк без заливки нового образа
+ * (ручной откат на предыдущую версию или возврат вперёд). */
+bool mg_ota_switch_bank(void) {
+    uint8_t current = mg_ota_get_active_bank();
+    uint8_t target  = current ? 0 : 1;
+
+    if (!bank_image_valid(target)) {
+        LOG_OTA("switch_bank: target bank %u has no valid image, aborting\n",
+                (unsigned) target);
+        return false;
+    }
+
+    const HTTPSsettings *cur = get_valid_settings();
+    HTTPSsettings tmp;
+    if (cur) memcpy(&tmp, cur, sizeof(tmp));
+    else     memset(&tmp, 0, sizeof(tmp));
+
+    tmp.ota_active_bank  = target;
+    tmp.ota_pending      = 0;
+    tmp.ota_state        = 3;
+    tmp.ota_boot_retries = 0;
+
+    bool ok = update_and_write_settings(&tmp);
+    if (ok) mg_device_reset();
+    return ok;
 }
 
 bool mg_ota_rollback(void) {

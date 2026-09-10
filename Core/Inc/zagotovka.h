@@ -47,6 +47,18 @@ void log_headers(const char *headers);
 // Статическая проверка на этапе компиляции
 #define STATIC_ASSERT(COND, MSG) typedef char static_assertion_##MSG[(COND) ? 1 : -1]
 #define BACKUP_OFFSET (((sizeof(HTTPSsettings) + 3) / 4) * 4) // Округление вверх до кратного 4
+/*
+ * ВНИМАНИЕ (совместимость между поколениями прошивок):
+ * Bank A и Bank B могут содержать РАЗНЫЕ версии прошивки сколько угодно
+ * долго. Обе версии читают/пишут ОДНУ И ТУ ЖЕ структуру HTTPSsettings
+ * в Flash-секторе 11. Если старый код (оставшийся в другом банке или
+ * в непереприошенном bootloader) не знает о новых полях — он трактует
+ * эти байты как соседние/padding и может затереть их при следующей записи.
+ *
+ * Правило: менять эту структуру ТОЛЬКО добавлением полей в конец,
+ * синхронно и байт-в-байт одинаково в Core/Inc/zagotovka.h и
+ * Bootloader/.../main.c. Не переставлять и не менять смысл существующих байт.
+ */
 typedef struct __attribute__((packed)) {
     uint32_t magic;          // Магическое значение для проверки валидности
     uint32_t crc;            // Контрольная сумма
@@ -64,7 +76,9 @@ typedef struct __attribute__((packed)) {
     uint8_t ota_active_bank; // 0=Bank A (по умолчанию), 1=Bank B
     uint8_t ota_pending;     // 1=есть незавершённое обновление
     uint8_t ota_boot_retries; // счётчик перезапусков для OTA
-    uint8_t padding[1];      // выравнивание до кратного 4
+    uint8_t ota_prev_active_bank;    // банк, активный ДО текущего OTA-цикла
+    char    ota_bank_a_version[16];  // последняя подтверждённая версия в Bank A
+    char    ota_bank_b_version[16];  // последняя подтверждённая версия в Bank B
 } HTTPSsettings;
 
 // Проверка, что размер структуры не превышает размер сектора (256 КБ)
@@ -342,6 +356,7 @@ void handle_settings_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_commit(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_rollback(struct mg_connection *c, struct mg_http_message *hm);
+void handle_firmware_switch_bank(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_status(struct mg_connection *c);
 void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm);
 void handle_device_eraselast(struct mg_connection *c);

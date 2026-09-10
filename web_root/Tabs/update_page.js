@@ -5,7 +5,14 @@ import { Icons, Button } from '../components.js';
 const FIRMWARE_UPLOAD_CHUNK_SIZE = 4096; // байт на POST; лимит тела запроса для /api/firmware/upload на устройстве не действует
 
 export function FirmwareUpdate({ }) {
-  const [info, setInfo] = useState([{}, {}]);
+  // /api/firmware/status возвращает ОБЪЕКТ: { firmwares: [current, previous],
+  // active_bank: 0|1, bank_a_version, bank_b_version }
+  const [info, setInfo] = useState({
+    firmwares: [{}, {}],
+    active_bank: 0,
+    bank_a_version: '',
+    bank_b_version: ''
+  });
   const [language, setLanguage] = useState('ru');
   const [alert, setAlert] = useState(null);
   const [progress, setProgress] = useState(null); // null = нет активной загрузки, 0..100 = процент
@@ -54,13 +61,25 @@ export function FirmwareUpdate({ }) {
     return s != null && map[s] !== undefined ? map[s] : (language === 'ru' ? 'Н/Д' : 'N/A');
   };
 
+  const firmwares = info.firmwares || [{}, {}];
+  const activeBank = info.active_bank || 0;
+  const bankAVersion = info.bank_a_version || '';
+  const bankBVersion = info.bank_b_version || '';
+
+  // Целевой банк для переключения — противоположный активному.
+  // Активный банк никогда не трогается OTA-циклом (новый образ всегда
+  // пишется в другой банк), поэтому в нём всегда остаётся последняя
+  // подтверждённая рабочая прошивка — переключение на него безопасно.
+  const targetBank = activeBank === 1 ? 'A' : 'B';
+  const targetVersion = activeBank === 1 ? bankAVersion : bankBVersion;
+
   // Кнопка "Подтвердить эту прошивку" вызывает mg_ota_commit() — это защитный
   // механизм двухбанковой OTA-схемы: пока прошивка не подтверждена, при
   // следующей перезагрузке bootloader откатится на предыдущий образ.
   // Подтверждать имеет смысл только в статусах 1 (первая загрузка после OTA)
   // и 2 (не подтверждено); при 0 (нет OTA-данных) и 3 (уже подтверждено)
   // кнопка неактивна, т.к. подтверждать нечего.
-  const canCommit = info[0].status === 1 || info[0].status === 2;
+  const canCommit = firmwares[0].status === 1 || firmwares[0].status === 2;
 
   const oncommit = (ev) =>
     fetch('api/firmware/commit', {
@@ -70,6 +89,38 @@ export function FirmwareUpdate({ }) {
     })
       .then((r) => r.json())
       .then(refresh);
+
+  // Переключение активного банка (Bank A <-> Bank B) без заливки нового
+  // образа: mg_ota_switch_bank() проверяет валидность образа в целевом
+  // банке, делает его активным и перезагружает устройство.
+  // Ответ "true" — устройство уже ребутается, "false" — образа нет.
+  const onswitchbank = (ev) =>
+    fetch('api/firmware/switch-bank', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    })
+      .then((r) => r.json())
+      .then((ok) => {
+        if (ok) {
+          setAlert({
+            type: 'green',
+            message:
+              language === 'ru'
+                ? `Переключение на Bank ${targetBank}... Ожидание перезагрузки устройства...`
+                : `Switching to Bank ${targetBank}... Waiting for device to reboot...`
+          });
+          setTimeout(() => window.location.reload(), 8000);
+        } else {
+          setAlert({
+            type: 'red',
+            message:
+              language === 'ru'
+                ? `Ошибка: в Bank ${targetBank} нет валидного образа прошивки.`
+                : `Error: Bank ${targetBank} has no valid firmware image.`
+          });
+        }
+      });
 
   const onreboot = (ev) =>
     fetch('api/device/reset', {
@@ -313,10 +364,16 @@ export function FirmwareUpdate({ }) {
               ${language === 'ru' ? 'Текущий образ прошивки' : 'Current firmware image'}
             </div>
             <div class="text-slate-700 text-sm">
-              ${language === 'ru' ? 'Версия' : 'Version'}: ${info[0].version || 'N/A'}
+              ${language === 'ru' ? 'Версия' : 'Version'}: ${firmwares[0].version || 'N/A'}
+            </div>
+            <div class="text-slate-700 text-sm">
+              ${language === 'ru' ? 'Активный банк' : 'Active bank'}: ${activeBank === 1 ? 'B' : 'A'}
             </div>
             <div class="text-slate-700 text-sm mb-2">
-              ${language === 'ru' ? 'Статус' : 'Status'}: ${statusText(info[0].status)}
+              ${language === 'ru' ? 'Статус' : 'Status'}: ${statusText(firmwares[0].status)}
+            </div>
+            <div class="text-slate-500 text-xs">
+              Bank A: ${bankAVersion || '—'} · Bank B: ${bankBVersion || '—'}
             </div>
             <button
               onclick=${oncommit}
@@ -328,6 +385,19 @@ export function FirmwareUpdate({ }) {
             >
               <${Icons.thumbUp} class="w-4" />
               ${language === 'ru' ? 'Подтвердить эту прошивку' : 'Commit this firmware'}
+            </button>
+            <button
+              onclick=${onswitchbank}
+              disabled=${uploading}
+              title=${language === 'ru'
+                ? `Переключает активный банк на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} без заливки нового образа и перезагружает устройство`
+                : `Switches the active bank to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} without uploading a new image, then reboots`}
+              class="w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold text-white shadow-md transition-all duration-300 transform bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
+            >
+              <${Icons.refresh} class="w-4" />
+              ${language === 'ru'
+                ? `Вернуться на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}`
+                : `Switch to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}`}
             </button>
           </div>
 

@@ -901,16 +901,15 @@ bool mg_ota_flash_begin(size_t new_firmware_size, struct mg_flash *flash) {
   if (s_size) {
     MG_ERROR(("OTA already in progress. Call mg_ota_end()"));
   } else {
-    size_t half = flash->size / 2;
     s_crc32 = 0;
-    s_addr = (char *) flash->start + half;
-    MG_DEBUG(("FW %lu bytes, max %lu", new_firmware_size, half));
-    if (new_firmware_size < half) {
+    s_addr = (char *) flash->start;  // пишем с начала целевого банка
+    MG_DEBUG(("FW %lu bytes, max %lu", new_firmware_size, flash->size));
+    if (new_firmware_size < flash->size) {
       ok = true;
       s_size = new_firmware_size;
-      MG_INFO(("Starting OTA, firmware size %lu", s_size));
+      MG_INFO(("Starting OTA at %p, firmware size %lu", flash->start, s_size));
     } else {
-      MG_ERROR(("Firmware %lu is too big to fit %lu", new_firmware_size, half));
+      MG_ERROR(("Firmware %lu too big for bank (%lu)", new_firmware_size, flash->size));
     }
   }
   return ok;
@@ -967,7 +966,7 @@ bool mg_ota_flash_write(const void *buf, size_t len, struct mg_flash *flash) {
 }
 
 bool mg_ota_flash_end(struct mg_flash *flash) {
-  char *base = (char *) flash->start + flash->size / 2;
+  char *base = (char *) flash->start;  // образ лежит с начала целевого банка
   bool ok = false;
   if (s_size) {
     size_t size = (size_t) (s_addr - base);
@@ -10213,39 +10212,49 @@ MG_IRAM void single_bank_swap(char *p1, char *p2, size_t size) {
   *(volatile unsigned long *) 0xe000ed0c = 0x5fa0004;
 }
 
+/* Адреса/ёмкость банков приложения (совпадают с Bootloader):
+ * Bank A = 0x08040000, Bank B = 0x08100000, под образ в банке 768 КБ
+ * (до сектора настроек 0x081C0000). */
+#define ZAG_BANK_A_ADDR   0x08040000u
+#define ZAG_BANK_B_ADDR   0x08100000u
+#define ZAG_BANK_CAPACITY 0x000C0000u   // 768K, реальная ёмкость банка
+
+extern uint8_t mg_ota_get_active_bank(void); /* compat_ota.c: SCB->VTOR */
+
+/* Сессионный дескриптор целевого банка.
+ * ВАЖНО: статический s_mg_flash_stm32f НЕ трогаем (кроме size) — его
+ * start/size (0x08000000, 2 МБ) использует секторная математика
+ * flash_page_start()/flash_sector(), рассчитанная на модель "вся flash +
+ * разделение пополам" и корректно отображающая адреса ОБЕИХ банков
+ * (Bank A и Bank B) в номера секторов и SNB. */
+static struct mg_flash s_ota_target_flash;
+
 bool mg_ota_begin(size_t new_firmware_size) {
-  /* ПРАВКА ПРОЕКТА (не апстрим Mongoose): жестко задаем размер flash = 0x200000
-   * (2 МБ). Тогда staging-область (верхняя половина) начнется с
-   * 0x08000000 + 0x100000 = 0x08100000 — это Bank B (1 МБ).
-   * Раньше было 0x180000 → staging на 0x080C0000 (Sector 10, внутри Bank A),
-   * что приводило к записи поверх работающей прошивки → HardFault. */
-  s_mg_flash_stm32f.size = 0x200000;
-#ifdef __ZEPHYR__
-  *((uint32_t *)0xE000ED94) = 0;
-  MG_DEBUG(("Jailbreak %s", *((uint32_t *)0xE000ED94) == 0 ? "successful" : "failed"));
-#endif
-  return mg_ota_flash_begin(new_firmware_size, &s_mg_flash_stm32f);
+  uint8_t active = mg_ota_get_active_bank();
+  /* ПРАВКА ПРОЕКТА (не апстрим Mongoose): пишем ТОЛЬКО в банк,
+   * противоположный исполняющемуся. Активный банк никогда не стирается
+   * и не перезаписывается — у пользователя всегда остаётся образ для
+   * отката (mg_ota_switch_bank() / rollback через bootloader). */
+  s_mg_flash_stm32f.size = 0x200000; // для секторной математики (не менять!)
+  s_ota_target_flash = s_mg_flash_stm32f;
+  s_ota_target_flash.start = (void *) (active ? ZAG_BANK_A_ADDR : ZAG_BANK_B_ADDR);
+  s_ota_target_flash.size  = ZAG_BANK_CAPACITY;
+  return mg_ota_flash_begin(new_firmware_size, &s_ota_target_flash);
 }
 
 bool mg_ota_write(const void *buf, size_t len) {
-  return mg_ota_flash_write(buf, len, &s_mg_flash_stm32f);
+  return mg_ota_flash_write(buf, len, &s_ota_target_flash);
 }
 
 bool mg_ota_end(void) {
-  // Double Bank: прошивка уже записана в Bank B (staging area).
-  // Вместо копирования 768 КБ (single_bank_swap) просто перезагружаемся —
+  // Double Bank: образ уже записан в банк, противоположный активному.
+  // Копирование (single_bank_swap) не требуется — просто возвращаем успех;
+  // ребут планирует handle_firmware_upload() после отправки HTTP 200 OK.
   // Bootloader прочитает ota_pending/ota_active_bank из Flash Sector 11
-  // и сделает jump_to_app(BANK_B_ADDR).
-  //
-  // ВНИМАНИЕ: вызов mg_device_reset() здесь НЕВОЗМОЖЕН —
-  // mg_ota_end() вызывается из handle_firmware_upload() ДО mg_http_reply().
-  // NVIC_SystemReset() прервёт отправку HTTP 200 OK → браузер увидит разрыв.
-  // Ребут планируется из handle_firmware_upload() через mg_timer_add()
-  // после mg_http_reply(), чтобы TCP-стек успел отправить ответ.
-
-  if (mg_ota_flash_end(&s_mg_flash_stm32f)) {
+  // и сделает jump_to_app() на активный банк.
+  if (mg_ota_flash_end(&s_ota_target_flash)) {
     MG_INFO(("OTA CRC+size OK, ready to reboot"));
-    return true;  //告诉caller: всё ОК, перезагружайся когда будешь готов
+    return true;
   }
   return false;
 }

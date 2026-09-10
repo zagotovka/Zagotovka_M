@@ -40,7 +40,10 @@ void mg_device_reset(void);
 
 /* Помечает "первая загрузка после OTA / не подтверждено" и возвращает
  * ПРЕДЫДУЩЕЕ значение флага (для отката в mg_ota_cancel_pending(),
- * если своп в итоге не состоялся). */
+ * если своп в итоге не состоялся).
+ * Целевой банк = противоположный активному (mg_ota_get_active_bank()),
+ * предыдущий активный банк запоминается в ota_prev_active_bank —
+ * bootloader откатывается именно на него. */
 uint32_t mg_ota_mark_pending(void);
 
 /* Откатывает флаг состояния OTA к значению prev_state, полученному
@@ -53,7 +56,7 @@ void mg_ota_reset_status(void);
 
 /* ---- OTA query stubs ---------------------------------------------------- */
 int      mg_ota_status(int firmware);
-void     mg_ota_set_pending_bank(uint8_t target_bank);
+void     mg_ota_set_pending_bank(uint8_t target_bank, uint8_t prev_bank);
 uint8_t  mg_ota_get_active_bank(void);
 uint32_t mg_ota_crc32(int firmware);
 uint32_t mg_ota_timestamp(int firmware);
@@ -61,6 +64,13 @@ size_t   mg_ota_size(int firmware);
 
 bool mg_ota_commit(void);
 bool mg_ota_rollback(void);
+
+/* Переключение активного банка без заливки нового образа:
+ * проверяет валидность образа в ПРОТИВОПОЛОЖНОМ банке, делает его
+ * активным (ota_active_bank=target, ota_pending=0, ota_state=3) и
+ * перезагружает устройство. Возвращает false, если образ в целевом
+ * банке невалиден (перезагрузки не будет). */
+bool mg_ota_switch_bank(void);
 
 /* ---- Flash stubs -------------------------------------------------------- */
 void  *mg_flash_start(void);
