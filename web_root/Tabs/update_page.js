@@ -122,6 +122,20 @@ export function FirmwareUpdate({ }) {
         }
       });
 
+  // Переключение банка — мгновенный ребут без trial-цикла, поэтому
+  // требует подтверждения по той же логике, что и onrebootConfirm ниже:
+  // случайный клик не должен сразу перезагружать устройство.
+  const onswitchbankConfirm = (ev) => {
+    const confirmMsg =
+      language === 'ru'
+        ? `Переключиться на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}? Устройство перезагрузится немедленно.`
+        : `Switch to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}? The device will reboot immediately.`;
+    if (!window.confirm(confirmMsg)) {
+      return Promise.resolve();
+    }
+    return onswitchbank(ev);
+  };
+
   const onreboot = (ev) =>
     fetch('api/device/reset', {
       method: 'POST',
@@ -372,32 +386,35 @@ export function FirmwareUpdate({ }) {
             <div class="text-slate-700 text-sm mb-2">
               ${language === 'ru' ? 'Статус' : 'Status'}: ${statusText(firmwares[0].status)}
             </div>
-            <div class="text-slate-500 text-xs">
-              Bank A: ${bankAVersion || '—'} · Bank B: ${bankBVersion || '—'}
+            <div class="text-slate-700 text-sm">
+              Bank A: ${bankAVersion || '—'}
             </div>
+            <div class="text-slate-700 text-sm mb-2">
+              Bank B: ${bankBVersion || '—'}
+            </div>
+            <!-- Пока не подтверждено (canCommit=true) — обычная кликабельная кнопка.
+                 Как только firmware закоммичена, подтверждать больше нечего, поэтому
+                 кнопка не просто затемняется, а полностью меняет вид (серая, без
+                 градиента, с другой подписью и иконкой) — чтобы не создавалось
+                 ощущение "нужно нажать ещё раз". -->
             <button
               onclick=${oncommit}
               disabled=${!canCommit}
-              title=${language === 'ru'
-                ? 'Подтверждает текущую прошивку, чтобы устройство не откатилось на предыдущую после перезагрузки'
-                : 'Confirms the current firmware so the device won\'t roll back to the previous one after reboot'}
-              class="w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold text-white shadow-md transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
+              title=${canCommit
+                ? (language === 'ru'
+                    ? 'Подтверждает текущую прошивку, чтобы устройство не откатилось на предыдущую после перезагрузки'
+                    : 'Confirms the current firmware so the device won\'t roll back to the previous one after reboot')
+                : (language === 'ru'
+                    ? 'Эта прошивка уже подтверждена, повторное подтверждение не требуется'
+                    : 'This firmware is already committed, no further action needed')}
+              class=${canCommit
+                ? "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold text-white shadow-md transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95"
+                : "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-slate-200 text-slate-400 shadow-inner cursor-not-allowed"}
             >
               <${Icons.thumbUp} class="w-4" />
-              ${language === 'ru' ? 'Подтвердить эту прошивку' : 'Commit this firmware'}
-            </button>
-            <button
-              onclick=${onswitchbank}
-              disabled=${uploading}
-              title=${language === 'ru'
-                ? `Переключает активный банк на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} без заливки нового образа и перезагружает устройство`
-                : `Switches the active bank to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} without uploading a new image, then reboots`}
-              class="w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold text-white shadow-md transition-all duration-300 transform bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
-            >
-              <${Icons.refresh} class="w-4" />
-              ${language === 'ru'
-                ? `Вернуться на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}`
-                : `Switch to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}`}
+              ${canCommit
+                ? (language === 'ru' ? 'Подтвердить эту прошивку' : 'Commit this firmware')
+                : (language === 'ru' ? 'Прошивка подтверждена' : 'Firmware committed')}
             </button>
           </div>
 
@@ -471,6 +488,21 @@ export function FirmwareUpdate({ }) {
       : ' Uploading firmware over plain HTTP is not recommended! For security reasons we strongly recommend performing the firmware update only in HTTPS mode!'}
               </div>
 
+              <!-- Предупреждение: образы собираются под конкретный банк -->
+              <div class="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 font-semibold">
+                ⚠️
+                ${language === 'ru'
+      ? html` Файл <code class="bg-amber-100 px-1 rounded">.bin</code>, который сейчас лежит в Bank A, и файл, который лежит в Bank B, — это две РАЗНЫЕ сборки, слинкованные под разные адреса flash. Заливая новую прошивку через «Загрузить новую прошивку», убедитесь, что это сборка именно для того банка, куда сейчас пойдёт запись (см. «Активный банк» выше — запись всегда идёт в противоположный банк). Загрузка образа не того банка не отслеживается автоматически и приведёт к неработающему кандидату при следующей перезагрузке.`
+      : html` The <code class="bg-amber-100 px-1 rounded">.bin</code> file currently in Bank A and the one in Bank B are two DIFFERENT builds, linked for different flash addresses. When uploading a new firmware via "Upload new firmware", make sure it was built for the bank that will actually receive the write (see "Active bank" above — writes always go to the opposite bank). Uploading the wrong bank's image is not caught automatically and will produce a non-booting candidate on the next reboot.`}
+              </div>
+
+              <!-- Пояснение логики кнопок commit / switch-bank -->
+              <div class="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600">
+                ${language === 'ru'
+      ? html`<b>Подтвердить эту прошивку</b> и <b>Вернуться на Bank X</b> — это разные действия. «Подтвердить» закрепляет только что залитый и уже загрузившийся образ как рабочий, чтобы устройство не откатилось на предыдущий банк при следующей перезагрузке; кнопка активна только пока есть неподтверждённый кандидат. «Вернуться на Bank X» — мгновенное переключение на уже подтверждённый ранее образ в другом банке БЕЗ заливки чего-либо нового и без пробного (trial) цикла — устройство перезагрузится сразу, поэтому действие требует подтверждения.`
+      : html`<b>Commit this firmware</b> and <b>Switch to Bank X</b> are different actions. "Commit" locks in the image that was just uploaded and has already booted, so the device won't roll back to the other bank on the next reboot; it's only enabled while there is an uncommitted candidate. "Switch to Bank X" is an immediate switch to a previously committed image in the other bank WITHOUT uploading anything new and without a trial cycle — the device reboots right away, which is why it asks for confirmation.`}
+              </div>
+
               <ol class="list-decimal pl-5 space-y-1.5">
                 <li>
                   ${language === 'ru'
@@ -507,15 +539,34 @@ export function FirmwareUpdate({ }) {
           </div>
         </div>
 
-        <!-- "Reboot" убран из Device Update и спрятан отдельно, -->
-        <!-- приглушённая, но заметная кнопка + подтверждение, чтобы не нажать случайно -->
-        <div class="w-full flex justify-end">
+        <!-- Bank switch и Reboot разнесены по разным краям одной строки (оба
+             ребутят устройство, не должны стоять рядом с Commit или друг
+             с другом). Форма и заливка — те же, что у «Загрузить новую
+             прошивку» (единый стиль по всей странице), но добавлено тонкое
+             amber-кольцо (ring), которое ничего не ломает в цветовой схеме,
+             а просто читается как "осторожно, действие необратимо" —
+             отдельно от confirm()-диалога, который остаётся основной защитой. -->
+        <div class="w-full flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+          <button
+            onclick=${onswitchbankConfirm}
+            disabled=${uploading}
+            title=${language === 'ru'
+              ? `Переключает активный банк на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} без заливки нового образа и перезагружает устройство`
+              : `Switches the active bank to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} without uploading a new image, then reboots`}
+            class="inline-flex justify-center items-center gap-2 py-3 px-6 rounded-full text-sm font-bold text-white shadow-md ring-2 ring-amber-300 ring-offset-2 ring-offset-white/50 transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:ring-0"
+          >
+            <${Icons.refresh} class="w-4" />
+            ${language === 'ru'
+              ? `Вернуться на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}`
+              : `Switch to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}`}
+          </button>
+
           <button
             onclick=${onrebootConfirm}
-            class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold text-amber-700 border border-amber-300 bg-amber-50 hover:bg-amber-100 hover:border-amber-400 transition-colors"
+            class="inline-flex justify-center items-center gap-2 py-3 px-6 rounded-full text-sm font-bold text-white shadow-md ring-2 ring-amber-300 ring-offset-2 ring-offset-white/50 transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95"
             title=${language === 'ru' ? 'Перезагрузить устройство (требуется подтверждение)' : 'Reboot device (requires confirmation)'}
           >
-            <${Icons.refresh} class="w-3.5 h-3.5" />
+            <${Icons.refresh} class="w-4" />
             ${language === 'ru' ? 'Перезагрузить устройство' : 'Reboot device'}
           </button>
         </div>
