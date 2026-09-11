@@ -7,6 +7,7 @@
 #include "ds18b20Config.h"
 #include "main.h"
 #include "compat_ota.h"
+#include "fw_meta.h"
 #include "fmt_float.h"
 #include <stdlib.h>   // rand()
 #include <stdarg.h>   // va_list for ota_log_direct()
@@ -425,6 +426,32 @@ void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm)
 			mg_ota_end();
 			ota_session_clear();
 		}
+
+		/* ---- Bank safety check --------------------------------------
+		 * Каждая сборка несёт метку (fw_meta.c) о том, для какого банка
+		 * она слинкована. Целевой банк записи — всегда противоположный
+		 * активному. Если образ собран не для того банка — отклоняем ДО
+		 * вызова mg_ota_begin(): ни один байт ещё не пишется во flash. */
+		if (data.len >= FW_META_OFFSET + sizeof(fw_meta_t)) {
+			const fw_meta_t *meta =
+					(const fw_meta_t *) (data.buf + FW_META_OFFSET);
+			uint8_t want_bank = mg_ota_get_active_bank() ^ 1;
+			if (meta->magic == FW_META_MAGIC
+					&& meta->target_bank != want_bank) {
+				ota_log_direct(
+						"Upload rejected: image built for Bank %c, but Bank %c needs update\n",
+						meta->target_bank ? 'B' : 'A',
+						want_bank ? 'B' : 'A');
+				mg_http_reply(c, 400, "",
+						"Wrong bank image: built for Bank %c, need Bank %c\n",
+						meta->target_bank ? 'B' : 'A',
+						want_bank ? 'B' : 'A');
+				return;
+			}
+			/* magic не совпал — старая сборка без метки: проверку
+			 * пропускаем молча, чтобы не ломать совместимость. */
+		}
+
 		if (mg_ota_begin((size_t) tot) == false) {
 			// At this point we know (from the check above) no session was
 			// active at the app layer, so a false return here means the
@@ -1076,7 +1103,13 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/upload"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/upload", c->id));
 				handle_firmware_upload(c, hm);
-				keep_alive = true;  // Keep-Alive для чанкового OTA: не закрывать TCP-соединение между чанками
+				// Keep-Alive нужен только МЕЖДУ чанками одной OTA-сессии.
+				// На финальном чанке (успех -> reboot через 500мс) или при ошибке
+				// ota_session_clear() обнуляет s_ota_expected — соединение НЕ держим:
+				// иначе браузер переиспользует этот сокет для следующего запроса
+				// (например /api/firmware/status), а устройство уже ребутается —
+				// запрос зависает без ответа и без ошибки, и страница не обновляется.
+				keep_alive = (s_ota_expected != 0);
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/commit"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/commit", c->id));
 				handle_firmware_commit(c, hm);

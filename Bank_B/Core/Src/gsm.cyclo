@@ -1,0 +1,16 @@
+../Drivers/CMSIS/Include/core_cm7.h:2147:34:__NVIC_SystemReset	1
+../Core/Src/gsm.c:80:6:replac_string.part.0	4
+../Core/Src/gsm.c:49:6:gsm_dtcm_init	1
+../Core/Src/gsm.c:80:6:replac_string	2
+../Core/Src/gsm.c:90:6:check_speed	9
+../Core/Src/gsm.c:166:6:set_comand	9
+../Core/Src/gsm.c:234:6:disable_connection	1
+../Core/Src/gsm.c:239:6:call	1
+../Core/Src/gsm.c:245:6:incoming_call	1
+../Core/Src/gsm.c:250:6:get_date_time	1
+../Core/Src/gsm.c:258:6:init_sim800l_module	2
+../Core/Src/gsm.c:308:6:sanitize_cmd_str	10
+../Core/Src/gsm.c:322:6:execute_commands.part.0	42
+../Core/Src/gsm.c:322:6:execute_commands	3
+../Core/Src/gsm.c:511:6:send_command_result_sms	34
+../Core/Src/gsm.c:656:6:process_sim800l_data	60

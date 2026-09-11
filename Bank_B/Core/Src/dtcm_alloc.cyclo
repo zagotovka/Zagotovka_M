@@ -1,0 +1,6 @@
+../Core/Src/dtcm_alloc.c:105:41:dtcm_malloc	3
+../Core/Src/dtcm_alloc.c:44:40:dtcm_alloc_init	30
+../Core/Src/dtcm_alloc.c:119:42:dtcm_alloc_get_used	1
+../Core/Src/dtcm_alloc.c:124:42:dtcm_alloc_get_free	1
+../Core/Src/dtcm_alloc.c:129:42:dtcm_alloc_get_total	1
+../Core/Src/dtcm_alloc.c:134:44:dtcm_alloc_get_fail_count	1

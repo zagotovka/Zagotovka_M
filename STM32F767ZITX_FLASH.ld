@@ -61,6 +61,16 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
+  /* Метка банка (fw_meta.c) — фиксированное смещение FW_META_OFFSET
+   * от начала образа, гарантированно попадает в первый (0-й) чанк
+   * OTA-загрузки. Должно совпадать с FW_META_OFFSET в Core/Inc/fw_meta.h.
+   * VMA задан явно (а не через ". =" между секциями): линкер с >FLASH
+   * может игнорировать межсекционные присваивания счётчика положения. */
+  .fw_meta (ORIGIN(FLASH) + 0x300) :
+  {
+    KEEP(*(.fw_meta))
+  } >FLASH
+
   /* The program code and other data into "FLASH" Rom type memory */
   .text :
   {

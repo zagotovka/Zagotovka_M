@@ -1,0 +1,7 @@
+../Core/Src/db.c:23:13:zbee_action_sclick	0	static
+../Core/Src/db.c:30:13:zbee_action_dclick	0	static
+../Core/Src/db.c:37:13:zbee_action_lpress	0	static
+../Core/Src/db.c:44:9:zbee_action_alloc	8	static
+../Core/Src/db.c:65:6:zbee_action_free	0	static
+../Core/Src/db.c:72:6:zbee_action_clear	0	static
+../Core/Src/db.c:79:9:GetPinView	16	static

@@ -203,6 +203,23 @@ export function FirmwareUpdate({ }) {
       return;
     }
 
+    const fname = file.name.toLowerCase();
+    const looksA = fname.includes('bank_a');
+    const looksB = fname.includes('bank_b');
+    if ((targetBank === 'A' && looksB) || (targetBank === 'B' && looksA)) {
+      // Блокирующая подсказка по имени файла — just-UX: реальная защита —
+      // серверная проверка метки банка (fw_meta) в первом чанке, до записи
+      // во flash (Core/Src/net.c). Здесь просто не начинаем загрузку.
+      setAlert({
+        type: 'red',
+        message: language === 'ru'
+          ? `Для обновления нужен файл «Bank ${targetBank}», так как сейчас активен «Bank ${activeBank === 1 ? 'B' : 'A'}». Нельзя обновлять активный банк.`
+          : `The update needs a "Bank ${targetBank}" file, since "Bank ${activeBank === 1 ? 'B' : 'A'}" is currently active. The active bank cannot be updated.`
+      });
+      uploadingRef.current = false;
+      return; // загрузка не начинается вообще
+    }
+
     const total = file.size;
     let offset = 0;
     setProgress(0);
@@ -226,6 +243,20 @@ export function FirmwareUpdate({ }) {
 
         const response = await fetch(url, { method: 'POST', body: buf });
         if (!response.ok) {
+          // Тело ответа содержит пояснение сервера. Отказ по банку
+          // ("Wrong bank image: built for Bank X, need Bank Y") показываем
+          // красным баннером; всё остальное — общая ошибка загрузки (жёлтый).
+          const errBody = await response.text();
+          if (errBody.startsWith('Wrong bank image')) {
+            setAlert({
+              type: 'red',
+              message: language === 'ru'
+                ? `Для обновления нужен файл «Bank ${targetBank}», так как сейчас активен «Bank ${activeBank === 1 ? 'B' : 'A'}». Нельзя обновлять активный банк.`
+                : `The update needs a "Bank ${targetBank}" file, since "Bank ${activeBank === 1 ? 'B' : 'A'}" is currently active. The active bank cannot be updated.`
+            });
+            uploadingRef.current = false;
+            return;
+          }
           throw new Error(`HTTP ${response.status} @offset=${offset}`);
         }
 
@@ -247,13 +278,16 @@ export function FirmwareUpdate({ }) {
       let retryCount = 0;
       const checkStatus = async () => {
         try {
-          const res = await fetch('api/firmware/status');
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 2000); // не ждать вечно (защита от мёртвых keep-alive сокетов / NAT / Wi-Fi)
+          const res = await fetch('api/firmware/status', { signal: ctrl.signal, cache: 'no-store' });
+          clearTimeout(t);
           if (res.ok) {
             window.location.reload();
             return;
           }
         } catch (e) {
-          // Игнорируем ошибки сети во время перезагрузки
+          // Сеть недоступна / таймаут — ожидаемо во время перезагрузки
         }
 
         retryCount++;
@@ -484,16 +518,16 @@ export function FirmwareUpdate({ }) {
               <div class="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 font-semibold">
                 ⚠️
                 ${language === 'ru'
-      ? ' Не рекомендуется заливать прошивку в незащищённом режиме HTTP! В целях безопасности мы настоятельно рекомендуем выполнять обновление прошивки только в режиме HTTPS!'
-      : ' Uploading firmware over plain HTTP is not recommended! For security reasons we strongly recommend performing the firmware update only in HTTPS mode!'}
+      ? ' Обновление по HTTP подходит для большинства случаев — например, если устройство находится в вашей домашней/локальной сети за роутером и снаружи не доступно. HTTP-режим не требует настройки домена и сертификатов и работает "из коробки". Но передача идёт без шифрования: если устройство доступно из недоверенной сети (публичный Wi-Fi, проброшено в интернет), файл прошивки и админ-сессию теоретически можно перехватить или подменить на лету. Для такого сценария в Settings можно настроить HTTPS (домен + сертификат).'
+      : ' Updating over HTTP is fine for most setups — for example, when the device is on your home/local network behind a router and not exposed externally. HTTP mode works out of the box, with no domain or certificate setup needed. However the transfer is unencrypted: if the device is reachable from an untrusted network (public Wi-Fi, port-forwarded to the internet), the firmware file and admin session could in theory be intercepted or tampered with in transit. For that scenario you can configure HTTPS (domain + certificate) in Settings.'}
               </div>
 
               <!-- Предупреждение: образы собираются под конкретный банк -->
               <div class="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 font-semibold">
-                ⚠️
+                ℹ️
                 ${language === 'ru'
-      ? html` Файл <code class="bg-amber-100 px-1 rounded">.bin</code>, который сейчас лежит в Bank A, и файл, который лежит в Bank B, — это две РАЗНЫЕ сборки, слинкованные под разные адреса flash. Заливая новую прошивку через «Загрузить новую прошивку», убедитесь, что это сборка именно для того банка, куда сейчас пойдёт запись (см. «Активный банк» выше — запись всегда идёт в противоположный банк). Загрузка образа не того банка не отслеживается автоматически и приведёт к неработающему кандидату при следующей перезагрузке.`
-      : html` The <code class="bg-amber-100 px-1 rounded">.bin</code> file currently in Bank A and the one in Bank B are two DIFFERENT builds, linked for different flash addresses. When uploading a new firmware via "Upload new firmware", make sure it was built for the bank that will actually receive the write (see "Active bank" above — writes always go to the opposite bank). Uploading the wrong bank's image is not caught automatically and will produce a non-booting candidate on the next reboot.`}
+      ? html` Файл <code class="bg-amber-100 px-1 rounded">.bin</code>, который сейчас лежит в Bank A, и файл, который лежит в Bank B, — это две РАЗНЫЕ сборки, слинкованные под разные адреса flash. Перепутать банки невозможно: каждая сборка несёт внутри образа метку своего банка, и устройство в начале загрузки сверяет её и отклоняет образ не для того банка ещё до записи во flash. Артефакты сборки различаются по имени — <code class="bg-amber-100 px-1 rounded">Zagotovka_Bank_A.bin</code> / <code class="bg-amber-100 px-1 rounded">Zagotovka_Bank_B.bin</code>, а интерфейс не даст начать загрузку, если имя файла не соответствует банку назначения.`
+      : html` The <code class="bg-amber-100 px-1 rounded">.bin</code> file currently in Bank A and the one in Bank B are two DIFFERENT builds, linked for different flash addresses. Mixing up the banks is not possible: each build carries its bank label inside the image, and at the start of the upload the device verifies it and rejects an image built for the other bank BEFORE anything is written to flash. The build artifacts are also named differently — <code class="bg-amber-100 px-1 rounded">Zagotovka_Bank_A.bin</code> / <code class="bg-amber-100 px-1 rounded">Zagotovka_Bank_B.bin</code> — and the UI refuses to start the upload if the file name does not match the destination bank.`}
               </div>
 
               <!-- Пояснение логики кнопок commit / switch-bank -->

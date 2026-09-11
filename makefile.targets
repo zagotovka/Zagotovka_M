@@ -3,9 +3,12 @@
 ################################################################################
 
 # Генерация .bin из .elf
-Zagotovka_M.bin: $(EXECUTABLES)
+$(BUILD_ARTIFACT_NAME).bin: $(EXECUTABLES)
 	arm-none-eabi-objcopy -O binary $(EXECUTABLES) $@
 	@echo 'Generated: $@'
+	@mkdir -p ../Proshivka
+	@cp $@ ../Proshivka/$@
+	@echo 'Copied to Proshivka/$@'
 
 # Расширяем secondary-outputs чтобы .bin создавался при каждом билде
-secondary-outputs: Zagotovka_M.bin
+secondary-outputs: $(BUILD_ARTIFACT_NAME).bin

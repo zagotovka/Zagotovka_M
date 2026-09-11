@@ -1,0 +1,8 @@
+../Core/Src/zbee_vbtn.c:41:12:json_find_val_path.constprop	72	static
+../Core/Src/zbee_vbtn.c:114:12:match_payload_word	56	static
+../Core/Src/zbee_vbtn.c:72:12:click_state_from_payload	16	static
+../Core/Src/zbee_vbtn.c:88:5:is_raw_payload	8	static
+../Core/Src/zbee_vbtn.c:93:6:vbtn_execute	48	static
+../Core/Src/zbee_vbtn.c:155:6:zbee_vbtn_tick	32	static
+../Core/Src/zbee_vbtn.c:246:6:zbee_vbtn_mqtt_event	32	static
+../Core/Src/zbee_vbtn.c:292:6:zbee_vbtn_auto_detect	24	static

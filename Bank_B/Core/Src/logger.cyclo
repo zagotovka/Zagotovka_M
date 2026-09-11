@@ -1,0 +1,7 @@
+../Core/Src/logger.c:43:13:logger_get_category_name	2
+../Core/Src/logger.c:61:6:logger_init	1
+../Core/Src/logger.c:66:6:logger_set_mask	1
+../Core/Src/logger.c:71:10:logger_get_mask	1
+../Core/Src/logger.c:75:6:logger_save_mask	1
+../Core/Src/logger.c:80:6:logger_send	6
+../Core/Src/logger.c:183:5:__io_putchar	32
