@@ -20,3 +20,18 @@ typedef struct {
 } fw_meta_t;
 
 extern const fw_meta_t g_fw_meta;
+
+/* ── OTA state machine ────────────────────────────────────────────────
+ * Общие константы между приложением (net.c, compat_ota.c) и бутлоадером
+ * (Bootloader/main.c). Значения обязаны совпадать байт-в-байт с тем, что
+ * пишется в HTTPSsettings::ota_state. При изменении — обновляй ОБА
+ * проекта и обязательно перепрошивай bootloader заново, иначе он продолжит
+ * писать старые значения. */
+#define OTA_STATE_NONE             0  // нет данных (прошито не через OTA)
+#define OTA_STATE_FIRST_BOOT       1  // пробная загрузка кандидата идёт
+#define OTA_STATE_UNCOMMITTED      2  // запрошен ручной откат, ждём перезагрузки
+#define OTA_STATE_COMMITTED        3  // подтверждено (вручную или health-check'ом)
+#define OTA_STATE_AUTO_ROLLED_BACK 4  // авто-откат: кандидат не прошёл проверку
+
+#define OTA_BOOT_RETRY_MAX         3      // сколько пробных загрузок даём кандидату
+#define OTA_BOOT_COMMIT_DELAY_MS   60000  // через сколько мс "прижившийся" кандидат подтверждается сам

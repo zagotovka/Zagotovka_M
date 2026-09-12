@@ -32,12 +32,6 @@ void mg_device_reset(void);
 #define MG_FIRMWARE_PREVIOUS 1
 #endif
 
-/* OTA status codes (compatible with 7.13) */
-#define MG_OTA_UNAVAILABLE 0
-#define MG_OTA_FIRST_BOOT  1
-#define MG_OTA_UNCOMMITTED 2
-#define MG_OTA_COMMITTED   3
-
 /* Помечает "первая загрузка после OTA / не подтверждено" и возвращает
  * ПРЕДЫДУЩЕЕ значение флага (для отката в mg_ota_cancel_pending(),
  * если своп в итоге не состоялся).

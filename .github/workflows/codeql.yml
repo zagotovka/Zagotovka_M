@@ -45,6 +45,8 @@ jobs:
             -mfloat-abi=hard \
             -DUSE_HAL_DRIVER \
             -DSTM32F767xx \
+            -DFW_TARGET_BANK=0 \
+            -DFW_LINK_BASE=0x08040000 \
             $INCLUDES \
             -o /dev/null
         done

@@ -366,8 +366,6 @@ void ota_watchdog_fn(void *arg) {
    If firmware survived OTA_BOOT_COMMIT_DELAY_MS with pending=1 state=1
    retries=3, the new bank is considered healthy and committed.
    Bootloader retry loop no longer increments, future boots use active bank. */
-#define OTA_BOOT_COMMIT_DELAY_MS  60000  /* 60 seconds after boot */
-#define OTA_BOOT_RETRY_MAX        3
 
 void ota_health_check_fn(void *arg) {
   (void) arg;
@@ -568,11 +566,14 @@ void handle_firmware_switch_bank(struct mg_connection *c, struct mg_http_message
 
 static size_t print_status(void (*out)(char, void *), void *ptr, va_list *ap) {
   int fw = va_arg(*ap, int);
-  return mg_xprintf(out, ptr, "{%m:%d,%m:%c%lx%c,%m:%u,%m:%u,%m:%m}\n",
+  const HTTPSsettings *s = get_valid_settings();
+  return mg_xprintf(out, ptr, "{%m:%d,%m:%c%lx%c,%m:%u,%m:%u,%m:%m,%m:%u,%m:%u}\n",
                     MG_ESC("status"), mg_ota_status(fw), MG_ESC("crc32"), '"',
                     mg_ota_crc32(fw), '"', MG_ESC("size"), mg_ota_size(fw),
                     MG_ESC("timestamp"), mg_ota_timestamp(fw),
-                    MG_ESC("version"), MG_ESC(FW_VERSION));
+                    MG_ESC("version"), MG_ESC(FW_VERSION),
+                    MG_ESC("retries"), (unsigned)(s ? s->ota_boot_retries : 0),
+                    MG_ESC("max_retries"), (unsigned) OTA_BOOT_RETRY_MAX);
 }
 
 void handle_firmware_status(struct mg_connection *c) {

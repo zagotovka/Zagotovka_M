@@ -58,7 +58,7 @@ Core/Src/compat_ota.o: ../Core/Src/compat_ota.c ../Core/Inc/compat_ota.h \
  ../Core/Inc/net.h ../Core/Inc/setings.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h \
- ../Core/Inc/version_gen.h ../Core/Inc/logger.h
+ ../Core/Inc/version_gen.h ../Core/Inc/fw_meta.h ../Core/Inc/logger.h
 ../Core/Inc/compat_ota.h:
 ../Core/Inc/mongoose.h:
 ../Core/Inc/mongoose_config.h:
@@ -126,4 +126,5 @@ Core/Src/compat_ota.o: ../Core/Src/compat_ota.c ../Core/Inc/compat_ota.h \
 ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h:
 ../Core/Inc/version_gen.h:
+../Core/Inc/fw_meta.h:
 ../Core/Inc/logger.h:

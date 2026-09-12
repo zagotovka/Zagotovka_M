@@ -27,6 +27,7 @@
 #include "compat_ota.h"
 #include "zagotovka.h" /* HTTPSsettings, get_valid_settings(), update_and_write_settings() */
 #include "version_gen.h" /* FW_VERSION */
+#include "fw_meta.h" /* OTA_STATE_* */
 #include "logger.h"    /* LOG_CAT_OTA, LOG_MASK_OTA, cat_prefixes[], g_log_filter_mask */
 #include <string.h>    /* strlen */
 /* Cortex-M CMSIS header for NVIC_SystemReset() */
@@ -93,7 +94,7 @@ void mg_ota_set_pending_bank(uint8_t target_bank, uint8_t prev_bank) {
     tmp.ota_pending = 1;
     tmp.ota_active_bank = target_bank;
     tmp.ota_prev_active_bank = prev_bank;
-    tmp.ota_state = 1; // MG_OTA_FIRST_BOOT
+    tmp.ota_state = OTA_STATE_FIRST_BOOT;
     /* Явное обнуление: каждый новый OTA-цикл стартует с чистым счётчиком
      * попыток, независимо от того, чем закончился предыдущий цикл
      * (иначе, например, перепрошивка поверх незавершённого trial-цикла
@@ -129,10 +130,26 @@ void mg_ota_reset_status(void) {
 
 /* ---- OTA query stubs ---------------------------------------------------- */
 int mg_ota_status(int firmware) {
-    (void) firmware;
-    uint32_t state = ota_flag_read();
-    if (state == 1 || state == 3) return (int) state;
-    return 0; // 0 = Нет данных / Не через OTA
+    const HTTPSsettings *s = get_valid_settings();
+    uint8_t active = mg_ota_get_active_bank();   // 0 = активен Bank A, 1 = активен Bank B
+
+    if (firmware == MG_FIRMWARE_CURRENT) {
+        /* CURRENT — банк, вокруг которого крутится вся логика ota_state
+         * (пробные загрузки, health-check, откаты). */
+        uint32_t state = ota_flag_read();
+        if (state == OTA_STATE_FIRST_BOOT  || state == OTA_STATE_UNCOMMITTED ||
+            state == OTA_STATE_COMMITTED   || state == OTA_STATE_AUTO_ROLLED_BACK) {
+            return (int) state;
+        }
+        return OTA_STATE_NONE;
+    }
+
+    /* PREVIOUS — банк, который сейчас НЕ активен. Он никогда не находится
+     * "в процессе обкатки": либо в нём уже подтверждённая версия,
+     * либо в него вообще ничего не заливали через OTA. */
+    const char *ver = (active == 1) ? (s ? s->ota_bank_a_version : "")
+                                    : (s ? s->ota_bank_b_version : "");
+    return (ver && ver[0]) ? OTA_STATE_COMMITTED : OTA_STATE_NONE;
 }
 
 uint32_t mg_ota_crc32(int firmware) {
@@ -156,7 +173,7 @@ bool mg_ota_commit(void) {
     if (current) memcpy(&tmp, current, sizeof(tmp));
     else memset(&tmp, 0, sizeof(tmp));
 
-    tmp.ota_state = 3; // Committed
+    tmp.ota_state = OTA_STATE_COMMITTED;
     tmp.ota_pending = 0;
 
     /* Запоминаем версию образа в активном банке — её показывает
@@ -196,7 +213,7 @@ bool mg_ota_switch_bank(void) {
 
     tmp.ota_active_bank  = target;
     tmp.ota_pending      = 0;
-    tmp.ota_state        = 3;
+    tmp.ota_state        = OTA_STATE_COMMITTED;
     tmp.ota_boot_retries = 0;
 
     bool ok = update_and_write_settings(&tmp);
@@ -210,7 +227,7 @@ bool mg_ota_rollback(void) {
     if (current) memcpy(&tmp, current, sizeof(tmp));
     else memset(&tmp, 0, sizeof(tmp));
     
-    tmp.ota_state = 2; // Uncommitted (rollback)
+    tmp.ota_state = OTA_STATE_UNCOMMITTED;
     tmp.ota_pending = 1;
     bool ok = update_and_write_settings(&tmp);
     if (ok) mg_device_reset();

@@ -51,12 +51,20 @@ export function FirmwareUpdate({ }) {
     }
   }, [alert]);
 
-  const statusText = (s) => {
+  const statusText = (fw) => {
+    const s = fw?.status;
+    if (s === 1) {
+      const n = fw.retries ?? '?';
+      const max = fw.max_retries ?? 3;
+      return language === 'ru'
+        ? `${n}-я тестовая загрузка из ${max}`
+        : `Trial boot ${n} of ${max}`;
+    }
     const map = {
       0: language === 'ru' ? 'Нет данных о версии (прошито не через OTA)' : 'No OTA data (flashed directly, not via OTA)',
-      1: language === 'ru' ? 'Первая загрузка' : 'First boot',
       2: language === 'ru' ? 'Не подтверждено' : 'Uncommitted',
-      3: language === 'ru' ? 'Подтверждено' : 'Committed'
+      3: language === 'ru' ? 'Подтверждено' : 'Committed',
+      4: language === 'ru' ? 'Выполнен автоматический откат на предыдущую версию прошивки.' : 'Automatic rollback to the previous firmware version was performed.'
     };
     return s != null && map[s] !== undefined ? map[s] : (language === 'ru' ? 'Н/Д' : 'N/A');
   };
@@ -418,7 +426,7 @@ export function FirmwareUpdate({ }) {
               ${language === 'ru' ? 'Активный банк' : 'Active bank'}: ${activeBank === 1 ? 'B' : 'A'}
             </div>
             <div class="text-slate-700 text-sm mb-2">
-              ${language === 'ru' ? 'Статус' : 'Status'}: ${statusText(firmwares[0].status)}
+              ${language === 'ru' ? 'Статус' : 'Status'}: ${statusText(firmwares[0])}
             </div>
             <div class="text-slate-700 text-sm">
               Bank A: ${bankAVersion || '—'}
@@ -535,6 +543,13 @@ export function FirmwareUpdate({ }) {
                 ${language === 'ru'
       ? html`<b>Подтвердить эту прошивку</b> и <b>Вернуться на Bank X</b> — это разные действия. «Подтвердить» закрепляет только что залитый и уже загрузившийся образ как рабочий, чтобы устройство не откатилось на предыдущий банк при следующей перезагрузке; кнопка активна только пока есть неподтверждённый кандидат. «Вернуться на Bank X» — мгновенное переключение на уже подтверждённый ранее образ в другом банке БЕЗ заливки чего-либо нового и без пробного (trial) цикла — устройство перезагрузится сразу, поэтому действие требует подтверждения.`
       : html`<b>Commit this firmware</b> and <b>Switch to Bank X</b> are different actions. "Commit" locks in the image that was just uploaded and has already booted, so the device won't roll back to the other bank on the next reboot; it's only enabled while there is an uncommitted candidate. "Switch to Bank X" is an immediate switch to a previously committed image in the other bank WITHOUT uploading anything new and without a trial cycle — the device reboots right away, which is why it asks for confirmation.`}
+              </div>
+
+              <!-- Пояснение "обкатки" новой прошивки простым языком -->
+              <div class="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600">
+                ${language === 'ru'
+      ? html`<b>Как устройство «обкатывает» новую прошивку.</b> Представьте, что вы купили новую обувь и меряете её три раза перед тем, как окончательно решить, подходит она или нет. Так же и тут: после заливки новой прошивки устройство даёт себе <b>3 пробные попытки</b> включиться с ней. Если на третьей попытке прошивка проработала спокойно <b>целую минуту</b> без перезагрузок — устройство решает, что всё в порядке, и <b>само подтверждает</b> обновление, как будто вы нажали кнопку «Подтвердить эту прошивку». Но если вы (или сбой питания) перезагрузите устройство ещё раз, не дав ему той самой минуты — оно решит, что новой прошивке доверять нельзя, и <b>само вернётся</b> на прежнюю, ранее рабочую версию. В этом случае в статусе появится «Автоматически откачено», чтобы не перепутать это с тем, что вы сами подтвердили обновление.`
+      : html`<b>How the device "test-drives" a new firmware.</b> Think of trying on a new pair of shoes three times before deciding whether to keep them. Same idea here: after a new firmware is uploaded, the device gives itself <b>3 trial attempts</b> to boot with it. If on the third attempt it runs quietly for a full minute without rebooting, the device decides it's fine and <b>confirms the update on its own</b>, as if you'd pressed "Commit this firmware". But if you (or a power glitch) reboot it again before that minute passes, it decides the new firmware can't be trusted and <b>switches back</b> to the previous, working version by itself. In that case the status will show "Auto rolled back", so it's never confused with you having confirmed the update yourself.`}
               </div>
 
               <ol class="list-decimal pl-5 space-y-1.5">

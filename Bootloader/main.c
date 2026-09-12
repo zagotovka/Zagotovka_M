@@ -26,6 +26,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include "fw_meta.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -77,7 +78,6 @@ typedef struct __attribute__((packed)) {
 #define BANK_A_ADDR 0x08040000
 #define BANK_B_ADDR 0x08100000
 
-#define OTA_BOOT_RETRY_MAX 3
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -300,17 +300,22 @@ static bool settings_write_retries(const HTTPSsettings *cur, uint8_t new_retries
 }
 
 /*
- * Откат: возвращаемся на банк, который был активен ДО текущего OTA-цикла
- * (ota_prev_active_bank), а не жёстко на Bank A. Активный банк никогда
- * не трогается, поэтому предыдущий образ всегда остаётся рабочим.
+ * Откат: возвращаемся на банк, который был активен ДО текущего OTA-цикла.
+ * new_state:
+ *   OTA_STATE_COMMITTED        — ручной откат по запросу пользователя,
+ *                                 либо восстановление после повреждённого
+ *                                 образа (кандидат тут ни при чём).
+ *   OTA_STATE_AUTO_ROLLED_BACK — автоматический откат: кандидат сам
+ *                                 не смог доказать свою надёжность
+ *                                 (исчерпан лимит пробных загрузок).
  */
-static bool settings_rollback(const HTTPSsettings *cur)
+static bool settings_rollback(const HTTPSsettings *cur, uint8_t new_state)
 {
   HTTPSsettings tmp;
   memcpy(&tmp, cur, sizeof(HTTPSsettings));
   tmp.ota_active_bank  = cur->ota_prev_active_bank;
   tmp.ota_pending      = 0;
-  tmp.ota_state        = 3;   // он и так уже был committed ранее
+  tmp.ota_state        = new_state;
   tmp.ota_boot_retries = 0;
   tmp.version = cur->version + 1;
   tmp.crc = calculate_crc(&tmp);
@@ -407,12 +412,12 @@ int main(void)
 		log_msg(buf);
 
 		if (s->ota_pending == 1) {
-			if (s->ota_state == 3) {
+			if (s->ota_state == OTA_STATE_COMMITTED) {
 				target_addr = (s->ota_active_bank == 1) ? BANK_B_ADDR : BANK_A_ADDR;
 				log_msg("[BOOT] Committed -> active bank\r\n");
-			} else if (s->ota_state == 2) {
+			} else if (s->ota_state == OTA_STATE_UNCOMMITTED) {
 				log_msg("[BOOT] App requested rollback\r\n");
-				if (!settings_rollback(s)) {
+				if (!settings_rollback(s, OTA_STATE_COMMITTED)) {
 					log_msg("[BOOT] WARN: rollback write FAILED\r\n");
 				}
 				target_addr = (s->ota_prev_active_bank == 1) ? BANK_B_ADDR : BANK_A_ADDR;
@@ -420,7 +425,7 @@ int main(void)
 				uint8_t r = s->ota_boot_retries;
 				if (r >= OTA_BOOT_RETRY_MAX) {
 					log_msg("[BOOT] Max retries -> rollback to previous bank\r\n");
-					if (!settings_rollback(s)) {
+					if (!settings_rollback(s, OTA_STATE_AUTO_ROLLED_BACK)) {
 						log_msg("[BOOT] WARN: rollback write FAILED\r\n");
 					}
 					target_addr = (s->ota_prev_active_bank == 1) ? BANK_B_ADDR : BANK_A_ADDR;
@@ -453,7 +458,10 @@ int main(void)
 	if (!app_image_valid(target_addr)) {
 		log_msg("[BOOT] Target bank image INVALID\r\n");
 		if (s != 0 && s->ota_pending == 1) {
-			if (!settings_rollback(s)) {
+			/* Клеймо "авто-откат кандидата" здесь неуместно: сюда же попадают
+			 * случаи повреждения УЖЕ committed-банка (state==3) и неудачного
+			 * ручного отката (state==2). Оставляем прежнее поведение. */
+			if (!settings_rollback(s, OTA_STATE_COMMITTED)) {
 				log_msg("[BOOT] WARN: rollback write FAILED\r\n");
 			}
 		}

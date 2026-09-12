@@ -71,7 +71,8 @@ typedef struct __attribute__((packed)) {
     uint32_t timeout;
     uint8_t retry_cnt;
     uint8_t connection_mode;
-    uint8_t ota_state;       // 0=нет данных, 1=первая загрузка, 3=подтверждено
+    uint8_t ota_state;       // 0=нет данных, 1=пробная загрузка, 2=запрошен ручной откат,
+                             // 3=подтверждено, 4=автоматический откат (см. fw_meta.h)
     uint8_t version;         // Номер версии настроек (0-94)
     uint8_t ota_active_bank; // 0=Bank A (по умолчанию), 1=Bank B
     uint8_t ota_pending;     // 1=есть незавершённое обновление
