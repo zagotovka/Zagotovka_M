@@ -16,6 +16,7 @@ C_SRCS += \
 ../Core/Src/lwdtc.c \
 ../Core/Src/main.c \
 ../Core/Src/mongoose.c \
+../Core/Src/mqtt_server.c \
 ../Core/Src/multi_button.c \
 ../Core/Src/net.c \
 ../Core/Src/onewire.c \
@@ -43,6 +44,7 @@ OBJS += \
 ./Core/Src/lwdtc.o \
 ./Core/Src/main.o \
 ./Core/Src/mongoose.o \
+./Core/Src/mqtt_server.o \
 ./Core/Src/multi_button.o \
 ./Core/Src/net.o \
 ./Core/Src/onewire.o \
@@ -70,6 +72,7 @@ C_DEPS += \
 ./Core/Src/lwdtc.d \
 ./Core/Src/main.d \
 ./Core/Src/mongoose.d \
+./Core/Src/mqtt_server.d \
 ./Core/Src/multi_button.d \
 ./Core/Src/net.d \
 ./Core/Src/onewire.d \
@@ -93,7 +96,7 @@ Core/Src/%.o Core/Src/%.su Core/Src/%.cyclo: ../Core/Src/%.c Core/Src/subdir.mk
 clean: clean-Core-2f-Src
 
 clean-Core-2f-Src:
-	-$(RM) ./Core/Src/compat_ota.cyclo ./Core/Src/compat_ota.d ./Core/Src/compat_ota.o ./Core/Src/compat_ota.su ./Core/Src/db.cyclo ./Core/Src/db.d ./Core/Src/db.o ./Core/Src/db.su ./Core/Src/ds18b20.cyclo ./Core/Src/ds18b20.d ./Core/Src/ds18b20.o ./Core/Src/ds18b20.su ./Core/Src/dtcm_alloc.cyclo ./Core/Src/dtcm_alloc.d ./Core/Src/dtcm_alloc.o ./Core/Src/dtcm_alloc.su ./Core/Src/freertos.cyclo ./Core/Src/freertos.d ./Core/Src/freertos.o ./Core/Src/freertos.su ./Core/Src/fw_meta.cyclo ./Core/Src/fw_meta.d ./Core/Src/fw_meta.o ./Core/Src/fw_meta.su ./Core/Src/gsm.cyclo ./Core/Src/gsm.d ./Core/Src/gsm.o ./Core/Src/gsm.su ./Core/Src/logger.cyclo ./Core/Src/logger.d ./Core/Src/logger.o ./Core/Src/logger.su ./Core/Src/lwdtc.cyclo ./Core/Src/lwdtc.d ./Core/Src/lwdtc.o ./Core/Src/lwdtc.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/mongoose.cyclo ./Core/Src/mongoose.d ./Core/Src/mongoose.o ./Core/Src/mongoose.su ./Core/Src/multi_button.cyclo ./Core/Src/multi_button.d ./Core/Src/multi_button.o ./Core/Src/multi_button.su ./Core/Src/net.cyclo ./Core/Src/net.d ./Core/Src/net.o ./Core/Src/net.su ./Core/Src/onewire.cyclo ./Core/Src/onewire.d ./Core/Src/onewire.o ./Core/Src/onewire.su ./Core/Src/packed_fs.cyclo ./Core/Src/packed_fs.d ./Core/Src/packed_fs.o ./Core/Src/packed_fs.su ./Core/Src/setings.cyclo ./Core/Src/setings.d ./Core/Src/setings.o ./Core/Src/setings.su ./Core/Src/stm32f7xx_hal_msp.cyclo ./Core/Src/stm32f7xx_hal_msp.d ./Core/Src/stm32f7xx_hal_msp.o ./Core/Src/stm32f7xx_hal_msp.su ./Core/Src/stm32f7xx_hal_timebase_tim.cyclo ./Core/Src/stm32f7xx_hal_timebase_tim.d ./Core/Src/stm32f7xx_hal_timebase_tim.o ./Core/Src/stm32f7xx_hal_timebase_tim.su ./Core/Src/stm32f7xx_it.cyclo ./Core/Src/stm32f7xx_it.d ./Core/Src/stm32f7xx_it.o ./Core/Src/stm32f7xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su ./Core/Src/system_stm32f7xx.cyclo ./Core/Src/system_stm32f7xx.d ./Core/Src/system_stm32f7xx.o ./Core/Src/system_stm32f7xx.su ./Core/Src/usart_ring.cyclo ./Core/Src/usart_ring.d ./Core/Src/usart_ring.o ./Core/Src/usart_ring.su ./Core/Src/zagotovka.cyclo ./Core/Src/zagotovka.d ./Core/Src/zagotovka.o ./Core/Src/zagotovka.su ./Core/Src/zbee_vbtn.cyclo ./Core/Src/zbee_vbtn.d ./Core/Src/zbee_vbtn.o ./Core/Src/zbee_vbtn.su
+	-$(RM) ./Core/Src/compat_ota.cyclo ./Core/Src/compat_ota.d ./Core/Src/compat_ota.o ./Core/Src/compat_ota.su ./Core/Src/db.cyclo ./Core/Src/db.d ./Core/Src/db.o ./Core/Src/db.su ./Core/Src/ds18b20.cyclo ./Core/Src/ds18b20.d ./Core/Src/ds18b20.o ./Core/Src/ds18b20.su ./Core/Src/dtcm_alloc.cyclo ./Core/Src/dtcm_alloc.d ./Core/Src/dtcm_alloc.o ./Core/Src/dtcm_alloc.su ./Core/Src/freertos.cyclo ./Core/Src/freertos.d ./Core/Src/freertos.o ./Core/Src/freertos.su ./Core/Src/fw_meta.cyclo ./Core/Src/fw_meta.d ./Core/Src/fw_meta.o ./Core/Src/fw_meta.su ./Core/Src/gsm.cyclo ./Core/Src/gsm.d ./Core/Src/gsm.o ./Core/Src/gsm.su ./Core/Src/logger.cyclo ./Core/Src/logger.d ./Core/Src/logger.o ./Core/Src/logger.su ./Core/Src/lwdtc.cyclo ./Core/Src/lwdtc.d ./Core/Src/lwdtc.o ./Core/Src/lwdtc.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/mongoose.cyclo ./Core/Src/mongoose.d ./Core/Src/mongoose.o ./Core/Src/mongoose.su ./Core/Src/mqtt_server.cyclo ./Core/Src/mqtt_server.d ./Core/Src/mqtt_server.o ./Core/Src/mqtt_server.su ./Core/Src/multi_button.cyclo ./Core/Src/multi_button.d ./Core/Src/multi_button.o ./Core/Src/multi_button.su ./Core/Src/net.cyclo ./Core/Src/net.d ./Core/Src/net.o ./Core/Src/net.su ./Core/Src/onewire.cyclo ./Core/Src/onewire.d ./Core/Src/onewire.o ./Core/Src/onewire.su ./Core/Src/packed_fs.cyclo ./Core/Src/packed_fs.d ./Core/Src/packed_fs.o ./Core/Src/packed_fs.su ./Core/Src/setings.cyclo ./Core/Src/setings.d ./Core/Src/setings.o ./Core/Src/setings.su ./Core/Src/stm32f7xx_hal_msp.cyclo ./Core/Src/stm32f7xx_hal_msp.d ./Core/Src/stm32f7xx_hal_msp.o ./Core/Src/stm32f7xx_hal_msp.su ./Core/Src/stm32f7xx_hal_timebase_tim.cyclo ./Core/Src/stm32f7xx_hal_timebase_tim.d ./Core/Src/stm32f7xx_hal_timebase_tim.o ./Core/Src/stm32f7xx_hal_timebase_tim.su ./Core/Src/stm32f7xx_it.cyclo ./Core/Src/stm32f7xx_it.d ./Core/Src/stm32f7xx_it.o ./Core/Src/stm32f7xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su ./Core/Src/system_stm32f7xx.cyclo ./Core/Src/system_stm32f7xx.d ./Core/Src/system_stm32f7xx.o ./Core/Src/system_stm32f7xx.su ./Core/Src/usart_ring.cyclo ./Core/Src/usart_ring.d ./Core/Src/usart_ring.o ./Core/Src/usart_ring.su ./Core/Src/zagotovka.cyclo ./Core/Src/zagotovka.d ./Core/Src/zagotovka.o ./Core/Src/zagotovka.su ./Core/Src/zbee_vbtn.cyclo ./Core/Src/zbee_vbtn.d ./Core/Src/zbee_vbtn.o ./Core/Src/zbee_vbtn.su
 
 .PHONY: clean-Core-2f-Src
 

@@ -46,6 +46,7 @@
 #include "gsm.h"
 #include "usart_ring.h"
 #include "dtcm_alloc.h"
+#include "mqtt_server.h"
 
 #define BLINK_PERIOD_MS 1000 // LED blinking period in millis
 #define DEBOUNCE_DELAY 45    // Encoder (ms)
@@ -295,6 +296,7 @@ static uint32_t mg_conn_cur = 0;
 static uint32_t mg_conn_listeners = 0;
 static uint32_t mg_conn_tls = 0;
 static uint32_t mg_conn_mqtt = 0;
+static uint32_t mg_conn_mqttsrv = 0; // клиенты встроенного MQTT-брокера
 static uint32_t mg_conn_other = 0;
 static unsigned long s_other_ids[8] = {0};
 static uint32_t s_other_cnt = 0;
@@ -419,6 +421,12 @@ static bool check_mqtt_connection(void *conn);
 
 void send_mqtt_message(struct mg_connection *conn, const char *topic,
                        const char *msg) {
+  char full_topic[128]; // Буфер для полного топика
+  snprintf(full_topic, sizeof(full_topic), "%s%s", get_mqtt_topic(), topic);
+
+  /* Локальный MQTT-сервер: fan-out независимо от состояния внешнего брокера */
+  mqtt_server_publish(full_topic, msg);
+
   if (!check_mqtt_connection(conn)) {
     return;
   }
@@ -439,8 +447,6 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic,
 
   struct mg_mqtt_opts pub_opts;
   memset(&pub_opts, 0, sizeof(pub_opts));
-  char full_topic[128]; // Буфер для полного топика
-  snprintf(full_topic, sizeof(full_topic), "%s%s", get_mqtt_topic(), topic);
   pub_opts.topic = mg_str(full_topic);
   pub_opts.message = mg_str(msg);
   pub_opts.qos = s_qos;
@@ -1999,6 +2005,12 @@ void StartWebServerTask(void *argument)
 
   web_init(mgr);
 
+  /* Встроенный MQTT-брокер (только если включён в настройках;
+     таблица клиентов выделяется в DTCM один раз) */
+  if (SetSettings.check_mqtt_srv) {
+    mqtt_server_init(mgr, (uint16_t)SetSettings.mqtt_srv_prt);
+  }
+
   MqttMessage_t rxMsg = {0};
   BaseType_t status;
   char mqtt_topic[100];
@@ -2031,6 +2043,9 @@ void StartWebServerTask(void *argument)
     uint32_t t_poll = HAL_GetTick();
     mg_mgr_poll(mgr, 0); // Было 10
     t_poll = HAL_GetTick() - t_poll;
+
+    /* Встроенный MQTT-брокер: keepalive-таймауты клиентов (сама проверяет флаг) */
+    mqtt_server_poll();
     /* Статический пик времени выполнения mg_mgr_poll */
     {
       static uint32_t s_poll_exec_peak = 0;
@@ -2087,6 +2102,7 @@ void StartWebServerTask(void *argument)
       mg_conn_tls = n_tls;
       mg_conn_mqtt = n_mqtt;
       mg_conn_other = n_other;
+      mg_conn_mqttsrv = mqtt_server_client_count();
       if (active_conns > mg_conn_peak) {
         mg_conn_peak = active_conns;
       }
@@ -2115,6 +2131,8 @@ void StartWebServerTask(void *argument)
             }
         }
         while (xQueueReceive(zbeeCmdQueueHandle, &zcmd, 0) == pdPASS) {
+            /* Локальный MQTT-сервер: публикация команд независимо от внешнего брокера */
+            mqtt_server_publish(zcmd.topic, zcmd.payload);
             if (s_conn != NULL && mqtt_connected_reported) {
                 struct mg_mqtt_opts pub_opts;
                 memset(&pub_opts, 0, sizeof(pub_opts));
@@ -2131,8 +2149,13 @@ void StartWebServerTask(void *argument)
         }
     }
 
-    /* Explicit drain: rapidly clear the queue if disconnected to avoid buildup */
-    if (s_conn == NULL || s_conn->is_closing || !mqtt_connected_reported) {
+    /* Explicit drain: rapidly clear the queue if disconnected to avoid buildup.
+     * НЕ дренажим, если работает локальный MQTT-сервер (check_mqtt_srv=1) —
+     * в этом случае у сообщений есть получатель (mqtt_server_publish) даже
+     * без внешнего брокера. Дренаж нужен только когда единственный потребитель —
+     * внешний клиент, и он не подключён. */
+    if (!SetSettings.check_mqtt_srv &&
+        (s_conn == NULL || s_conn->is_closing || !mqtt_connected_reported)) {
       MqttMessage_t drain;
       while (xQueueReceive(mqttQueueHandle, &drain, 0) == pdPASS) {
         /* Drop silently */
@@ -2156,31 +2179,23 @@ void StartWebServerTask(void *argument)
       } else {
       switch (rxMsg.command) {
       case 1: // DEVICE
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            strcpy(mqtt_topic, "/device/");
-            snprintf(mqtt_payload, sizeof(mqtt_payload), "DEVICE(s)/ACTION=%s", PinsConf[1].sclick);
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
-          }
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          strcpy(mqtt_topic, "/device/");
+          snprintf(mqtt_payload, sizeof(mqtt_payload), "DEVICE(s)/ACTION=%s", PinsConf[1].sclick);
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
         break;
       case 2: // Switch
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            snprintf(mqtt_topic, sizeof(mqtt_topic), "/switch/");
-            snprintf(mqtt_payload, sizeof(mqtt_payload), "ID:%d=%s", rxMsg.deviceId, rxMsg.state ? "ON" : "OFF");
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
-          }
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/switch/");
+          snprintf(mqtt_payload, sizeof(mqtt_payload), "ID:%d=%s", rxMsg.deviceId, rxMsg.state ? "ON" : "OFF");
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
@@ -2188,35 +2203,27 @@ void StartWebServerTask(void *argument)
       case 3: // BUTTON LONG_PRESS
       case 4: // BUTTON SINGLE_CLICK
       case 5: // BUTTON DOUBLE_CLICK
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            snprintf(mqtt_topic, sizeof(mqtt_topic), "/button/");
-            switch (rxMsg.command) {
-            case 3: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].lpress); break;
-            case 4: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick); break;
-            case 5: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].dclick); break;
-            }
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/button/");
+          switch (rxMsg.command) {
+          case 3: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].lpress); break;
+          case 4: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick); break;
+          case 5: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].dclick); break;
           }
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
         break;
       case 6: // SECURITY
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
-            snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick, PinsConf[rxMsg.deviceId].info);
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
-          }
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
+          snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick, PinsConf[rxMsg.deviceId].info);
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
@@ -2225,25 +2232,21 @@ void StartWebServerTask(void *argument)
       case 9: // PWM_TIMER — заменён на send_mqtt_timer_batch()
         break; // no-op: батч обрабатывает всё
       case 8: // OnOff
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            snprintf(mqtt_topic, sizeof(mqtt_topic), "/onoff/");
-            int written = snprintf(mqtt_payload, sizeof(mqtt_payload),
-                                   "ID=%d/OnOff=%s/%s",
-                                   rxMsg.deviceId,
-                                   PinsConf[rxMsg.deviceId].onoff ? "ON" : "OFF",
-                                   PinsConf[rxMsg.deviceId].info);
-            if (written < 0 || (size_t)written >= sizeof(mqtt_payload)) {
-              printf("[MQTT] payload truncated for deviceId=%d, skipping\r\n",
-                     rxMsg.deviceId);
-              break;
-            }
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/onoff/");
+          int written = snprintf(mqtt_payload, sizeof(mqtt_payload),
+                                 "ID=%d/OnOff=%s/%s",
+                                 rxMsg.deviceId,
+                                 PinsConf[rxMsg.deviceId].onoff ? "ON" : "OFF",
+                                 PinsConf[rxMsg.deviceId].info);
+          if (written < 0 || (size_t)written >= sizeof(mqtt_payload)) {
+            printf("[MQTT] payload truncated for deviceId=%d, skipping\r\n",
+                   rxMsg.deviceId);
+            break;
           }
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
@@ -2262,7 +2265,10 @@ void StartWebServerTask(void *argument)
 
           if (now - lsens_tk >= 5000) {
 	  lsens_tk = now;
-            if (s_conn != NULL && mqtt_connected_reported && !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining) {
+            /* Публикуем и при выключенном внешнем брокере — если локальный
+               MQTT-сервер включён (publish_sensor_batch сам разрулит conn==NULL) */
+            if (SetSettings.check_mqtt_srv ||
+                (s_conn != NULL && mqtt_connected_reported && !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining)) {
               publish_sensor_batch(s_conn);
             }
           }
@@ -2274,8 +2280,11 @@ void StartWebServerTask(void *argument)
           uint32_t now = HAL_GetTick();
           if (now - ltim_tk >= 1000) {
               ltim_tk = now;
-              if (s_conn != NULL && mqtt_connected_reported &&
-                  !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining) {
+              /* Публикуем и при выключенном внешнем брокере — если локальный
+                 MQTT-сервер включён (send_mqtt_timer_batch сам разрулит conn==NULL) */
+              if (SetSettings.check_mqtt_srv ||
+                  (s_conn != NULL && mqtt_connected_reported &&
+                   !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining)) {
                   send_mqtt_timer_batch(s_conn);
               }
           }
@@ -3561,9 +3570,10 @@ static void heap_diagnostic(void)
         printf("Output queue peak:  %lu / 64\r\n", output_peak);
         printf("USB queue peak:     %lu / 16\r\n", usb_peak);
         printf("Zbee cmd peak:      %lu / 64\r\n", zbee_cmd_peak);
-        printf("Mongoose conns peak: %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu]\r\n",
+        printf("Mongoose conns peak: %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu MQTTSRV=%lu]\r\n",
                mg_conn_peak, mg_conn_cur,
-               mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other);
+               mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other,
+               (unsigned long)mg_conn_mqttsrv);
         printf("Mongoose gap peak:   %lu ms (starvation cnt: %lu)\r\n", mg_poll_gap_peak, (unsigned long)mg_poll_gap_over_50ms_cnt);
         printf("HTTP(s) Requests:   Total=%lu, API=%lu, Encoder=%lu\r\n",
                (unsigned long)req_total, (unsigned long)req_api, (unsigned long)req_encoder);
@@ -3753,9 +3763,10 @@ void StartDgnTask(void *argument)
 			printf("USB peak:      %lu / 16\r\n", usb_peak);
 
 			printf("\r\n""=== MONGOOSE PEAKS ===\r\n");
-			printf("Conns peak:    %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu]\r\n",
+			printf("Conns peak:    %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu MQTTSRV=%lu]\r\n",
 			       mg_conn_peak, mg_conn_cur,
-			       mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other);
+			       mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other,
+			       (unsigned long)mg_conn_mqttsrv);
 			printf("Poll gap peak: %lu ms (starvation cnt: %lu)\r\n", mg_poll_gap_peak, (unsigned long)mg_poll_gap_over_50ms_cnt);
 
 			printf("\r\n""=== RUNTIME ===\r\n");

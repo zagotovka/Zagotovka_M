@@ -11,7 +11,9 @@ export function FirmwareUpdate({ }) {
     firmwares: [{}, {}],
     active_bank: 0,
     bank_a_version: '',
-    bank_b_version: ''
+    bank_b_version: '',
+    bank_a_valid: false,
+    bank_b_valid: false
   });
   const [language, setLanguage] = useState('ru');
   const [alert, setAlert] = useState(null);
@@ -73,6 +75,17 @@ export function FirmwareUpdate({ }) {
   const activeBank = info.active_bank || 0;
   const bankAVersion = info.bank_a_version || '';
   const bankBVersion = info.bank_b_version || '';
+  // bank_a_valid/bank_b_valid — реальное наличие рабочего образа в банке
+  // (сервер проверяет MSP в векторной таблице по адресу банка), а НЕ
+  // непустота bank_a_version/bank_b_version. Версия появляется только
+  // после mg_ota_commit(), т.е. только если прошивка попадала в банк
+  // через OTA. Bank A всегда прошивается напрямую через ST-Link (сразу
+  // после bootloader'а, на чистом МК) — версии там никогда не будет,
+  // хотя сам образ полностью валиден и загружается. Раньше "Bank A: —"
+  // ошибочно читалось как "банк пуст", хотя это лишь означало "версия
+  // неизвестна, потому что прошито не через OTA".
+  const bankAValid = !!info.bank_a_valid;
+  const bankBValid = !!info.bank_b_valid;
 
   // Целевой банк для переключения — противоположный активному.
   // Активный банк никогда не трогается OTA-циклом (новый образ всегда
@@ -80,6 +93,17 @@ export function FirmwareUpdate({ }) {
   // подтверждённая рабочая прошивка — переключение на него безопасно.
   const targetBank = activeBank === 1 ? 'A' : 'B';
   const targetVersion = activeBank === 1 ? bankAVersion : bankBVersion;
+  const targetValid = activeBank === 1 ? bankAValid : bankBValid;
+
+  // Кнопка "Вернуться на Bank X" не должна быть кликабельной, если в целевом
+  // банке реально нет образа (targetValid === false) — иначе клик приводит
+  // только к ошибке от сервера постфактум. Именно наличие образа, а не
+  // наличие версии: у прошивки, залитой через ST-Link, версии не будет,
+  // но переключаться на неё можно и нужно. Полностью меняем набор классов
+  // (а не полагаемся на disabled:opacity-40 и т.п.), чтобы неактивность
+  // кнопки было видно сразу, а не только по курсору при наведении — по
+  // аналогии с кнопкой "Подтвердить эту прошивку" ниже.
+  const bankSwitchDisabled = uploading || !targetValid;
 
   // Кнопка "Подтвердить эту прошивку" вызывает mg_ota_commit() — это защитный
   // механизм двухбанковой OTA-схемы: пока прошивка не подтверждена, при
@@ -429,15 +453,19 @@ export function FirmwareUpdate({ }) {
               ${language === 'ru' ? 'Статус' : 'Status'}: ${statusText(firmwares[0])}
             </div>
             <div class="text-slate-700 text-sm">
-              Bank A: ${bankAVersion || '—'}
+              Bank A: ${bankAVersion || (bankAValid
+                ? (language === 'ru' ? 'прошито напрямую (не через OTA)' : 'flashed directly (not via OTA)')
+                : '—')}
             </div>
             <div class="text-slate-700 text-sm mb-2">
-              Bank B: ${bankBVersion || '—'}
+              Bank B: ${bankBVersion || (bankBValid
+                ? (language === 'ru' ? 'прошито напрямую (не через OTA)' : 'flashed directly (not via OTA)')
+                : '—')}
             </div>
             <!-- Пока не подтверждено (canCommit=true) — обычная кликабельная кнопка.
                  Как только firmware закоммичена, подтверждать больше нечего, поэтому
                  кнопка не просто затемняется, а полностью меняет вид (серая, без
-                 градиента, с другой подписью и иконкой) — чтобы не создавалось
+                 градиента, с другой подписью) — чтобы не создавалось
                  ощущение "нужно нажать ещё раз". -->
             <button
               onclick=${oncommit}
@@ -453,7 +481,6 @@ export function FirmwareUpdate({ }) {
                 ? "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold text-white shadow-md transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95"
                 : "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-slate-200 text-slate-400 shadow-inner cursor-not-allowed"}
             >
-              <${Icons.thumbUp} class="w-4" />
               ${canCommit
                 ? (language === 'ru' ? 'Подтвердить эту прошивку' : 'Commit this firmware')
                 : (language === 'ru' ? 'Прошивка подтверждена' : 'Firmware committed')}
@@ -598,13 +625,19 @@ export function FirmwareUpdate({ }) {
         <div class="w-full flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
           <button
             onclick=${onswitchbankConfirm}
-            disabled=${uploading}
-            title=${language === 'ru'
-              ? `Переключает активный банк на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} без заливки нового образа и перезагружает устройство`
-              : `Switches the active bank to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} without uploading a new image, then reboots`}
-            class="inline-flex justify-center items-center gap-2 py-3 px-6 rounded-full text-sm font-bold text-white shadow-md ring-2 ring-amber-300 ring-offset-2 ring-offset-white/50 transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:ring-0"
+            disabled=${bankSwitchDisabled}
+            title=${!targetValid
+              ? (language === 'ru'
+                  ? `В Bank ${targetBank} нет прошивки — переключаться не на что`
+                  : `Bank ${targetBank} has no firmware — nothing to switch to`)
+              : (language === 'ru'
+                  ? `Переключает активный банк на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} без заливки нового образа и перезагружает устройство`
+                  : `Switches the active bank to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} without uploading a new image, then reboots`)}
+            class=${bankSwitchDisabled
+              ? "inline-flex justify-center items-center gap-2 py-3 px-6 rounded-full text-sm font-bold bg-slate-200 text-slate-400 shadow-inner cursor-not-allowed"
+              : "inline-flex justify-center items-center gap-2 py-3 px-6 rounded-full text-sm font-bold text-white shadow-md ring-2 ring-amber-300 ring-offset-2 ring-offset-white/50 transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95"}
           >
-            <${Icons.refresh} class="w-4" />
+            ${!bankSwitchDisabled && html`<${Icons.refresh} class="w-4" />`}
             ${language === 'ru'
               ? `Вернуться на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}`
               : `Switch to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}`}

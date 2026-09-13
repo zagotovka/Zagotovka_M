@@ -9,6 +9,7 @@
 "./Core/Src/lwdtc.o"
 "./Core/Src/main.o"
 "./Core/Src/mongoose.o"
+"./Core/Src/mqtt_server.o"
 "./Core/Src/multi_button.o"
 "./Core/Src/net.o"
 "./Core/Src/onewire.o"

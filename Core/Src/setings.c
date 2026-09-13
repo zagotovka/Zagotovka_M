@@ -163,6 +163,12 @@ void SetSettingsConfig() {
 
   writeField(&USBHFile, buffer, "mqtt_hst", "\"%s\"", SetSettings.mqtt_hst);
 
+  writeField(&USBHFile, buffer, "check_mqtt_srv", "%d", SetSettings.check_mqtt_srv);
+  writeField(&USBHFile, buffer, "mqtt_srv_prt", "%d", SetSettings.mqtt_srv_prt);
+  writeField(&USBHFile, buffer, "mqtt_srv_maxcli", "%d", SetSettings.mqtt_srv_maxcli);
+  writeField(&USBHFile, buffer, "mqtt_srv_usr", "\"%s\"", SetSettings.mqtt_srv_usr);
+  writeField(&USBHFile, buffer, "mqtt_srv_pswd", "\"%s\"", SetSettings.mqtt_srv_pswd);
+
   writeField(&USBHFile, buffer, "check_ip", "%d", SetSettings.check_ip);
   writeField(&USBHFile, buffer, "ip_addr0", "%d", SetSettings.ip_addr0);
   writeField(&USBHFile, buffer, "ip_addr1", "%d", SetSettings.ip_addr1);
@@ -256,6 +262,13 @@ void StartSettingsConfig() {
 
   writeField(&USBHFile, buffer, "mqtt_hst", "\"192.168.1.100\"");
 
+  // Write MQTT Server settings
+  writeField(&USBHFile, buffer, "check_mqtt_srv", "%d", CHECK_MQTT_SRV);
+  writeField(&USBHFile, buffer, "mqtt_srv_prt", "%d", MQTT_SRV_PRT);
+  writeField(&USBHFile, buffer, "mqtt_srv_maxcli", "%d", MQTT_SRV_MAXCLI);
+  writeField(&USBHFile, buffer, "mqtt_srv_usr", "\"%s\"", MQTT_SRV_USR);
+  writeField(&USBHFile, buffer, "mqtt_srv_pswd", "\"%s\"", MQTT_SRV_PSWD);
+
   // Write IP settings
   writeField(&USBHFile, buffer, "check_ip", "%d", CHECK_IP);
 
@@ -314,6 +327,11 @@ void StartSettingsConfig() {
   //    SetSettings.gateway2 = GATEWAY2;
   //    SetSettings.gateway3 = GATEWAY3;
   SetSettings.mqtt_prt = MQTT_PRT;
+  SetSettings.check_mqtt_srv = CHECK_MQTT_SRV;
+  SetSettings.mqtt_srv_prt = MQTT_SRV_PRT;
+  SetSettings.mqtt_srv_maxcli = MQTT_SRV_MAXCLI;
+  strcpy(SetSettings.mqtt_srv_usr, MQTT_SRV_USR);
+  strcpy(SetSettings.mqtt_srv_pswd, MQTT_SRV_PSWD);
   SetSettings.usehttps = CHECK_USEHTTPS;
   //    SetSettings.mqtt_qos = MQTT_QOS;
 }
@@ -344,6 +362,12 @@ void GetSettingsConfig() {
   }
   //	printf("File opened successfully\r\n");
   memset(&SetSettings, 0, sizeof(SetSettings)); // обнуляем структуру
+  // Дефолты ДО парсинга: если ключ отсутствует в старом settings.ini — остаются дефолты
+  SetSettings.check_mqtt_srv = CHECK_MQTT_SRV;
+  SetSettings.mqtt_srv_prt = MQTT_SRV_PRT;
+  SetSettings.mqtt_srv_maxcli = MQTT_SRV_MAXCLI;
+  strcpy(SetSettings.mqtt_srv_usr, MQTT_SRV_USR);
+  strcpy(SetSettings.mqtt_srv_pswd, MQTT_SRV_PSWD);
 
   while ((fresult = f_read(&USBHFile, &currentChar, 1, &bytesRead)) == FR_OK &&
          bytesRead > 0) {
@@ -471,6 +495,10 @@ void GetSettingsConfig() {
       strncpy(SetSettings.rxzbtop, value, sizeof(SetSettings.rxzbtop) - 1);
     } else if (strcmp(key, "mqtt_hst") == 0) {
       strncpy(SetSettings.mqtt_hst, value, sizeof(SetSettings.mqtt_hst) - 1);
+    } else if (strcmp(key, "mqtt_srv_usr") == 0) {
+      strncpy(SetSettings.mqtt_srv_usr, value, sizeof(SetSettings.mqtt_srv_usr) - 1);
+    } else if (strcmp(key, "mqtt_srv_pswd") == 0) {
+      strncpy(SetSettings.mqtt_srv_pswd, value, sizeof(SetSettings.mqtt_srv_pswd) - 1);
     } else if (strcmp(key, "tel") == 0) {
       strncpy(SetSettings.tel, value, sizeof(SetSettings.tel) - 1);
       //			printf("Found key: %s, value: %s\r\n", key,
@@ -507,6 +535,12 @@ void GetSettingsConfig() {
       SetSettings.mqtt_prt = atoi(value);
       //			printf("Found key: %s, value: %s\r\n", key,
       // value);
+    } else if (strcmp(key, "check_mqtt_srv") == 0) {
+      SetSettings.check_mqtt_srv = atoi(value);
+    } else if (strcmp(key, "mqtt_srv_prt") == 0) {
+      SetSettings.mqtt_srv_prt = atoi(value);
+    } else if (strcmp(key, "mqtt_srv_maxcli") == 0) {
+      SetSettings.mqtt_srv_maxcli = (uint8_t)atoi(value);
     } else if (strcmp(key, "check_ip") == 0) {
       SetSettings.check_ip = atoi(value);
       //			printf("Found key: %s, value: %s\r\n", key,

@@ -250,6 +250,12 @@ struct dbSettings {	// Cтруктура для setting
 	char rxmqttop[32];  // Receive MQTT topic
 	char rxzbtop[32];   // Receive Zigbee2MQTT topic prefix (default "zigbee2mqtt")
 	char mqtt_hst[50];  // Your MQTT broker address or domain name (e.g. "192.168.1.100" or "broker.hivemq.com")
+	// Настройки MQTT Server (независимо от MQTT-клиента!)
+	short check_mqtt_srv;      // MQTT server on/off
+	int   mqtt_srv_prt;        // порт сервера (напр. 1884, НЕ совпадает с портом веб-интерфейса)
+	uint8_t mqtt_srv_maxcli;   // лимит одновременных клиентов (clamp в прошивке: MQTT_SRV_MAX_CLIENTS_HARDCAP)
+	char  mqtt_srv_usr[32];    // опционально: логин для подключения к серверу
+	char  mqtt_srv_pswd[32];   // опционально: пароль
 	// Настройки IP адреса
 	short check_ip;	// check DHCP on/off
 	short ip_addr0;	// IP адрес

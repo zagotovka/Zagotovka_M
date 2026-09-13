@@ -187,8 +187,16 @@ bool mg_ota_commit(void) {
 }
 
 /* Валидность образа по начальному MSP: обязан указывать в SRAM (0x200xxxxx).
- * Адреса банков: Bank A = 0x08040000, Bank B = 0x08100000 (как в bootloader). */
-static bool bank_image_valid(uint8_t bank) {
+ * Адреса банков: Bank A = 0x08040000, Bank B = 0x08100000 (как в bootloader).
+ * Критерий СОЗНАТЕЛЬНО идентичен app_image_valid() в Bootloader/main.c:
+ * и bootloader, и mg_ota_switch_bank(), и API /api/firmware/status должны
+ * давать ОДИН И ТОТ ЖЕ ответ на вопрос "можно ли загрузиться из этого банка".
+ * Проверка по содержимому flash (а не по строке версии из OTA-метаданных):
+ * версия пишется в настройки только при mg_ota_commit(), т.е. только для
+ * образов, залитых через OTA. Образ, залитый напрямую через ST-Link
+ * (Bank A на чистом МК — сразу после bootloader'а), валиден, хотя версии
+ * в метаданных у него нет и не будет. */
+bool mg_ota_bank_image_valid(uint8_t bank) {
     uint32_t addr = bank ? 0x08100000u : 0x08040000u;
     uint32_t msp  = *(volatile uint32_t *)addr;
     return (msp & 0xFFF00000u) == 0x20000000u;
@@ -200,7 +208,7 @@ bool mg_ota_switch_bank(void) {
     uint8_t current = mg_ota_get_active_bank();
     uint8_t target  = current ? 0 : 1;
 
-    if (!bank_image_valid(target)) {
+    if (!mg_ota_bank_image_valid(target)) {
         LOG_OTA("switch_bank: target bank %u has no valid image, aborting\n",
                 (unsigned) target);
         return false;

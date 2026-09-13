@@ -580,17 +580,27 @@ void handle_firmware_status(struct mg_connection *c) {
   const HTTPSsettings *s = get_valid_settings();
   uint8_t active = mg_ota_get_active_bank();
   /* Форма ответа изменилась: массив статусов теперь вложен в поле
-   * "firmwares" объекта + добавлены active_bank и версии банков.
-   * Версии печатаются через %m (MG_ESC) — JSON-экранированные строки. */
+   * "firmwares" объекта + добавлены active_bank, версии банков и
+   * bank_a_valid/bank_b_valid — реальное наличие рабочего образа в банке
+   * по содержимому flash (MSP в векторной таблице, тот же критерий, что
+   * в bootloader'е и mg_ota_switch_bank()). Версия (bank_X_version)
+   * появляется только после mg_ota_commit(), т.е. только у образов,
+   * залитых через OTA: Bank A, прошитый напрямую через ST-Link, отдаёт
+   * пустую версию при bank_a_valid=true — фронтенд (update_page.js)
+   * завязан на валидность, а не на непустоту версии. */
   mg_http_reply(c, 200, s_json_header,
-                "{%m:[%M,%M],%m:%d,%m:%m,%m:%m}\n",
+                "{%m:[%M,%M],%m:%d,%m:%m,%m:%m,%m:%s,%m:%s}\n",
                 MG_ESC("firmwares"), print_status, MG_FIRMWARE_CURRENT,
                           print_status, MG_FIRMWARE_PREVIOUS,
                 MG_ESC("active_bank"), (int) active,
                 MG_ESC("bank_a_version"),
                     MG_ESC(s ? s->ota_bank_a_version : ""),
                 MG_ESC("bank_b_version"),
-                    MG_ESC(s ? s->ota_bank_b_version : ""));
+                    MG_ESC(s ? s->ota_bank_b_version : ""),
+                MG_ESC("bank_a_valid"),
+                    mg_ota_bank_image_valid(0) ? "true" : "false",
+                MG_ESC("bank_b_valid"),
+                    mg_ota_bank_image_valid(1) ? "true" : "false");
 }
 
 void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm) {

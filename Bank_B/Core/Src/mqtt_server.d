@@ -1,5 +1,18 @@
-Core/Src/zagotovka.o: ../Core/Src/zagotovka.c ../Core/Inc/zagotovka.h \
- ../Core/Inc/db.h ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal.h \
+Core/Src/mqtt_server.o: ../Core/Src/mqtt_server.c \
+ ../Core/Inc/mqtt_server.h ../Core/Inc/mongoose.h \
+ ../Core/Inc/mongoose_config.h ../Core/Inc/mg_alloc.h \
+ ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h \
+ ../Core/Inc/FreeRTOSConfig.h \
+ ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h \
+ ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h \
+ ../Middlewares/Third_Party/FreeRTOS/Source/include/deprecated_definitions.h \
+ ../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1/portmacro.h \
+ ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h \
+ ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h \
+ ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h \
+ ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h \
+ ../Core/Inc/dtcm_alloc.h ../Core/Inc/db.h \
+ ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal.h \
  ../Core/Inc/stm32f7xx_hal_conf.h \
  ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_rcc.h \
  ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_def.h \
@@ -35,36 +48,28 @@ Core/Src/zagotovka.o: ../Core/Src/zagotovka.c ../Core/Inc/zagotovka.h \
  ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_uart_ex.h \
  ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_hcd.h \
  ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_ll_usb.h \
- ../Core/Inc/ds18b20.h ../Core/Inc/ds18b20Config.h ../Core/Inc/main.h \
- ../Core/Inc/multi_button.h ../Core/Inc/logger.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h \
- ../Core/Inc/FreeRTOSConfig.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/deprecated_definitions.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1/portmacro.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h \
+ ../Core/Inc/lwdtc.h ../Core/Inc/main.h ../Core/Inc/multi_button.h \
+ ../Core/Inc/logger.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/message_buffer.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/stream_buffer.h \
- ../Core/Inc/onewire.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h \
- ../Core/Inc/mongoose.h ../Core/Inc/mongoose_config.h \
- ../Core/Inc/mg_alloc.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h \
- ../Core/Inc/net.h ../Core/Inc/setings.h \
+ ../Core/Inc/db.h ../Core/Inc/logger.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h \
- ../Core/Inc/version_gen.h ../Core/Inc/setings.h ../Core/Inc/logger.h \
- ../Core/Inc/ds18b20.h ../Core/Inc/ds18b20Config.h ../Core/Inc/gsm.h \
- ../Core/Inc/lwdtc.h ../Core/Inc/main.h ../Core/Inc/usart_ring.h \
- ../Core/Inc/db.h ../Core/Inc/dtcm_alloc.h ../Core/Inc/lwdtc.h \
- ../Core/Inc/mqtt_server.h ../Core/Inc/fmt_float.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/semphr.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h
-../Core/Inc/zagotovka.h:
+ ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h
+../Core/Inc/mqtt_server.h:
+../Core/Inc/mongoose.h:
+../Core/Inc/mongoose_config.h:
+../Core/Inc/mg_alloc.h:
+../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h:
+../Core/Inc/FreeRTOSConfig.h:
+../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h:
+../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h:
+../Middlewares/Third_Party/FreeRTOS/Source/include/deprecated_definitions.h:
+../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1/portmacro.h:
+../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h:
+../Middlewares/Third_Party/FreeRTOS/Source/include/task.h:
+../Middlewares/Third_Party/FreeRTOS/Source/include/list.h:
+../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h:
+../Core/Inc/dtcm_alloc.h:
 ../Core/Inc/db.h:
 ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal.h:
 ../Core/Inc/stm32f7xx_hal_conf.h:
@@ -102,46 +107,13 @@ Core/Src/zagotovka.o: ../Core/Src/zagotovka.c ../Core/Inc/zagotovka.h \
 ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_uart_ex.h:
 ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal_hcd.h:
 ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_ll_usb.h:
-../Core/Inc/ds18b20.h:
-../Core/Inc/ds18b20Config.h:
+../Core/Inc/lwdtc.h:
 ../Core/Inc/main.h:
 ../Core/Inc/multi_button.h:
 ../Core/Inc/logger.h:
-../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h:
-../Core/Inc/FreeRTOSConfig.h:
-../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h:
-../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h:
-../Middlewares/Third_Party/FreeRTOS/Source/include/deprecated_definitions.h:
-../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1/portmacro.h:
-../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/message_buffer.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/stream_buffer.h:
-../Core/Inc/onewire.h:
-../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os.h:
-../Middlewares/Third_Party/FreeRTOS/Source/include/task.h:
-../Middlewares/Third_Party/FreeRTOS/Source/include/list.h:
-../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h:
-../Core/Inc/mongoose.h:
-../Core/Inc/mongoose_config.h:
-../Core/Inc/mg_alloc.h:
-../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h:
-../Core/Inc/net.h:
-../Core/Inc/setings.h:
-../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h:
-../Middlewares/Third_Party/FreeRTOS/Source/include/task.h:
-../Core/Inc/version_gen.h:
-../Core/Inc/setings.h:
-../Core/Inc/logger.h:
-../Core/Inc/ds18b20.h:
-../Core/Inc/ds18b20Config.h:
-../Core/Inc/gsm.h:
-../Core/Inc/lwdtc.h:
-../Core/Inc/main.h:
-../Core/Inc/usart_ring.h:
 ../Core/Inc/db.h:
-../Core/Inc/dtcm_alloc.h:
-../Core/Inc/lwdtc.h:
-../Core/Inc/mqtt_server.h:
-../Core/Inc/fmt_float.h:
-../Middlewares/Third_Party/FreeRTOS/Source/include/semphr.h:
+../Core/Inc/logger.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h:
+../Middlewares/Third_Party/FreeRTOS/Source/include/task.h:

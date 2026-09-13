@@ -158,7 +158,12 @@ export const enlangsettings = [
   'Next full moon - Date and time of the next full moon, calculated automatically.', // 23
   'Date - Date for offline mode in dd.mm.yy format. Used when there is no access to the NTP server. Example: 15.03.25', // 24
   'Time - Time for offline mode in hh:mm:ss format. Used when there is no access to the NTP server. Example: 14:30:00', // 25
-  'RX Z2M topic - Zigbee2MQTT topic prefix. Default: zigbee2mqtt. The device subscribes to {prefix}/data/... and publishes commands to {prefix}/cmd/.... Example: zigbee2mqtt' // 26
+  'RX Z2M topic - Zigbee2MQTT topic prefix. Default: zigbee2mqtt. The device subscribes to {prefix}/data/... and publishes commands to {prefix}/cmd/.... Example: zigbee2mqtt', // 26
+  'MQTT Server - Experimental built-in MQTT broker. Limitations: maximum 6 clients, QoS 0 only, no retained messages, LWT or TLS. Do not mix it with the MQTT client on the same port. Settings changes require a device reboot.', // 27
+  'Port - Built-in MQTT server port. Default: 1884. Must not match the web interface port (8000/8443), otherwise the server will not start.', // 28
+  'Max clients - Maximum number of simultaneously connected broker clients (1-6). The firmware clamps this value regardless of user input.', // 29
+  'User - Username for connecting to the built-in broker. Leave empty if authentication is not required.', // 30
+  'Password - Password for connecting to the built-in broker. Leave empty if authentication is not required.' // 31
 ];
 
 export const enlangsettingsmap = {

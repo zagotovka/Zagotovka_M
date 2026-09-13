@@ -22,6 +22,7 @@
 #include <string.h>
 #include <strings.h>  /* strncasecmp */
 #include "dtcm_alloc.h"
+#include "mqtt_server.h"
 /*********************** Moon *****************************/
 #include "net.h"
 #include <math.h>
@@ -2079,6 +2080,16 @@ static void emit_mqtt(struct mg_connection *c,
   emit_escaped_blob(c, "mqtt_hst", s->mqtt_hst, buf, 512);
 }
 
+static void emit_mqtt_server(struct mg_connection *c,
+                             const struct dbSettings *s, char *buf) {
+  int len = snprintf(buf, 512,
+      "\"check_mqtt_srv\":%d,\"mqtt_srv_prt\":%d,\"mqtt_srv_maxcli\":%d,",
+      s->check_mqtt_srv, s->mqtt_srv_prt, s->mqtt_srv_maxcli);
+  mg_http_write_chunk(c, buf, (size_t)len);
+  emit_escaped_blob(c, "mqtt_srv_usr",  s->mqtt_srv_usr,  buf, 512);
+  emit_escaped_blob(c, "mqtt_srv_pswd", s->mqtt_srv_pswd, buf, 512);
+}
+
 __attribute__((section(".itcm"))) static void emit_ip(struct mg_connection *c,
                     const struct dbSettings *s, char *buf) {
   int len = snprintf(buf, 512,
@@ -2161,6 +2172,7 @@ static void stream_mysett_json(struct mg_connection *c,
   emit_sunrise_pins(c, s, buf);
   emit_sunset_pins(c, s, buf);
   emit_mqtt(c, s, buf);
+  emit_mqtt_server(c, s, buf);
   emit_ip(c, s, buf);
   emit_admin(c, s, buf);
   emit_offldt(c, s, buf);
@@ -2248,7 +2260,7 @@ void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm) {
 }
 
 void mqtt_publish_logfilter_status(void) {
-  if (s_conn == NULL) return;
+  if (s_conn == NULL && !SetSettings.check_mqtt_srv) return;
   uint32_t mask = logger_get_mask();
   char payload[512];
   snprintf(payload, sizeof(payload),
@@ -2866,6 +2878,29 @@ bool is_c_like_format(const char *value) {
   // Проверяем, содержит ли значение переносы строк и экранированные символы
   return (strstr(value, "\\n") != NULL && strstr(value, "\"") != NULL);
 }
+
+/* mg_json_get_str() не умеет пустые строки: для токена "" внутренняя проверка
+ * len > 2 отсекает его и функция возвращает NULL, из-за чего пустое значение
+ * молча игнорировалось и в настройках оставалось старое (User/Password
+ * MQTT-сервера невозможно было очистить). Обёртка ниже возвращает
+ * malloc'нутую строку (в т.ч. пустую ""), если ключ присутствует в JSON
+ * и является строкой; отсутствие ключа / не-строка / битые escape — NULL
+ * (старое значение сохраняется, как и раньше). */
+static char *json_get_str_allow_empty(struct mg_str json, const char *path) {
+  char *result = NULL;
+  int len = 0, off = mg_json_get(json, path, &len);
+  if (off >= 0 && len >= 2 && json.buf[off] == '"') {
+    if (len == 2) {
+      result = (char *) mg_calloc(1, 1);          // "" — пустая строка
+    } else if ((result = (char *) mg_calloc(1, (size_t) len)) != NULL &&
+               mg_json_unescape(json, path, result, (size_t) len) == 0) {
+      mg_free(result);
+      result = NULL;
+    }
+  }
+  return result;
+}
+
 void parse_mysett_json(char *json_string, struct dbSettings *settings) {
   struct mg_str body = mg_str_n(json_string, strlen(json_string));
 
@@ -2913,6 +2948,32 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
     settings->mqtt_hst[sizeof(settings->mqtt_hst) - 1] = '\0'; mg_free(_v); } }
 
   settings->mqtt_prt = mg_json_get_long(body, "$.mqtt_prt", settings->mqtt_prt);
+
+  /* --- Настройки MQTT Server --- */
+  settings->check_mqtt_srv = (short)mg_json_get_long(body, "$.check_mqtt_srv", settings->check_mqtt_srv);
+  {
+    long v = mg_json_get_long(body, "$.mqtt_srv_prt", settings->mqtt_srv_prt);
+    /* Порт не должен конфликтовать с веб-интерфейсом и должен быть валидным */
+    if (v < 1 || v > 65535 || v == (long)atoi(HTTP_PORT) || v == (long)atoi(HTTPS_PORT)) {
+      v = MQTT_SRV_PRT;
+    }
+    settings->mqtt_srv_prt = (int)v;
+  }
+  {
+    long v = mg_json_get_long(body, "$.mqtt_srv_maxcli", settings->mqtt_srv_maxcli);
+    if (v < 1) v = 1;
+    if (v > MQTT_SRV_MAX_CLIENTS_HARDCAP) v = MQTT_SRV_MAX_CLIENTS_HARDCAP; // защита от дурака
+    settings->mqtt_srv_maxcli = (uint8_t)v;
+  }
+  /* User/Password брокера могут быть пустыми (работа без авторизации) —
+   * парсим через json_get_str_allow_empty, иначе "" молча игнорируется
+   * и после Save возвращается старое значение */
+  { char *_v = json_get_str_allow_empty(body, "$.mqtt_srv_usr");
+    if (_v) { strncpy(settings->mqtt_srv_usr, _v, sizeof(settings->mqtt_srv_usr) - 1);
+    settings->mqtt_srv_usr[sizeof(settings->mqtt_srv_usr) - 1] = '\0'; mg_free(_v); } }
+  { char *_v = json_get_str_allow_empty(body, "$.mqtt_srv_pswd");
+    if (_v) { strncpy(settings->mqtt_srv_pswd, _v, sizeof(settings->mqtt_srv_pswd) - 1);
+    settings->mqtt_srv_pswd[sizeof(settings->mqtt_srv_pswd) - 1] = '\0'; mg_free(_v); } }
 
   { char *_v = mg_json_get_str(body, "$.mqtt_clt");
     if (_v) { strncpy(settings->mqtt_clt, _v, sizeof(settings->mqtt_clt) - 1);
@@ -7633,8 +7694,11 @@ void mqtt_queue_send_safe(uint8_t command, uint8_t deviceId,
 
 /*** Batch MQTT publish — все изменения сенсоров в одном JSON-пакете ***/
 void publish_sensor_batch(struct mg_connection *conn) {
-  if (!conn || conn->is_closing || conn->is_draining) return;
-  if (SetSettings.check_mqtt != 1 || SetSettings.txmqttop[0] == '\0') return;
+  /* conn может быть NULL в режиме «только локальный MQTT-сервер» */
+  if (!conn && !SetSettings.check_mqtt_srv) return;
+  if (conn && (conn->is_closing || conn->is_draining)) return;
+  if (SetSettings.check_mqtt != 1 && SetSettings.check_mqtt_srv != 1) return;
+  if (SetSettings.txmqttop[0] == '\0') return;
 
   char *batch_buf = (char *)dtcm_sensor_batch;
   int off = 0;
@@ -7759,8 +7823,11 @@ void publish_sensor_batch(struct mg_connection *conn) {
 #define TIMER_BATCH_BUF_SIZE  (NUMTASK * 80 + 256)
 
 void send_mqtt_timer_batch(struct mg_connection *conn) {
-  if (!conn || conn->is_closing || conn->is_draining) return;
-  if (SetSettings.check_mqtt != 1 || SetSettings.txmqttop[0] == '\0') return;
+  /* conn может быть NULL в режиме «только локальный MQTT-сервер» */
+  if (!conn && !SetSettings.check_mqtt_srv) return;
+  if (conn && (conn->is_closing || conn->is_draining)) return;
+  if (SetSettings.check_mqtt != 1 && SetSettings.check_mqtt_srv != 1) return;
+  if (SetSettings.txmqttop[0] == '\0') return;
 
   char *tbuf = (char *)dtcm_timer_batch;
 
