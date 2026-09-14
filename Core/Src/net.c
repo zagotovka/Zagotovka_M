@@ -3,6 +3,7 @@
 
 #include "net.h"
 #include "zagotovka.h"
+#include "logger.h"
 #include "ds18b20.h"
 #include "ds18b20Config.h"
 #include "main.h"
@@ -282,6 +283,25 @@ void handle_events_get(struct mg_connection *c,
   int pageno = mg_json_get_long(hm->body, "$.page", 1);
   mg_http_reply(c, 200, s_json_header, "{%m:[%M], %m:%d}\n", MG_ESC("arr"),
                 print_events, pageno, MG_ESC("totalCount"), MAX_EVENTS_NO);
+}
+
+/* Хвост системного лога для веб-вьюера. tmp[] на стеке WebServerTask
+ * (18 КБ) — НЕ static: в .bss свободно 64 байта, линкер-ASSERT
+ * ((_ebss + _Min_Stack_Size) <= _estack) заблокирует сборку. */
+void handle_logs_get(struct mg_connection *c, struct mg_http_message *hm) {
+  long since_l = mg_json_get_long(hm->body, "$.since", 0);
+  uint32_t since = since_l > 0 ? (uint32_t)since_l : 0;
+
+  char tmp[LOG_RING_SIZE];
+  size_t n = 0;
+  uint32_t cursor = 0;
+  bool dropped = false;
+  logger_ring_read(since, tmp, sizeof(tmp), &n, &cursor, &dropped);
+
+  mg_http_reply(c, 200, s_json_header, "{%m:%m,%m:%lu,%m:%d}\n",
+                MG_ESC("text"), mg_print_esc, (int) n, tmp,
+                MG_ESC("cursor"), (unsigned long) cursor,
+                MG_ESC("dropped"), dropped ? 1 : 0);
 }
 
 void handle_settings_set(struct mg_connection *c, struct mg_http_message *hm) {
@@ -1105,6 +1125,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/events/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/events/get", c->id));
 				handle_events_get(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/logs/get"), NULL)) {
+				MG_INFO(("%lu Processing /api/logs/get", c->id));
+				handle_logs_get(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/settings/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/settings/get", c->id));
 				handle_settings_get(c);
@@ -1418,6 +1441,17 @@ static uint8_t  s_tcp_delay_idx = 0;     /* индекс в таблице backo
 static const uint8_t s_backoff_tbl[] = {5, 10, 15, 30, 45, 60};
 #define BACKOFF_TBL_SZ (sizeof(s_backoff_tbl)/sizeof(s_backoff_tbl[0]))
 
+/* RAM-бюджет: над .bss лежит .noinit_ram (0x24 Б, dtcm_ota_*), а над ней
+ * стек (0x2007F800..0x20080000). ASSERT в .ld проверяет ТОЛЬКО _ebss —
+ * переполнение .noinit_ram поверх стека он НЕ ловит. Свободно ~8-24 Б
+ * (Bank A/B). Каждый новый static/глобал - только после сверки с .map! */
+#define MQTT_CLIENT_KEEPALIVE_S 20u  /* keepalive в CONNECT: связан И с интервалом PING,
+                                        И с порогом RX-watchdog ниже - не разъедутся */
+#define MQTT_CLIENT_PING_MS ((uint32_t)MQTT_CLIENT_KEEPALIVE_S * 1000u / 2u)
+
+static uint32_t s_mqtt_last_rx_ms = 0;      /* момент последнего ЛЮБОГО входящего байта от брокера */
+static uint32_t s_mqtt_watchdog_kills = 0;  /* сколько раз RX-watchdog форсировал реконнект */
+
 static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
   if (ev == MG_EV_OPEN) {
     MG_INFO(("%lu CREATED", c->id));
@@ -1437,6 +1471,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
 	s_mqtt_reconnect_reported = false; // Сброс: при следующем дисконнекте снова напечатает 1 раз
 	s_mqtt_conn_tick = mg_millis();    /* сбрасываем таймер watchdog  -  соединение здорово */
 	s_mqtt_alive_since = mg_millis();  /* запоминаем время успешного коннекта */
+	s_mqtt_last_rx_ms = (uint32_t) mg_millis(); /* CONNACK = первая живая активность брокера */
 	s_tcp_backoff = 0;                 /* сброс backoff  -  соединение успешно */
 	s_tcp_delay_idx = 0;
 	printf("[MQTT] txmqttop='%s' rxmqttop='%s'\r\n", SetSettings.txmqttop, SetSettings.rxmqttop);
@@ -1631,6 +1666,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
       }
     }
   } else if (ev == MG_EV_MQTT_MSG) {
+    s_mqtt_last_rx_ms = (uint32_t) mg_millis(); /* любой PUBLISH от брокера = брокер жив */
     // When we get echo response, print it
     struct mg_mqtt_message *mm = (struct mg_mqtt_message *) ev_data;
     printf("[MQTT] topic='%.*s' data='%.*s'\r\n",
@@ -1650,6 +1686,9 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
         printf("[MQTT] RX queue full, message dropped!\r\n");
       }
     }
+  } else if (ev == MG_EV_READ) {
+    s_mqtt_last_rx_ms = (uint32_t) mg_millis(); /* любой входящий байт, вкл. PINGRESP,
+                                                   который отдельно нигде не разбирается */
   } else if (ev == MG_EV_CLOSE) {
     MG_INFO(("%lu CLOSED", c->id));
     if (s_conn == c) {
@@ -1714,10 +1753,30 @@ void timer_fn_mqtt(void *arg) {
       s_close_since = 0;
     }
 
+    /* RX-watchdog: соединение официально открыто (CONNACK получен), но от
+     * брокера дольше 1.5x keepalive + 5с не пришло вообще ничего - ни PUBLISH,
+     * ни PONG на наш периодический PING. Аналог MQTT 3.1.1 [MQTT-3.1.2-24],
+     * симметрично mqtt_server.c: ловим "тихий" обрыв TCP (SLZB пропал без
+     * FIN/RST) - на голом TCP-таймауте lwIP это могло длиться вечно. */
+    if (s_conn != NULL && mqtt_connected_reported
+        && !s_conn->is_closing && !s_conn->is_draining) {
+      uint32_t idle  = (uint32_t) mg_millis() - s_mqtt_last_rx_ms;
+      uint32_t limit = MQTT_CLIENT_KEEPALIVE_S * 1500u + 5000u;
+      if (idle > limit) {
+        s_mqtt_watchdog_kills++;
+        printf("[MQTT] no data from broker for %lus (limit %lus), kills=%lu - "
+               "assuming dead, forcing reconnect\r\n",
+               (unsigned long)(idle / 1000), (unsigned long)(limit / 1000),
+               (unsigned long)s_mqtt_watchdog_kills);
+        s_conn->is_closing = 1;  /* следующий тик даст MG_EV_CLOSE -> быстрый реконнект */
+        return;
+      }
+    }
+
     if (s_conn != NULL) {
       if (mqtt_connected_reported && !s_conn->is_closing && !s_conn->is_draining) {
         static uint64_t s_last_ping = 0;
-        if (mg_millis() - s_last_ping >= 30000) {
+        if (mg_millis() - s_last_ping >= MQTT_CLIENT_PING_MS) {
           s_last_ping = mg_millis();
           mg_mqtt_ping(s_conn);
         }
@@ -1766,7 +1825,7 @@ void timer_fn_mqtt(void *arg) {
   opts.qos = s_qos;
   opts.topic = mg_str(get_mqtt_topic());
   opts.version = 4;
-  opts.keepalive = 60;
+  opts.keepalive = MQTT_CLIENT_KEEPALIVE_S;  /* было 60; см. комментарий у #define */
   opts.message = mg_str("bye");
 
   if (SetSettings.mqtt_clt[0] != '\0')

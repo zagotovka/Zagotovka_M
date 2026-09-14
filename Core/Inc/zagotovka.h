@@ -352,6 +352,7 @@ void handle_logout(struct mg_connection *c);
 void handle_debug(struct mg_connection *c, struct mg_http_message *hm);
 void handle_stats_get(struct mg_connection *c);
 void handle_events_get(struct mg_connection *c, struct mg_http_message *hm);
+void handle_logs_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_settings_get(struct mg_connection *c);
 void handle_settings_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm);

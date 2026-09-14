@@ -3814,12 +3814,13 @@ void StartLoggerTask(void *argument)
                   int total = prefix_len + msg_len;
                   /* Сборка в один буфер для одной неблокирующей передачи */
                   char tx_buf[256];
-                  if (total < (int)sizeof(tx_buf)) {
-                      memcpy(tx_buf, cat_prefixes[cat], prefix_len);
-                      memcpy(tx_buf + prefix_len, msg, msg_len);
-                      // Bounded timeout: 200ms хватает на ~2300 байт на 115200 bps
-                      HAL_UART_Transmit(&huart3, (uint8_t*)tx_buf, total, 200);
-                  }
+if (total < (int)sizeof(tx_buf)) {
+                        memcpy(tx_buf, cat_prefixes[cat], prefix_len);
+                        memcpy(tx_buf + prefix_len, msg, msg_len);
+                        logger_ring_push(tx_buf, total); /* копия для веб-вьюера */
+                        // Bounded timeout: 200ms хватает на ~2300 байт на 115200 bps
+                        HAL_UART_Transmit(&huart3, (uint8_t*)tx_buf, total, 200);
+                    }
               }
           }
       } else {

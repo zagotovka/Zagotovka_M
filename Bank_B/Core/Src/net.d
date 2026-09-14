@@ -58,7 +58,7 @@ Core/Src/net.o: ../Core/Src/net.c ../Core/Inc/net.h \
  ../Core/Inc/setings.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h \
- ../Core/Inc/version_gen.h ../Core/Inc/ds18b20.h \
+ ../Core/Inc/version_gen.h ../Core/Inc/logger.h ../Core/Inc/ds18b20.h \
  ../Core/Inc/ds18b20Config.h ../Core/Inc/main.h ../Core/Inc/compat_ota.h \
  ../Core/Inc/fw_meta.h ../Core/Inc/fmt_float.h ../Core/Inc/dtcm_alloc.h \
  ../Core/Inc/lwdtc.h
@@ -128,6 +128,7 @@ Core/Src/net.o: ../Core/Src/net.c ../Core/Inc/net.h \
 ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h:
 ../Core/Inc/version_gen.h:
+../Core/Inc/logger.h:
 ../Core/Inc/ds18b20.h:
 ../Core/Inc/ds18b20Config.h:
 ../Core/Inc/main.h:

@@ -1,7 +1,9 @@
-../Core/Src/logger.c:43:13:logger_get_category_name	0	static
-../Core/Src/logger.c:61:6:logger_init	8	static
-../Core/Src/logger.c:66:6:logger_set_mask	0	static
-../Core/Src/logger.c:71:10:logger_get_mask	0	static
-../Core/Src/logger.c:75:6:logger_save_mask	0	static
-../Core/Src/logger.c:80:6:logger_send	212	static
-../Core/Src/logger.c:183:5:__io_putchar	240	static,ignoring_inline_asm
+../Core/Src/logger.c:47:13:logger_get_category_name	0	static
+../Core/Src/logger.c:65:6:logger_init	8	static
+../Core/Src/logger.c:80:6:logger_set_mask	0	static
+../Core/Src/logger.c:85:10:logger_get_mask	0	static
+../Core/Src/logger.c:89:6:logger_save_mask	0	static
+../Core/Src/logger.c:94:6:logger_send	212	static
+../Core/Src/logger.c:197:5:__io_putchar	240	static,ignoring_inline_asm
+../Core/Src/logger.c:269:6:logger_ring_push	32	static
+../Core/Src/logger.c:289:6:logger_ring_read	48	static

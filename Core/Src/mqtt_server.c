@@ -33,9 +33,9 @@ extern struct dbSettings SetSettings;
  * "MQTT" на странице Global Settings: маска g_log_filter_mask проверяется
  * на месте вызова (дешёвое чтение volatile), а сама доставка — через
  * MessageBuffer в LoggerTask (не блокирует WebServerTask UART'ом).
- * Сообщения сохраняют текстовый префикс "[MQTTS]", чтобы отличать логи
+ * Сообщения сохраняют текстовый префикс "[server]", чтобы отличать логи
  * встроенного брокера от логов MQTT-клиента (net.c/zagotovka.c).
- * В UART строка попадает в виде: "[MQTT] [MQTTS] heartbeat: ...".
+ * В UART строка попадает в виде: "[MQTT] [server] heartbeat: ...".
  *
  * ВАЖНО про производительность:
  *  - SRV_LOG вызывается ТОЛЬКО в редких, событийных точках: CONNECT/DISCONNECT/
@@ -92,8 +92,10 @@ static uint8_t s_running = 0;
 static uint32_t s_stat_accepted   = 0;  /* успешных CONNECT */
 static uint32_t s_stat_rejected   = 0;  /* отклонённых CONNECT (proto/auth/мусор) */
 static uint32_t s_stat_rx_msgs    = 0;  /* принятых PUBLISH от клиентов */
-static uint32_t s_stat_tx_msgs    = 0;  /* вызовов mqtt_server_publish() */
-static uint32_t s_last_heartbeat_ms = 0;
+  static uint32_t s_stat_tx_msgs    = 0;  /* вызовов mqtt_server_publish() */
+  static uint32_t s_stat_SLZB_timeouts = 0; /* keepalive-таймаутов: клиент молчал > 1.5x KA+5с,
+                                               слот закрыли МЫ (тихий обрыв, напр. SLZB) */
+  static uint32_t s_last_heartbeat_ms = 0;
 
 /* ---------- мелкие парсеры ---------- */
 static uint16_t srv_be16(const uint8_t *p) {
@@ -197,7 +199,7 @@ static void srv_handle_connect(struct mg_connection *c,
 
   if (cl == NULL) return;
   if (len < 12) {                                   // мусор вместо CONNECT
-    SRV_LOG("[MQTTS] reject: CONNECT too short (%u B)\r\n", (unsigned) len);
+    SRV_LOG("[server] reject: CONNECT too short (%u B)\r\n", (unsigned) len);
     s_stat_rejected++;
     c->is_closing = 1; return;
   }
@@ -206,21 +208,21 @@ static void srv_handle_connect(struct mg_connection *c,
   {
     size_t ve = srv_varint_end(d, off, len);
     if (ve == 0) {
-      SRV_LOG("[MQTTS] reject: bad remaining-length varint\r\n");
+      SRV_LOG("[server] reject: bad remaining-length varint\r\n");
       s_stat_rejected++;
       c->is_closing = 1; return;
     }
     off = ve;
   }
   if (off + 10 > len) {
-    SRV_LOG("[MQTTS] reject: CONNECT truncated (fixed header)\r\n");
+    SRV_LOG("[server] reject: CONNECT truncated (fixed header)\r\n");
     s_stat_rejected++;
     c->is_closing = 1; return;
   }
 
   plen = srv_be16(d + off); off += 2;
   if (off + plen + 4 > len) {
-    SRV_LOG("[MQTTS] reject: CONNECT truncated (protocol name)\r\n");
+    SRV_LOG("[server] reject: CONNECT truncated (protocol name)\r\n");
     s_stat_rejected++;
     c->is_closing = 1; return;
   }
@@ -229,7 +231,7 @@ static void srv_handle_connect(struct mg_connection *c,
   flags = d[off++];
 
   if (level != 4 && level != 3) {                   // v3.1.1 / v3.1 only
-    SRV_LOG("[MQTTS] reject: unsupported protocol level=%u (клиент шлёт MQTT5?)\r\n",
+    SRV_LOG("[server] reject: unsupported protocol level=%u (клиент шлёт MQTT5?)\r\n",
             (unsigned) level);
     s_stat_rejected++;
     srv_send_connack(c, 0x01);                      // unacceptable protocol
@@ -243,12 +245,12 @@ static void srv_handle_connect(struct mg_connection *c,
   {
     uint16_t clen;
     if (off + 2 > len) {
-      SRV_LOG("[MQTTS] reject: CONNECT truncated (client-id length)\r\n");
+      SRV_LOG("[server] reject: CONNECT truncated (client-id length)\r\n");
       s_stat_rejected++; c->is_closing = 1; return;
     }
     clen = srv_be16(d + off); off += 2;
     if (off + clen > len) {
-      SRV_LOG("[MQTTS] reject: CONNECT truncated (client-id body)\r\n");
+      SRV_LOG("[server] reject: CONNECT truncated (client-id body)\r\n");
       s_stat_rejected++; c->is_closing = 1; return;
     }
     off += clen;
@@ -256,29 +258,29 @@ static void srv_handle_connect(struct mg_connection *c,
   if (flags & SRV_FLAG_WILL) {
     uint16_t wl, ml;
     if (off + 2 > len) {
-      SRV_LOG("[MQTTS] reject: CONNECT truncated (will-topic length)\r\n");
+      SRV_LOG("[server] reject: CONNECT truncated (will-topic length)\r\n");
       s_stat_rejected++; c->is_closing = 1; return;
     }
     wl = srv_be16(d + off); off += 2 + wl;
     if (off + 2 > len) {
-      SRV_LOG("[MQTTS] reject: CONNECT truncated (will-message length)\r\n");
+      SRV_LOG("[server] reject: CONNECT truncated (will-message length)\r\n");
       s_stat_rejected++; c->is_closing = 1; return;
     }
     ml = srv_be16(d + off); off += 2 + ml;
     if (off > len) {
-      SRV_LOG("[MQTTS] reject: CONNECT truncated (will-message body)\r\n");
+      SRV_LOG("[server] reject: CONNECT truncated (will-message body)\r\n");
       s_stat_rejected++; c->is_closing = 1; return;
     }
   }
   if (flags & SRV_FLAG_USERNAME) {
     uint16_t ul;
     if (off + 2 > len) {
-      SRV_LOG("[MQTTS] reject: CONNECT truncated (username length)\r\n");
+      SRV_LOG("[server] reject: CONNECT truncated (username length)\r\n");
       s_stat_rejected++; c->is_closing = 1; return;
     }
     ul = srv_be16(d + off); off += 2;
     if (off + ul > len) {
-      SRV_LOG("[MQTTS] reject: CONNECT truncated (username body)\r\n");
+      SRV_LOG("[server] reject: CONNECT truncated (username body)\r\n");
       s_stat_rejected++; c->is_closing = 1; return;
     }
     /* Проверка логина. НЕ печатаем сами значения — только длины, этого
@@ -286,7 +288,7 @@ static void srv_handle_connect(struct mg_connection *c,
      * логин), без утечки credentials в UART-лог. */
     if (s_usr[0] != '\0') {
       if (ul != strlen(s_usr) || memcmp(d + off, s_usr, ul) != 0) {
-        SRV_LOG("[MQTTS] reject: bad username (got %u B, expected %u B)\r\n",
+        SRV_LOG("[server] reject: bad username (got %u B, expected %u B)\r\n",
                 (unsigned) ul, (unsigned) strlen(s_usr));
         s_stat_rejected++;
         srv_send_connack(c, 0x04);
@@ -296,7 +298,7 @@ static void srv_handle_connect(struct mg_connection *c,
     }
     off += ul;
   } else if (s_usr[0] != '\0') {
-    SRV_LOG("[MQTTS] reject: username required, но клиент не выставил флаг USERNAME\r\n");
+    SRV_LOG("[server] reject: username required, но клиент не выставил флаг USERNAME\r\n");
     s_stat_rejected++;
     srv_send_connack(c, 0x05);                      // not authorized
     c->is_closing = 1;
@@ -305,17 +307,17 @@ static void srv_handle_connect(struct mg_connection *c,
   if (flags & SRV_FLAG_PASSWORD) {
     uint16_t pw;
     if (off + 2 > len) {
-      SRV_LOG("[MQTTS] reject: CONNECT truncated (password length)\r\n");
+      SRV_LOG("[server] reject: CONNECT truncated (password length)\r\n");
       s_stat_rejected++; c->is_closing = 1; return;
     }
     pw = srv_be16(d + off); off += 2;
     if (off + pw > len) {
-      SRV_LOG("[MQTTS] reject: CONNECT truncated (password body)\r\n");
+      SRV_LOG("[server] reject: CONNECT truncated (password body)\r\n");
       s_stat_rejected++; c->is_closing = 1; return;
     }
     if (s_pswd[0] != '\0') {
       if (pw != strlen(s_pswd) || memcmp(d + off, s_pswd, pw) != 0) {
-        SRV_LOG("[MQTTS] reject: bad password (got %u B, expected %u B)\r\n",
+        SRV_LOG("[server] reject: bad password (got %u B, expected %u B)\r\n",
                 (unsigned) pw, (unsigned) strlen(s_pswd));
         s_stat_rejected++;
         srv_send_connack(c, 0x04);
@@ -324,7 +326,7 @@ static void srv_handle_connect(struct mg_connection *c,
       }
     }
   } else if (s_pswd[0] != '\0') {
-    SRV_LOG("[MQTTS] reject: password required, но клиент не выставил флаг PASSWORD\r\n");
+    SRV_LOG("[server] reject: password required, но клиент не выставил флаг PASSWORD\r\n");
     s_stat_rejected++;
     srv_send_connack(c, 0x05);
     c->is_closing = 1;
@@ -332,14 +334,14 @@ static void srv_handle_connect(struct mg_connection *c,
   }
 
   if (cl->authenticated) {                                // второй CONNECT
-    SRV_LOG("[MQTTS] reject: duplicate CONNECT on already-authenticated conn\r\n");
+    SRV_LOG("[server] reject: duplicate CONNECT on already-authenticated conn\r\n");
     s_stat_rejected++;
     c->is_closing = 1; return;
   }
   cl->authenticated = 1;
   srv_send_connack(c, 0x00);
   s_stat_accepted++;
-  SRV_LOG("[MQTTS] client accepted (%d/%d), keepalive=%us\r\n",
+  SRV_LOG("[server] client accepted (%d/%d), keepalive=%us\r\n",
          s_cli_count, MQTT_SRV_MAX_CLIENTS_HARDCAP, cl->keepalive_s);
 }
 
@@ -356,13 +358,13 @@ static void srv_handle_subscribe(struct mg_connection *c,
   {
     size_t ve = srv_varint_end(d, 1, len);
     if (ve == 0) {
-      SRV_LOG("[MQTTS] reject: SUBSCRIBE bad remaining-length varint\r\n");
+      SRV_LOG("[server] reject: SUBSCRIBE bad remaining-length varint\r\n");
       c->is_closing = 1; return;
     }
     off = ve;
   }
   if (off + 2 > len) {
-    SRV_LOG("[MQTTS] reject: SUBSCRIBE truncated (packet-id)\r\n");
+    SRV_LOG("[server] reject: SUBSCRIBE truncated (packet-id)\r\n");
     c->is_closing = 1; return;
   }
   off += 2;                                         /* FIX: пропустить 2B Packet Identifier */
@@ -385,10 +387,10 @@ static void srv_handle_subscribe(struct mg_connection *c,
       memcpy(cl->subs[cl->num_subs], topic, tlen);
       cl->subs[cl->num_subs][tlen] = '\0';
       cl->num_subs++;
-      SRV_LOG("[MQTTS] sub '%.*s' (%d/%d)\r\n", (int) tlen, topic,
+      SRV_LOG("[server] sub '%.*s' (%d/%d)\r\n", (int) tlen, topic,
              cl->num_subs, MQTT_SRV_MAX_SUBS_PER_CLIENT);
     } else {
-      SRV_LOG("[MQTTS] sub rejected '%.*s' (rc=0x%02x)\r\n",
+      SRV_LOG("[server] sub rejected '%.*s' (rc=0x%02x)\r\n",
              (int) tlen, topic, rc);
     }
     codes[nsubs++] = rc;
@@ -398,7 +400,7 @@ static void srv_handle_subscribe(struct mg_connection *c,
    * без строки "client sent DISCONNECT" в логе: клиент прислал SUBSCRIBE,
    * который не распарсился (либо кривой топик, либо >16 фильтров разом). */
   if (nsubs == 0 || off < len) {
-    SRV_LOG("[MQTTS] reject: malformed SUBSCRIBE payload (nsubs=%u, off=%u, len=%u)\r\n",
+    SRV_LOG("[server] reject: malformed SUBSCRIBE payload (nsubs=%u, off=%u, len=%u)\r\n",
             (unsigned) nsubs, (unsigned) off, (unsigned) len);
     c->is_closing = 1; return;
   }
@@ -416,13 +418,13 @@ static void srv_handle_unsubscribe(struct mg_connection *c,
   {
     size_t ve = srv_varint_end(d, 1, len);
     if (ve == 0) {
-      SRV_LOG("[MQTTS] reject: UNSUBSCRIBE bad remaining-length varint\r\n");
+      SRV_LOG("[server] reject: UNSUBSCRIBE bad remaining-length varint\r\n");
       c->is_closing = 1; return;
     }
     off = ve;
   }
   if (off + 2 > len) {                              /* FIX: symmetric guard */
-    SRV_LOG("[MQTTS] reject: UNSUBSCRIBE truncated (packet-id)\r\n");
+    SRV_LOG("[server] reject: UNSUBSCRIBE truncated (packet-id)\r\n");
     c->is_closing = 1; return;
   }
   off += 2;                                         /* FIX: пропустить 2B Packet Identifier */
@@ -461,7 +463,7 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
       {
         int slot = srv_slot_alloc(c);
         if (slot < 0) {
-          SRV_LOG("[MQTTS] REFUSED: client limit (%d) reached\r\n",
+          SRV_LOG("[server] REFUSED: client limit (%d) reached\r\n",
                  MQTT_SRV_MAX_CLIENTS_HARDCAP);
           c->is_closing = 1;
           return;
@@ -509,7 +511,7 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
            * "client closed". Если её нет — клиент разорвал соединение
            * сам, не отправив DISCONNECT (частый паттерн у "тестовых"
            * connect-check в мобильных приложениях). */
-          SRV_LOG("[MQTTS] client sent DISCONNECT\r\n");
+          SRV_LOG("[server] client sent DISCONNECT\r\n");
           c->is_closing = 1;
           break;
         default:                                      // PUBLISH и пр. служебные команды
@@ -531,7 +533,7 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
       memcpy(rx.payload, msg->data.buf,  dlen);
       s_stat_rx_msgs++;   /* дешёвый инкремент — НЕ printf на каждое сообщение */
       if (xQueueSend(mqttRxQueueHandle, &rx, 0) != pdPASS) {
-        SRV_LOG("[MQTTS] RX queue full, message dropped!\r\n");
+        SRV_LOG("[server] RX queue full, message dropped!\r\n");
       }
       break;
     }
@@ -542,7 +544,7 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
         memcpy(&idx, c->data, 1);
         if (idx < MQTT_SRV_MAX_CLIENTS_HARDCAP && s_cli != NULL &&
             s_cli[idx].conn == c) {
-          SRV_LOG("[MQTTS] client closed (auth=%d, %d subs)\r\n",
+          SRV_LOG("[server] client closed (auth=%d, %d subs)\r\n",
                   s_cli[idx].authenticated, s_cli[idx].num_subs);
           s_cli[idx].conn = NULL;
           s_cli[idx].num_subs = 0;
@@ -566,7 +568,7 @@ void mqtt_server_init(struct mg_mgr *mgr, uint16_t port) {
 
   /* Порт не должен конфликтовать с веб-интерфейсом */
   if (port == 8000 || port == 8443 || port == 0) {
-    SRV_LOG("[MQTTS] FATAL: port %u conflicts with web UI / invalid, "
+    SRV_LOG("[server] FATAL: port %u conflicts with web UI / invalid, "
            "server not started\r\n", (unsigned) port);
     return;
   }
@@ -575,7 +577,7 @@ void mqtt_server_init(struct mg_mgr *mgr, uint16_t port) {
   s_usr = (char *) dtcm_malloc(32);
   s_pswd = (char *) dtcm_malloc(32);
   if (s_cli == NULL || s_usr == NULL || s_pswd == NULL) {
-    SRV_LOG("[MQTTS] FATAL: DTCM alloc failed (need %u B), server disabled\r\n",
+    SRV_LOG("[server] FATAL: DTCM alloc failed (need %u B), server disabled\r\n",
            (unsigned) (tbl_sz + 64));
     s_cli = NULL;
     return;
@@ -593,7 +595,7 @@ void mqtt_server_init(struct mg_mgr *mgr, uint16_t port) {
     snprintf(url, sizeof(url), "mqtt://0.0.0.0:%u", (unsigned) port);
     struct mg_connection *lsn = mg_mqtt_listen(mgr, url, mqtt_srv_cb, NULL);
     if (lsn == NULL) {
-      SRV_LOG("[MQTTS] FATAL: cannot listen on %s\r\n", url);
+      SRV_LOG("[server] FATAL: cannot listen on %s\r\n", url);
       s_cli = NULL;
       return;
     }
@@ -601,7 +603,8 @@ void mqtt_server_init(struct mg_mgr *mgr, uint16_t port) {
   s_running = 1;
   s_last_heartbeat_ms = mg_millis();
   s_stat_accepted = s_stat_rejected = s_stat_rx_msgs = s_stat_tx_msgs = 0;
-  SRV_LOG("[MQTTS] MQTT 3.1.1 broker started on port %u (max %d clients, "
+  s_stat_SLZB_timeouts = 0;
+  SRV_LOG("[server] MQTT 3.1.1 broker started on port %u (max %d clients, "
          "QoS 0, subs/client %d)\r\n",
          (unsigned) port, MQTT_SRV_MAX_CLIENTS_HARDCAP,
          MQTT_SRV_MAX_SUBS_PER_CLIENT);
@@ -623,13 +626,14 @@ void mqtt_server_poll(void) {
     uint32_t now = mg_millis();
     if (now - s_last_heartbeat_ms >= MQTT_SRV_HEARTBEAT_MS) {
       s_last_heartbeat_ms = now;
-      SRV_LOG("[MQTTS] heartbeat: clients=%u accepted=%lu rejected=%lu "
-              "rx=%lu tx=%lu\r\n",
+      SRV_LOG("[server] heartbeat: clients=%u accepted=%lu rejected=%lu "
+              "rx=%lu tx=%lu SLZB=%lu\r\n",
               (unsigned) s_cli_count,
               (unsigned long) s_stat_accepted,
               (unsigned long) s_stat_rejected,
               (unsigned long) s_stat_rx_msgs,
-              (unsigned long) s_stat_tx_msgs);
+              (unsigned long) s_stat_tx_msgs,
+              (unsigned long) s_stat_SLZB_timeouts);
     }
   }
 
@@ -640,7 +644,7 @@ void mqtt_server_poll(void) {
     idle = mg_millis() - cl->last_activity_ms;
     if (!cl->authenticated) {
       if (idle > MQTT_SRV_CONNECT_TIMEOUT_MS) {
-        SRV_LOG("[MQTTS] slot %d: no CONNECT in %dms, closing\r\n", i,
+        SRV_LOG("[server] slot %d: no CONNECT in %dms, closing\r\n", i,
                MQTT_SRV_CONNECT_TIMEOUT_MS);
         cl->conn->is_closing = 1;
       }
@@ -651,7 +655,8 @@ void mqtt_server_poll(void) {
                 ? (uint32_t) cl->keepalive_s * 1500u + 5000u
                 : 0;
     if (limit != 0 && idle > limit) {
-      SRV_LOG("[MQTTS] slot %d: keepalive timeout (%lums > %ums), closing\r\n",
+      s_stat_SLZB_timeouts++;
+      SRV_LOG("[server] slot %d: keepalive timeout (%lums > %ums), closing\r\n",
              i, (unsigned long) idle, (unsigned) limit);
       cl->conn->is_closing = 1;
     }

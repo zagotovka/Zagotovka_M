@@ -17,6 +17,10 @@ void SetSettingsConfig(void);
 MessageBufferHandle_t xMessageBuffer = NULL;
 volatile uint32_t g_log_filter_mask = LOG_MASK_ALL;
 
+/* ---- Кольцевой буфер для веб-просмотра логов ---------------------------- */
+static char              *s_log_ring      = NULL;   /* pvPortMalloc(LOG_RING_SIZE) */
+static volatile uint32_t  s_log_write_pos = 0;      /* монотонный курсор записи */
+
 typedef struct {
     TaskHandle_t task_handle;
     char buffer[192];
@@ -61,6 +65,16 @@ const char* logger_get_category_name(LogCategory_t cat) {
 void logger_init(void) {
     xMessageBuffer = xMessageBufferCreate(4096);
     memset(g_task_bufs, 0, sizeof(g_task_bufs));
+
+    /* Один раз за всё время работы, из кучи — не из .bss (там свободно
+     * 64 байта на весь проект, линкер-ASSERT заблокирует static-массив).
+     * Неудача не фатальна: UART3-логирование продолжит работать как
+     * раньше, просто веб-вьюер будет пуст. */
+    s_log_ring = pvPortMalloc(LOG_RING_SIZE);
+    if (s_log_ring == NULL) {
+        printf("[SYSTEM] WARN: log ring alloc failed (%u B) - web log viewer disabled\r\n",
+               (unsigned)LOG_RING_SIZE);
+    }
 }
 
 void logger_set_mask(uint32_t mask) {
@@ -245,4 +259,68 @@ int __io_putchar(int ch) {
         buf->len = 0;
     }
     return ch;
+}
+
+/* ---- Кольцевой буфер для веб-просмотра логов ----------------------------
+ * Один писатель (StartLoggerTask), один читатель (WebServerTask).
+ * Курсор = монотонное число записанных байт, никаких индексов head/tail
+ * и проблем с обёрткой курсора. */
+
+void logger_ring_push(const char *data, int len) {
+    if (s_log_ring == NULL || len <= 0) return;
+    if ((uint32_t)len > LOG_RING_SIZE) {          /* защита от аномально длинной строки */
+        data += (len - LOG_RING_SIZE);
+        len = (int)LOG_RING_SIZE;
+    }
+
+    taskENTER_CRITICAL();                         /* короткая секция: максимум 1 КБ memcpy */
+    uint32_t pos   = s_log_write_pos % LOG_RING_SIZE;
+    uint32_t first = LOG_RING_SIZE - pos;         /* сколько влезает до конца кольца */
+    if ((uint32_t)len <= first) {
+        memcpy(s_log_ring + pos, data, (size_t)len);
+    } else {
+        memcpy(s_log_ring + pos, data, first);
+        memcpy(s_log_ring, data + first, (size_t)len - first);
+    }
+    s_log_write_pos += (uint32_t)len;
+    taskEXIT_CRITICAL();
+}
+
+void logger_ring_read(uint32_t since, char *out, size_t out_cap,
+                      size_t *out_len, uint32_t *cursor, bool *dropped) {
+    if (out_len) *out_len = 0;
+    if (cursor)  *cursor  = 0;
+    if (dropped) *dropped = false;
+    if (s_log_ring == NULL || out == NULL || out_cap == 0) return;
+    if (out_cap > LOG_RING_SIZE) out_cap = LOG_RING_SIZE;
+
+    taskENTER_CRITICAL();          /* держим секцию на всё копирование - буфер 1 КБ,
+                                    * микросекунды, зато данные гарантированно консистентны */
+    uint32_t total  = s_log_write_pos;
+    uint32_t avail  = (total > LOG_RING_SIZE) ? LOG_RING_SIZE : total;
+    uint32_t oldest = total - avail;               /* самый старый ещё доступный курсор */
+
+    if (since > total) since = total;              /* клиент "из будущего" - отдаём пусто */
+    uint32_t start = (since > oldest) ? since : oldest;
+    bool     lost  = (since > 0) && (since < oldest);
+
+    uint32_t n = total - start;
+    if (n > out_cap) {                             /* буфер вызывающего меньше накопленного */
+        start = total - (uint32_t)out_cap;
+        n = (uint32_t)out_cap;
+        lost = true;
+    }
+
+    for (uint32_t i = 0; i < n; ) {
+        uint32_t pos   = (start + i) % LOG_RING_SIZE;
+        uint32_t chunk = LOG_RING_SIZE - pos;
+        if (chunk > n - i) chunk = n - i;
+        memcpy(out + i, s_log_ring + pos, chunk);
+        i += chunk;
+    }
+    taskEXIT_CRITICAL();
+
+    *out_len = n;
+    *cursor  = total;
+    *dropped = lost;
 }

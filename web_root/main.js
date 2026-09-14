@@ -449,6 +449,82 @@ export function DeveloperNote({ text, children }) {
   <//>`;
 }
 
+const LOG_RING_MAX_CHARS = 4000; // лимит на клиенте — не даём тексту расти бесконечно в DOM
+const LOG_POLL_MS = 1000;        // низкий приоритет: опрос раз в 4с, не чаще
+
+function LogsTerminal() {
+  const [text, setText] = useState('');
+  const [paused, setPaused] = useState(false);
+  const cursorRef = useRef(0);
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    if (paused) return;
+    let stopped = false;
+
+    const tick = () => {
+      if (stopped || document.hidden) return;
+      fetch('api/logs/get', {
+        method: 'POST',
+        cache: 'no-store',
+        body: JSON.stringify({ since: cursorRef.current }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (stopped || !d) return;
+          cursorRef.current = d.cursor || 0;
+          if (d.text) {
+            setText((prev) => {
+              const chunk = d.dropped
+                ? '\n… [пропуск — буфер устройства переполнен] …\n' + d.text
+                : d.text;
+              const next = prev + chunk;
+              return next.length > LOG_RING_MAX_CHARS
+                ? next.slice(next.length - LOG_RING_MAX_CHARS)
+                : next;
+            });
+          }
+        })
+        .catch(() => {});
+    };
+
+    tick();
+    const id = setInterval(tick, LOG_POLL_MS);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
+  }, [paused]);
+
+  useEffect(() => {
+    if (boxRef.current) boxRef.current.scrollTop = boxRef.current.scrollHeight;
+  }, [text]);
+
+  return html`
+    <div class="m-4 divide-y divide-gray-200 overflow-auto rounded bg-white">
+      <div
+        class="font-semibold flex items-center justify-between text-gray-600 px-3 py-2"
+      >
+        <div>SYSTEM LOG (хвост UART3)</div>
+        <button
+          type="button"
+          onClick=${() => setPaused((v) => !v)}
+          class="text-xs font-semibold px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-100"
+        >
+          ${paused ? '▶ Продолжить' : '⏸ Пауза'}
+        </button>
+      </div>
+      <div
+        ref=${boxRef}
+        class="bg-slate-900 text-slate-100 text-xs font-mono p-3 overflow-auto whitespace-pre-wrap"
+        style="height: 320px;"
+      >
+        ${text || '...ожидание данных...'}
+      </div>
+    </div>
+  `;
+}
+
 function Main({ }) {
   const [stats, setStats] = useState(null);
   const refresh = () =>
@@ -456,39 +532,42 @@ function Main({ }) {
       .then((r) => r.json())
       .then((r) => setStats(r));
   useEffect(refresh, []);
-  if (!stats) return '';
   return html` <div class="p-2">
-    <div class="p-4 sm:p-2 mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4">
-      <${Stat}
-        title="Temperature"
-        text="${stats.temperature} °C"
-        tipText="good"
-        tipIcon=${Icons.ok}
-        tipColors=${tipColors.green}
-      />
-      <${Stat}
-        title="Humidity"
-        text="${stats.humidity} %"
-        tipText="warn"
-        tipIcon=${Icons.warn}
-        tipColors=${tipColors.yellow}
-      />
-      <div class="bg-white col-span-2 border rounded-md shadow-lg" role="alert">
-        <${DeveloperNote}
-          text="Stats data is received from the Mongoose backend"
+    <${LogsTerminal} />
+    ${stats &&
+    html`
+      <div class="p-4 sm:p-2 mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <${Stat}
+          title="Temperature"
+          text="${stats.temperature} °C"
+          tipText="good"
+          tipIcon=${Icons.ok}
+          tipColors=${tipColors.green}
         />
-      <//>
-    <//>
-    <div class="p-4 sm:p-2 mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <${Chart} data=${stats.points} />
+        <${Stat}
+          title="Humidity"
+          text="${stats.humidity} %"
+          tipText="warn"
+          tipIcon=${Icons.warn}
+          tipColors=${tipColors.yellow}
+        />
+        <div class="bg-white col-span-2 border rounded-md shadow-lg" role="alert">
+          <${DeveloperNote}
+            text="Stats data is received from the Mongoose backend"
+          />
+        <//>
+      </div>
+      <div class="p-4 sm:p-2 mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <${Chart} data=${stats.points} />
 
-      <div class="my-4 hx-24 bg-white border rounded-md shadow-lg" role="alert">
-        <${DeveloperNote}
-          text="This chart is an SVG image, generated on the fly from the
+        <div class="my-4 hx-24 bg-white border rounded-md shadow-lg" role="alert">
+          <${DeveloperNote}
+            text="This chart is an SVG image, generated on the fly from the
         data returned by the api/stats/get API call"
-        />
-      <//>
-    <//>
+          />
+        <//>
+      </div>
+    `}
   <//>`;
 }
 

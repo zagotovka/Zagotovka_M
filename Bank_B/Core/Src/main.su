@@ -26,8 +26,8 @@
 ../Core/Src/main.c:1633:6:start_pwm_fade	48	static
 ../Core/Src/main.c:1690:6:parse_string	80	static
 ../Core/Src/main.c:2415:6:StartCronTask	344	static
-../Core/Src/main.c:3890:6:HAL_TIM_PeriodElapsedCallback	0	static
-../Core/Src/main.c:3907:6:Error_Handler	64	static,ignoring_inline_asm
+../Core/Src/main.c:3891:6:HAL_TIM_PeriodElapsedCallback	0	static
+../Core/Src/main.c:3908:6:Error_Handler	64	static,ignoring_inline_asm
 ../Core/Src/main.c:1268:6:SystemClock_Config	88	static
 ../Core/Src/main.c:897:5:main	288	static,ignoring_inline_asm
 ../Core/Src/main.c:1923:6:StartWebServerTask	1112	static
