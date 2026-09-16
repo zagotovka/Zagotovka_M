@@ -45,7 +45,8 @@ Core/Src/dtcm_alloc.o: ../Core/Src/dtcm_alloc.c ../Core/Inc/dtcm_alloc.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1/portmacro.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/message_buffer.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/stream_buffer.h
+ ../Middlewares/Third_Party/FreeRTOS/Source/include/stream_buffer.h \
+ ../Core/Inc/ds18b20Config.h ../Core/Inc/main.h
 ../Core/Inc/dtcm_alloc.h:
 ../Core/Inc/db.h:
 ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal.h:
@@ -97,3 +98,5 @@ Core/Src/dtcm_alloc.o: ../Core/Src/dtcm_alloc.c ../Core/Inc/dtcm_alloc.h \
 ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/message_buffer.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/stream_buffer.h:
+../Core/Inc/ds18b20Config.h:
+../Core/Inc/main.h:

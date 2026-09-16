@@ -52,7 +52,8 @@ Core/Src/mqtt_server.o: ../Core/Src/mqtt_server.c \
  ../Core/Inc/logger.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/message_buffer.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/stream_buffer.h \
- ../Core/Inc/db.h ../Core/Inc/logger.h \
+ ../Core/Inc/ds18b20Config.h ../Core/Inc/main.h ../Core/Inc/db.h \
+ ../Core/Inc/logger.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h
 ../Core/Inc/mqtt_server.h:
@@ -113,6 +114,8 @@ Core/Src/mqtt_server.o: ../Core/Src/mqtt_server.c \
 ../Core/Inc/logger.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/message_buffer.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/stream_buffer.h:
+../Core/Inc/ds18b20Config.h:
+../Core/Inc/main.h:
 ../Core/Inc/db.h:
 ../Core/Inc/logger.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h:

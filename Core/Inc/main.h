@@ -43,7 +43,7 @@ extern struct mg_connection * volatile s_conn;
 #define BUTTON_PRESSED 1
 #define BUTTON_RELEASED 0
 
-extern struct Button button[NUMPIN];
+extern struct Button *button;  /* выделяется в DTCM через dtcm_button (main) */
 // Прототип функции processPins
 void processPins(uint16_t i, uint8_t action);
 

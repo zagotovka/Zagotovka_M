@@ -295,7 +295,7 @@ struct dbSettings {	// Cтруктура для setting
 /* ═══════════════════════════════════════════════════════════════════════════
  *  ZIGBEE PLAN B — отдельный массив ZigbeeConf[NUMZBEE]
  * ═══════════════════════════════════════════════════════════════════════════ */
-#define NUMZBEE 201
+#define NUMZBEE 200
 
 typedef struct {
     char     zbee_ieee[17];      // IEEE-адрес без "0x", 16 hex + '\0'
@@ -345,7 +345,7 @@ typedef struct {
     uint8_t  dimmer_attr;        // Attribute: 0x0000=Level, DP# for Manufacturer
 } ZigbeeVirtualPin;
 
-extern ZigbeeVirtualPin ZigbeeConf[NUMZBEE];
+extern ZigbeeVirtualPin ZigbeeConf[NUMZBEE];  /* в .bss — в DTCM не помещается вместе с g_body/MQTT */
 
 /* ── Action pool for Zigbee triggers (saves ~56 KB RAM) ── */
 #define NUMACTIONPOOL       50

@@ -32,6 +32,9 @@
 extern char *g_body;  // allocated in FreeRTOS heap, size = G_BODY_SIZE (net.h)
 extern bool s_tls_loaded;  /* TLS cert+key preload cache, invalidated on cert/key update */
 
+static uint8_t *writebuf;  /* DTCM, выделяется в zagotovka_dtcm_init(); полностью
+                              перезаписывается memcpy перед каждым чтением */
+
 /* ── Cluster flags <-> JSON array ── */
 uint8_t clusters_json_to_flags(const char *json_str) {
   if (!json_str || json_str[0] == '\0') return ZBEE_CL_ONOFF;
@@ -199,9 +202,9 @@ extern osMessageQueueId_t outputQueueHandle;
 /* A4: global mqttMsg removed — each send site uses a local copy */
 extern osMessageQueueId_t outputQueueHandle;
 /* mqtt_payload[300] removed — locale in WebServerTask */
-extern TIM_HandleTypeDef htim[NUMPIN];
+extern TIM_HandleTypeDef *htim;  /* выделяется в DTCM через dtcm_htim (main) */
 extern ds18b20_pin_t ds18b20[MAX_DS18B20_P];
-extern dht22_pin_t dht22[MAX_DHT22_P];
+extern dht22_pin_t *dht22;  /* выделяется в DTCM через dtcm_dht22 (main) */
 
 char s_url[70] = {0};       // Статический буфер для URL
 char s_pub_topic[64] = {0}; // Public topic (TX)
@@ -520,7 +523,7 @@ static int strip_id_from_sunrise_sunset(char *str, int target_id) {
 
 // Каскадная очистка всех связей для удалённого пина (физического или Zigbee)
 static void cascade_delete_pin_id(int deleted_id) {
-  extern struct dbPinToPin PinsLinks[NUMPINLINKS];
+  extern struct dbPinToPin *PinsLinks;  /* выделяется в DTCM через dtcm_pinslinks (main) */
   extern struct dbCron dbCrontxt[NUMTASK];
   extern struct dbSettings SetSettings;
   extern osMessageQueueId_t usbQueueHandle;
@@ -2140,10 +2143,26 @@ char *s_cached_domain   = NULL;
 char *s_cached_tg_token = NULL;
 static bool s_mysett_cache_valid     = false;
 
+static void zbee_probe_dtcm_init(void);
+static void zbee_learn_dtcm_init(void);
+
 void zagotovka_dtcm_init(void) {
     s_cached_tls_ca   = (char *)dtcm_cache_tls_ca;
     s_cached_domain   = (char *)dtcm_cache_domain;
     s_cached_tg_token = (char *)dtcm_cache_tg_token;
+
+    /* ow_conf + writebuf + s_zbee_probe_pool + obs_copy → DTCM (pool — NOLOAD) */
+    ow_conf  = dtcm_malloc(sizeof(onewire_config_t) * (MAX_DS18B20_P + MAX_DHT22_P));
+    writebuf = dtcm_malloc(sizeof(HTTPSsettings));
+    zbee_probe_dtcm_init();
+    zbee_learn_dtcm_init();
+    if (!ow_conf || !writebuf) {
+        printf("[DTCM] FATAL: zagotovka BSS→DTCM allocation failed! used=%u free=%u\r\n",
+               (unsigned)dtcm_alloc_get_used(), (unsigned)dtcm_alloc_get_free());
+        while (1) { __asm volatile("bkpt #0"); }  /* Останавливаем систему! */
+    }
+    memset(ow_conf, 0, sizeof(onewire_config_t) * (MAX_DS18B20_P + MAX_DHT22_P));
+    /* writebuf и obs_copy всегда полностью перезаписываются memcpy перед чтением — memset не нужен */
 }
 
 void mysett_cache_reload(void) {
@@ -2660,9 +2679,7 @@ static const HTTPSsettings *const flash_settings_backup
 STATIC_ASSERT(sizeof(HTTPSsettings) * 2 <= FLASH_SECTOR_11_SIZE,
               structure_size_exceeds_flash_sector);
 extern CRC_HandleTypeDef hcrc;
-static uint8_t
-    writebuf[sizeof(HTTPSsettings)]; // Буфер для временного хранения данных при
-                                     // записи  используется только при записи
+/* writebuf перенесён наверх файла (DTCM-указатель, zagotovka_dtcm_init) */
 
 // Функция для вычисления CRC всей структуры, кроме поля crc
 uint32_t calculate_crc(const HTTPSsettings *settings) {
@@ -4107,7 +4124,17 @@ typedef struct {
     uint8_t  allow_learning;
 } ZigbeeProbe;
 
-static ZigbeeProbe s_zbee_probe_pool[ZBEE_PROBE_POOL_SIZE] = {0};
+static ZigbeeProbe *s_zbee_probe_pool = NULL;  /* выделяется в DTCM в zagotovka_dtcm_init() */
+
+static void zbee_probe_dtcm_init(void) {
+    s_zbee_probe_pool = dtcm_malloc(sizeof(ZigbeeProbe) * ZBEE_PROBE_POOL_SIZE);
+    if (!s_zbee_probe_pool) {
+        printf("[DTCM] FATAL: zagotovka BSS→DTCM allocation failed! used=%u free=%u\r\n",
+               (unsigned)dtcm_alloc_get_used(), (unsigned)dtcm_alloc_get_free());
+        while (1) { __asm volatile("bkpt #0"); }  /* Останавливаем систему! */
+    }
+    memset(s_zbee_probe_pool, 0, sizeof(ZigbeeProbe) * ZBEE_PROBE_POOL_SIZE);
+}
 
 static const struct {
     uint16_t cluster;
@@ -4181,9 +4208,20 @@ typedef struct {
 } ZigbeeLearnSession;
 
 static ZigbeeLearnSession s_zbee_learn = {0};
+static ZigbeeLearnObs *obs_copy = NULL;  /* DTCM, выделяется в zbee_learn_dtcm_init();
+                                            всегда полностью memcpy перед чтением */
 static void zbee_learn_start(const char *ieee);
 static void zbee_learn_observe(uint16_t ep, uint16_t cluster, uint16_t attr, int val);
 static void zbee_learn_observe_trigger(const char *payload);
+
+static void zbee_learn_dtcm_init(void) {
+    obs_copy = dtcm_malloc(sizeof(ZigbeeLearnObs) * ZBEE_LEARN_MAX_OBS);
+    if (!obs_copy) {
+        printf("[DTCM] FATAL: zagotovka BSS→DTCM allocation failed! used=%u free=%u\r\n",
+               (unsigned)dtcm_alloc_get_used(), (unsigned)dtcm_alloc_get_free());
+        while (1) { __asm volatile("bkpt #0"); }  /* Останавливаем систему! */
+    }
+}
 
 /* Финализация одного зонда из пула */
 static void zbee_probe_finalize_slot(int slot) {
@@ -4885,7 +4923,6 @@ void handle_zigbee_learn_status(struct mg_connection *c, struct mg_http_message 
 
 void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm) {
     char *body = (char *)dtcm_zbee_body;
-    static ZigbeeLearnObs obs_copy[ZBEE_LEARN_MAX_OBS];
     int off = 0;
     int safe_limit = (int)DTCM_BUF_ZBEE_BODY - 128;
 
@@ -4894,7 +4931,7 @@ void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm
     uint32_t started_copy;
 
     taskENTER_CRITICAL();
-    memcpy(obs_copy, s_zbee_learn.obs, sizeof(obs_copy));
+    memcpy(obs_copy, s_zbee_learn.obs, sizeof(ZigbeeLearnObs) * ZBEE_LEARN_MAX_OBS);
     strncpy(ieee_copy, s_zbee_learn.ieee, sizeof(ieee_copy) - 1);
     active_copy = s_zbee_learn.active;
     started_copy = s_zbee_learn.started_at;
@@ -6671,7 +6708,7 @@ void check_DHT22_limits(void) {
   }
 }
 
-onewire_config_t ow_conf[MAX_DHT22_P + MAX_DS18B20_P] = {0};
+onewire_config_t *ow_conf = NULL;  /* выделяется в DTCM в zagotovka_dtcm_init() */
 
 void init_ds18b20(OneWire_t *OneWire, GPIO_TypeDef *OneWirePort,
                   uint16_t OneWirePin, uint8_t *owflag, uint8_t *temp_cnt,

@@ -61,8 +61,8 @@ extern uint8_t Ds18b20StartConvert;
 extern uint16_t Ds18b20Timeout;
 extern uint64_t s_boot_timestamp;
 int32_t onoffid;  /* знаковый: JSON id может быть < 0 */
-extern onewire_config_t ow_conf[MAX_DS18B20_P + MAX_DHT22_P];
-struct Button button[NUMPIN];
+extern onewire_config_t *ow_conf;  /* выделяется в DTCM в zagotovka_dtcm_init() */
+struct Button *button = NULL;      /* выделяется в DTCM через dtcm_button (main) */
 extern volatile uint8_t onlineFlg;
 extern uint8_t *gsm_rx_buffer;
 extern volatile gsm_rx_buffer_index_t gsm_rx_buffer_head;
@@ -73,7 +73,7 @@ uint8_t RxByte; // Буфер для приема одного байта по U
 uint8_t owflag = 0;
 
 ds18b20_pin_t ds18b20[MAX_DS18B20_P];
-dht22_pin_t dht22[MAX_DHT22_P];
+dht22_pin_t *dht22 = NULL;         /* выделяется в DTCM через dtcm_dht22 (main) */
 
 /* A4: global mqttMsg removed — each send site uses a local copy */
 /* mqtt_topic[100] / mqtt_payload[300] теперь локальны в WebServerTask */
@@ -81,7 +81,7 @@ dht22_pin_t dht22[MAX_DHT22_P];
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-TIM_HandleTypeDef htim[NUMPIN];
+TIM_HandleTypeDef *htim = NULL;  /* выделяется в DTCM через dtcm_htim (main) */
 uint8_t usbnum = 0;
 uint8_t mqttnum = 0;
 uint8_t sumowpin = 0;
@@ -275,7 +275,7 @@ extern struct dbSettings SetSettings;
 extern struct dbCron dbCrontxt[NUMTASK];
 extern struct dbPinsConf PinsConf[NUMPIN];
 extern struct dbPinsInfo PinsInfo[NUMPIN];
-extern struct dbPinToPin PinsLinks[NUMPINLINKS];
+extern struct dbPinToPin *PinsLinks;  /* выделяется в DTCM через dtcm_pinslinks (main) */
 extern bool g_log_filter_from_file;  // Флаг: log_filter_mask был в settings.ini
 
 extern ApplicationTypeDef Appli_state;
@@ -1047,18 +1047,7 @@ int main(void)
     EARLY_LOG_SYSTEM("[SYSTEM] 1e: ITCM OK\r\n");
   }
 
-  memset(dht22, 0, sizeof(dht22));
-
-  /* ── ITCM check 1f: после memset(dht22) ── */
-  {
-    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
-    uint32_t *itcm_dst  = (uint32_t *)_sitcm;
-    if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
-      EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1f (after memset dht22) ***\r\n");
-      while (1) { __NOP(); }
-    }
-    EARLY_LOG_SYSTEM("[SYSTEM] 1f: ITCM OK\r\n");
-  }
+  /* dht22 перенесён в DTCM — memset после dtcm_alloc_init() (ниже) */
 
   EARLY_LOG_SYSTEM("[SYSTEM] 15: sensor arrays zeroed\r\n");
   DWT_Init();
@@ -1108,6 +1097,16 @@ int main(void)
   dtcm_alloc_init();
   /* BSS → DTCM: присваиваем указатели (с проверкой на overflow) */
   PidConf = dtcm_pid_conf;
+  /* ЭТАП 2: htim + dht22 + button + PinsLinks → DTCM (pool — NOLOAD, нужен memset) */
+  htim = dtcm_htim;
+  if (htim) memset(htim, 0, sizeof(TIM_HandleTypeDef) * NUMPIN);
+  dht22 = dtcm_dht22;
+  if (dht22) memset(dht22, 0, sizeof(dht22_pin_t) * MAX_DHT22_P);
+  button = dtcm_button;
+  if (button) memset(button, 0, sizeof(struct Button) * NUMPIN);
+  PinsLinks = dtcm_pinslinks;
+  if (PinsLinks) memset(PinsLinks, 0, sizeof(struct dbPinToPin) * NUMPINLINKS);
+  /* ZigbeeConf — в .bss, обнуляется стартапом автоматически */
   if (dtcm_sec_deb_tm)     memset(dtcm_sec_deb_tm, 0, sizeof(uint32_t) * NUMPIN);
   if (dtcm_sec_lasttrg)    memset(dtcm_sec_lasttrg, 0, sizeof(uint32_t) * NUMPIN);
   if (dtcm_fade_state)     memset(dtcm_fade_state, 0, sizeof(FadeState_t) * NUMPIN);

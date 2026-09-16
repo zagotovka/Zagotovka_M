@@ -45,7 +45,8 @@ Core/Src/usart_ring.o: ../Core/Src/usart_ring.c ../Core/Inc/usart_ring.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/message_buffer.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/stream_buffer.h \
- ../Core/Inc/dtcm_alloc.h ../Core/Inc/lwdtc.h ../Core/Inc/main.h
+ ../Core/Inc/dtcm_alloc.h ../Core/Inc/lwdtc.h ../Core/Inc/main.h \
+ ../Core/Inc/ds18b20Config.h
 ../Core/Inc/usart_ring.h:
 ../Core/Inc/main.h:
 ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal.h:
@@ -99,3 +100,4 @@ Core/Src/usart_ring.o: ../Core/Src/usart_ring.c ../Core/Inc/usart_ring.h \
 ../Core/Inc/dtcm_alloc.h:
 ../Core/Inc/lwdtc.h:
 ../Core/Inc/main.h:
+../Core/Inc/ds18b20Config.h:

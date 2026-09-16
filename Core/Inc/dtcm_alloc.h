@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include "db.h"
 #include "lwdtc.h"
+#include "ds18b20Config.h"
 
 extern uint8_t _sdtcm_pool[];
 
@@ -95,5 +96,11 @@ extern int                  *dtcm_prev_pwm_dvalue;
 extern uint8_t              *dtcm_prev_gpio;
 extern int16_t              *dtcm_prev_duty;
 extern uint32_t             *dtcm_zbee_last_cmd_tick;
+
+/* main.c / db.c — ЭТАП 2 */
+extern dht22_pin_t          *dtcm_dht22;
+extern struct Button        *dtcm_button;   /* typedef в multi_button.h */
+extern struct dbPinToPin    *dtcm_pinslinks;
+extern TIM_HandleTypeDef    *dtcm_htim;
 
 #endif // DTCM_ALLOC_H

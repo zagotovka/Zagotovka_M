@@ -39,7 +39,7 @@ extern struct dbPinsConf PinsConf[NUMPIN];
 extern struct dbCron dbCrontxt[NUMTASK];
 extern struct dbSettings SetSettings;
 extern const char *s_json_header;
-extern struct dbPinToPin PinsLinks[NUMPINLINKS];
+extern struct dbPinToPin *PinsLinks;  /* выделяется в DTCM через dtcm_pinslinks (main) */
 void processPins(uint16_t i, uint8_t action);
 
 void log_headers(const char *headers);
@@ -162,7 +162,7 @@ typedef struct {
     uint8_t owflag;
     uint8_t temp_cnt;
 } onewire_config_t;
-extern onewire_config_t ow_conf[MAX_DS18B20_P + MAX_DHT22_P];
+extern onewire_config_t *ow_conf;  /* выделяется в DTCM в zagotovka_dtcm_init() */
 
 /****************** End global_vars **************************/
 void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf, int num_pins);

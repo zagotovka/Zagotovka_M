@@ -85,6 +85,6 @@ typedef struct {
 } dht22_pin_t;
 
 extern ds18b20_pin_t ds18b20[MAX_DS18B20_P];
-extern dht22_pin_t dht22[MAX_DHT22_P];
+extern dht22_pin_t *dht22;  /* выделяется в DTCM через dtcm_dht22 (main) */
 //###################################################################################
 #endif

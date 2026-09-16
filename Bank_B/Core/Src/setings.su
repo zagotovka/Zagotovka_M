@@ -11,7 +11,7 @@
 ../Core/Src/setings.c:897:6:GetPinConfig	144	static
 ../Core/Src/setings.c:1171:6:SetPinConfig	288	static
 ../Core/Src/setings.c:1441:6:GetPinToPin	112	static
-../Core/Src/setings.c:1507:6:SetPinToPin	304	static
+../Core/Src/setings.c:1507:6:SetPinToPin	296	static
 ../Core/Src/setings.c:1549:6:InitPin	208	static
 ../Core/Src/setings.c:1827:6:InitMultibutton	24	static
 ../Core/Src/setings.c:1853:6:ProcessKeyValuePair	40	static

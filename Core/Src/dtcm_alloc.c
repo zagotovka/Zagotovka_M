@@ -41,6 +41,12 @@ uint8_t             *dtcm_prev_gpio       = NULL;
 int16_t             *dtcm_prev_duty       = NULL;
 uint32_t            *dtcm_zbee_last_cmd_tick = NULL;
 
+/* ЭТАП 2: dht22 + button + PinsLinks → DTCM */
+dht22_pin_t          *dtcm_dht22       = NULL;
+struct Button        *dtcm_button      = NULL;
+struct dbPinToPin    *dtcm_pinslinks   = NULL;
+TIM_HandleTypeDef    *dtcm_htim        = NULL;
+
 __attribute__((section(".itcm"))) void dtcm_alloc_init(void)
 {
     dtcm_next       = _sdtcm_pool;
@@ -79,6 +85,12 @@ __attribute__((section(".itcm"))) void dtcm_alloc_init(void)
     dtcm_prev_duty       = dtcm_malloc(sizeof(int16_t) * NUMPIN);
     dtcm_zbee_last_cmd_tick = dtcm_malloc(sizeof(uint32_t) * NUMZBEE);
 
+    /* ЭТАП 2: htim + dht22 + button + PinsLinks → DTCM */
+    dtcm_htim        = dtcm_malloc(sizeof(TIM_HandleTypeDef) * NUMPIN);
+    dtcm_dht22       = dtcm_malloc(sizeof(dht22_pin_t) * MAX_DHT22_P);
+    dtcm_button      = dtcm_malloc(sizeof(struct Button) * NUMPIN);
+    dtcm_pinslinks   = dtcm_malloc(sizeof(struct dbPinToPin) * NUMPINLINKS);
+
     /* Проверяем что всё выделилось */
     if (!dtcm_zbee_body || !dtcm_zbee_raw || !dtcm_sensor_batch ||
         !dtcm_timer_batch || !dtcm_decoded ||
@@ -95,7 +107,8 @@ __attribute__((section(".itcm"))) void dtcm_alloc_init(void)
     if (!dtcm_pid_conf || !dtcm_sec_deb_tm || !dtcm_sec_lasttrg ||
         !dtcm_fade_state || !dtcm_cron_ctxs ||
         !dtcm_prev_pwm_dvalue || !dtcm_prev_gpio || !dtcm_prev_duty ||
-        !dtcm_zbee_last_cmd_tick) {
+        !dtcm_zbee_last_cmd_tick || !dtcm_htim ||
+        !dtcm_dht22 || !dtcm_button || !dtcm_pinslinks) {
         printf("[DTCM] FATAL: BSS→DTCM allocation failed! used=%u free=%u\r\n",
                (unsigned)dtcm_alloc_get_used(), (unsigned)dtcm_alloc_get_free());
         while (1) { __asm volatile("bkpt #0"); }  /* Останавливаем систему! */

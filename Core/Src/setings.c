@@ -36,12 +36,12 @@ extern struct dbSettings SetSettings;
 extern struct dbCron dbCrontxt[NUMTASK];
 extern struct dbPinsInfo PinsInfo[NUMPIN];
 extern struct dbPinsConf PinsConf[NUMPIN];
-extern struct dbPinToPin PinsLinks[NUMPINLINKS];
-extern struct Button button[NUMPIN];
+extern struct dbPinToPin *PinsLinks;  /* выделяется в DTCM через dtcm_pinslinks (main) */
+extern struct Button *button;  /* выделяется в DTCM через dtcm_button (main) */
 extern uint8_t mqttnum;
-extern TIM_HandleTypeDef htim[NUMPIN];
+extern TIM_HandleTypeDef *htim;  /* выделяется в DTCM через dtcm_htim (main) */
 extern ds18b20_pin_t ds18b20[MAX_DS18B20_P];
-extern dht22_pin_t dht22[MAX_DHT22_P];
+extern dht22_pin_t *dht22;  /* выделяется в DTCM через dtcm_dht22 (main) */
 
 // Current state tracking
 int pinindex = -1;       //  Current pin index
@@ -1476,7 +1476,7 @@ void GetPinToPin() {
   }
   buf[bytesRead] = '\0';
 
-  memset(PinsLinks, 0, sizeof(PinsLinks));
+  memset(PinsLinks, 0, sizeof(struct dbPinToPin) * NUMPINLINKS);
 
   struct mg_str arr = mg_str_n(buf, strlen(buf));
 
@@ -2565,7 +2565,7 @@ void GetZigbeeConfig(void) {
   }
   struct mg_str arr = mg_str_n(body.buf + arr_ofs, body.len - (size_t)arr_ofs);
 
-  memset(ZigbeeConf, 0, sizeof(ZigbeeConf));
+  memset(ZigbeeConf, 0, sizeof(ZigbeeVirtualPin) * NUMZBEE);
   for (int i = 0; i < NUMZBEE; i++) {
     ZigbeeConf[i].action_pool_idx = ACTION_POOL_IDX_NONE;
   }

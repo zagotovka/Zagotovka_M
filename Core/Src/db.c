@@ -12,10 +12,10 @@
 
 struct dbPinsConf PinsConf[NUMPIN];
 
-struct dbPinToPin PinsLinks[NUMPINLINKS];
+struct dbPinToPin *PinsLinks = NULL;  /* выделяется в DTCM через dtcm_pinslinks (main) */
 
 /* ── ZIGBEE PLAN B ── */
-ZigbeeVirtualPin ZigbeeConf[NUMZBEE];
+ZigbeeVirtualPin ZigbeeConf[NUMZBEE];  /* в .bss — в DTCM не помещается вместе с g_body/MQTT */
 
 /* ── Action pool for Zigbee triggers ── */
 ZigbeeActionPool ZigbeeActionPoolArr[NUMACTIONPOOL];
