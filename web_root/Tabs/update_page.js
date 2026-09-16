@@ -87,6 +87,30 @@ export function FirmwareUpdate({ }) {
   const bankAValid = !!info.bank_a_valid;
   const bankBValid = !!info.bank_b_valid;
 
+  // Пустая версия при валидном образе означает одно из двух:
+  //  1) банк прошит напрямую через ST-Link — версии не будет никогда;
+  //  2) это активный банк, только что залитый через OTA, но ещё не
+  //     закоммиченный (status 1 = trial, 2 = uncommitted) — версия
+  //     появится после mg_ota_commit(), сейчас её отсутствие не значит
+  //     "не через OTA".
+  // "Необкатанный" образ всегда лежит в активном банке (новый образ
+  // через OTA сразу становится активным), поэтому для неактивного банка
+  // с пустой версией остаётся только вариант (1).
+  const currentStatus = firmwares[0]?.status;
+  const isUncommittedOta = currentStatus === 1 || currentStatus === 2;
+  const bankLabel = (version, valid, isActiveBank) => {
+    if (version) return version;
+    if (isActiveBank && isUncommittedOta) {
+      return language === 'ru'
+        ? 'прошито через OTA (не подтверждено)'
+        : 'flashed via OTA (uncommitted)';
+    }
+    if (valid) {
+      return language === 'ru' ? 'прошито напрямую (не через OTA)' : 'flashed directly (not via OTA)';
+    }
+    return '—';
+  };
+
   // Целевой банк для переключения — противоположный активному.
   // Активный банк никогда не трогается OTA-циклом (новый образ всегда
   // пишется в другой банк), поэтому в нём всегда остаётся последняя
@@ -453,14 +477,10 @@ export function FirmwareUpdate({ }) {
               ${language === 'ru' ? 'Статус' : 'Status'}: ${statusText(firmwares[0])}
             </div>
             <div class="text-slate-700 text-sm">
-              Bank A: ${bankAVersion || (bankAValid
-                ? (language === 'ru' ? 'прошито напрямую (не через OTA)' : 'flashed directly (not via OTA)')
-                : '—')}
+              Bank A: ${bankLabel(bankAVersion, bankAValid, activeBank === 0)}
             </div>
             <div class="text-slate-700 text-sm mb-2">
-              Bank B: ${bankBVersion || (bankBValid
-                ? (language === 'ru' ? 'прошито напрямую (не через OTA)' : 'flashed directly (not via OTA)')
-                : '—')}
+              Bank B: ${bankLabel(bankBVersion, bankBValid, activeBank === 1)}
             </div>
             <!-- Пока не подтверждено (canCommit=true) — обычная кликабельная кнопка.
                  Как только firmware закоммичена, подтверждать больше нечего, поэтому

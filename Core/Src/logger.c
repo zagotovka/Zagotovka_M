@@ -1,4 +1,3 @@
-#include "logger.h"
 #include "FreeRTOS.h"
 #include "message_buffer.h"
 #include "task.h"
@@ -119,7 +118,16 @@ void logger_send(LogCategory_t cat, const char *fmt, ...) {
         total_len++; // include null terminator
 
         if (xMessageBuffer != NULL) {
+            /* Несколько задач-писателей (WebServerTask/CronTask/GSM/Sensors...)
+             * могут вызвать logger_send() одновременно. xMessageBuffer
+             * официально небезопасен для нескольких писателей без внешней
+             * синхронизации (см. документацию FreeRTOS) — без критической
+             * секции гонка может повредить границы сообщений в потоке,
+             * из-за чего читатель (StartLoggerTask) видит "задвоенные" или
+             * оборванные строки. Блокировка короткая (block time = 0). */
+            taskENTER_CRITICAL();
             xMessageBufferSend(xMessageBuffer, buf, total_len, 0);
+            taskEXIT_CRITICAL();
         } else {
             // Before scheduler: print directly to UART
             HAL_UART_Transmit(&huart3, (uint8_t*)cat_prefixes[cat], strlen(cat_prefixes[cat]), 50);
@@ -249,7 +257,11 @@ int __io_putchar(int ch) {
             send_buf[1 + send_len] = '\0';
 
             if (xMessageBuffer != NULL) {
+                /* См. комментарий в logger_send(): несколько задач-писателей,
+                 * xMessageBuffer требует критической секции вокруг send. */
+                taskENTER_CRITICAL();
                 xMessageBufferSend(xMessageBuffer, send_buf, send_len + 2, 0);
+                taskEXIT_CRITICAL();
             } else {
                 // Before scheduler: print directly to UART
                 HAL_UART_Transmit(&huart3, (uint8_t*)cat_prefixes[cat], strlen(cat_prefixes[cat]), 50);
