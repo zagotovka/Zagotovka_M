@@ -59,6 +59,7 @@ void SetPidConfig();
 #define MQTT_SRV_MAXCLI 4     // UI-лимит клиентов; прошивка clamp до MQTT_SRV_MAX_CLIENTS_HARDCAP
 #define MQTT_SRV_USR  "Yahsalta"    // дефолтный логин встроенного MQTT-брокера
 #define MQTT_SRV_PSWD "Zagotovka"   // дефолтный пароль встроенного MQTT-брокера
+#define SLZB_HOST     ""            // IP шлюза SLZB-06p7U для watchdog'а; пусто = watchdog выключен
 //void writedatatofile(const char* json_input);
 
 #endif /* INC_SETINGS_H_ */

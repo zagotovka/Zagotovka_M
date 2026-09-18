@@ -43,4 +43,10 @@ void mqtt_server_publish(const char *topic, const char *payload);
 /* Текущее число занятых клиентских слотов (для диагностики/UI) */
 uint8_t mqtt_server_client_count(void);
 
+/* true (1), если среди подключённых и аутентифицированных клиентов есть
+ * подписавшийся на <rxzbtop>/system_control/ — это фингерпринт шлюза
+ * SLZB-06p7U (Android-приложения и прочие MQTT-клиенты на этот топик
+ * не подписываются). Используется slzb_watchdog для автоворековера шлюза. */
+uint8_t mqtt_server_slzb_connected(void);
+
 #endif /* MQTT_SERVER_H */

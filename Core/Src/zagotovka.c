@@ -2091,6 +2091,7 @@ static void emit_mqtt_server(struct mg_connection *c,
   mg_http_write_chunk(c, buf, (size_t)len);
   emit_escaped_blob(c, "mqtt_srv_usr",  s->mqtt_srv_usr,  buf, 512);
   emit_escaped_blob(c, "mqtt_srv_pswd", s->mqtt_srv_pswd, buf, 512);
+  emit_escaped_blob(c, "slzb_host",     s->slzb_host,     buf, 512);
 }
 
 __attribute__((section(".itcm"))) static void emit_ip(struct mg_connection *c,
@@ -2918,6 +2919,35 @@ static char *json_get_str_allow_empty(struct mg_str json, const char *path) {
   return result;
 }
 
+/* Строгая проверка IPv4-адреса: ровно 4 октета по 1-3 цифры, значения 0-255,
+ * разделители — только '.', посторонних символов быть не должно. Используется
+ * для slzb_host (IP шлюза SLZB-06p7U): мусор в этом поле не должен попадать
+ * в settings.ini и в watchdog независимо от фронтенда. */
+static bool settings_valid_ipv4(const char *s) {
+  int octets = 0;
+  const char *p;
+  if (s == NULL || *s == '\0') return false;
+  p = s;
+  while (*p != '\0') {
+    int val = 0, digits = 0;
+    if (*p < '0' || *p > '9') return false;      // не цифра — мусор
+    while (*p >= '0' && *p <= '9') {
+      val = val * 10 + (*p - '0');
+      if (++digits > 3) return false;            // октет длиннее 3 цифр
+      p++;
+    }
+    if (val > 255) return false;                 // октет > 255
+    octets++;
+    if (*p == '.') {
+      p++;
+      if (*p == '\0') return false;              // точка в конце
+    } else {
+      break;                                     // не точка — конец адреса
+    }
+  }
+  return octets == 4 && *p == '\0';
+}
+
 void parse_mysett_json(char *json_string, struct dbSettings *settings) {
   struct mg_str body = mg_str_n(json_string, strlen(json_string));
 
@@ -2991,6 +3021,23 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
   { char *_v = json_get_str_allow_empty(body, "$.mqtt_srv_pswd");
     if (_v) { strncpy(settings->mqtt_srv_pswd, _v, sizeof(settings->mqtt_srv_pswd) - 1);
     settings->mqtt_srv_pswd[sizeof(settings->mqtt_srv_pswd) - 1] = '\0'; mg_free(_v); } }
+  /* slzb_host — IP шлюза SLZB-06p7U для watchdog'а. Опционально: пустая
+   * строка = watchdog выключен. Значение валидируем СЕРВЕРНО (строгий IPv4):
+   * невалидное значение молча игнорируется (остаётся старое) — мусор не
+   * должен попасть в settings.ini и в slzb_watchdog, даже если фронтенд
+   * проверку каким-то образом обошли. */
+  { char *_v = json_get_str_allow_empty(body, "$.slzb_host");
+    if (_v != NULL) {
+      if (_v[0] == '\0') {
+        settings->slzb_host[0] = '\0';           // очистка поля = watchdog off
+      } else if (settings_valid_ipv4(_v)) {
+        strncpy(settings->slzb_host, _v, sizeof(settings->slzb_host) - 1);
+        settings->slzb_host[sizeof(settings->slzb_host) - 1] = '\0';
+      } else {
+        printf("[settings] WARN: slzb_host rejected (invalid IPv4): '%s'\r\n", _v);
+      }
+      mg_free(_v);
+    } }
 
   { char *_v = mg_json_get_str(body, "$.mqtt_clt");
     if (_v) { strncpy(settings->mqtt_clt, _v, sizeof(settings->mqtt_clt) - 1);

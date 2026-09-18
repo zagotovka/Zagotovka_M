@@ -168,6 +168,7 @@ void SetSettingsConfig() {
   writeField(&USBHFile, buffer, "mqtt_srv_maxcli", "%d", SetSettings.mqtt_srv_maxcli);
   writeField(&USBHFile, buffer, "mqtt_srv_usr", "\"%s\"", SetSettings.mqtt_srv_usr);
   writeField(&USBHFile, buffer, "mqtt_srv_pswd", "\"%s\"", SetSettings.mqtt_srv_pswd);
+  writeField(&USBHFile, buffer, "slzb_host", "\"%s\"", SetSettings.slzb_host);
 
   writeField(&USBHFile, buffer, "check_ip", "%d", SetSettings.check_ip);
   writeField(&USBHFile, buffer, "ip_addr0", "%d", SetSettings.ip_addr0);
@@ -268,6 +269,7 @@ void StartSettingsConfig() {
   writeField(&USBHFile, buffer, "mqtt_srv_maxcli", "%d", MQTT_SRV_MAXCLI);
   writeField(&USBHFile, buffer, "mqtt_srv_usr", "\"%s\"", MQTT_SRV_USR);
   writeField(&USBHFile, buffer, "mqtt_srv_pswd", "\"%s\"", MQTT_SRV_PSWD);
+  writeField(&USBHFile, buffer, "slzb_host", "\"%s\"", SLZB_HOST);
 
   // Write IP settings
   writeField(&USBHFile, buffer, "check_ip", "%d", CHECK_IP);
@@ -499,6 +501,8 @@ void GetSettingsConfig() {
       strncpy(SetSettings.mqtt_srv_usr, value, sizeof(SetSettings.mqtt_srv_usr) - 1);
     } else if (strcmp(key, "mqtt_srv_pswd") == 0) {
       strncpy(SetSettings.mqtt_srv_pswd, value, sizeof(SetSettings.mqtt_srv_pswd) - 1);
+    } else if (strcmp(key, "slzb_host") == 0) {
+      strncpy(SetSettings.slzb_host, value, sizeof(SetSettings.slzb_host) - 1);
     } else if (strcmp(key, "tel") == 0) {
       strncpy(SetSettings.tel, value, sizeof(SetSettings.tel) - 1);
       //			printf("Found key: %s, value: %s\r\n", key,

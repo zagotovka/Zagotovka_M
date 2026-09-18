@@ -77,6 +77,7 @@ typedef struct {
     uint16_t keepalive_s;         // keepalive из CONNECT (0 = клиент не задал)
     uint8_t  num_subs;
     uint8_t  authenticated;       // CONNACK(0x00) отправлен
+    uint8_t  is_slzb;             // клиент подписался на <rxzbtop>/system_control/ (фингерпринт SLZB-06p7U)
     uint32_t last_activity_ms;    // любой входящий трафик (MG_EV_READ)
 } MqttSrvClient_t;
 
@@ -389,6 +390,22 @@ static void srv_handle_subscribe(struct mg_connection *c,
       cl->num_subs++;
       SRV_LOG("[server] sub '%.*s' (%d/%d)\r\n", (int) tlen, topic,
              cl->num_subs, MQTT_SRV_MAX_SUBS_PER_CLIENT);
+
+      /* Фингерпринт SLZB-06p7U: единственный клиент, который подписывается
+       * на <rxzbtop>/system_control/... (Android-приложения и прочие
+       * MQTT-клиенты на этот топик не подписываются). Сравнение по префиксу:
+       * SLZB может добавить свой client-id в конец топика. */
+      if (!cl->is_slzb) {
+        char pattern[MQTT_SRV_TOPIC_LEN];
+        const char *zbtop = (SetSettings.rxzbtop[0] != '\0')
+                                ? SetSettings.rxzbtop : "zigbee2mqtt";
+        int plen = snprintf(pattern, sizeof(pattern), "%s/system_control/", zbtop);
+        if (plen > 0 && (size_t) plen <= tlen &&
+            memcmp(topic, pattern, (size_t) plen) == 0) {
+          cl->is_slzb = 1;
+          SRV_LOG("[server] slot identified as SLZB (system_control sub)\r\n");
+        }
+      }
     } else {
       SRV_LOG("[server] sub rejected '%.*s' (rc=0x%02x)\r\n",
              (int) tlen, topic, rc);
@@ -474,6 +491,7 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
         s_cli[slot].num_subs = 0;
         s_cli[slot].keepalive_s = 0;
         s_cli[slot].authenticated = 0;
+        s_cli[slot].is_slzb = 0;
         s_cli[slot].last_activity_ms = mg_millis();
         s_cli_count++;
       }
@@ -549,6 +567,7 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
           s_cli[idx].conn = NULL;
           s_cli[idx].num_subs = 0;
           s_cli[idx].authenticated = 0;
+          s_cli[idx].is_slzb = 0;
           s_cli_count--;
         }
       }
@@ -693,4 +712,14 @@ void mqtt_server_publish(const char *topic, const char *payload) {
 
 uint8_t mqtt_server_client_count(void) {
   return s_cli_count;
+}
+
+uint8_t mqtt_server_slzb_connected(void) {
+  if (!s_running || s_cli == NULL) return 0;
+  for (int i = 0; i < MQTT_SRV_MAX_CLIENTS_HARDCAP; i++) {
+    if (s_cli[i].conn != NULL && s_cli[i].authenticated && s_cli[i].is_slzb) {
+      return 1;
+    }
+  }
+  return 0;
 }

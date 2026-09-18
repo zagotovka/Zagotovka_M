@@ -256,6 +256,7 @@ struct dbSettings {	// Cтруктура для setting
 	uint8_t mqtt_srv_maxcli;   // лимит одновременных клиентов (clamp в прошивке: MQTT_SRV_MAX_CLIENTS_HARDCAP)
 	char  mqtt_srv_usr[32];    // опционально: логин для подключения к серверу
 	char  mqtt_srv_pswd[32];   // опционально: пароль
+	char  slzb_host[16];       // IP шлюза SLZB-06p7U для watchdog'а автовосстановления (пусто = выключен), строго IPv4: "192.168.1.115"
 	// Настройки IP адреса
 	short check_ip;	// check DHCP on/off
 	short ip_addr0;	// IP адрес

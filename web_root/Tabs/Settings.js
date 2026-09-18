@@ -102,6 +102,7 @@ const SETTINGS_TIP_IDX = {
   'Max clients':     29,
   'User (srv)':      30,
   'Password (srv)':  31,
+  'SLZB IP':         32,
   'HTTPS domain':    15,
   'Private Key':     16,
   'Public Key':      17,
@@ -219,7 +220,7 @@ function Settings({ }) {
     [0.0,   '(GMT +0:00) Western Europe Time, London, Lisbon, Casablanca'],
     [1.0,   '(GMT +1:00) Brussels, Copenhagen, Madrid, Paris'],
     [2.0,   '(GMT +2:00) Kaliningrad, South Africa'],
-    [3.0,   '(GMT +3:00) Moscow, St. Petersburg, Baghdad, Riyadh'],
+    [3.0,   '(GMT +3:00) Yashalta, Moscow, St. Petersburg, Baghdad, Riyadh'],
     [3.3,   '(GMT +3:30) Tehran'],
     [4.0,   '(GMT +4:00) Abu Dhabi, Muscat, Baku, Tbilisi'],
     [4.3,   '(GMT +4:30) Kabul'],
@@ -269,6 +270,18 @@ function Settings({ }) {
     return pattern.test(timeStr);
   };
 
+  // SLZB IP (watchdog шлюза SLZB-06p7U): поле опциональное (пусто = watchdog выключен),
+  // но если пользователь что-то ввёл — это должен быть строго IPv4-адрес.
+  // Мусор в этом поле нельзя: прошивка по нему шлёт шлюзу HTTP-reboot.
+  // На лету вычищаем всё, кроме цифр и точек, ограничиваем формат адреса.
+  const sanitizeIpInput = (value) => {
+    if (typeof value !== 'string') return '';
+    const parts = value.replace(/[^0-9.]/g, '').split('.').slice(0, 4);
+    return parts.map((p) => p.slice(0, 3)).join('.');
+  };
+
+  const isValidIpInput = (value) => ipRegex.test(value);
+
   const isFormValid = (settings, errors) => {
     const hasErrors = Object.values(errors).some((error) => error !== null);
     const requiredFieldsFilled = settings.usehttps
@@ -300,6 +313,12 @@ function Settings({ }) {
       case 'gateway':
       case 'mqtt_hst':
         if (value.length > 50) error = 'Слишком длинное имя хоста';
+        break;
+      case 'slzb_host':
+        // Опциональное поле: пусто = SLZB watchdog выключен (валидной считается и пустота).
+        if (value && value.trim() !== '' && !isValidIpInput(value)) {
+          error = 'Неверный формат IP-адреса (пример: 192.168.1.115)';
+        }
         break;
       case 'sb_mask':
         if (!subnetMaskRegex.test(value)) error = 'Неверная маска подсети';
@@ -414,7 +433,12 @@ function Settings({ }) {
 
   const handleChange = (key, value) => {
     let error = null;
-    if (key === 'offdate') {
+    if (key === 'slzb_host') {
+      // Чистим мусор ДО записи в state: буквы/пробелы/лишние точки просто
+      // не попадут в поле, а не появятся с красной рамкой
+      value = sanitizeIpInput(value);
+      error = validateInput(key, value);
+    } else if (key === 'offdate') {
       error = validateDateFormat(value) ? null : 'Неверный формат даты (д.м.гг)';
     } else if (key === 'offtime') {
       error = validateTimeFormat(value) ? null : 'Неверный формат времени (чч:мм:сс)';
@@ -776,7 +800,8 @@ function Settings({ }) {
                     { label: 'Port',        key: 'mqtt_srv_prt',    type: 'number',   tipLabel: 'Port (srv)',     min: 1, max: 65535 },
                     { label: 'Max clients', key: 'mqtt_srv_maxcli', type: 'number',   tipLabel: 'Max clients',    min: 1, max: 6 },
                     { label: 'User',        key: 'mqtt_srv_usr',    type: 'text',     maxlength: 32, tipLabel: 'User (srv)' },
-                    { label: 'Password',    key: 'mqtt_srv_pswd',   type: 'password', maxlength: 32, tipLabel: 'Password (srv)' }
+                    { label: 'Password',    key: 'mqtt_srv_pswd',   type: 'password', maxlength: 32, tipLabel: 'Password (srv)' },
+                    { label: 'SLZB IP',     key: 'slzb_host',       type: 'text',     maxlength: 15, tipLabel: 'SLZB IP', placeholder: '192.168.1.115' }
                   ].map((item, index) => html`
                     <${FieldRow} label=${item.label} tip=${gt(item.tipLabel || item.label)} index=${index}>
                       <${pageSetting}
@@ -797,18 +822,69 @@ function Settings({ }) {
                 </table>
                 ${settings.check_mqtt_srv ? html`
                   <div class="px-6 py-3 text-sm font-semibold text-amber-700 bg-amber-500/10 border-t border-amber-500/20 space-y-2">
-                    <p>${settings.lang === 'ru'
-                      ? 'MQTT Server - Экспериментальный встроенный MQTT-брокер. Ограничения: максимум 6 клиентов, только QoS 0, без retained-сообщений, LWT и TLS. Не совмещайте с MQTT-клиентом на одном порту. Изменение настроек требует перезагрузки устройства.'
-                      : 'MQTT Server - Experimental built-in MQTT broker. Limitations: maximum 6 clients, QoS 0 only, no retained messages, LWT or TLS. Do not combine it with an MQTT client on the same port. Changing the settings requires a device reboot.'}</p>
-                    <p>${settings.lang === 'ru'
-                      ? 'При высокой нагрузке возможны задержки и пропуски MQTT-сообщений от Zigbee-устройств. Автор проекта не может точно определить, при каком количестве устройств и сообщений могут начаться пропуски.'
-                      : 'Under heavy load, delays and dropped MQTT messages from Zigbee devices are possible. The project author cannot say exactly at what number of devices and messages the drops may start to occur.'}</p>
-                    <p>${settings.lang === 'ru'
-                      ? 'В настоящее время у автора проекта нет достаточного количества Zigbee-устройств и физических устройств, чтобы полноценно проверить работу MQTT Server при максимальной нагрузке. Поэтому невозможно гарантировать стабильную работу системы при одновременном использовании всех 89 физических пинов, 200 Zigbee-пинов и 50 таймеров, особенно если они одновременно отправляют MQTT-сообщения.'
-                      : 'The project author currently does not have enough Zigbee devices and physical devices to fully test MQTT Server operation under maximum load. Therefore stable operation cannot be guaranteed when simultaneously using all 89 physical pins, 200 Zigbee pins and 50 timers, especially if they send MQTT messages at the same time.'}</p>
-                    <p>${settings.lang === 'ru'
-                      ? 'Если вы столкнётесь с задержками, пропусками сообщений или другими проблемами при высокой нагрузке, сообщите о своём опыте и предоставьте подробности конфигурации и журналы работы. Эта информация поможет автору внести необходимые изменения в код и расширить возможности проекта.'
-                      : 'If you encounter delays, dropped messages or other issues under heavy load, please share your experience and provide configuration details and logs. This information will help the author make the necessary code changes and expand the capabilities of the project.'}</p>
+                    ${settings.lang === 'ru' ? html`
+                      <p>MQTT Server — встроенный MQTT-брокер в настоящее время находится в разработке.</p>
+                      <p>MQTT Server поддерживает от 1 до 6 одновременно подключённых MQTT-клиентов. Вы можете изменить это значение, указав параметр <b>Max clients</b> в диапазоне от 1 до 6.</p>
+                      <p>Клиентом считается любое устройство или приложение, подключённое к серверу по MQTT. Например:</p>
+                      <ul class="list-disc pl-5 space-y-1">
+                        <li>Шлюз SLZB-06p7U занимает 1 клиентское подключение</li>
+                        <li>Подключённое Android-приложение с MQTT-клиентом — ещё одно подключение</li>
+                      </ul>
+                      <p>Таким образом, вы можете настроить сервер на работу с необходимым количеством клиентов (от 1 до 6 устройств или приложений).</p>
+                      <p class="font-bold pt-1">Технические ограничения</p>
+                      <ul class="list-disc pl-5 space-y-1">
+                        <li>Поддерживается только QoS 0</li>
+                        <li>Retained-сообщения, LWT и TLS не поддерживаются</li>
+                        <li>Не используйте MQTT Server и внешний MQTT-клиент на одном порту одновременно</li>
+                        <li>Изменение настроек (включая Max clients) требует перезагрузки устройства</li>
+                      </ul>
+                      <p class="font-bold pt-1">SLZB IP — watchdog шлюза SLZB-06p7U</p>
+                      <p>Если шлюз SLZB-06p7U не подключился к брокеру в течение 40 секунд после старта (или отвалился в процессе работы), устройство само перезагрузит его через веб-API — не чаще одного раза в минуту. Укажите в поле <b>SLZB IP</b> IP-адрес шлюза (например, 192.168.1.115). Пустое поле = watchdog выключен.</p>
+                      <p class="font-bold pt-1">Производительность при высокой нагрузке</p>
+                      <p>При высокой нагрузке возможны задержки и пропуски MQTT-сообщений от Zigbee-устройств.</p>
+                      <p>В настоящее время у автора проекта нет достаточного количества Zigbee-устройств и физического оборудования для полноценного тестирования MQTT Server при максимальной нагрузке. Поэтому невозможно гарантировать стабильную работу системы при одновременном использовании всех 89 физических пинов, 200 Zigbee-пинов и 50 таймеров, особенно если они одновременно отправляют MQTT-сообщения.</p>
+                      <p class="font-bold pt-1">Рекомендации при проблемах</p>
+                      <p>Если вы столкнётесь с задержками, пропусками сообщений или другими проблемами при высокой нагрузке, отключите MQTT Server и настройте MQTT Client. MQTT Client работает стабильно даже при больших нагрузках.</p>
+                      <p>Для этого потребуется внешнее устройство с установленным MQTT-сервером. Это может быть:</p>
+                      <ul class="list-disc pl-5 space-y-1">
+                        <li>Роутер с поддержкой MQTT-брокера</li>
+                        <li>Raspberry Pi</li>
+                        <li>Другое устройство (сервер, ПК и т.п.)</li>
+                      </ul>
+                      <p class="font-bold pt-1">Обратная связь</p>
+                      <p>Если вы используете встроенный MQTT Server и столкнулись с проблемами, пожалуйста, сообщите о своём опыте. Предоставьте подробности конфигурации и журналы работы — эта информация поможет автору внести необходимые изменения в код и расширить возможности проекта.</p>
+                    ` : html`
+                      <p>MQTT Server — the built-in MQTT broker is currently under development.</p>
+                      <p>MQTT Server supports from 1 to 6 simultaneously connected MQTT clients. You can change this value via the <b>Max clients</b> parameter, in the range from 1 to 6.</p>
+                      <p>A client is any device or application connected to the server over MQTT. For example:</p>
+                      <ul class="list-disc pl-5 space-y-1">
+                        <li>The SLZB-06p7U gateway takes up 1 client connection</li>
+                        <li>A connected Android app with an MQTT client — another connection</li>
+                      </ul>
+                      <p>This way, you can configure the server to work with the number of clients you need (from 1 to 6 devices or applications).</p>
+                      <p class="font-bold pt-1">Technical limitations</p>
+                      <ul class="list-disc pl-5 space-y-1">
+                        <li>Only QoS 0 is supported</li>
+                        <li>Retained messages, LWT and TLS are not supported</li>
+                        <li>Do not use MQTT Server and an external MQTT client on the same port at the same time</li>
+                        <li>Changing the settings (including Max clients) requires a device reboot</li>
+                      </ul>
+                      <p class="font-bold pt-1">SLZB IP — SLZB-06p7U gateway watchdog</p>
+                      <p>If the SLZB-06p7U gateway does not connect to the broker within 40 seconds after startup (or drops out during operation), the device will reboot it via its web API — no more than once per minute. Enter the gateway IP address in the <b>SLZB IP</b> field (for example, 192.168.1.115). An empty field = watchdog disabled.</p>
+                      <p class="font-bold pt-1">Performance under heavy load</p>
+                      <p>Under heavy load, delays and dropped MQTT messages from Zigbee devices are possible.</p>
+                      <p>The project author currently does not have enough Zigbee devices and physical hardware to fully test MQTT Server under maximum load. Therefore stable operation cannot be guaranteed when simultaneously using all 89 physical pins, 200 Zigbee pins and 50 timers, especially if they send MQTT messages at the same time.</p>
+                      <p class="font-bold pt-1">Recommendations if you run into problems</p>
+                      <p>If you encounter delays, dropped messages or other issues under heavy load, disable MQTT Server and set up MQTT Client instead. MQTT Client works reliably even under heavy load.</p>
+                      <p>For this you will need an external device with an MQTT server installed. This can be:</p>
+                      <ul class="list-disc pl-5 space-y-1">
+                        <li>A router with MQTT broker support</li>
+                        <li>A Raspberry Pi</li>
+                        <li>Another device (a server, a PC, etc.)</li>
+                      </ul>
+                      <p class="font-bold pt-1">Feedback</p>
+                      <p>If you use the built-in MQTT Server and run into problems, please share your experience. Provide configuration details and logs — this information will help the author make the necessary code changes and expand the project's capabilities.</p>
+                    `}
                   </div>
                 ` : ''}
               </div>

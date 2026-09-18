@@ -47,6 +47,7 @@
 #include "usart_ring.h"
 #include "dtcm_alloc.h"
 #include "mqtt_server.h"
+#include "slzb_watchdog.h"
 
 #define BLINK_PERIOD_MS 1000 // LED blinking period in millis
 #define DEBOUNCE_DELAY 45    // Encoder (ms)
@@ -1992,9 +1993,11 @@ void StartWebServerTask(void *argument)
   mg_tcpip_init(mgr, &mif);
 
   MG_INFO(("MAC: %M. Waiting for IP...", mg_print_mac, mif.mac));
+  LOG_MQTT("[BOOT] t=%lu waiting for IP...\r\n", (unsigned long)HAL_GetTick());
   while (mif.state != MG_TCPIP_STATE_READY) {
     mg_mgr_poll(mgr, 0);
   }
+  LOG_MQTT("[BOOT] t=%lu IP ready\r\n", (unsigned long)HAL_GetTick());
 
   {
     uint8_t *ip_bytes = (uint8_t *)&mif.ip;
@@ -2002,13 +2005,23 @@ void StartWebServerTask(void *argument)
     snprintf(g_mac_addr, sizeof(g_mac_addr), "%02X:%02X:%02X:%02X:%02X:%02X", mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]);
   }
 
-  web_init(mgr);
-
   /* Встроенный MQTT-брокер (только если включён в настройках;
      таблица клиентов выделяется в DTCM один раз) */
   if (SetSettings.check_mqtt_srv) {
     mqtt_server_init(mgr, (uint16_t)SetSettings.mqtt_srv_prt);
+    LOG_MQTT("[BOOT] t=%lu mqtt_server_init() done, broker on port %d\r\n",
+             (unsigned long)HAL_GetTick(), SetSettings.mqtt_srv_prt);
+
+    /* Watchdog автовосстановления шлюза SLZB-06p7U: если шлюз не подключился
+     * к брокеру за SLZB_WD_WAIT_MS — перезагружаем его HTTP-запросом.
+     * IP берётся из настроек (Settings → MQTT Server → "SLZB IP");
+     * пустая строка = watchdog выключен. */
+    slzb_watchdog_init(SetSettings.slzb_host);
   }
+
+  LOG_MQTT("[BOOT] t=%lu calling web_init()\r\n", (unsigned long)HAL_GetTick());
+  web_init(mgr);
+  LOG_MQTT("[BOOT] t=%lu web_init() done\r\n", (unsigned long)HAL_GetTick());
 
   MqttMessage_t rxMsg = {0};
   BaseType_t status;
@@ -2045,6 +2058,9 @@ void StartWebServerTask(void *argument)
 
     /* Встроенный MQTT-брокер: keepalive-таймауты клиентов (сама проверяет флаг) */
     mqtt_server_poll();
+    /* Watchdog SLZB-06p7U: автовосстановление связи с шлюзом (сама проверяет,
+       что брокер запущен и host задан) */
+    slzb_watchdog_poll(mgr);
     /* Статический пик времени выполнения mg_mgr_poll */
     {
       static uint32_t s_poll_exec_peak = 0;
