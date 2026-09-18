@@ -763,7 +763,7 @@ function Settings({ }) {
                     <tr class="bg-amber-500/10 border-b border-amber-500/20">
                       <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3 cursor-help" data-tip=${gt('MQTT Server')}>
                         <div class="flex items-center gap-3">
-                          <span>MQTT Server ⚠</span>
+                          <span>MQTT Server</span>
                           <${MyPolzunok} value=${settings.check_mqtt_srv} onChange=${(v) => handleChange('check_mqtt_srv', v)} />
                         </div>
                       </th>
@@ -796,10 +796,19 @@ function Settings({ }) {
                   ` : html`<tbody></tbody>`}
                 </table>
                 ${settings.check_mqtt_srv ? html`
-                  <div class="px-6 py-3 text-sm font-semibold text-amber-700 bg-amber-500/10 border-t border-amber-500/20">
-                    ${gt('MQTT Server') || (settings.lang === 'ru'
-                      ? 'Экспериментальная функция: макс. 6 клиентов, только QoS 0, без retained/LWT/TLS. Изменение настроек требует перезагрузки.'
-                      : 'Experimental feature: max 6 clients, QoS 0 only, no retained/LWT/TLS. Settings changes require a reboot.')}
+                  <div class="px-6 py-3 text-sm font-semibold text-amber-700 bg-amber-500/10 border-t border-amber-500/20 space-y-2">
+                    <p>${settings.lang === 'ru'
+                      ? 'MQTT Server - Экспериментальный встроенный MQTT-брокер. Ограничения: максимум 6 клиентов, только QoS 0, без retained-сообщений, LWT и TLS. Не совмещайте с MQTT-клиентом на одном порту. Изменение настроек требует перезагрузки устройства.'
+                      : 'MQTT Server - Experimental built-in MQTT broker. Limitations: maximum 6 clients, QoS 0 only, no retained messages, LWT or TLS. Do not combine it with an MQTT client on the same port. Changing the settings requires a device reboot.'}</p>
+                    <p>${settings.lang === 'ru'
+                      ? 'При высокой нагрузке возможны задержки и пропуски MQTT-сообщений от Zigbee-устройств. Автор проекта не может точно определить, при каком количестве устройств и сообщений могут начаться пропуски.'
+                      : 'Under heavy load, delays and dropped MQTT messages from Zigbee devices are possible. The project author cannot say exactly at what number of devices and messages the drops may start to occur.'}</p>
+                    <p>${settings.lang === 'ru'
+                      ? 'В настоящее время у автора проекта нет достаточного количества Zigbee-устройств и физических устройств, чтобы полноценно проверить работу MQTT Server при максимальной нагрузке. Поэтому невозможно гарантировать стабильную работу системы при одновременном использовании всех 89 физических пинов, 200 Zigbee-пинов и 50 таймеров, особенно если они одновременно отправляют MQTT-сообщения.'
+                      : 'The project author currently does not have enough Zigbee devices and physical devices to fully test MQTT Server operation under maximum load. Therefore stable operation cannot be guaranteed when simultaneously using all 89 physical pins, 200 Zigbee pins and 50 timers, especially if they send MQTT messages at the same time.'}</p>
+                    <p>${settings.lang === 'ru'
+                      ? 'Если вы столкнётесь с задержками, пропусками сообщений или другими проблемами при высокой нагрузке, сообщите о своём опыте и предоставьте подробности конфигурации и журналы работы. Эта информация поможет автору внести необходимые изменения в код и расширить возможности проекта.'
+                      : 'If you encounter delays, dropped messages or other issues under heavy load, please share your experience and provide configuration details and logs. This information will help the author make the necessary code changes and expand the capabilities of the project.'}</p>
                   </div>
                 ` : ''}
               </div>

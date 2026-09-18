@@ -499,26 +499,30 @@ function TabPid({ }) {
                 </div>
               </div>
             `
-            : html`<div class="flex items-center justify-center p-8 text-slate-500 font-medium">No PID jobs available</div>`}
+            : html`<div class="flex items-center justify-center p-8 text-slate-500 font-medium">${language === 'ru' ? 'Нет доступных ПИД-регуляторов' : 'No PID jobs available'}</div>`}
         </div>
         <div class="w-full flex justify-between items-center mb-4 mt-2 bg-white/40 backdrop-blur-md border border-white/60 shadow-sm p-4 rounded-2xl">
           <button
             class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
             onclick=${() => setShowHelp(!showHelp)}
           >
-            ${showHelp ? 'Hide Help' : 'Show Help'}
+            ${showHelp
+            ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help')
+            : (language === 'ru' ? 'Показать справку' : 'Show Help')}
           </button>
           <div class="font-semibold text-slate-600 tracking-wide">
             ${varpid && (PID_MAX_SLOTS - visiblePids > 0)
-            ? `Still available: ${PID_MAX_SLOTS - visiblePids} PID jobs`
-            : 'No available: PID jobs!'}
+            ? (language === 'ru'
+                ? `Ещё доступно: ${PID_MAX_SLOTS - visiblePids} ПИД-регулятор(ов)`
+                : `Still available: ${PID_MAX_SLOTS - visiblePids} PID jobs`)
+            : (language === 'ru' ? 'Нет доступных ПИД-регуляторов!' : 'No available: PID jobs!')}
           </div>
           <div class="flex gap-2">
             ${visiblePids < PID_MAX_SLOTS ? html`
             <button
                 class="bg-emerald-500 hover:bg-emerald-600 shadow-md text-white font-black text-xl w-10 h-10 rounded-full transition-transform hover:scale-110 active:scale-95 flex items-center justify-center pb-1 shadow-emerald-500/30"
                 onclick=${addPid}
-                title="Add PID"
+                title=${language === 'ru' ? 'Добавить ПИД-регулятор' : 'Add PID'}
             >+</button>
             ` : null}
             ${visiblePids > 0
@@ -526,7 +530,7 @@ function TabPid({ }) {
                 <button
                   class="bg-rose-500 hover:bg-rose-600 shadow-md text-white font-black text-xl w-10 h-10 rounded-full transition-transform hover:scale-110 active:scale-95 flex items-center justify-center pb-1 shadow-rose-500/30"
                   onclick=${deletePid}
-                  title="Remove PID"
+                  title=${language === 'ru' ? 'Удалить ПИД-регулятор' : 'Remove PID'}
                 >-</button>
               `
               : null}

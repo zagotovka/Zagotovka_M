@@ -72,7 +72,7 @@ function LogsTerminal({ language }) {
       </div>
       <div
         ref=${boxRef}
-        class="bg-slate-900 text-amber-300 text-xs font-mono p-3 rounded-xl overflow-auto whitespace-pre-wrap"
+        class="bg-slate-900 text-amber-300 text-xs font-mono p-3 rounded-xl overflow-auto whitespace-pre-wrap selection:bg-amber-300 selection:text-slate-900"
         style="height: 420px;"
       >
         ${text || (language === 'ru' ? '...ожидание данных...' : '...waiting for data...')}

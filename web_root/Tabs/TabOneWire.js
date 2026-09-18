@@ -251,6 +251,55 @@ const TabOneWire = () => {
   const togglePin = (id) => setExpandedPins(prev => ({ ...prev, [id]: !prev[id] }));
   const clean = (s) => typeof s === 'string' ? s.replace(/[^\x20-\x7E\u0400-\u04FF]/g, '') : s;
 
+  // ---------------------------------------------------------------------
+  // Надёжное копирование в буфер обмена.
+  // navigator.clipboard доступен только в защищённом контексте (HTTPS
+  // или localhost). Устройство обычно открывают по обычному http://<ip>
+  // в локальной сети — там navigator.clipboard отсутствует или его
+  // вызов молча падает, поэтому кнопка "copy SN" не работала ни в
+  // Firefox, ни в Chrome. Делаем откат на document.execCommand('copy')
+  // через временный textarea, плюс явную обработку ошибок/отказа
+  // в разрешении, чтобы пользователь видел результат в любом случае.
+  // ---------------------------------------------------------------------
+  const copyToClipboard = (text, buttonEl) => {
+    const original = 'copy SN';
+    const showResult = (ok) => {
+      if (!buttonEl) return;
+      buttonEl.textContent = ok ? 'Copied!' : 'Copy failed';
+      setTimeout(() => { buttonEl.textContent = original; }, 1500);
+    };
+
+    const legacyFallbackCopy = () => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-9999px';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, ta.value.length);
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        showResult(ok);
+      } catch (e) {
+        showResult(false);
+      }
+    };
+
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(
+        () => showResult(true),
+        () => legacyFallbackCopy()
+      );
+    } else {
+      // Небезопасный контекст (обычный http://192.168.x.x) — сразу используем fallback.
+      legacyFallbackCopy();
+    }
+  };
+
   useEffect(() => { initGlobalTooltip(); }, []);
 
   const updateSensorData = (data) => {
@@ -365,9 +414,7 @@ const TabOneWire = () => {
                 <span class="font-mono text-base text-slate-700 select-all">${clean(s.s_number)}</span>
                 <button class="px-4 py-1.5 rounded-full text-sm font-bold text-white bg-gradient-to-r from-teal-400 to-cyan-500" onclick=${(e) => {
                   e.stopPropagation();
-                  navigator.clipboard.writeText(clean(s.s_number));
-                  e.target.textContent = 'Copied!';
-                  setTimeout(() => e.target.textContent = 'copy SN', 1500);
+                  copyToClipboard(clean(s.s_number), e.target);
                 }}>copy SN</button>
               </span>
             `}
