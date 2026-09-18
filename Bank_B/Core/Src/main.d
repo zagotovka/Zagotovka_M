@@ -77,7 +77,8 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h \
  ../Core/Inc/version_gen.h ../Core/Inc/gsm.h ../Core/Inc/usart_ring.h \
- ../Core/Inc/dtcm_alloc.h ../Core/Inc/lwdtc.h ../Core/Inc/mqtt_server.h
+ ../Core/Inc/dtcm_alloc.h ../Core/Inc/lwdtc.h ../Core/Inc/mqtt_server.h \
+ ../Core/Inc/slzb_watchdog.h
 ../Core/Inc/main.h:
 ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal.h:
 ../Core/Inc/stm32f7xx_hal_conf.h:
@@ -179,3 +180,4 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
 ../Core/Inc/dtcm_alloc.h:
 ../Core/Inc/lwdtc.h:
 ../Core/Inc/mqtt_server.h:
+../Core/Inc/slzb_watchdog.h:

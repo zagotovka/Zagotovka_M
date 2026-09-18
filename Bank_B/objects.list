@@ -15,6 +15,7 @@
 "./Core/Src/onewire.o"
 "./Core/Src/packed_fs.o"
 "./Core/Src/setings.o"
+"./Core/Src/slzb_watchdog.o"
 "./Core/Src/stm32f7xx_hal_msp.o"
 "./Core/Src/stm32f7xx_hal_timebase_tim.o"
 "./Core/Src/stm32f7xx_it.o"

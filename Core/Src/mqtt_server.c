@@ -94,8 +94,11 @@ static uint32_t s_stat_accepted   = 0;  /* успешных CONNECT */
 static uint32_t s_stat_rejected   = 0;  /* отклонённых CONNECT (proto/auth/мусор) */
 static uint32_t s_stat_rx_msgs    = 0;  /* принятых PUBLISH от клиентов */
   static uint32_t s_stat_tx_msgs    = 0;  /* вызовов mqtt_server_publish() */
-  static uint32_t s_stat_SLZB_timeouts = 0; /* keepalive-таймаутов: клиент молчал > 1.5x KA+5с,
-                                               слот закрыли МЫ (тихий обрыв, напр. SLZB) */
+  static uint32_t s_stat_slzb_reconnects = 0; /* переподключений шлюза SLZB-06p7U: опознанный
+                                                 слот (is_slzb=1, authenticated=1) закрылся —
+                                                 любой причиной (keepalive-таймаут, DISCONNECT,
+                                                 разрыв TCP). Метрика стабильности связи,
+                                                 инкремент в MG_EV_CLOSE. */
   static uint32_t s_last_heartbeat_ms = 0;
 
 /* ---------- мелкие парсеры ---------- */
@@ -562,6 +565,11 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
         memcpy(&idx, c->data, 1);
         if (idx < MQTT_SRV_MAX_CLIENTS_HARDCAP && s_cli != NULL &&
             s_cli[idx].conn == c) {
+          if (s_cli[idx].authenticated && s_cli[idx].is_slzb) {
+            s_stat_slzb_reconnects++;
+            SRV_LOG("[server] SLZB slot %d disconnected (reconnect #%lu)\r\n",
+                    idx, (unsigned long) s_stat_slzb_reconnects);
+          }
           SRV_LOG("[server] client closed (auth=%d, %d subs)\r\n",
                   s_cli[idx].authenticated, s_cli[idx].num_subs);
           s_cli[idx].conn = NULL;
@@ -622,7 +630,7 @@ void mqtt_server_init(struct mg_mgr *mgr, uint16_t port) {
   s_running = 1;
   s_last_heartbeat_ms = mg_millis();
   s_stat_accepted = s_stat_rejected = s_stat_rx_msgs = s_stat_tx_msgs = 0;
-  s_stat_SLZB_timeouts = 0;
+  s_stat_slzb_reconnects = 0;
   SRV_LOG("[server] MQTT 3.1.1 broker started on port %u (max %d clients, "
          "QoS 0, subs/client %d)\r\n",
          (unsigned) port, MQTT_SRV_MAX_CLIENTS_HARDCAP,
@@ -652,7 +660,7 @@ void mqtt_server_poll(void) {
               (unsigned long) s_stat_rejected,
               (unsigned long) s_stat_rx_msgs,
               (unsigned long) s_stat_tx_msgs,
-              (unsigned long) s_stat_SLZB_timeouts);
+              (unsigned long) s_stat_slzb_reconnects);
     }
   }
 
@@ -674,7 +682,8 @@ void mqtt_server_poll(void) {
                 ? (uint32_t) cl->keepalive_s * 1500u + 5000u
                 : 0;
     if (limit != 0 && idle > limit) {
-      s_stat_SLZB_timeouts++;
+      /* Счётчик переподключений здесь НЕ трогаем: is_closing=1 приведёт к
+       * MG_EV_CLOSE на следующем poll(), учёт (только для is_slzb) — там. */
       SRV_LOG("[server] slot %d: keepalive timeout (%lums > %ums), closing\r\n",
              i, (unsigned long) idle, (unsigned) limit);
       cl->conn->is_closing = 1;
