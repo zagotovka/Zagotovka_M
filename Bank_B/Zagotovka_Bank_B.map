@@ -6778,7 +6778,7 @@ LOAD /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.
  *(.noinit_itcm)
                 0x00003098                        . = ALIGN (0x4)
 
-.rodata         0x08145ea0    0x31d50
+.rodata         0x08145ea0    0x34d50
                 0x08145ea0                        . = ALIGN (0x4)
  *(.rodata)
  .rodata        0x08145ea0       0xb8 ./Core/Src/main.o
@@ -7502,538 +7502,538 @@ LOAD /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.
                 0x081511d8                mg_packed_files
  .rodata.v6     0x08151250     0x111c ./Core/Src/packed_fs.o
  .rodata.v5     0x0815236c      0x3fa ./Core/Src/packed_fs.o
- .rodata.v4     0x08152766     0x26f9 ./Core/Src/packed_fs.o
- .rodata.v3     0x08154e5f    0x1ba0d ./Core/Src/packed_fs.o
+ .rodata.v4     0x08152766     0x2731 ./Core/Src/packed_fs.o
+ .rodata.v3     0x08154e97    0x1e9d4 ./Core/Src/packed_fs.o
  .rodata.is_action_set.str1.1
-                0x0817086c        0x5 ./Core/Src/setings.o
+                0x0817386b        0x5 ./Core/Src/setings.o
  .rodata.writeField.constprop.0.str1.1
-                0x0817086c        0x6 ./Core/Src/setings.o
+                0x0817386b        0x6 ./Core/Src/setings.o
                                   0x8 (size before relaxing)
  .rodata.SetSettingsConfig.str1.1
-                0x08170872      0x132 ./Core/Src/setings.o
+                0x08173871      0x132 ./Core/Src/setings.o
                                 0x284 (size before relaxing)
  .rodata.StartSettingsConfig.str1.1
-                0x081709a4       0x62 ./Core/Src/setings.o
+                0x081739a3       0x62 ./Core/Src/setings.o
                                  0x72 (size before relaxing)
  .rodata.GetSettingsConfig.str1.1
-                0x08170a06       0xe4 ./Core/Src/setings.o
+                0x08173a05       0xe4 ./Core/Src/setings.o
                                  0xf0 (size before relaxing)
  .rodata.GetCronConfig.str1.1
-                0x08170aea       0x71 ./Core/Src/setings.o
+                0x08173ae9       0x71 ./Core/Src/setings.o
                                  0x87 (size before relaxing)
  .rodata.SetCronConfig.str1.1
-                0x08170b5b        0x3 ./Core/Src/setings.o
+                0x08173b5a        0x3 ./Core/Src/setings.o
                                  0x13 (size before relaxing)
  .rodata.GetPinConfig.str1.1
-                0x08170b5e       0x87 ./Core/Src/setings.o
+                0x08173b5d       0x87 ./Core/Src/setings.o
                                 0x10b (size before relaxing)
  .rodata.SetPinConfig.str1.1
-                0x08170be5      0x5dd ./Core/Src/setings.o
+                0x08173be4      0x5dd ./Core/Src/setings.o
                                 0x5e9 (size before relaxing)
  .rodata.GetPinToPin.str1.1
-                0x081711c2      0x10d ./Core/Src/setings.o
+                0x081741c1      0x10d ./Core/Src/setings.o
                                 0x11a (size before relaxing)
  .rodata.SetPinToPin.str1.1
-                0x081712cf       0xd4 ./Core/Src/setings.o
+                0x081742ce       0xd4 ./Core/Src/setings.o
                                  0xf7 (size before relaxing)
  .rodata.InitPin.str1.1
-                0x081713a3       0x3a ./Core/Src/setings.o
+                0x081743a2       0x3a ./Core/Src/setings.o
  .rodata.ProcessKeyValuePair.str1.1
-                0x081713dd       0x87 ./Core/Src/setings.o
+                0x081743dc       0x87 ./Core/Src/setings.o
                                  0xf1 (size before relaxing)
  .rodata.GetOneWireConfig.str1.1
-                0x08171464       0x73 ./Core/Src/setings.o
+                0x08174463       0x73 ./Core/Src/setings.o
  .rodata.SetOneWireConfig.str1.1
-                0x081714d7      0x206 ./Core/Src/setings.o
+                0x081744d6      0x206 ./Core/Src/setings.o
                                 0x226 (size before relaxing)
  .rodata.GetPidConfig.str1.1
-                0x081716dd      0x1b5 ./Core/Src/setings.o
+                0x081746dc      0x1b5 ./Core/Src/setings.o
  .rodata.SetPidConfig.str1.1
-                0x08171892      0x1b1 ./Core/Src/setings.o
+                0x08174891      0x1b1 ./Core/Src/setings.o
  .rodata.GetZigbeeConfig.str1.1
-                0x08171a43      0x200 ./Core/Src/setings.o
+                0x08174a42      0x200 ./Core/Src/setings.o
  .rodata.SetZigbeeConfig.str1.1
-                0x08171c43      0x247 ./Core/Src/setings.o
+                0x08174c42      0x247 ./Core/Src/setings.o
  .rodata.slzb_reboot_cb.str1.1
-                0x08171e8a       0x9c ./Core/Src/slzb_watchdog.o
+                0x08174e89       0x9c ./Core/Src/slzb_watchdog.o
  .rodata.slzb_watchdog_init.str1.1
-                0x08171f26       0x69 ./Core/Src/slzb_watchdog.o
+                0x08174f25       0x69 ./Core/Src/slzb_watchdog.o
  .rodata.slzb_watchdog_poll.str1.1
-                0x08171f8f       0xa9 ./Core/Src/slzb_watchdog.o
+                0x08174f8e       0xa9 ./Core/Src/slzb_watchdog.o
  .rodata.fault_print_hex.str1.1
-                0x08172038       0x14 ./Core/Src/stm32f7xx_it.o
+                0x08175037       0x14 ./Core/Src/stm32f7xx_it.o
  .rodata.fault_print_reg.str1.1
-                0x08172038       0xa9 ./Core/Src/stm32f7xx_it.o
+                0x08175037       0xa9 ./Core/Src/stm32f7xx_it.o
                                   0x9 (size before relaxing)
  .rodata.fault_addr_region.str1.1
-                0x08172038       0x2f ./Core/Src/stm32f7xx_it.o
+                0x08175037       0x2f ./Core/Src/stm32f7xx_it.o
  .rodata.fault_report.str1.1
-                0x08172067      0x7b4 ./Core/Src/stm32f7xx_it.o
+                0x08175066      0x7b4 ./Core/Src/stm32f7xx_it.o
                                 0x7ca (size before relaxing)
  .rodata.fault_handler_c.str1.1
-                0x0817281b       0x2e ./Core/Src/stm32f7xx_it.o
+                0x0817581a       0x2e ./Core/Src/stm32f7xx_it.o
  .rodata.memmanage_handler_c.str1.1
-                0x08172849       0x35 ./Core/Src/stm32f7xx_it.o
+                0x08175848       0x35 ./Core/Src/stm32f7xx_it.o
  .rodata.NMI_Handler.str1.1
-                0x0817287e       0x50 ./Core/Src/stm32f7xx_it.o
+                0x0817587d       0x50 ./Core/Src/stm32f7xx_it.o
  .rodata.BusFault_Handler.str1.1
-                0x081728ce       0x21 ./Core/Src/stm32f7xx_it.o
+                0x081758cd       0x21 ./Core/Src/stm32f7xx_it.o
  .rodata.UsageFault_Handler.str1.1
-                0x081728ef       0x3b ./Core/Src/stm32f7xx_it.o
+                0x081758ee       0x3b ./Core/Src/stm32f7xx_it.o
  .rodata.SystemInit.str1.1
-                0x0817292a       0x22 ./Core/Src/system_stm32f7xx.o
+                0x08175929       0x22 ./Core/Src/system_stm32f7xx.o
  .rodata.APBPrescTable
-                0x0817294c        0x8 ./Core/Src/system_stm32f7xx.o
-                0x0817294c                APBPrescTable
+                0x0817594b        0x8 ./Core/Src/system_stm32f7xx.o
+                0x0817594b                APBPrescTable
  .rodata.AHBPrescTable
-                0x08172954       0x10 ./Core/Src/system_stm32f7xx.o
-                0x08172954                AHBPrescTable
+                0x08175953       0x10 ./Core/Src/system_stm32f7xx.o
+                0x08175953                AHBPrescTable
  .rodata.gsm_read.str1.1
-                0x08172964        0xf ./Core/Src/usart_ring.o
+                0x08175963        0xf ./Core/Src/usart_ring.o
  .rodata.strip_id_from_action.part.0.str1.1
-                0x08172973        0xd ./Core/Src/zagotovka.o
+                0x08175972        0xd ./Core/Src/zagotovka.o
  .rodata.strip_id_from_sunrise_sunset.part.0.str1.1
-                0x08172973        0xf ./Core/Src/zagotovka.o
+                0x08175972        0xf ./Core/Src/zagotovka.o
                                   0x6 (size before relaxing)
  .rodata.log_headers.part.0.str1.1
-                0x08172973       0x1d ./Core/Src/zagotovka.o
+                0x08175972       0x1d ./Core/Src/zagotovka.o
                                  0x20 (size before relaxing)
  .rodata.emit_escaped_blob.constprop.0.str1.1
-                0x08172990        0xe ./Core/Src/zagotovka.o
+                0x0817598f        0xe ./Core/Src/zagotovka.o
                                  0x11 (size before relaxing)
  .rodata.fmt_float.constprop.0.str1.1
-                0x0817299e        0x8 ./Core/Src/zagotovka.o
+                0x0817599d        0x8 ./Core/Src/zagotovka.o
  .rodata.clusters_flags_to_json.str1.1
-                0x0817299e       0x20 ./Core/Src/zagotovka.o
+                0x0817599d       0x20 ./Core/Src/zagotovka.o
                                  0x21 (size before relaxing)
  .rodata.json_escape_send.str1.1
-                0x081729be        0xc ./Core/Src/zagotovka.o
+                0x081759bd        0xc ./Core/Src/zagotovka.o
                                   0xf (size before relaxing)
  .rodata.log_headers.str1.1
-                0x081729ca        0xd ./Core/Src/zagotovka.o
+                0x081759c9        0xd ./Core/Src/zagotovka.o
  .rodata.json_decode_string.str1.1
-                0x081729d7       0x34 ./Core/Src/zagotovka.o
+                0x081759d6       0x34 ./Core/Src/zagotovka.o
  .rodata.handle_select_get.str1.1
-                0x08172a0b      0x167 ./Core/Src/zagotovka.o
+                0x08175a0a      0x167 ./Core/Src/zagotovka.o
                                 0x16a (size before relaxing)
  .rodata.handle_pintopin_get.str1.1
-                0x08172b72       0x34 ./Core/Src/zagotovka.o
+                0x08175b71       0x34 ./Core/Src/zagotovka.o
                                  0x5b (size before relaxing)
  .rodata.parse_switch_json.str1.1
-                0x08172ba6       0xf9 ./Core/Src/zagotovka.o
+                0x08175ba5       0xf9 ./Core/Src/zagotovka.o
                                 0x10f (size before relaxing)
  .rodata.handle_switch_set.str1.1
-                0x08172c9f       0x6c ./Core/Src/zagotovka.o
+                0x08175c9e       0x6c ./Core/Src/zagotovka.o
                                  0x8d (size before relaxing)
  .rodata.parse_button_json.str1.1
-                0x08172d0b       0x7d ./Core/Src/zagotovka.o
+                0x08175d0a       0x7d ./Core/Src/zagotovka.o
                                  0x98 (size before relaxing)
  .rodata.handle_button_set.str1.1
-                0x08172d88       0x8d ./Core/Src/zagotovka.o
+                0x08175d87       0x8d ./Core/Src/zagotovka.o
  .rodata.handle_timers_get.str1.1
-                0x08172e15       0xe0 ./Core/Src/zagotovka.o
+                0x08175e14       0xe0 ./Core/Src/zagotovka.o
  .rodata.parse_numline_json.str1.1
-                0x08172ef5       0x4a ./Core/Src/zagotovka.o
+                0x08175ef4       0x4a ./Core/Src/zagotovka.o
  .rodata.parse_timers_json.str1.1
-                0x08172f3f       0x30 ./Core/Src/zagotovka.o
+                0x08175f3e       0x30 ./Core/Src/zagotovka.o
  .rodata.zagotovka_dtcm_init.str1.1
-                0x08172f6f       0x48 ./Core/Src/zagotovka.o
+                0x08175f6e       0x48 ./Core/Src/zagotovka.o
  .rodata.handle_mysett_get.str1.1
-                0x08172fb7      0x2b5 ./Core/Src/zagotovka.o
+                0x08175fb6      0x2b5 ./Core/Src/zagotovka.o
                                 0x37c (size before relaxing)
  .rodata.mqtt_publish_logfilter_status.str1.1
-                0x0817326c       0xf7 ./Core/Src/zagotovka.o
+                0x0817626b       0xf7 ./Core/Src/zagotovka.o
                                 0x102 (size before relaxing)
  .rodata.handle_logfilter.str1.1
-                0x08173363       0x24 ./Core/Src/zagotovka.o
+                0x08176362       0x24 ./Core/Src/zagotovka.o
                                  0x29 (size before relaxing)
  .rodata.get_valid_settings.str1.1
-                0x08173387       0x19 ./Core/Src/zagotovka.o
+                0x08176386       0x19 ./Core/Src/zagotovka.o
  .rodata.write_settings_to_flash.str1.1
-                0x081733a0       0x5b ./Core/Src/zagotovka.o
+                0x0817639f       0x5b ./Core/Src/zagotovka.o
  .rodata.is_template_value.str1.1
-                0x081733fb       0x51 ./Core/Src/zagotovka.o
+                0x081763fa       0x51 ./Core/Src/zagotovka.o
  .rodata.handle_connection_del.str1.1
-                0x0817344c       0xed ./Core/Src/zagotovka.o
+                0x0817644b       0xed ./Core/Src/zagotovka.o
                                  0xf5 (size before relaxing)
  .rodata.gen_onewire_json.str1.1
-                0x08173539      0x1a9 ./Core/Src/zagotovka.o
+                0x08176538      0x1a9 ./Core/Src/zagotovka.o
                                 0x2c2 (size before relaxing)
  .rodata.handle_onewire_get.str1.1
-                0x081736e2       0x42 ./Core/Src/zagotovka.o
+                0x081766e1       0x42 ./Core/Src/zagotovka.o
  .rodata.parse_onewire_json.str1.1
-                0x08173724       0xa2 ./Core/Src/zagotovka.o
+                0x08176723       0xa2 ./Core/Src/zagotovka.o
  .rodata.parse_sensor_json.str1.1
-                0x081737c6      0x19a ./Core/Src/zagotovka.o
+                0x081767c5      0x19a ./Core/Src/zagotovka.o
                                 0x19f (size before relaxing)
  .rodata.parse_stm32time.str1.1
-                0x08173960       0xb5 ./Core/Src/zagotovka.o
+                0x0817695f       0xb5 ./Core/Src/zagotovka.o
  .rodata.gen_security_json.str1.1
-                0x08173a15       0x5d ./Core/Src/zagotovka.o
+                0x08176a14       0x5d ./Core/Src/zagotovka.o
                                  0xc6 (size before relaxing)
  .rodata.handle_security_get.str1.1
-                0x08173a72       0x16 ./Core/Src/zagotovka.o
+                0x08176a71       0x16 ./Core/Src/zagotovka.o
                                  0x5b (size before relaxing)
  .rodata.parse_sim800l_json.str1.1
-                0x08173a88       0x3a ./Core/Src/zagotovka.o
+                0x08176a87       0x3a ./Core/Src/zagotovka.o
  .rodata.get_rxzbtop.str1.1
-                0x08173ac2        0xc ./Core/Src/zagotovka.o
+                0x08176ac1        0xc ./Core/Src/zagotovka.o
  .rodata.zbee_probe_send_one.str1.1
-                0x08173ac2       0x54 ./Core/Src/zagotovka.o
+                0x08176ac1       0x54 ./Core/Src/zagotovka.o
                                  0x56 (size before relaxing)
  .rodata.zbee_learn_start.str1.1
-                0x08173b16       0x31 ./Core/Src/zagotovka.o
+                0x08176b15       0x31 ./Core/Src/zagotovka.o
                                  0x3f (size before relaxing)
  .rodata.zbee_probe_check_timeout.str1.1
-                0x08173b47       0x9f ./Core/Src/zagotovka.o
+                0x08176b46       0x9f ./Core/Src/zagotovka.o
  .rodata.SendZigbeeReadProbe.str1.1
-                0x08173be6       0xa3 ./Core/Src/zagotovka.o
+                0x08176be5       0xa3 ./Core/Src/zagotovka.o
  .rodata.parse_select_json.str1.1
-                0x08173c89       0xb8 ./Core/Src/zagotovka.o
+                0x08176c88       0xb8 ./Core/Src/zagotovka.o
                                  0xc3 (size before relaxing)
  .rodata.handle_select_set.str1.1
-                0x08173d41       0x37 ./Core/Src/zagotovka.o
+                0x08176d40       0x37 ./Core/Src/zagotovka.o
  .rodata.zbee_learn_check_timeout.str1.1
-                0x08173d78       0x23 ./Core/Src/zagotovka.o
+                0x08176d77       0x23 ./Core/Src/zagotovka.o
  .rodata.handle_zigbee_learn_status.str1.1
-                0x08173d9b       0x2d ./Core/Src/zagotovka.o
+                0x08176d9a       0x2d ./Core/Src/zagotovka.o
  .rodata.handle_zigbee_learn_get.str1.1
-                0x08173dc8      0x196 ./Core/Src/zagotovka.o
+                0x08176dc7      0x196 ./Core/Src/zagotovka.o
  .rodata.handle_zigbee_learn_label.str1.1
-                0x08173f5e      0x5d5 ./Core/Src/zagotovka.o
+                0x08176f5d      0x5d5 ./Core/Src/zagotovka.o
                                 0x652 (size before relaxing)
  .rodata.handle_zigbee_learn_start.str1.1
-                0x08174533       0x5c ./Core/Src/zagotovka.o
+                0x08177532       0x5c ./Core/Src/zagotovka.o
  .rodata.SendZigbeeCommand.str1.1
-                0x0817458f       0xa7 ./Core/Src/zagotovka.o
+                0x0817758e       0xa7 ./Core/Src/zagotovka.o
  .rodata.SendZigbeeEPCommand.str1.1
-                0x08174636       0x6f ./Core/Src/zagotovka.o
+                0x08177635       0x6f ./Core/Src/zagotovka.o
  .rodata.parse_time.str1.1
-                0x081746a5        0x6 ./Core/Src/zagotovka.o
+                0x081776a4        0x6 ./Core/Src/zagotovka.o
  .rodata.processPins.str1.1
-                0x081746a5       0x9f ./Core/Src/zagotovka.o
+                0x081776a4       0x9f ./Core/Src/zagotovka.o
  .rodata.parse_monitoring_json.str1.1
-                0x08174744       0x3e ./Core/Src/zagotovka.o
+                0x08177743       0x3e ./Core/Src/zagotovka.o
  .rodata.handle_security_set.str1.1
-                0x08174782       0x12 ./Core/Src/zagotovka.o
+                0x08177781       0x12 ./Core/Src/zagotovka.o
                                  0x49 (size before relaxing)
  .rodata.init_ds18b20.str1.1
-                0x08174794       0x30 ./Core/Src/zagotovka.o
+                0x08177793       0x30 ./Core/Src/zagotovka.o
  .rodata.pars_temp_sensors.str1.1
-                0x081747c4        0x3 ./Core/Src/zagotovka.o
+                0x081777c3        0x3 ./Core/Src/zagotovka.o
                                  0x71 (size before relaxing)
  .rodata.handle_temp_get.str1.1
-                0x081747c7       0x2a ./Core/Src/zagotovka.o
+                0x081777c6       0x2a ./Core/Src/zagotovka.o
  .rodata.calculateMoonPhase.str1.1
-                0x081747f1       0x24 ./Core/Src/zagotovka.o
+                0x081777f0       0x24 ./Core/Src/zagotovka.o
                                  0x3d (size before relaxing)
  .rodata.send_sms.str1.1
-                0x08174815       0x8e ./Core/Src/zagotovka.o
+                0x08177814       0x8e ./Core/Src/zagotovka.o
                                  0xa1 (size before relaxing)
  .rodata.process_dht22.str1.1
-                0x081748a3       0x55 ./Core/Src/zagotovka.o
+                0x081778a2       0x55 ./Core/Src/zagotovka.o
  .rodata.publish_sensor_batch.str1.1
-                0x081748f8       0x4d ./Core/Src/zagotovka.o
+                0x081778f7       0x4d ./Core/Src/zagotovka.o
  .rodata.send_mqtt_timer_batch.str1.1
-                0x08174945       0xac ./Core/Src/zagotovka.o
+                0x08177944       0xac ./Core/Src/zagotovka.o
                                  0xb7 (size before relaxing)
  .rodata.reset_to_defaults.str1.1
-                0x081749f1       0x8e ./Core/Src/zagotovka.o
+                0x081779f0       0x8e ./Core/Src/zagotovka.o
  .rodata.parse_mysett_json.str1.1
-                0x08174a7f      0x5a7 ./Core/Src/zagotovka.o
+                0x08177a7e      0x5a7 ./Core/Src/zagotovka.o
                                 0x5ba (size before relaxing)
  .rodata.initialize_https_settings.str1.1
-                0x08175026       0x69 ./Core/Src/zagotovka.o
+                0x08178025       0x69 ./Core/Src/zagotovka.o
  .rodata.gen_pid_json.str1.1
-                0x0817508f       0xba ./Core/Src/zagotovka.o
+                0x0817808e       0xba ./Core/Src/zagotovka.o
                                  0xdc (size before relaxing)
  .rodata.parse_pid_json.str1.1
-                0x08175149       0x81 ./Core/Src/zagotovka.o
+                0x08178148       0x81 ./Core/Src/zagotovka.o
                                  0xa4 (size before relaxing)
  .rodata.parse_pidline_json.str1.1
-                0x081751ca        0xa ./Core/Src/zagotovka.o
+                0x081781c9        0xa ./Core/Src/zagotovka.o
  .rodata.handle_pid_get.str1.1
-                0x081751d4       0x34 ./Core/Src/zagotovka.o
+                0x081781d3       0x34 ./Core/Src/zagotovka.o
  .rodata.handle_pid_set.str1.1
-                0x08175208       0x45 ./Core/Src/zagotovka.o
+                0x08178207       0x45 ./Core/Src/zagotovka.o
  .rodata.parse_onoff_json.str1.1
-                0x0817524d       0xcb ./Core/Src/zagotovka.o
+                0x0817824c       0xcb ./Core/Src/zagotovka.o
  .rodata.parse_encoder_json.str1.1
-                0x08175318      0x1b9 ./Core/Src/zagotovka.o
+                0x08178317      0x1b9 ./Core/Src/zagotovka.o
                                 0x1c2 (size before relaxing)
  .rodata.action_handler.part.0.str1.1
-                0x081754d1       0xaa ./Core/Src/zagotovka.o
+                0x081784d0       0xaa ./Core/Src/zagotovka.o
                                  0xae (size before relaxing)
  .rodata.process_ds18b20.str1.1
-                0x0817557b      0x27f ./Core/Src/zagotovka.o
+                0x0817857a      0x27f ./Core/Src/zagotovka.o
  .rodata.check_DHT22_limits.str1.1
-                0x081757fa      0x10e ./Core/Src/zagotovka.o
+                0x081787f9      0x10e ./Core/Src/zagotovka.o
  .rodata.Check_SunriseSunset_Actions.str1.1
-                0x08175908       0x90 ./Core/Src/zagotovka.o
+                0x08178907       0x90 ./Core/Src/zagotovka.o
  .rodata.api_handler.str1.1
-                0x08175998      0x394 ./Core/Src/zagotovka.o
+                0x08178997      0x394 ./Core/Src/zagotovka.o
                                 0x3c2 (size before relaxing)
  .rodata.mqtt_message_handler.str1.1
-                0x08175d2c      0x80c ./Core/Src/zagotovka.o
+                0x08178d2b      0x80c ./Core/Src/zagotovka.o
                                 0x850 (size before relaxing)
  .rodata.pid_autotune_start.str1.1
-                0x08176538      0x1e6 ./Core/Src/zagotovka.o
+                0x08179537      0x1e6 ./Core/Src/zagotovka.o
  .rodata.pid_autotune_stop.str1.1
-                0x0817671e       0x21 ./Core/Src/zagotovka.o
+                0x0817971d       0x21 ./Core/Src/zagotovka.o
  .rodata.pid_compute_imc.str1.1
-                0x0817673f       0x38 ./Core/Src/zagotovka.o
+                0x0817973e       0x38 ./Core/Src/zagotovka.o
  .rodata.pid_autotune_tick.str1.1
-                0x08176777      0x1e7 ./Core/Src/zagotovka.o
+                0x08179776      0x1e7 ./Core/Src/zagotovka.o
  .rodata.handle_pid_tune_set.str1.1
-                0x0817695e       0x33 ./Core/Src/zagotovka.o
+                0x0817995d       0x33 ./Core/Src/zagotovka.o
  .rodata.calc_display_id.str1.1
-                0x08176991       0x33 ./Core/Src/zagotovka.o
+                0x08179990       0x33 ./Core/Src/zagotovka.o
                                   0x6 (size before relaxing)
  .rodata.handle_zigbee_get.str1.1
-                0x08176991      0x13d ./Core/Src/zagotovka.o
+                0x08179990      0x13d ./Core/Src/zagotovka.o
                                 0x14d (size before relaxing)
  .rodata.handle_zigbee_set.str1.1
-                0x08176ace       0x7e ./Core/Src/zagotovka.o
+                0x08179acd       0x7e ./Core/Src/zagotovka.o
                                  0xae (size before relaxing)
  .rodata.handle_zigbee_enable.str1.1
-                0x08176b4c       0x4f ./Core/Src/zagotovka.o
+                0x08179b4b       0x4f ./Core/Src/zagotovka.o
  .rodata.handle_zigbee_command.str1.1
-                0x08176b9b       0x66 ./Core/Src/zagotovka.o
+                0x08179b9a       0x66 ./Core/Src/zagotovka.o
  .rodata.handle_zigbee_rescan.str1.1
-                0x08176c01       0x5a ./Core/Src/zagotovka.o
+                0x08179c00       0x5a ./Core/Src/zagotovka.o
  .rodata.__func__.2
-                0x08176c5b       0x14 ./Core/Src/zagotovka.o
+                0x08179c5a       0x14 ./Core/Src/zagotovka.o
  .rodata.__func__.3
-                0x08176c6f       0x15 ./Core/Src/zagotovka.o
+                0x08179c6e       0x15 ./Core/Src/zagotovka.o
  .rodata.__func__.4
-                0x08176c84       0x12 ./Core/Src/zagotovka.o
+                0x08179c83       0x12 ./Core/Src/zagotovka.o
  .rodata.__func__.5
-                0x08176c96       0x13 ./Core/Src/zagotovka.o
+                0x08179c95       0x13 ./Core/Src/zagotovka.o
  .rodata.__func__.6
-                0x08176ca9       0x16 ./Core/Src/zagotovka.o
+                0x08179ca8       0x16 ./Core/Src/zagotovka.o
  .rodata.__func__.7
-                0x08176cbf       0x12 ./Core/Src/zagotovka.o
- *fill*         0x08176cd1        0x3 
+                0x08179cbe       0x12 ./Core/Src/zagotovka.o
  .rodata.pow10.8
-                0x08176cd4       0x1c ./Core/Src/zagotovka.o
+                0x08179cd0       0x1c ./Core/Src/zagotovka.o
  .rodata.__func__.9
-                0x08176cf0       0x13 ./Core/Src/zagotovka.o
+                0x08179cec       0x13 ./Core/Src/zagotovka.o
  .rodata.__func__.10
-                0x08176d03       0x12 ./Core/Src/zagotovka.o
+                0x08179cff       0x12 ./Core/Src/zagotovka.o
  .rodata.__func__.11
-                0x08176d15       0x13 ./Core/Src/zagotovka.o
+                0x08179d11       0x13 ./Core/Src/zagotovka.o
  .rodata.__func__.12
-                0x08176d28       0x12 ./Core/Src/zagotovka.o
+                0x08179d24       0x12 ./Core/Src/zagotovka.o
  .rodata.__func__.13
-                0x08176d3a       0x11 ./Core/Src/zagotovka.o
+                0x08179d36       0x11 ./Core/Src/zagotovka.o
  .rodata.__func__.15
-                0x08176d4b       0x12 ./Core/Src/zagotovka.o
+                0x08179d47       0x12 ./Core/Src/zagotovka.o
  .rodata.__func__.16
-                0x08176d5d       0x12 ./Core/Src/zagotovka.o
+                0x08179d59       0x12 ./Core/Src/zagotovka.o
  .rodata.__func__.18
-                0x08176d6f        0xc ./Core/Src/zagotovka.o
- *fill*         0x08176d7b        0x1 
+                0x08179d6b        0xc ./Core/Src/zagotovka.o
+ *fill*         0x08179d77        0x1 
  .rodata.pid_presets
-                0x08176d7c      0x168 ./Core/Src/zagotovka.o
+                0x08179d78      0x168 ./Core/Src/zagotovka.o
  .rodata.zbee_probe_cl_bit
-                0x08176ee4        0x5 ./Core/Src/zagotovka.o
- *fill*         0x08176ee9        0x1 
+                0x08179ee0        0x5 ./Core/Src/zagotovka.o
+ *fill*         0x08179ee5        0x1 
  .rodata.zbee_probe_stages
-                0x08176eea       0x14 ./Core/Src/zagotovka.o
+                0x08179ee6       0x14 ./Core/Src/zagotovka.o
  .rodata.json_find_val_path.constprop.0.str1.1
-                0x08176efe        0x8 ./Core/Src/zbee_vbtn.o
+                0x08179efa        0x8 ./Core/Src/zbee_vbtn.o
                                  0x11 (size before relaxing)
  .rodata.match_payload_word.str1.1
-                0x08176f06        0x8 ./Core/Src/zbee_vbtn.o
+                0x08179f02        0x8 ./Core/Src/zbee_vbtn.o
                                   0x9 (size before relaxing)
  .rodata.click_state_from_payload.str1.1
-                0x08176f06       0x15 ./Core/Src/zbee_vbtn.o
+                0x08179f02       0x15 ./Core/Src/zbee_vbtn.o
  .rodata.vbtn_execute.str1.1
-                0x08176f06       0x18 ./Core/Src/zbee_vbtn.o
+                0x08179f02       0x18 ./Core/Src/zbee_vbtn.o
                                  0x42 (size before relaxing)
  .rodata.zbee_vbtn_tick.str1.1
-                0x08176f1e       0x22 ./Core/Src/zbee_vbtn.o
+                0x08179f1a       0x22 ./Core/Src/zbee_vbtn.o
  .rodata.zbee_vbtn_auto_detect.str1.1
-                0x08176f40       0x5a ./Core/Src/zbee_vbtn.o
+                0x08179f3c       0x5a ./Core/Src/zbee_vbtn.o
  .rodata.str1.1
-                0x08176f9a       0x2b ./Core/Src/zbee_vbtn.o
- *fill*         0x08176fc5        0x3 
+                0x08179f96       0x2b ./Core/Src/zbee_vbtn.o
+ *fill*         0x08179fc1        0x3 
  .rodata.USBH_Driver
-                0x08176fc8       0x14 ./FATFS/Target/usbh_diskio.o
-                0x08176fc8                USBH_Driver
+                0x08179fc4       0x14 ./FATFS/Target/usbh_diskio.o
+                0x08179fc4                USBH_Driver
  .rodata.str1.1
-                0x08176fdc        0x4 ./Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Src/usbh_msc.o
+                0x08179fd8        0x4 ./Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Src/usbh_msc.o
  .rodata.USBH_Init.str1.1
-                0x08176fe0        0xb ./Middlewares/ST/STM32_USB_Host_Library/Core/Src/usbh_core.o
+                0x08179fdc        0xb ./Middlewares/ST/STM32_USB_Host_Library/Core/Src/usbh_core.o
  .rodata.follow_path.str1.1
-                0x08176feb        0xf ./Middlewares/Third_Party/FatFs/src/ff.o
- .rodata.ExCvt  0x08176ffa       0x80 ./Middlewares/Third_Party/FatFs/src/ff.o
+                0x08179fe7        0xf ./Middlewares/Third_Party/FatFs/src/ff.o
+ .rodata.ExCvt  0x08179ff6       0x80 ./Middlewares/Third_Party/FatFs/src/ff.o
  .rodata.vTaskStartScheduler.str1.1
-                0x0817707a        0x5 ./Middlewares/Third_Party/FreeRTOS/Source/tasks.o
+                0x0817a076        0x5 ./Middlewares/Third_Party/FreeRTOS/Source/tasks.o
  .rodata.prvCheckForValidListAndQueue.str1.1
-                0x0817707f        0x5 ./Middlewares/Third_Party/FreeRTOS/Source/timers.o
+                0x0817a07b        0x5 ./Middlewares/Third_Party/FreeRTOS/Source/timers.o
  .rodata.xTimerCreateTimerTask.str1.1
-                0x08177084        0x8 ./Middlewares/Third_Party/FreeRTOS/Source/timers.o
+                0x0817a080        0x8 ./Middlewares/Third_Party/FreeRTOS/Source/timers.o
  .rodata.USBH_UserProcess.str1.1
-                0x0817708c       0x8f ./USB_HOST/App/usb_host.o
+                0x0817a088       0x8f ./USB_HOST/App/usb_host.o
                                  0x90 (size before relaxing)
  .rodata.__assert_func.str1.1
-                0x0817711b       0x3c /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-assert.o)
+                0x0817a117       0x3c /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-assert.o)
                                  0x3d (size before relaxing)
  .rodata.srand.str1.1
-                0x08177157       0x6f /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-rand.o)
+                0x0817a153       0x6f /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-rand.o)
  .rodata._strtod_l.str1.1
-                0x081771c6       0x6f /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strtod.o)
+                0x0817a1c2       0x6f /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strtod.o)
                                   0xf (size before relaxing)
- *fill*         0x081771c6        0x2 
+ *fill*         0x0817a1c2        0x2 
  .rodata.fpinan.0
-                0x081771c8       0x14 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strtod.o)
- .rodata.fpi.1  0x081771dc       0x14 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strtod.o)
+                0x0817a1c4       0x14 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strtod.o)
+ .rodata.fpi.1  0x0817a1d8       0x14 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strtod.o)
+ *fill*         0x0817a1ec        0x4 
  .rodata.tinytens
-                0x081771f0       0x28 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strtod.o)
+                0x0817a1f0       0x28 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strtod.o)
  .rodata._ctype_
-                0x08177218      0x101 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-ctype_.o)
-                0x08177218                _ctype_
+                0x0817a218      0x101 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-ctype_.o)
+                0x0817a218                _ctype_
  .rodata._printf_float.str1.1
-                0x08177319        0x8 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfprintf_float.o)
+                0x0817a319        0x8 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfprintf_float.o)
                                  0x12 (size before relaxing)
  .rodata._printf_i.str1.1
-                0x08177321       0x22 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfprintf_i.o)
+                0x0817a321       0x22 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfprintf_i.o)
  .rodata._scanf_float.str1.1
-                0x08177321        0x5 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfscanf_float.o)
+                0x0817a321        0x5 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfscanf_float.o)
                                   0x6 (size before relaxing)
  .rodata.strtok.str1.1
-                0x08177326       0x5a /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strtok.o)
+                0x0817a326       0x5a /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strtok.o)
                                  0x71 (size before relaxing)
  .rodata.localtime.str1.1
-                0x08177380       0x59 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-lcltime.o)
+                0x0817a380       0x59 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-lcltime.o)
                                  0x70 (size before relaxing)
- *fill*         0x081773d9        0x3 
+ *fill*         0x0817a3d9        0x3 
  .rodata._DAYS_BEFORE_MONTH
-                0x081773dc       0x30 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mktime.o)
+                0x0817a3dc       0x30 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mktime.o)
  .rodata.DAYS_IN_MONTH
-                0x0817740c       0x30 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mktime.o)
+                0x0817a40c       0x30 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mktime.o)
  .rodata.__month_lengths
-                0x0817743c       0x60 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-month_lengths.o)
-                0x0817743c                __month_lengths
+                0x0817a43c       0x60 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-month_lengths.o)
+                0x0817a43c                __month_lengths
  .rodata.__strftime.isra.0.str1.1
-                0x0817749c       0x5b /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strftime.o)
+                0x0817a49c       0x5b /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strftime.o)
                                  0x7a (size before relaxing)
  .rodata._tzset_unlocked_r.str1.1
-                0x081774f7       0x4e /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-tzset_r.o)
+                0x0817a4f7       0x4e /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-tzset_r.o)
                                  0x61 (size before relaxing)
  .rodata.str1.1
-                0x08177545        0x4 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-tzvars.o)
+                0x0817a545        0x4 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-tzvars.o)
  .rodata._setlocale_r.str1.1
-                0x08177545        0x6 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-locale.o)
+                0x0817a545        0x6 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-locale.o)
                                   0x9 (size before relaxing)
  .rodata.str1.1
-                0x0817754b        0x2 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-locale.o)
+                0x0817a54b        0x2 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-locale.o)
  .rodata.str1.1
-                0x0817754b      0x122 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-timelocal.o)
+                0x0817a54b      0x122 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-timelocal.o)
                                 0x12c (size before relaxing)
- *fill*         0x0817766d        0x3 
+ *fill*         0x0817a66d        0x3 
  .rodata._C_time_locale
-                0x08177670       0xfc /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-timelocal.o)
-                0x08177670                _C_time_locale
+                0x0817a670       0xfc /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-timelocal.o)
+                0x0817a670                _C_time_locale
  .rodata._dtoa_r.str1.1
-                0x0817776c       0x76 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-dtoa.o)
+                0x0817a76c       0x76 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-dtoa.o)
                                  0x8f (size before relaxing)
  .rodata.__gethex.str1.1
-                0x081777e2       0x60 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-gdtoa-gethex.o)
+                0x0817a7e2       0x60 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-gdtoa-gethex.o)
                                  0x73 (size before relaxing)
  .rodata._Balloc.str1.1
-                0x08177842       0x59 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
+                0x0817a842       0x59 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
                                  0x70 (size before relaxing)
  .rodata.__multadd.str1.1
-                0x0817789b       0x11 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
- *fill*         0x0817789b        0x1 
- .rodata.p05.0  0x0817789c        0xc /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
+                0x0817a89b       0x11 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
+ *fill*         0x0817a89b        0x1 
+ .rodata.p05.0  0x0817a89c        0xc /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
  .rodata.__mprec_bigtens
-                0x081778a8       0x28 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
-                0x081778a8                __mprec_bigtens
+                0x0817a8a8       0x28 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
+                0x0817a8a8                __mprec_bigtens
  .rodata.__mprec_tens
-                0x081778d0       0xc8 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
-                0x081778d0                __mprec_tens
+                0x0817a8d0       0xc8 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
+                0x0817a8d0                __mprec_tens
  .rodata._svfprintf_r.str1.1
-                0x08177998       0x11 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-svfprintf.o)
+                0x0817a998       0x11 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-svfprintf.o)
  .rodata.__ssvfscanf_r.str1.1
-                0x081779a9        0x4 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-svfscanf.o)
+                0x0817a9a9        0x4 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-svfscanf.o)
  .rodata._vfprintf_r.str1.1
-                0x081779a9       0x11 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfprintf.o)
+                0x0817a9a9       0x11 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfprintf.o)
  .rodata._scanf_i.str1.1
-                0x081779a9       0x12 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfscanf_i.o)
+                0x0817a9a9       0x12 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfscanf_i.o)
  .rodata.str1.1
-                0x081779bb        0x6 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfscanf_i.o)
+                0x0817a9bb        0x6 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfscanf_i.o)
                                   0x9 (size before relaxing)
  .rodata.acos.str1.1
-                0x081779c1        0x1 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-w_acos.o)
+                0x0817a9c1        0x1 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-w_acos.o)
  .rodata.asin.str1.1
-                0x081779c1        0x1 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-w_asin.o)
- *fill*         0x081779c1        0x7 
+                0x0817a9c1        0x1 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-w_asin.o)
+ *fill*         0x0817a9c1        0x7 
  .rodata.atanlo
-                0x081779c8       0x20 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-s_atan.o)
+                0x0817a9c8       0x20 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-s_atan.o)
  .rodata.atanhi
-                0x081779e8       0x20 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-s_atan.o)
- .rodata.Zero   0x08177a08       0x10 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-e_fmod.o)
+                0x0817a9e8       0x20 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-s_atan.o)
+ .rodata.Zero   0x0817aa08       0x10 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-e_fmod.o)
  .rodata.npio2_hw
-                0x08177a18       0x80 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-e_rem_pio2.o)
+                0x0817aa18       0x80 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-e_rem_pio2.o)
  .rodata.two_over_pi
-                0x08177a98      0x108 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-e_rem_pio2.o)
- .rodata.PIo2   0x08177ba0       0x40 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-k_rem_pio2.o)
+                0x0817aa98      0x108 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-e_rem_pio2.o)
+ .rodata.PIo2   0x0817aba0       0x40 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-k_rem_pio2.o)
  .rodata.init_jk
-                0x08177be0       0x10 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-k_rem_pio2.o)
-                0x08177bf0                        . = ALIGN (0x4)
+                0x0817abe0       0x10 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libm.a(libm_a-k_rem_pio2.o)
+                0x0817abf0                        . = ALIGN (0x4)
 
-.ARM.extab      0x08177bf0        0x0
-                0x08177bf0                        . = ALIGN (0x4)
+.ARM.extab      0x0817abf0        0x0
+                0x0817abf0                        . = ALIGN (0x4)
  *(.ARM.extab* .gnu.linkonce.armextab.*)
-                0x08177bf0                        . = ALIGN (0x4)
+                0x0817abf0                        . = ALIGN (0x4)
 
-.ARM            0x08177bf0        0x8
-                0x08177bf0                        . = ALIGN (0x4)
-                0x08177bf0                        __exidx_start = .
+.ARM            0x0817abf0        0x8
+                0x0817abf0                        . = ALIGN (0x4)
+                0x0817abf0                        __exidx_start = .
  *(.ARM.exidx*)
- .ARM.exidx     0x08177bf0        0x8 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strcmp.o)
- .ARM.exidx     0x08177bf8        0x0 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-memchr.o)
+ .ARM.exidx     0x0817abf0        0x8 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strcmp.o)
+ .ARM.exidx     0x0817abf8        0x0 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-memchr.o)
                                   0x8 (size before relaxing)
- .ARM.exidx     0x08177bf8        0x0 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strlen.o)
+ .ARM.exidx     0x0817abf8        0x0 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strlen.o)
                                   0x8 (size before relaxing)
- .ARM.exidx     0x08177bf8        0x0 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+dp/hard/libgcc.a(_udivmoddi4.o)
+ .ARM.exidx     0x0817abf8        0x0 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+dp/hard/libgcc.a(_udivmoddi4.o)
                                   0x8 (size before relaxing)
-                0x08177bf8                        __exidx_end = .
-                0x08177bf8                        . = ALIGN (0x4)
+                0x0817abf8                        __exidx_end = .
+                0x0817abf8                        . = ALIGN (0x4)
 
-.preinit_array  0x08177bf8        0x0
-                0x08177bf8                        . = ALIGN (0x4)
-                0x08177bf8                        PROVIDE (__preinit_array_start = .)
+.preinit_array  0x0817abf8        0x0
+                0x0817abf8                        . = ALIGN (0x4)
+                0x0817abf8                        PROVIDE (__preinit_array_start = .)
  *(.preinit_array*)
-                0x08177bf8                        PROVIDE (__preinit_array_end = .)
-                0x08177bf8                        . = ALIGN (0x4)
+                0x0817abf8                        PROVIDE (__preinit_array_end = .)
+                0x0817abf8                        . = ALIGN (0x4)
 
-.init_array     0x08177bf8        0x4
-                0x08177bf8                        . = ALIGN (0x4)
-                0x08177bf8                        PROVIDE (__init_array_start = .)
+.init_array     0x0817abf8        0x4
+                0x0817abf8                        . = ALIGN (0x4)
+                0x0817abf8                        PROVIDE (__init_array_start = .)
  *(SORT_BY_NAME(.init_array.*))
  *(.init_array*)
- .init_array    0x08177bf8        0x4 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+dp/hard/crtbegin.o
-                0x08177bfc                        PROVIDE (__init_array_end = .)
-                0x08177bfc                        . = ALIGN (0x4)
+ .init_array    0x0817abf8        0x4 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+dp/hard/crtbegin.o
+                0x0817abfc                        PROVIDE (__init_array_end = .)
+                0x0817abfc                        . = ALIGN (0x4)
 
-.fini_array     0x08177bfc        0x4
-                0x08177bfc                        . = ALIGN (0x4)
+.fini_array     0x0817abfc        0x4
+                0x0817abfc                        . = ALIGN (0x4)
                 [!provide]                        PROVIDE (__fini_array_start = .)
  *(SORT_BY_NAME(.fini_array.*))
  *(.fini_array*)
- .fini_array    0x08177bfc        0x4 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+dp/hard/crtbegin.o
+ .fini_array    0x0817abfc        0x4 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+dp/hard/crtbegin.o
                 [!provide]                        PROVIDE (__fini_array_end = .)
-                0x08177c00                        . = ALIGN (0x4)
-                0x08177c00                        _sidata = LOADADDR (.data)
+                0x0817ac00                        . = ALIGN (0x4)
+                0x0817ac00                        _sidata = LOADADDR (.data)
 
-.rel.dyn        0x08177c00        0x0
- .rel.iplt      0x08177c00        0x0 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+dp/hard/crtbegin.o
+.rel.dyn        0x0817ac00        0x0
+ .rel.iplt      0x0817ac00        0x0 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+dp/hard/crtbegin.o
 
-.data           0x20000000      0x4b0 load address 0x08177c00
+.data           0x20000000      0x4b0 load address 0x0817ac00
                 0x20000000                        . = ALIGN (0x4)
                 0x20000000                        _sdata = .
  *(.data)
@@ -8169,11 +8169,11 @@ LOAD /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.
                 0x200004b0                        . = ALIGN (0x4)
                 0x200004b0                        _edata = .
 
-.igot.plt       0x200004b0        0x0 load address 0x081780b0
+.igot.plt       0x200004b0        0x0 load address 0x0817b0b0
  .igot.plt      0x200004b0        0x0 /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.linux64_1.0.100.202403111256/tools/bin/../lib/gcc/arm-none-eabi/12.3.1/thumb/v7e-m+dp/hard/crtbegin.o
 
 ._user_heap_stack
-                0x200004b0     0x8800 load address 0x081780b0
+                0x200004b0     0x8800 load address 0x0817b0b0
                 0x200004b0                        . = ALIGN (0x8)
                 [!provide]                        PROVIDE (end = .)
                 0x200004b0                        PROVIDE (_end = .)
@@ -8183,7 +8183,7 @@ LOAD /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.
  *fill*         0x200084b0      0x800 
                 0x20008cb0                        . = ALIGN (0x8)
 
-.dtcm_pool      0x20008cb0        0x0 load address 0x081780b0
+.dtcm_pool      0x20008cb0        0x0 load address 0x0817b0b0
                 0x20008cb0                        . = ALIGN (0x8)
                 0x20008cb0                        _sdtcm_pool = .
                 0x2001fff8                        _edtcm_pool = 0x2001fff8
@@ -9019,7 +9019,7 @@ LOAD /opt/st/stm32cubeide_1.15.1/plugins/com.st.stm32cube.ide.mcu.externaltools.
                 0x2007a580                        . = ALIGN (0x4)
 
 .zagotovka_section
-                0x081c0000        0x0 load address 0x081780b0
+                0x081c0000        0x0 load address 0x0817b0b0
                 0x081c0000                        . = ALIGN (0x8)
  *(.zagotovka_section)
                 0x081c0000                        . = ALIGN (0x8)

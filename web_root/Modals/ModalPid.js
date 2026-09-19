@@ -4,32 +4,7 @@ import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
 
-// Пресеты по языку
-const PRESETS = {
-  ru: [
-    { value: '1', label: 'Паяльная станция T max=125°C, T min=-55°C' },
-    { value: '2', label: 'Кулер / вентилятор T max=70°C, T min=-55°C' },
-    { value: '3', label: '3D‑принтер (стол) T max=120°C, T min=0°C' },
-    { value: '4', label: 'Форточный нагреватель T max=60°C, T min=-55°C' },
-    { value: '5', label: 'Тёплый пол T max=45°C, T min=0°C' },
-    { value: '6', label: 'Холодильник T max=100°C, T min=-55°C' },
-    { value: '7', label: 'Аквариум / бойлер T max=80°C, T min=0°C' },
-    { value: '8', label: 'Инкубатор T max=45°C, T min=0°C' },
-    { value: '9', label: 'Теплица / комната T max=50°C, T min=-55°C' },
-  ],
-  en: [
-    { value: '1', label: 'Soldering station T max=125°C, T min=-55°C' },
-    { value: '2', label: 'Cooler / fan T max=70°C, T min=-55°C' },
-    { value: '3', label: '3D printer (table) T max=120°C, T min=0°C' },
-    { value: '4', label: 'Vent heater T max=60°C, T min=-55°C' },
-    { value: '5', label: 'Warm floor T max=45°C, T min=0°C' },
-    { value: '6', label: 'Refrigerator T max=100°C, T min=-55°C' },
-    { value: '7', label: 'Aquarium / boiler T max=80°C, T min=0°C' },
-    { value: '8', label: 'Incubator T max=45°C, T min=0°C' },
-    { value: '9', label: 'Greenhouse / room T max=50°C, T min=-55°C' },
-  ],
-};
-
+// Список пресетов и подсказка приходят из TabPid.js через параметры presetList и PresetHintComponent
 const SENSOR_OPTIONS = [
   { value: '1', label: 'DS18B20' },
   { value: '2', label: 'DHT-22' },
@@ -45,7 +20,9 @@ function ModalPid({
   handlePidChange,
   language = 'en',
   modalClass,
-  SliderComponent = MyPolzunok
+  SliderComponent = MyPolzunok,
+  presetList = [],
+  PresetHintComponent = null
 }) {
   const [pidInfo, setPidInfo] = useState(selectedPid?.info || '');
   const [onoff, setOnOff] = useState(selectedPid?.onoff === 1);
@@ -142,13 +119,12 @@ const handlePwmChange = (e) => {
     setSelectedPwm([parts[0], parts[1]]);
   }
 };
-  const presetList = PRESETS[language] || PRESETS['en'];
 
   const renderModalContent = () => {
     if (page === 'TabPid' && modalType === 'edit') {
       return html`
-        <form onsubmit=${handleSubmit}>
-          <div class="modal-body">
+        <form onsubmit=${handleSubmit} class="flex flex-col flex-1 min-h-0">
+          <div class="modal-body flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1 -mr-1">
             <table class="table-auto w-full">
               <tbody>
                 ${[
@@ -222,22 +198,33 @@ const handlePwmChange = (e) => {
                   {
                     label: 'Presets',
                     value: html`
-                      <select
-                        value=${presets}
-                        onChange=${(e) => setPresets(e.target.value)}
-                        class="border rounded p-2 w-full"
-                      >
-                        ${presetList.map(
-                          (opt) => html`
-                            <option
-                              value=${opt.value}
-                              selected=${opt.value === presets}
-                            >
-                              ${opt.label}
-                            </option>
-                          `
-                        )}
-                      </select>
+                      <div>
+                        <select
+                          value=${presets}
+                          onChange=${(e) => setPresets(e.target.value)}
+                          class="border rounded p-2 w-full"
+                        >
+                          ${presetList.map(
+                            (opt) => html`
+                              <option
+                                value=${opt.value}
+                                selected=${opt.value === presets}
+                              >
+                                ${opt.label}
+                              </option>
+                            `
+                          )}
+                        </select>
+                        ${PresetHintComponent
+                          ? html`<${PresetHintComponent}
+                              lang=${language}
+                              presetId=${presets}
+                              tmpset=${tmpset}
+                              sensor=${selsens}
+                              changed=${String(presets) !== String(selectedPid?.presets || '1')}
+                            />`
+                          : null}
+                      </div>
                     `
                   },
                   {
@@ -295,7 +282,16 @@ const handlePwmChange = (e) => {
               </tbody>
             </table>
           </div>
-          <div class="modal-footer flex justify-end mt-4">
+          <div
+            class="modal-footer flex-shrink-0 flex justify-end gap-2 pt-4 mt-4 border-t bg-white dark:bg-gray-800"
+          >
+            <button
+              type="button"
+              onclick=${hideModal}
+              class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
@@ -313,16 +309,16 @@ const handlePwmChange = (e) => {
     <div class=${`modal ${modalClass || ''}`}>
       <div class="modal-content">
         <div
-          class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[999]"
+          class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4 overflow-y-auto z-[999]"
           onclick=${(e) =>
             closeOnOverlayClick && e.target === e.currentTarget && hideModal()}
         >
           <div
-            class="modal-content bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-lg relative"
-            style="margin-top: 0px;"
+            class="modal-content bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-lg relative flex flex-col"
+            style="margin-top: 0px; max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem);"
           >
             <div
-              class="modal-header flex justify-between items-center border-b pb-4 mb-4"
+              class="modal-header flex-shrink-0 flex justify-between items-center border-b pb-4 mb-4"
             >
               <h5 class="text-xl font-bold">Edit PID</h5>
               <button
@@ -346,7 +342,19 @@ const handlePwmChange = (e) => {
     portalEl.id = 'modal-portal';
     document.body.appendChild(portalEl);
     portalRef.current = portalEl;
+
+    // страница под модальным окном не должна прокручиваться
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') hideModal();
+    };
+    document.addEventListener('keydown', onKeyDown);
+
     return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
       render(null, portalEl);
       document.body.removeChild(portalEl);
     };
@@ -362,3 +370,4 @@ const handlePwmChange = (e) => {
 }
 
 export { ModalPid };
+

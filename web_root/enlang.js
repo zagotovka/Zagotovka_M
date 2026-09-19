@@ -277,7 +277,7 @@ export const enlangpid = [
   'PWM Pin - The PWM pin you selected on the "Select pin" page.', // 2
   'Sel. sensor - Specify one of the two types (DS18B20/DHT22) of temperature sensors.', // 3
   'Dev. ser. number - Serial number of the selected DS18B20 sensor (from the "OneWire pin" page).', // 4
-  'Presets - Select the preset that best matches the desired temperature and timing parameters.', // 5
+  'Presets - A ready-made set of settings for your device: warm floor, aquarium, incubator, refrigerator, etc. See the help under the table ("How does it work? Help" button) to learn how to choose.', // 5
   'T set. - Set the target temperature that the PID controller should maintain.', // 6
   'T cur. - Current temperature of the selected sensor.', // 7
   'Duty - Current PWM value.', // 8
@@ -286,3 +286,4 @@ export const enlangpid = [
   'Action - Button to enter the PID controller settings menu.', // 11
   'Auto tune - Automatic tuning of PID coefficients.' // 12
 ];
+
