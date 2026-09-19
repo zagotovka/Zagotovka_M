@@ -138,3 +138,18 @@ This project uses semantic versioning. The version number follows the MAJOR.MINO
 | 2.0.0   | 27.06.2026 | Updated web interface and Mongoose library (7.13 → 7.21); added: SMS control, session limiting with indication, PID controller, PWM timer, desired encoder PWM frequency setting (0.05 Hz — 2 MHz); optimized and refactored code |
 | 2.0.1 | 30.06.2026 | Replaced cJSON with Mongoose's built-in JSON API, heap optimization, and MQTT fix.|
 | 2.0.2 | 02-07-2026 | Implemented: stop TLS Alert storm in pollQueue on session invalidation.|
+| 2.1.0 | 15-07-2026 | Added Zigbee integration via MQTT gateway (SLZB-06p7U).|
+| 2.1.1 | 17-07-2026 | Added DTCM pool allocator; migrated ~57 KB of buffers from .bss.|
+| 2.2.0 | 18-07-2026 | Added universal Zigbee dimmer → encoder PWM binding with auto-detected range.|
+| 2.2.1 | 19-07-2026 | Placed 42 hot functions in ITCM RAM for deterministic execution.|
+| 2.2.2 | 20-07-2026 | Fixed Zigbee switch connection persistence, dimmer calibration, and learning mode.|
+| 2.3.0 | 22-07-2026 | Added cascade deletion of connections when a pin type is set to NONE.|
+| 2.4.0 | 24-07-2026 | Added universal Zigbee button support with auto-release and flexible payload matching.|
+| 2.4.1 | 25-07-2026 | Fixed button event filtering, Zigbee PASSTHROUGH val:0 handling, and structured logging.|
+| 2.5.0 | 31-07-2026 | Implemented OTA firmware update.|
+| 2.5.1 | 01-08-2026 | Fixed a hardware bug with Flash memory lock.|
+| 2.6.0 | 17-08-2026 | Implemented Dual Bank mode (dual-bank flash).|
+| 2.6.1 | 07-09-2026 | Protected ITCM with MPU; fixed a NULL stdout write that corrupted ITCM.|
+| 2.6.2 | 11-09-2026 | Added validation that the .bin firmware matches the inactive bank.|
+| 2.7.0 | 13-09-2026 | Implemented a built-in MQTT server.|
+| 2.8.0 | 14-09-2026 | Added live SYSTEM LOG tail to the Loger page; embedded firmware version in release .bin file names.|

@@ -1,0 +1,4 @@
+../Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Src/usbh_msc_bot.c:107:20:USBH_MSC_BOT_REQ_Reset	0	static
+../Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Src/usbh_msc_bot.c:128:20:USBH_MSC_BOT_REQ_GetMaxLUN	0	static
+../Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Src/usbh_msc_bot.c:149:20:USBH_MSC_BOT_Init	0	static
+../Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Src/usbh_msc_bot.c:171:20:USBH_MSC_BOT_Process	24	static

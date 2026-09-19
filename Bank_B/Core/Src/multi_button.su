@@ -1,0 +1,6 @@
+../Core/Src/multi_button.c:27:6:button_init	24	static
+../Core/Src/multi_button.c:44:6:button_attach	0	static
+../Core/Src/multi_button.c:54:12:get_button_event	0	static
+../Core/Src/multi_button.c:168:5:button_start	0	static
+../Core/Src/multi_button.c:185:6:button_stop	0	static
+../Core/Src/multi_button.c:213:6:button_ticks	8	static

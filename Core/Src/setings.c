@@ -10,12 +10,14 @@
 #include "db.h"
 #include "ds18b20Config.h"
 #include "fatfs.h"
+#include "logger.h"
 #include "main.h"
 #include "multi_button.h"
 #include "usb_host.h"
 #include "zagotovka.h"
 #include <stdio.h>
 #include <string.h>
+#include "dtcm_alloc.h"
 
 #include "FreeRTOS.h"
 #include "cmsis_os2.h"
@@ -34,12 +36,12 @@ extern struct dbSettings SetSettings;
 extern struct dbCron dbCrontxt[NUMTASK];
 extern struct dbPinsInfo PinsInfo[NUMPIN];
 extern struct dbPinsConf PinsConf[NUMPIN];
-extern struct dbPinToPin PinsLinks[NUMPINLINKS];
-extern struct Button button[NUMPIN];
+extern struct dbPinToPin *PinsLinks;  /* выделяется в DTCM через dtcm_pinslinks (main) */
+extern struct Button *button;  /* выделяется в DTCM через dtcm_button (main) */
 extern uint8_t mqttnum;
-extern TIM_HandleTypeDef htim[NUMPIN];
+extern TIM_HandleTypeDef *htim;  /* выделяется в DTCM через dtcm_htim (main) */
 extern ds18b20_pin_t ds18b20[MAX_DS18B20_P];
-extern dht22_pin_t dht22[MAX_DHT22_P];
+extern dht22_pin_t *dht22;  /* выделяется в DTCM через dtcm_dht22 (main) */
 
 // Current state tracking
 int pinindex = -1;       //  Current pin index
@@ -157,8 +159,16 @@ void SetSettingsConfig() {
   writeField(&USBHFile, buffer, "mqtt_pswd", "\"%s\"", SetSettings.mqtt_pswd);
   writeField(&USBHFile, buffer, "txmqttop", "\"%s\"", SetSettings.txmqttop);
   writeField(&USBHFile, buffer, "rxmqttop", "\"%s\"", SetSettings.rxmqttop);
+  writeField(&USBHFile, buffer, "rxzbtop", "\"%s\"", SetSettings.rxzbtop);
 
   writeField(&USBHFile, buffer, "mqtt_hst", "\"%s\"", SetSettings.mqtt_hst);
+
+  writeField(&USBHFile, buffer, "check_mqtt_srv", "%d", SetSettings.check_mqtt_srv);
+  writeField(&USBHFile, buffer, "mqtt_srv_prt", "%d", SetSettings.mqtt_srv_prt);
+  writeField(&USBHFile, buffer, "mqtt_srv_maxcli", "%d", SetSettings.mqtt_srv_maxcli);
+  writeField(&USBHFile, buffer, "mqtt_srv_usr", "\"%s\"", SetSettings.mqtt_srv_usr);
+  writeField(&USBHFile, buffer, "mqtt_srv_pswd", "\"%s\"", SetSettings.mqtt_srv_pswd);
+  writeField(&USBHFile, buffer, "slzb_host", "\"%s\"", SetSettings.slzb_host);
 
   writeField(&USBHFile, buffer, "check_ip", "%d", SetSettings.check_ip);
   writeField(&USBHFile, buffer, "ip_addr0", "%d", SetSettings.ip_addr0);
@@ -249,8 +259,17 @@ void StartSettingsConfig() {
   writeField(&USBHFile, buffer, "mqtt_pswd", "\"\"");
   writeField(&USBHFile, buffer, "txmqttop", "\"%s\"", MQTT_TPC);
   writeField(&USBHFile, buffer, "rxmqttop", "\"\"");
+  writeField(&USBHFile, buffer, "rxzbtop", "\"%s\"", RXZBTOP);
 
   writeField(&USBHFile, buffer, "mqtt_hst", "\"192.168.1.100\"");
+
+  // Write MQTT Server settings
+  writeField(&USBHFile, buffer, "check_mqtt_srv", "%d", CHECK_MQTT_SRV);
+  writeField(&USBHFile, buffer, "mqtt_srv_prt", "%d", MQTT_SRV_PRT);
+  writeField(&USBHFile, buffer, "mqtt_srv_maxcli", "%d", MQTT_SRV_MAXCLI);
+  writeField(&USBHFile, buffer, "mqtt_srv_usr", "\"%s\"", MQTT_SRV_USR);
+  writeField(&USBHFile, buffer, "mqtt_srv_pswd", "\"%s\"", MQTT_SRV_PSWD);
+  writeField(&USBHFile, buffer, "slzb_host", "\"%s\"", SLZB_HOST);
 
   // Write IP settings
   writeField(&USBHFile, buffer, "check_ip", "%d", CHECK_IP);
@@ -277,8 +296,8 @@ void StartSettingsConfig() {
   for (int i = 0; i < 5; i++) {
     writeField(&USBHFile, buffer, "macaddr%d", "%d", i, 0);
   }
-  // Write default log filter mask (0x3FF = all categories enabled)
-  writeField(&USBHFile, buffer, "log_filter_mask", "%d", 0x3FF);
+  // Write default log filter mask (0x7FF = all categories enabled)
+  writeField(&USBHFile, buffer, "log_filter_mask", "%d", 0x7FF);
 
   // Write the last MAC address field without comma
   snprintf(buffer, JSON_BUF_SIZE, "\"macaddr5\":%d", 0);
@@ -310,6 +329,11 @@ void StartSettingsConfig() {
   //    SetSettings.gateway2 = GATEWAY2;
   //    SetSettings.gateway3 = GATEWAY3;
   SetSettings.mqtt_prt = MQTT_PRT;
+  SetSettings.check_mqtt_srv = CHECK_MQTT_SRV;
+  SetSettings.mqtt_srv_prt = MQTT_SRV_PRT;
+  SetSettings.mqtt_srv_maxcli = MQTT_SRV_MAXCLI;
+  strcpy(SetSettings.mqtt_srv_usr, MQTT_SRV_USR);
+  strcpy(SetSettings.mqtt_srv_pswd, MQTT_SRV_PSWD);
   SetSettings.usehttps = CHECK_USEHTTPS;
   //    SetSettings.mqtt_qos = MQTT_QOS;
 }
@@ -340,6 +364,12 @@ void GetSettingsConfig() {
   }
   //	printf("File opened successfully\r\n");
   memset(&SetSettings, 0, sizeof(SetSettings)); // обнуляем структуру
+  // Дефолты ДО парсинга: если ключ отсутствует в старом settings.ini — остаются дефолты
+  SetSettings.check_mqtt_srv = CHECK_MQTT_SRV;
+  SetSettings.mqtt_srv_prt = MQTT_SRV_PRT;
+  SetSettings.mqtt_srv_maxcli = MQTT_SRV_MAXCLI;
+  strcpy(SetSettings.mqtt_srv_usr, MQTT_SRV_USR);
+  strcpy(SetSettings.mqtt_srv_pswd, MQTT_SRV_PSWD);
 
   while ((fresult = f_read(&USBHFile, &currentChar, 1, &bytesRead)) == FR_OK &&
          bytesRead > 0) {
@@ -463,8 +493,16 @@ void GetSettingsConfig() {
       strncpy(SetSettings.rxmqttop, value, sizeof(SetSettings.rxmqttop) - 1);
       //			printf("Found key: %s, value: %s\r\n", key,
       // value);
+    } else if (strcmp(key, "rxzbtop") == 0) {
+      strncpy(SetSettings.rxzbtop, value, sizeof(SetSettings.rxzbtop) - 1);
     } else if (strcmp(key, "mqtt_hst") == 0) {
       strncpy(SetSettings.mqtt_hst, value, sizeof(SetSettings.mqtt_hst) - 1);
+    } else if (strcmp(key, "mqtt_srv_usr") == 0) {
+      strncpy(SetSettings.mqtt_srv_usr, value, sizeof(SetSettings.mqtt_srv_usr) - 1);
+    } else if (strcmp(key, "mqtt_srv_pswd") == 0) {
+      strncpy(SetSettings.mqtt_srv_pswd, value, sizeof(SetSettings.mqtt_srv_pswd) - 1);
+    } else if (strcmp(key, "slzb_host") == 0) {
+      strncpy(SetSettings.slzb_host, value, sizeof(SetSettings.slzb_host) - 1);
     } else if (strcmp(key, "tel") == 0) {
       strncpy(SetSettings.tel, value, sizeof(SetSettings.tel) - 1);
       //			printf("Found key: %s, value: %s\r\n", key,
@@ -501,6 +539,12 @@ void GetSettingsConfig() {
       SetSettings.mqtt_prt = atoi(value);
       //			printf("Found key: %s, value: %s\r\n", key,
       // value);
+    } else if (strcmp(key, "check_mqtt_srv") == 0) {
+      SetSettings.check_mqtt_srv = atoi(value);
+    } else if (strcmp(key, "mqtt_srv_prt") == 0) {
+      SetSettings.mqtt_srv_prt = atoi(value);
+    } else if (strcmp(key, "mqtt_srv_maxcli") == 0) {
+      SetSettings.mqtt_srv_maxcli = (uint8_t)atoi(value);
     } else if (strcmp(key, "check_ip") == 0) {
       SetSettings.check_ip = atoi(value);
       //			printf("Found key: %s, value: %s\r\n", key,
@@ -845,6 +889,15 @@ void SetCronConfig() {
   f_close(&USBHFile);
 }
 
+static void zbee_sanitize_str(char *s, size_t max_len) {
+    for (size_t i = 0; i < max_len && s[i] != '\0'; i++) {
+        unsigned char ch = (unsigned char)s[i];
+        if (ch == '"' || ch == '\\' || ch < 0x20) {
+            s[i] = '_';
+        }
+    }
+}
+
 void GetPinConfig() {
   UINT bytesRead;
   char key[32] = {0};
@@ -954,6 +1007,26 @@ void GetPinConfig() {
           PinsConf[currentPin]
               .send_sms[sizeof(PinsConf[currentPin].send_sms) - 1] = '\0';
         }
+        else if (strcmp(key, "zbee_ieee") == 0) {
+            strncpy(PinsConf[currentPin].zbee_ieee, value,
+                    sizeof(PinsConf[currentPin].zbee_ieee) - 1);
+            zbee_sanitize_str(PinsConf[currentPin].zbee_ieee,
+                              sizeof(PinsConf[currentPin].zbee_ieee));
+        }
+        else if (strcmp(key, "zbee_endpoint") == 0)
+            PinsConf[currentPin].zbee_endpoint = (uint8_t)atoi(value);
+        else if (strcmp(key, "zbee_cluster") == 0)
+            PinsConf[currentPin].zbee_cluster = (uint16_t)strtol(value, NULL, 16);
+        else if (strcmp(key, "zbee_attribute") == 0)
+            PinsConf[currentPin].zbee_attribute = (uint16_t)strtol(value, NULL, 16);
+        else if (strcmp(key, "zbee_label") == 0) {
+            strncpy(PinsConf[currentPin].zbee_label, value,
+                    sizeof(PinsConf[currentPin].zbee_label) - 1);
+            zbee_sanitize_str(PinsConf[currentPin].zbee_label,
+                              sizeof(PinsConf[currentPin].zbee_label));
+        }
+        else if (strcmp(key, "zbee_bind_id") == 0)
+            PinsConf[currentPin].zbee_bind_id = (uint8_t)atoi(value);
       }
       //            printf("Finished processing pin at index %d\n", currentPin);
       inObject = false;
@@ -1059,6 +1132,24 @@ void GetPinConfig() {
                   sizeof(PinsConf[currentPin].send_sms) - 1);
           PinsConf[currentPin]
               .send_sms[sizeof(PinsConf[currentPin].send_sms) - 1] = '\0';
+        }
+        else if (strcmp(key, "zbee_ieee") == 0) {
+            strncpy(PinsConf[currentPin].zbee_ieee, value,
+                    sizeof(PinsConf[currentPin].zbee_ieee) - 1);
+            zbee_sanitize_str(PinsConf[currentPin].zbee_ieee,
+                              sizeof(PinsConf[currentPin].zbee_ieee));
+        }
+        else if (strcmp(key, "zbee_endpoint") == 0)
+            PinsConf[currentPin].zbee_endpoint = (uint8_t)atoi(value);
+        else if (strcmp(key, "zbee_cluster") == 0)
+            PinsConf[currentPin].zbee_cluster = (uint16_t)strtol(value, NULL, 16);
+        else if (strcmp(key, "zbee_attribute") == 0)
+            PinsConf[currentPin].zbee_attribute = (uint16_t)strtol(value, NULL, 16);
+        else if (strcmp(key, "zbee_label") == 0) {
+            strncpy(PinsConf[currentPin].zbee_label, value,
+                    sizeof(PinsConf[currentPin].zbee_label) - 1);
+            zbee_sanitize_str(PinsConf[currentPin].zbee_label,
+                              sizeof(PinsConf[currentPin].zbee_label));
         }
       }
       keyIndex = 0;
@@ -1275,6 +1366,48 @@ void SetPinConfig() {
       f_close(&USBHFile);
       return;
     }
+    snprintf(buffer, sizeof(buffer), ",\"zbee_ieee\":\"%s\"", PinsConf[i].zbee_ieee);
+    fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
+    if (fresult != FR_OK) {
+      printf("Failed to write 'zbee_ieee': %d\n", fresult);
+      f_close(&USBHFile);
+      return;
+    }
+    snprintf(buffer, sizeof(buffer), ",\"zbee_endpoint\":%d", PinsConf[i].zbee_endpoint);
+    fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
+    if (fresult != FR_OK) {
+      printf("Failed to write 'zbee_endpoint': %d\n", fresult);
+      f_close(&USBHFile);
+      return;
+    }
+    snprintf(buffer, sizeof(buffer), ",\"zbee_cluster\":\"%04X\"", PinsConf[i].zbee_cluster);
+    fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
+    if (fresult != FR_OK) {
+      printf("Failed to write 'zbee_cluster': %d\n", fresult);
+      f_close(&USBHFile);
+      return;
+    }
+    snprintf(buffer, sizeof(buffer), ",\"zbee_attribute\":\"%04X\"", PinsConf[i].zbee_attribute);
+    fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
+    if (fresult != FR_OK) {
+      printf("Failed to write 'zbee_attribute': %d\n", fresult);
+      f_close(&USBHFile);
+      return;
+    }
+    snprintf(buffer, sizeof(buffer), ",\"zbee_label\":\"%s\"", PinsConf[i].zbee_label);
+    fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
+    if (fresult != FR_OK) {
+      printf("Failed to write 'zbee_label': %d\n", fresult);
+      f_close(&USBHFile);
+      return;
+    }
+    snprintf(buffer, sizeof(buffer), ",\"zbee_bind_id\":%d", PinsConf[i].zbee_bind_id);
+    fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
+    if (fresult != FR_OK) {
+      printf("Failed to write 'zbee_bind_id': %d\n", fresult);
+      f_close(&USBHFile);
+      return;
+    }
     fresult = f_write(&USBHFile, "}", 1, &Byteswritten);
     if (fresult != FR_OK) {
       printf("Failed to write '}': %d\n", fresult);
@@ -1316,42 +1449,43 @@ void GetPinToPin() {
 
   fresult = f_stat("pintopin.ini", &finfo);
   if (fresult != FR_OK) {
-    printf("ERROR: pintopin.ini file not found!\r\n");
+    LOG_SYSTEM("[USB] pintopin.ini not found");
     return;
   }
   if (finfo.fsize == 0) {
-    printf("ERROR: pintopin.ini is empty!\r\n");
+    LOG_SYSTEM("[USB] pintopin.ini is empty");
     return;
   }
   if (f_open(&USBHFile, "pintopin.ini", FA_READ) != FR_OK) {
-    printf("ERROR: Cannot open pintopin.ini!\r\n");
+    LOG_SYSTEM("[USB] Cannot open pintopin.ini");
     return;
   }
 
   char *buf = pvPortMalloc(finfo.fsize + 1);
   if (!buf) {
-    printf("ERROR: Out of memory reading pintopin.ini\r\n");
+    LOG_SYSTEM("[USB] Out of memory reading pintopin.ini");
     f_close(&USBHFile);
     return;
   }
-  printf("heap: free=%u min=%u (pintopin alloc %lu)\r\n",
-         (unsigned)xPortGetFreeHeapSize(), (unsigned)xPortGetMinimumEverFreeHeapSize(), (unsigned long)(finfo.fsize + 1));
+  LOG_SYSTEM("[USB] pintopin.ini size=%lu heap=%u",
+               (unsigned long)finfo.fsize, (unsigned)xPortGetFreeHeapSize());
 
   fresult = f_read(&USBHFile, buf, finfo.fsize, &bytesRead);
   f_close(&USBHFile);
 
   if (fresult != FR_OK || bytesRead == 0) {
-    printf("ERROR: Failed to read pintopin.ini\r\n");
+    LOG_SYSTEM("[USB] Failed to read pintopin.ini");
     vPortFree(buf);
     return;
   }
   buf[bytesRead] = '\0';
 
-  memset(PinsLinks, 0, sizeof(PinsLinks)); // Очищаем массив связей
+  memset(PinsLinks, 0, sizeof(struct dbPinToPin) * NUMPINLINKS);
 
   struct mg_str arr = mg_str_n(buf, strlen(buf));
 
   int i = 0;
+  int loaded = 0;
   size_t pos = 0;
   struct mg_str key, elem;
   while (i < NUMPINLINKS && (pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
@@ -1365,42 +1499,52 @@ void GetPinToPin() {
       PinsLinks[i].pins[sizeof(PinsLinks[i].pins) - 1] = '\0';
       mg_free(pins);
     }
+    if (idin != 0 || idout != 0) loaded++;
     i++;
   }
   vPortFree(buf);
-  printf("GetPinToPin() loaded successfully!\r\n");
+  LOG_SYSTEM("[USB] GetPinToPin: loaded %d entries (%d total)", loaded, i);
   if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 }
 
 // Записываем данные в файл "pintopin.ini", создавая его если его нет.
 void SetPinToPin() {
   UINT bytesWritten;
+  FRESULT fres;
   char buffer[JSON_BUF_SIZE];
+  int saved_count = 0;
 
   if (f_open(&USBHFile, (const TCHAR *)"pintopin.ini",
              FA_CREATE_ALWAYS | FA_WRITE) != FR_OK) {
-    printf("Error opening file for writing\r\n");
+    LOG_SYSTEM("[USB] SetPinToPin open failed");
     return;
   }
-  f_write(&USBHFile, "[", 1, &bytesWritten);
-  for (int i = 0; i < NUMPINLINKS; i++) {
-    // Write opening bracket for object
-    if (i > 0) {
-      f_write(&USBHFile, ",{", 2, &bytesWritten);
-    } else {
-      f_write(&USBHFile, "{", 1, &bytesWritten);
-    }
-    snprintf(buffer, JSON_BUF_SIZE, "\"idin\":%d,", PinsLinks[i].idin);
-    f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
-    snprintf(buffer, JSON_BUF_SIZE, "\"idout\":%d,", PinsLinks[i].idout);
-    f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
-    snprintf(buffer, JSON_BUF_SIZE, "\"pins\":\"%s\"}", PinsLinks[i].pins);
-    f_write(&USBHFile, buffer, strlen(buffer), &bytesWritten);
+  fres = f_write(&USBHFile, "[", 1, &bytesWritten);
+  if (fres != FR_OK || bytesWritten != 1) {
+    LOG_SYSTEM("[USB] SetPinToPin write '[' failed");
+    f_close(&USBHFile);
+    return;
   }
-  f_write(&USBHFile, "]", 1, &bytesWritten);
+  for (int i = 0; i < NUMPINLINKS; i++) {
+    if (PinsLinks[i].idin == 0 && PinsLinks[i].idout == 0)
+      continue;
+    if (saved_count > 0) {
+      fres = f_write(&USBHFile, ",", 1, &bytesWritten);
+      if (fres != FR_OK) { LOG_SYSTEM("[USB] SetPinToPin write ',' failed"); break; }
+    }
+    int len = snprintf(buffer, JSON_BUF_SIZE,
+                       "{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
+                       PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins);
+    fres = f_write(&USBHFile, buffer, len, &bytesWritten);
+    if (fres != FR_OK || (int)bytesWritten != len) { LOG_SYSTEM("[USB] SetPinToPin write entry[%d] failed", i); break; }
+    saved_count++;
+  }
+  fres = f_write(&USBHFile, "]", 1, &bytesWritten);
+  if (fres != FR_OK) LOG_SYSTEM("[USB] SetPinToPin write ']' failed");
 
+  f_sync(&USBHFile);
   f_close(&USBHFile);
-  printf("File 'PINTOPIN.INI' updated successfully!\r\n");
+  LOG_SYSTEM("[USB] SetPinToPin: saved %d entries", saved_count);
   mark_slice_dirty(&g_ver_switch);
   mark_slice_dirty(&g_ver_encoder);
   mark_slice_dirty(&g_ver_pins);
@@ -1680,48 +1824,32 @@ void InitPin() {
   }
 }
 
+static inline bool is_action_set(const char *action) {
+  return action && action[0] != '\0' && strcmp(action, "None") != 0;
+}
+
 void InitMultibutton(void) {
   for (uint8_t i = 0; i < NUMPIN; i++) {
-    // Инциализация кнопки PULLDOWN
-    if (PinsConf[i].ptype == 2) {
-      button_init(&button[i], read_button_level, 1, i);
-      // просто кнопка
-      button_attach(&button[i], PRESS_DOWN, (BtnCallback)button_event_handler);
-      button_attach(&button[i], PRESS_UP, (BtnCallback)button_event_handler);
-      button_attach(&button[i], LONG_PRESS_START,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], LONG_PRESS_HOLD,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], SINGLE_CLICK,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], DOUBLE_CLICK,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], PRESS_REPEAT,
-                    (BtnCallback)button_event_handler);
-      button_start(&button[i]);
-      // инициализация Multibutton flag
-      PinsConf[i].act = 1;
+    if (PinsConf[i].ptype != 1 && PinsConf[i].ptype != 2) continue;
+
+    uint8_t active_level = (PinsConf[i].ptype == 2) ? 1 : 0;
+    button_init(&button[i], read_button_level, active_level, i);
+
+    button_attach(&button[i], PRESS_DOWN, (BtnCallback)button_event_handler);
+    button_attach(&button[i], PRESS_UP, (BtnCallback)button_event_handler);
+    button_attach(&button[i], SINGLE_CLICK, (BtnCallback)button_event_handler);
+    button_attach(&button[i], PRESS_REPEAT, (BtnCallback)button_event_handler);
+
+    if (is_action_set(PinsConf[i].dclick)) {
+      button_attach(&button[i], DOUBLE_CLICK, (BtnCallback)button_event_handler);
     }
-    // Инциализация кнопки PULLUP
-    if (PinsConf[i].ptype == 1) {
-      button_init(&button[i], read_button_level, 0, i);
-      // просто кнопка
-      button_attach(&button[i], PRESS_DOWN, (BtnCallback)button_event_handler);
-      button_attach(&button[i], PRESS_UP, (BtnCallback)button_event_handler);
-      button_attach(&button[i], LONG_PRESS_START,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], LONG_PRESS_HOLD,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], SINGLE_CLICK,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], DOUBLE_CLICK,
-                    (BtnCallback)button_event_handler);
-      button_attach(&button[i], PRESS_REPEAT,
-                    (BtnCallback)button_event_handler);
-      button_start(&button[i]);
-      // инициализация Multibutton flag
-      PinsConf[i].act = 1;
+    if (is_action_set(PinsConf[i].lpress)) {
+      button_attach(&button[i], LONG_PRESS_START, (BtnCallback)button_event_handler);
+      button_attach(&button[i], LONG_PRESS_HOLD, (BtnCallback)button_event_handler);
     }
+
+    button_start(&button[i]);
+    PinsConf[i].act = 1;
   }
 }
 
@@ -2048,7 +2176,7 @@ void SetOneWireConfig() {
   UINT byteswritten;
   const uint8_t CHUNK_SIZE =
       1; // Обработка по одному сенсору за раз для экономии памяти
-  static char buf[1536];
+  char *buf = (char *)dtcm_settings_a;
   bool first_pin = true;
   int len = 0;
 
@@ -2087,10 +2215,10 @@ void SetOneWireConfig() {
         goto cleanup;
     }
     first_pin = false;
-    len = snprintf(buf, sizeof(buf),
+    len = snprintf(buf, DTCM_BUF_SETTINGS_A,
         "{\"id\":%d,\"pin\":\"%s\",\"typsensr\":1,\"numsens\":%d,\"onoff\":%d",
         ds18b20[i].id, ds18b20[i].pin, ds18b20[i].numsens, ds18b20[i].onoff);
-    if (len <= 0 || len >= (int)sizeof(buf)) continue;
+    if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_A) continue;
 
     fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
     if (fresult != FR_OK)
@@ -2121,14 +2249,14 @@ void SetOneWireConfig() {
           sprintf(sensor_addr_str + (k * 2), "%02X",
                   ds18b20[i].sensors[j].addr[k]);
         }
-        len = snprintf(buf, sizeof(buf),
+        len = snprintf(buf, DTCM_BUF_SETTINGS_A,
             "{\"s_number\":\"%s\",\"t\":0.00,\"valid\":false,"
             "\"ut\":%.2f,\"lt\":%.2f,"
             "\"action_ut\":\"%s\",\"action_lt\":\"%s\",\"info\":\"%s\"}",
             sensor_addr_str, ds18b20[i].sensors[j].upt, ds18b20[i].sensors[j].lowt,
             ds18b20[i].sensors[j].actup, ds18b20[i].sensors[j].actlow,
             ds18b20[i].sensors[j].info);
-        if (len <= 0 || len >= (int)sizeof(buf)) continue;
+        if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_A) continue;
 
         fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
         if (fresult != FR_OK)
@@ -2160,10 +2288,10 @@ void SetOneWireConfig() {
       }
       first_pin = false;
       // Create pin object
-      len = snprintf(buf, sizeof(buf),
+      len = snprintf(buf, DTCM_BUF_SETTINGS_A,
           "{\"id\":%d,\"pin\":\"%s\",\"typsensr\":2,\"numsens\":1,\"onoff\":%d",
           dht22[j].id, dht22[j].pin, dht22[j].onoff);
-      if (len <= 0 || len >= (int)sizeof(buf)) continue;
+      if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_A) continue;
 
       fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
       if (fresult != FR_OK)
@@ -2174,7 +2302,7 @@ void SetOneWireConfig() {
       if (fresult != FR_OK)
         goto cleanup;
       // Create DHT22 sensor object
-      len = snprintf(buf, sizeof(buf),
+      len = snprintf(buf, DTCM_BUF_SETTINGS_A,
           "{\"s_number\":\"DHT22\",\"t\":0.00,\"humidity\":0.00,\"valid\":false,"
           "\"ut\":%.2f,\"lt\":%.2f,"
           "\"action_ut\":\"%s\",\"action_lt\":\"%s\","
@@ -2184,7 +2312,7 @@ void SetOneWireConfig() {
           dht22[j].actup, dht22[j].actlow,
           dht22[j].uph, dht22[j].lowh,
           dht22[j].actuh, dht22[j].actlh, dht22[j].info);
-      if (len <= 0 || len >= (int)sizeof(buf)) goto cleanup;
+      if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_A) goto cleanup;
 
       fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
       if (fresult != FR_OK)
@@ -2254,7 +2382,7 @@ void GetPidConfig() {
   }
   struct mg_str arr = mg_str_n(body.buf + arr_ofs, body.len - (size_t)arr_ofs);
 
-  memset(PidConf, 0, sizeof(PidConf));
+  memset(PidConf, 0, sizeof(dbPidConf) * PID_MAX_SLOTS);
 
   int idx = 0;
   size_t pos = 0;
@@ -2310,7 +2438,7 @@ void GetPidConfig() {
 void SetPidConfig() {
   FRESULT fresult;
   UINT byteswritten;
-  static char buf[1536];
+  char *buf = (char *)dtcm_settings_b;
   int len = 0;
 
   fresult = f_open(&USBHFile, (const TCHAR *)"pid.ini",
@@ -2337,7 +2465,7 @@ void SetPidConfig() {
     }
     first = false;
 
-    len = snprintf(buf, sizeof(buf),
+    len = snprintf(buf, DTCM_BUF_SETTINGS_B,
         "{\"pwm_pin_id\":%d,\"selsens\":%d,\"sensor_pin_id\":%d,"
         "\"sernum\":\"%s\",\"sensor_sub_idx\":%d,\"preset\":%d,"
         "\"tmpset\":%.2f,\"Kp\":%.4f,\"Ki\":%.6f,\"Kd\":%.4f,\"bias\":%.4f,"
@@ -2354,7 +2482,7 @@ void SetPidConfig() {
         PidConf[i].temp_max, PidConf[i].temp_min, PidConf[i].pause_sec,
         PidConf[i].tau, PidConf[i].K_gain,
         PidConf[i].info, PidConf[i].onoff);
-    if (len <= 0 || len >= (int)sizeof(buf)) continue;
+    if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_B) continue;
 
     fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
     if (fresult != FR_OK) goto cleanup;
@@ -2371,5 +2499,296 @@ cleanup:
   mark_slice_dirty(&g_ver_pid);
   f_close(&USBHFile);
   printf("[PID] Config saved to pid.ini\r\n");
+}
+/***********************************************************************************************/
+
+/************************** Zigbee Config *********************************/
+
+bool zbee_is_valid_ieee(const char *s) {
+  if (strlen(s) != 16) return false;
+  for (int i = 0; i < 16; i++) {
+    char c = s[i];
+    if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')))
+      return false;
+  }
+  return true;
+}
+
+void zbee_validate_ieee(char *ieee) {
+  for (int i = 0; i < 16; i++) {
+    if (ieee[i] == '\0') {
+      while (i < 16) { ieee[i] = '0'; i++; }
+      ieee[16] = '\0';
+      break;
+    }
+    if ((ieee[i] < '0' || ieee[i] > '9') && (ieee[i] < 'A' || ieee[i] > 'F') && (ieee[i] < 'a' || ieee[i] > 'f')) {
+      ieee[i] = '0';
+    }
+  }
+}
+
+void GetZigbeeConfig(void) {
+  FILINFO finfo;
+  FRESULT fresult;
+
+  fresult = f_stat("zigbee.ini", &finfo);
+  if (fresult != FR_OK) {
+    printf("zigbee.ini not found, using defaults\r\n");
+    return;
+  }
+  printf("zigbee.ini has size: %lu bytes\r\n", finfo.fsize);
+  if (f_open(&USBHFile, "zigbee.ini", FA_READ) != FR_OK) {
+    printf("ERROR: Cannot open zigbee.ini!\r\n");
+    return;
+  }
+
+  char *buf = pvPortMalloc(finfo.fsize + 1);
+  if (!buf) {
+    printf("ERROR: Out of memory reading zigbee.ini\r\n");
+    f_close(&USBHFile);
+    return;
+  }
+
+  UINT bytesRead;
+  fresult = f_read(&USBHFile, buf, finfo.fsize, &bytesRead);
+  f_close(&USBHFile);
+  if (fresult != FR_OK || bytesRead == 0) {
+    vPortFree(buf);
+    return;
+  }
+  buf[bytesRead] = '\0';
+
+  /* Парсим JSON */
+  struct mg_str body = mg_str_n(buf, strlen(buf));
+
+  int arr_ofs = mg_json_get(body, "$.zigbee", NULL);
+  if (arr_ofs < 0) {
+    vPortFree(buf);
+    if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    return;
+  }
+  struct mg_str arr = mg_str_n(body.buf + arr_ofs, body.len - (size_t)arr_ofs);
+
+  memset(ZigbeeConf, 0, sizeof(ZigbeeVirtualPin) * NUMZBEE);
+  for (int i = 0; i < NUMZBEE; i++) {
+    ZigbeeConf[i].action_pool_idx = ACTION_POOL_IDX_NONE;
+  }
+
+  int idx = 0;
+  size_t pos = 0;
+  struct mg_str key, elem;
+  while (idx < NUMZBEE && (pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
+    char *ieee = mg_json_get_str(elem, "$.ieee");
+    if (ieee) {
+      strncpy(ZigbeeConf[idx].zbee_ieee, ieee, sizeof(ZigbeeConf[idx].zbee_ieee) - 1);
+      zbee_validate_ieee(ZigbeeConf[idx].zbee_ieee);
+      /* Нормализуем к нижнему регистру */
+      for (int k = 0; k < 16; k++) {
+        if (ZigbeeConf[idx].zbee_ieee[k] >= 'A' && ZigbeeConf[idx].zbee_ieee[k] <= 'F')
+          ZigbeeConf[idx].zbee_ieee[k] += 32;
+      }
+      mg_free(ieee);
+    }
+    
+    char *label = mg_json_get_str(elem, "$.label");
+    if (label) {
+      strncpy(ZigbeeConf[idx].zbee_label, label, sizeof(ZigbeeConf[idx].zbee_label) - 1);
+      mg_free(label);
+    }
+
+    char *info = mg_json_get_str(elem, "$.info");
+    if (info) {
+      strncpy(ZigbeeConf[idx].info, info, sizeof(ZigbeeConf[idx].info) - 1);
+      mg_free(info);
+    }
+
+    ZigbeeConf[idx].zbee_endpoint = (uint8_t)mg_json_get_long(elem, "$.endpoint",
+        (int)mg_json_get_long(elem, "$.ep", 1));
+    /* Читаем clusters как сырой JSON-массив [6,8,768] — mg_json_get_str не работает с массивами */
+    {
+      int cl_len = 0;
+      int cl_off = mg_json_get(elem, "$.clusters", &cl_len);
+      if (cl_off >= 0 && cl_len > 0 && cl_len < 64) {
+        char cl_raw[64];
+        memcpy(cl_raw, elem.buf + cl_off, cl_len);
+        cl_raw[cl_len] = '\0';
+        ZigbeeConf[idx].cluster_flags = clusters_json_to_flags(cl_raw);
+      } else {
+        ZigbeeConf[idx].cluster_flags = ZBEE_CL_ONOFF;
+      }
+    }
+    ZigbeeConf[idx].zbee_attribute = (uint16_t)mg_json_get_long(elem, "$.attr", 0);
+    ZigbeeConf[idx].onoff = (uint8_t)mg_json_get_long(elem, "$.onoff", 1);
+    ZigbeeConf[idx].dvalue = (int)mg_json_get_long(elem, "$.dvalue", 0);
+    ZigbeeConf[idx].color_hex = (uint32_t)mg_json_get_long(elem, "$.color_hex", 0xFFAA00);
+    ZigbeeConf[idx].state = (uint8_t)mg_json_get_long(elem, "$.state", 0);
+    /* topin всегда 11 для Zigbee устройств */
+    ZigbeeConf[idx].topin = 11;
+    ZigbeeConf[idx].ep = (uint16_t)mg_json_get_long(elem, "$.ep", 0);
+    ZigbeeConf[idx].ep_onoff = (uint16_t)mg_json_get_long(elem, "$.ep_onoff", 0);
+    ZigbeeConf[idx].ep_brightness = (uint16_t)mg_json_get_long(elem, "$.ep_brightness", 0);
+    ZigbeeConf[idx].ep_color = (uint16_t)mg_json_get_long(elem, "$.ep_color", 0);
+    ZigbeeConf[idx].zbee_role = (uint8_t)mg_json_get_long(elem, "$.role", 0);
+
+    /* Читаем sclick/dclick/lpress для кнопок через пул */
+    char *sclick = mg_json_get_str(elem, "$.sclick");
+    char *dclick = mg_json_get_str(elem, "$.dclick");
+    char *lpress = mg_json_get_str(elem, "$.lpress");
+    if (ZigbeeConf[idx].zbee_role == ZBEE_ROLE_TRIGGER || (sclick && sclick[0]) || (dclick && dclick[0]) || (lpress && lpress[0])) {
+      if (ZigbeeConf[idx].action_pool_idx == ACTION_POOL_IDX_NONE) {
+        ZigbeeConf[idx].action_pool_idx = zbee_action_alloc();
+      }
+      uint8_t aidx = ZigbeeConf[idx].action_pool_idx;
+      if (aidx < NUMACTIONPOOL) {
+        if (sclick) {
+          strncpy(ZigbeeActionPoolArr[aidx].sclick, sclick, sizeof(ZigbeeActionPoolArr[aidx].sclick) - 1);
+          ZigbeeActionPoolArr[aidx].sclick[sizeof(ZigbeeActionPoolArr[aidx].sclick) - 1] = '\0';
+        }
+        if (dclick) {
+          strncpy(ZigbeeActionPoolArr[aidx].dclick, dclick, sizeof(ZigbeeActionPoolArr[aidx].dclick) - 1);
+          ZigbeeActionPoolArr[aidx].dclick[sizeof(ZigbeeActionPoolArr[aidx].dclick) - 1] = '\0';
+        }
+        if (lpress) {
+          strncpy(ZigbeeActionPoolArr[aidx].lpress, lpress, sizeof(ZigbeeActionPoolArr[aidx].lpress) - 1);
+          ZigbeeActionPoolArr[aidx].lpress[sizeof(ZigbeeActionPoolArr[aidx].lpress) - 1] = '\0';
+        }
+      }
+    }
+    if (sclick) mg_free(sclick);
+    if (dclick) mg_free(dclick);
+    if (lpress) mg_free(lpress);
+
+    ZigbeeConf[idx].vbtn_mode = (uint8_t)mg_json_get_long(elem, "$.vbtn_mode", 0);
+
+    char *pt_single = mg_json_get_str(elem, "$.pt_single");
+    if (pt_single) {
+      strncpy(ZigbeeConf[idx].pt_single, pt_single, sizeof(ZigbeeConf[idx].pt_single) - 1);
+      mg_free(pt_single);
+    }
+
+    char *pt_double = mg_json_get_str(elem, "$.pt_double");
+    if (pt_double) {
+      strncpy(ZigbeeConf[idx].pt_double, pt_double, sizeof(ZigbeeConf[idx].pt_double) - 1);
+      mg_free(pt_double);
+    }
+
+    char *pt_long = mg_json_get_str(elem, "$.pt_long");
+    if (pt_long) {
+      strncpy(ZigbeeConf[idx].pt_long, pt_long, sizeof(ZigbeeConf[idx].pt_long) - 1);
+      mg_free(pt_long);
+    }
+
+    /* switch_payload_on/off — payload'ы ON/OFF для Zigbee-выключателя (Switch).
+     * Раньше не читались из zigbee.ini: после ребута оба поля оставались
+     * пустыми ("" после общего memset(ZigbeeConf, 0, ...) выше), из-за чего
+     * mqtt_zigbee_trigger_handler() переставал распознавать явный OFF-payload
+     * и переключатель "вырождался" в тумблер только по ON-payload —
+     * логика менялась по сравнению с состоянием сразу после обучения. */
+    char *switch_payload_on = mg_json_get_str(elem, "$.switch_payload_on");
+    if (switch_payload_on) {
+      strncpy(ZigbeeConf[idx].switch_payload_on, switch_payload_on,
+              sizeof(ZigbeeConf[idx].switch_payload_on) - 1);
+      mg_free(switch_payload_on);
+    }
+
+    char *switch_payload_off = mg_json_get_str(elem, "$.switch_payload_off");
+    if (switch_payload_off) {
+      strncpy(ZigbeeConf[idx].switch_payload_off, switch_payload_off,
+              sizeof(ZigbeeConf[idx].switch_payload_off) - 1);
+      mg_free(switch_payload_off);
+    }
+
+    /* Читаем dimmer поля */
+    ZigbeeConf[idx].dimmer_min = (uint16_t)mg_json_get_long(elem, "$.dimmer_min", 0);
+    ZigbeeConf[idx].dimmer_max = (uint16_t)mg_json_get_long(elem, "$.dimmer_max", 0);
+    ZigbeeConf[idx].dimmer_cluster = (uint16_t)mg_json_get_long(elem, "$.dimmer_cluster", 0x0008);
+    ZigbeeConf[idx].dimmer_attr = (uint8_t)mg_json_get_long(elem, "$.dimmer_attr", 0);
+    ZigbeeConf[idx].device_type_override = (uint8_t)mg_json_get_long(elem, "$.override", 0);
+
+    idx++;
+  }
+
+  vPortFree(buf);
+  if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  printf("[ZIGBEE] Loaded %d slots from zigbee.ini\r\n", idx);
+}
+
+void SetZigbeeConfig(void) {
+  FRESULT fresult;
+  UINT byteswritten;
+  char *buf = (char *)dtcm_settings_c;
+  int len = 0;
+
+  fresult = f_open(&USBHFile, (const TCHAR *)"zigbee.ini",
+                   FA_CREATE_ALWAYS | FA_WRITE);
+  if (fresult != FR_OK) {
+    printf("Error: Could not open zigbee.ini for writing\n");
+    return;
+  }
+
+  const char *start = "{\"zigbee\":[";
+  fresult = f_write(&USBHFile, start, strlen(start), &byteswritten);
+  if (fresult != FR_OK) goto cleanup;
+
+  bool first = true;
+  static char clbuf[32];
+  for (int i = 0; i < NUMZBEE; i++) {
+    // Сохраняем только валидные записи с IEEE-адресом
+    if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
+
+    if (!first) {
+      fresult = f_write(&USBHFile, ",", 1, &byteswritten);
+      if (fresult != FR_OK) goto cleanup;
+    }
+    first = false;
+
+    clusters_flags_to_json(ZigbeeConf[i].cluster_flags, clbuf, sizeof(clbuf));
+    len = snprintf(buf, DTCM_BUF_SETTINGS_C,
+        "{\"ieee\":\"%s\",\"endpoint\":%d,\"clusters\":%s,\"attr\":%d,"
+        "\"label\":\"%s\",\"onoff\":%d,\"dvalue\":%d,\"color_hex\":%u,"
+        "\"state\":%d,\"topin\":%d,\"info\":\"%s\","
+        "\"ep\":%d,\"ep_onoff\":%d,\"ep_brightness\":%d,\"ep_color\":%d,"
+        "\"role\":%d,"
+        "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
+        "\"vbtn_mode\":%d,"
+        "\"pt_single\":\"%s\",\"pt_double\":\"%s\",\"pt_long\":\"%s\","
+        "\"switch_payload_on\":\"%s\",\"switch_payload_off\":\"%s\","
+        "\"dimmer_min\":%d,\"dimmer_max\":%d,\"dimmer_cluster\":%d,\"dimmer_attr\":%d,"
+        "\"override\":%d}",
+        ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint, clbuf,
+        ZigbeeConf[i].zbee_attribute, ZigbeeConf[i].zbee_label, ZigbeeConf[i].onoff,
+        ZigbeeConf[i].dvalue, (unsigned)ZigbeeConf[i].color_hex,
+        ZigbeeConf[i].state, ZigbeeConf[i].topin, ZigbeeConf[i].info,
+        ZigbeeConf[i].ep, ZigbeeConf[i].ep_onoff,
+        ZigbeeConf[i].ep_brightness, ZigbeeConf[i].ep_color,
+        ZigbeeConf[i].zbee_role,
+        zbee_action_sclick(i), zbee_action_dclick(i), zbee_action_lpress(i),
+        ZigbeeConf[i].vbtn_mode,
+        ZigbeeConf[i].pt_single, ZigbeeConf[i].pt_double, ZigbeeConf[i].pt_long,
+        ZigbeeConf[i].switch_payload_on, ZigbeeConf[i].switch_payload_off,
+        ZigbeeConf[i].dimmer_min, ZigbeeConf[i].dimmer_max,
+        ZigbeeConf[i].dimmer_cluster, ZigbeeConf[i].dimmer_attr,
+        ZigbeeConf[i].device_type_override);
+    if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_C) continue;
+
+    fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
+    if (fresult != FR_OK) goto cleanup;
+  }
+
+  const char *end = "]}";
+  fresult = f_write(&USBHFile, end, strlen(end), &byteswritten);
+
+cleanup:
+  if (fresult != FR_OK) {
+    printf("Error: Failed to write zigbee.ini (error: %d)\n", fresult);
+  }
+  extern volatile uint32_t g_ver_zigbee;
+  extern volatile uint32_t g_ver_select;
+  extern volatile uint32_t g_ver_button;
+  mark_slice_dirty(&g_ver_zigbee);
+  mark_slice_dirty(&g_ver_select);
+  mark_slice_dirty(&g_ver_button);
+  f_close(&USBHFile);
+  printf("[ZIGBEE] Config saved to zigbee.ini\r\n");
 }
 /***********************************************************************************************/

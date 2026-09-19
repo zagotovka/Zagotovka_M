@@ -1,0 +1,16 @@
+################################################################################
+# Custom build targets — вставляется в конец auto-generated makefile
+################################################################################
+
+# Генерация .bin из .elf
+$(BUILD_ARTIFACT_NAME).bin: $(EXECUTABLES)
+	arm-none-eabi-objcopy -O binary $(EXECUTABLES) $@
+	@echo 'Generated: $@'
+	@mkdir -p ../Proshivka
+	@rm -f ../Proshivka/$(BUILD_ARTIFACT_NAME)_v*.bin
+	@FW_VER=$$(cat ../VERSION | tr -d '[:space:]'); \
+	cp $@ ../Proshivka/$(BUILD_ARTIFACT_NAME)_v$$FW_VER.bin; \
+	echo "Copied to Proshivka/$(BUILD_ARTIFACT_NAME)_v$$FW_VER.bin"
+
+# Расширяем secondary-outputs чтобы .bin создавался при каждом билде
+secondary-outputs: $(BUILD_ARTIFACT_NAME).bin

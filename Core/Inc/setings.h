@@ -52,6 +52,14 @@ void SetPidConfig();
 #define MQTT_PRT 1883
 #define MQTT_QOS 0
 #define MQTT_TPC "Zagotovka"
+#define RXZBTOP "zigbee2mqtt"
+// MQTT Server (встроенный брокер)
+#define CHECK_MQTT_SRV 0      // по умолчанию ВЫКЛ
+#define MQTT_SRV_PRT 1884     // порт сервера (не совпадать с HTTP 8000 / HTTPS 8443)
+#define MQTT_SRV_MAXCLI 4     // UI-лимит клиентов; прошивка clamp до MQTT_SRV_MAX_CLIENTS_HARDCAP
+#define MQTT_SRV_USR  "Yahsalta"    // дефолтный логин встроенного MQTT-брокера
+#define MQTT_SRV_PSWD "Zagotovka"   // дефолтный пароль встроенного MQTT-брокера
+#define SLZB_HOST     ""            // IP шлюза SLZB-06p7U для watchdog'а; пусто = watchdog выключен
 //void writedatatofile(const char* json_input);
 
 #endif /* INC_SETINGS_H_ */

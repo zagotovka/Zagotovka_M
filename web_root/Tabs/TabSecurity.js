@@ -203,6 +203,18 @@ const TabSecurity = () => {
             </tbody>
           </table>
         </div>
+        <div>
+          <h2 class="text-xl font-bold mb-2">Формат полей Action</h2>
+          <p class="mb-2">Максимальное количество записей в формате <code>ID:Action</code> с разделителем <code>,</code> ограничено длиной строки — <b>124 символа</b>.</p>
+          <table class="w-full text-sm">
+            <thead><tr><th class="border px-3 py-1">Длина ID</th><th class="border px-3 py-1">Пример</th><th class="border px-3 py-1">Байт на запись</th><th class="border px-3 py-1">Записей в строке</th></tr></thead>
+            <tbody>
+              <tr><td class="border px-3 py-1">1 знак</td><td class="border px-3 py-1"><code>5:1</code></td><td class="border px-3 py-1">3 + запятая = 4</td><td class="border px-3 py-1">до 31</td></tr>
+              <tr><td class="border px-3 py-1">2 знака</td><td class="border px-3 py-1"><code>15:1</code></td><td class="border px-3 py-1">4 + запятая = 5</td><td class="border px-3 py-1">до 24</td></tr>
+              <tr><td class="border px-3 py-1">3 знака</td><td class="border px-3 py-1"><code>155:1</code></td><td class="border px-3 py-1">5 + запятая = 6</td><td class="border px-3 py-1">до 20</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>`,
     en: html`
       <div class="mytext space-y-6">
@@ -262,6 +274,18 @@ const TabSecurity = () => {
               <tr>
                 <td class="border px-4 py-2 whitespace-nowrap">Swarm/security/</td>
               </tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <h2 class="text-xl font-bold mb-2">Action Field Format</h2>
+          <p class="mb-2">Maximum number of entries in <code>ID:Action</code> format with <code>,</code> separator is limited by string length — <b>124 characters</b>.</p>
+          <table class="w-full text-sm">
+            <thead><tr><th class="border px-3 py-1">ID Length</th><th class="border px-3 py-1">Example</th><th class="border px-3 py-1">Bytes per entry</th><th class="border px-3 py-1">Entries in string</th></tr></thead>
+            <tbody>
+              <tr><td class="border px-3 py-1">1 digit</td><td class="border px-3 py-1"><code>5:1</code></td><td class="border px-3 py-1">3 + comma = 4</td><td class="border px-3 py-1">up to 31</td></tr>
+              <tr><td class="border px-3 py-1">2 digits</td><td class="border px-3 py-1"><code>15:1</code></td><td class="border px-3 py-1">4 + comma = 5</td><td class="border px-3 py-1">up to 24</td></tr>
+              <tr><td class="border px-3 py-1">3 digits</td><td class="border px-3 py-1"><code>155:1</code></td><td class="border px-3 py-1">5 + comma = 6</td><td class="border px-3 py-1">up to 20</td></tr>
             </tbody>
           </table>
         </div>

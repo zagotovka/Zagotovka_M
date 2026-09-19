@@ -43,9 +43,9 @@ extern struct mg_connection * volatile s_conn;
 #define BUTTON_PRESSED 1
 #define BUTTON_RELEASED 0
 
-extern struct Button button[NUMPIN];
+extern struct Button *button;  /* выделяется в DTCM через dtcm_button (main) */
 // Прототип функции processPins
-void processPins(uint8_t i, uint8_t action);
+void processPins(uint16_t i, uint8_t action);
 
 // для sim800l
 extern UART_HandleTypeDef huart2;
@@ -151,6 +151,11 @@ typedef struct {
     char topic[64];
     char payload[256];
 } MqttRxMsg_t;
+typedef struct {
+    char topic[80];
+    char payload[64];
+} ZbeeCmdMsg_t;
+
 typedef struct xHeapStats
 {
 	size_t xAvailableHeapSpaceInBytes;

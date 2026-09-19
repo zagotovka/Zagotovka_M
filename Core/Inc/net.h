@@ -9,7 +9,7 @@
 #define MQTT_PORT "1883"
 
 // Shared JSON response buffer — heap-allocated in web_init() to save 16KB .bss
-#define G_BODY_SIZE 16384
+#define G_BODY_SIZE 32768
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,10 +36,11 @@ struct ui_event {
 };
 
 extern volatile bool mqtt_connected_reported;  // true после MG_EV_MQTT_OPEN, false после MG_EV_CLOSE
-extern char s_tls_cert[1024];
-extern char s_tls_key[512];
+extern char *s_tls_cert;
+extern char *s_tls_key;
 extern bool s_tls_loaded;
 extern char *g_body;  // shared JSON buffer (G_BODY_SIZE bytes in FreeRTOS heap)
+void net_dtcm_init(void);
 void web_init(struct mg_mgr *mgr);
 
 /*********************************** From Zagotovka ****************************************************/

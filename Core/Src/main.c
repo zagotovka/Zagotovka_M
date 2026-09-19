@@ -45,6 +45,9 @@
 
 #include "gsm.h"
 #include "usart_ring.h"
+#include "dtcm_alloc.h"
+#include "mqtt_server.h"
+#include "slzb_watchdog.h"
 
 #define BLINK_PERIOD_MS 1000 // LED blinking period in millis
 #define DEBOUNCE_DELAY 45    // Encoder (ms)
@@ -59,17 +62,19 @@ extern uint8_t Ds18b20StartConvert;
 extern uint16_t Ds18b20Timeout;
 extern uint64_t s_boot_timestamp;
 int32_t onoffid;  /* знаковый: JSON id может быть < 0 */
-extern onewire_config_t ow_conf[MAX_DS18B20_P + MAX_DHT22_P];
-struct Button button[NUMPIN];
+extern onewire_config_t *ow_conf;  /* выделяется в DTCM в zagotovka_dtcm_init() */
+struct Button *button = NULL;      /* выделяется в DTCM через dtcm_button (main) */
 extern volatile uint8_t onlineFlg;
-extern uint8_t gsm_rx_buffer[GSM_RX_BUFFER_SIZE];
+extern uint8_t *gsm_rx_buffer;
 extern volatile gsm_rx_buffer_index_t gsm_rx_buffer_head;
+extern uint8_t _sitcm[], _eitcm[];
+extern uint32_t _sitcm_load;
 uint8_t RxByte; // Буфер для приема одного байта по UART
 
 uint8_t owflag = 0;
 
 ds18b20_pin_t ds18b20[MAX_DS18B20_P];
-dht22_pin_t dht22[MAX_DHT22_P];
+dht22_pin_t *dht22 = NULL;         /* выделяется в DTCM через dtcm_dht22 (main) */
 
 /* A4: global mqttMsg removed — each send site uses a local copy */
 /* mqtt_topic[100] / mqtt_payload[300] теперь локальны в WebServerTask */
@@ -77,12 +82,12 @@ dht22_pin_t dht22[MAX_DHT22_P];
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-TIM_HandleTypeDef htim[NUMPIN];
+TIM_HandleTypeDef *htim = NULL;  /* выделяется в DTCM через dtcm_htim (main) */
 uint8_t usbnum = 0;
 uint8_t mqttnum = 0;
 uint8_t sumowpin = 0;
 /* A3: global data_pin removed — each producer/consumer uses a local copy */
-dbPidConf PidConf[PID_MAX_SLOTS];
+dbPidConf *PidConf = NULL;  /* выделяется в DTCM через dtcm_pid_conf */
 
 #define HTTP_URL "http://0.0.0.0:8000"
 #define HTTPS_URL "https://0.0.0.0:8443"
@@ -256,12 +261,22 @@ osMessageQueueId_t mqttRxQueueHandle;
 const osMessageQueueAttr_t mqttRxQueue_attributes = {
   .name = "mqttRxQueue"
 };
+/* Definitions for zbeeCmdQueue */
+osMessageQueueId_t zbeeCmdQueueHandle;
+const osMessageQueueAttr_t zbeeCmdQueue_attributes = {
+  .name = "zbeeCmdQueue"
+};
+/* Definitions for actionMutexHandle */
+osMutexId_t actionMutexHandleHandle;
+const osMutexAttr_t actionMutexHandle_attributes = {
+  .name = "actionMutexHandle"
+};
 /* USER CODE BEGIN PV */
 extern struct dbSettings SetSettings;
 extern struct dbCron dbCrontxt[NUMTASK];
 extern struct dbPinsConf PinsConf[NUMPIN];
 extern struct dbPinsInfo PinsInfo[NUMPIN];
-extern struct dbPinToPin PinsLinks[NUMPINLINKS];
+extern struct dbPinToPin *PinsLinks;  /* выделяется в DTCM через dtcm_pinslinks (main) */
 extern bool g_log_filter_from_file;  // Флаг: log_filter_mask был в settings.ini
 
 extern ApplicationTypeDef Appli_state;
@@ -272,11 +287,17 @@ static uint32_t mqtt_tx_peak = 0;
 static uint32_t mqtt_rx_peak = 0;
 static uint32_t output_peak = 0;
 static uint32_t usb_peak = 0;
+static uint32_t zbee_cmd_peak = 0;
 static uint32_t mg_conn_peak = 0;
+
+/* Runtime arrays for SecurityTask — выделяются в DTCM через dtcm_sec_deb_tm/dtcm_sec_lasttrg */
+#define sec_deb_tm  dtcm_sec_deb_tm
+#define sec_lasttrg dtcm_sec_lasttrg
 static uint32_t mg_conn_cur = 0;
 static uint32_t mg_conn_listeners = 0;
 static uint32_t mg_conn_tls = 0;
 static uint32_t mg_conn_mqtt = 0;
+static uint32_t mg_conn_mqttsrv = 0; // клиенты встроенного MQTT-брокера
 static uint32_t mg_conn_other = 0;
 static unsigned long s_other_ids[8] = {0};
 static uint32_t s_other_cnt = 0;
@@ -401,6 +422,12 @@ static bool check_mqtt_connection(void *conn);
 
 void send_mqtt_message(struct mg_connection *conn, const char *topic,
                        const char *msg) {
+  char full_topic[128]; // Буфер для полного топика
+  snprintf(full_topic, sizeof(full_topic), "%s%s", get_mqtt_topic(), topic);
+
+  /* Локальный MQTT-сервер: fan-out независимо от состояния внешнего брокера */
+  mqtt_server_publish(full_topic, msg);
+
   if (!check_mqtt_connection(conn)) {
     return;
   }
@@ -421,8 +448,6 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic,
 
   struct mg_mqtt_opts pub_opts;
   memset(&pub_opts, 0, sizeof(pub_opts));
-  char full_topic[128]; // Буфер для полного топика
-  snprintf(full_topic, sizeof(full_topic), "%s%s", get_mqtt_topic(), topic);
   pub_opts.topic = mg_str(full_topic);
   pub_opts.message = mg_str(msg);
   pub_opts.qos = s_qos;
@@ -438,8 +463,8 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic,
     printf("[MQTT] Large publish len=%d on topic %s\r\n", (int)msg_len, full_topic);
   }
 
-  MG_INFO(("%lu PUBLISHED %s -> %.*s", conn->id, msg, (int)pub_opts.topic.len,
-           pub_opts.topic.buf));
+  // printf("[MQTT] %lu PUBLISHED %s -> %.*s\r\n", conn->id, msg, (int)pub_opts.topic.len,
+  //         pub_opts.topic.buf);
 }
 /*********************** End M ******************************/
 
@@ -463,6 +488,10 @@ static bool check_mqtt_connection(void *conn) {
   return true;
 }
 
+static inline bool is_action_set(const char *action) {
+  return action && action[0] != '\0' && strcmp(action, "None") != 0;
+}
+
 void button_event_handler(
     Button *handle) { // Функция callback для обработки событий кнопки
   if (handle->button_id >= NUMPIN) {
@@ -481,45 +510,30 @@ void button_event_handler(
                  //       printf("Button %d: PRESS_UP!\r\n", handle->button_id);
     break;
   case LONG_PRESS_START: // Начало долгого нажатия
-    //       printf("Button %d: LONG_PRESS_START!\r\n", handle->button_id);
-    if (handle->button_id < NUMPIN) {
-      //	 printf("PinsConf[%d].lpress content: %s\n",
-      //        handle->button_id, PinsConf[handle->button_id].lpress);
+    if (is_action_set(PinsConf[handle->button_id].lpress)) {
+      LOG_SYSTEM("[LONG PRESS] Button %d: %s", handle->button_id, PinsConf[handle->button_id].lpress);
       action_handler(handle->button_id, PinsConf[handle->button_id].lpress,
                      "long press");
-      // Подготовка MQTT сообщения (локальная копия — без гонки данных)
       mqtt_queue_send_safe(3, handle->button_id, 1, 0);
-    } else {
-      printf("Invalid button ID: %d\n", handle->button_id);
     }
     break;
   case LONG_PRESS_HOLD: // Продолжение долгого нажатия
     //       printf("Button %d: LONG_PRESS_HOLD!\r\n", handle->button_id);
     break;
   case SINGLE_CLICK: // Одиночное нажатие кнопки
-    if (handle->button_id < NUMPIN) {
-      // printf("PinsConf[%d].sclick content: %s\n", handle->button_id,
-      // PinsConf[handle->button_id].sclick);
+    if (is_action_set(PinsConf[handle->button_id].sclick)) {
+      LOG_SYSTEM("[SINGLE CLICK] Button %d: %s", handle->button_id, PinsConf[handle->button_id].sclick);
       action_handler(handle->button_id, PinsConf[handle->button_id].sclick,
                      "sclick press");
-      // Подготовка MQTT сообщения (локальная копия — без гонки данных)
       mqtt_queue_send_safe(4, handle->button_id, 2, 0);
-    } else {
-      printf("Invalid button ID: %d\n", handle->button_id);
     }
-//    printf("Button %d: SINGLE_CLICK!\r\n", handle->button_id);
     break;
   case DOUBLE_CLICK: // Двойное нажатие кнопки
-    //		printf("Button %d: DOUBLE_CLICK!\r\n", handle->button_id);
-    if (handle->button_id < NUMPIN) {
-      //	 rintf("PinsConf[%d].lpress content: %s\n",
-      //        handle->button_id, PinsConf[handle->button_id].lpress);
+    if (is_action_set(PinsConf[handle->button_id].dclick)) {
+      LOG_SYSTEM("[DOUBLE CLICK] Button %d: %s", handle->button_id, PinsConf[handle->button_id].dclick);
       action_handler(handle->button_id, PinsConf[handle->button_id].dclick,
                      "double press");
-      // Подготовка MQTT сообщения (локальная копия — без гонки данных)
       mqtt_queue_send_safe(5, handle->button_id, 3, 0);
-    } else {
-      printf("Invalid button ID: %d\n", handle->button_id);
     }
     break;
   case PRESS_REPEAT: // Повторное нажатие кнопки
@@ -661,6 +675,19 @@ uint8_t read_button_level(uint8_t button_id) {
 uint32_t zerg_t;  /* используется в gsm.c через extern */
 uint32_t swarm_t; /* используется в gsm.c через extern */
 
+/* OTA crash diagnostics: NOLOAD-переменные, переживают NVIC_SystemReset().
+ * Перенесены из ITCM (.noinit_itcm) в SRAM (.noinit_ram), чтобы MPU мог
+ * защитить весь ITCM как Read-Only и ловить дикие записи. */
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_sector;
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_magic;
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_addr;
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_sr_erase;    /* FLASH_SR after sector erase */
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_cr_erase;    /* FLASH_CR written for erase */
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_sr_write;    /* FLASH_SR after failed write */
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_write_addr;  /* address of failed write */
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_write_word;  /* word that failed to write */
+__attribute__((section(".noinit_ram"))) uint32_t dtcm_ota_pre_erase0; /* first8 bytes before erase */
+
 /* clear_string перенесена в gsm.c */
 /* check_speed перенесена в gsm.c */
 /*************************** END GSM ************************************/
@@ -705,6 +732,16 @@ static void read_reset_reason(void) {
         snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len, "PINRST ");
     }
 
+    if (dtcm_ota_magic == 0xDEADBEEF) {
+        len = strlen(reset_reason_str);
+        snprintf(reset_reason_str + len, sizeof(reset_reason_str) - len,
+                 "[OTA S%lu@0x%08lX SR_e=0x%08lX CR_e=0x%08lX SR_w=0x%08lX Pre=0x%08lX] ",
+                 dtcm_ota_sector, dtcm_ota_addr,
+                 dtcm_ota_sr_erase, dtcm_ota_cr_erase,
+                 dtcm_ota_sr_write, dtcm_ota_pre_erase0);
+        dtcm_ota_magic = 0;
+    }
+
     // Trim trailing space
     len = strlen(reset_reason_str);
     if (len > 0 && reset_reason_str[len - 1] == ' ') {
@@ -715,6 +752,143 @@ static void read_reset_reason(void) {
         strcpy(reset_reason_str, "None");
     }
 }
+
+void early_uart_print(const char *str) {
+    volatile uint32_t *ISR = (volatile uint32_t *)(0x40004800 + 0x1C);
+    volatile uint32_t *TDR = (volatile uint32_t *)(0x40004800 + 0x28);
+    while (*str) {
+        volatile uint32_t t = 100000;
+        while (!((*ISR) & (1 << 7)) && --t) {}
+        *TDR = *str++;
+    }
+}
+#define EARLY_LOG_SYSTEM(fmt) do { if (LOG_CONF_SYSTEM_EN && (g_log_filter_mask & LOG_MASK_SYSTEM)) { early_uart_print(fmt); } } while(0)
+
+/* 
+ * 0 = Ничего не делать
+ * 1 = Принудительно установить Dual Bank Mode (рекомендуется для вашего проекта)
+ * 2 = Принудительно установить Single Bank Mode
+ */
+#define FORCE_FLASH_BANK_MODE 0
+
+void Flash_DecodeError(uint32_t error_mask)
+{
+    char _ebuf[80];
+    if (error_mask == HAL_FLASH_ERROR_NONE)
+    {
+        early_uart_print("[FLASH_ERR] No errors (0x00000000)\r\n");
+        return;
+    }
+
+    snprintf(_ebuf, sizeof(_ebuf), "[FLASH_ERR] Raw mask = 0x%08lX\r\n", (unsigned long)error_mask);
+    early_uart_print(_ebuf);
+
+#if defined(HAL_FLASH_ERROR_RD)
+    if (error_mask & HAL_FLASH_ERROR_RD)
+        early_uart_print("  - RDERR: PCROP violation\r\n");
+#endif
+#if defined(HAL_FLASH_ERROR_PGS)
+    if (error_mask & HAL_FLASH_ERROR_PGS)
+        early_uart_print("  - PGSERR: programming sequence error\r\n");
+#endif
+#if defined(HAL_FLASH_ERROR_PGP)
+    if (error_mask & HAL_FLASH_ERROR_PGP)
+        early_uart_print("  - PGPERR: parallelism error\r\n");
+#endif
+#if defined(HAL_FLASH_ERROR_PGA)
+    if (error_mask & HAL_FLASH_ERROR_PGA)
+        early_uart_print("  - PGAERR: alignment error\r\n");
+#endif
+#if defined(HAL_FLASH_ERROR_WRP)
+    if (error_mask & HAL_FLASH_ERROR_WRP)
+        early_uart_print("  - WRPERR: write protection error\r\n");
+#endif
+#if defined(HAL_FLASH_ERROR_OPERATION)
+    if (error_mask & HAL_FLASH_ERROR_OPERATION)
+        early_uart_print("  - OPERR: operation error\r\n");
+#endif
+#if defined(HAL_FLASH_ERROR_ERS)
+    if (error_mask & HAL_FLASH_ERROR_ERS)
+        early_uart_print("  - ERSERR: erase error\r\n");
+#endif
+}
+
+HAL_StatusTypeDef Switch_To_DualBank(void)
+{
+    HAL_StatusTypeDef status;
+    FLASH_OBProgramInitTypeDef ob_init = {0};
+    char _sbuf[80];
+
+    HAL_FLASH_Unlock();
+    HAL_FLASH_OB_Unlock();
+    HAL_FLASHEx_OBGetConfig(&ob_init);
+    
+    snprintf(_sbuf, sizeof(_sbuf), "[OB] USERConfig before = 0x%08lX\r\n", (unsigned long)ob_init.USERConfig);
+    early_uart_print(_sbuf);
+    ob_init.OptionType = OPTIONBYTE_USER;
+
+#if defined(OB_NDBANK_DUAL_BANK)
+    ob_init.USERConfig = (ob_init.USERConfig & ~OB_NDBANK_SINGLE_BANK) | OB_NDBANK_DUAL_BANK;
+#else
+    #define MY_NDBANK_BIT   (1UL << 29)
+    ob_init.USERConfig &= ~MY_NDBANK_BIT;
+#endif
+
+    status = HAL_FLASHEx_OBProgram(&ob_init);
+    if (status != HAL_OK)
+    {
+        snprintf(_sbuf, sizeof(_sbuf), "[OB] HAL_FLASHEx_OBProgram failed: %ld\r\n", (long)status);
+        early_uart_print(_sbuf);
+        Flash_DecodeError(HAL_FLASH_GetError());
+        HAL_FLASH_OB_Lock();
+        HAL_FLASH_Lock();
+        return status;
+    }
+
+    early_uart_print("[OB] Option bytes programmed OK (Dual Bank). Launching OBL_LAUNCH (reset)...\r\n");
+    HAL_FLASH_OB_Lock();
+    HAL_FLASH_Lock();
+    HAL_FLASH_OB_Launch();
+    return HAL_OK;
+}
+
+HAL_StatusTypeDef Switch_To_SingleBank(void)
+{
+    HAL_StatusTypeDef status;
+    FLASH_OBProgramInitTypeDef ob_init = {0};
+    char _sbuf[80];
+
+    HAL_FLASH_Unlock();
+    HAL_FLASH_OB_Unlock();
+    HAL_FLASHEx_OBGetConfig(&ob_init);
+
+    ob_init.OptionType = OPTIONBYTE_USER;
+
+#if defined(OB_NDBANK_SINGLE_BANK)
+    ob_init.USERConfig = (ob_init.USERConfig & ~OB_NDBANK_DUAL_BANK) | OB_NDBANK_SINGLE_BANK;
+#else
+    #define MY_NDBANK_BIT   (1UL << 29)
+    ob_init.USERConfig |= MY_NDBANK_BIT;
+#endif
+
+    status = HAL_FLASHEx_OBProgram(&ob_init);
+    if (status != HAL_OK)
+    {
+        snprintf(_sbuf, sizeof(_sbuf), "[OB] HAL_FLASHEx_OBProgram failed: %ld\r\n", (long)status);
+        early_uart_print(_sbuf);
+        Flash_DecodeError(HAL_FLASH_GetError());
+        HAL_FLASH_OB_Lock();
+        HAL_FLASH_Lock();
+        return status;
+    }
+
+    early_uart_print("[OB] Option bytes programmed OK (Single Bank). Launching OBL_LAUNCH (reset)...\r\n");
+    HAL_FLASH_OB_Lock();
+    HAL_FLASH_Lock();
+    HAL_FLASH_OB_Launch();
+    return HAL_OK;
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -725,7 +899,45 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+	/* ── Очистка после Bootloader (программный переход, не аппаратный reset) ──
+	 * Bootloader использует SysTick как HAL timebase. В приложении
+	 * SysTick_Handler = xPortSysTickHandler (FreeRTOS tick). Если SysTick
+	 * останется запущенным/pending, он вызовет FreeRTOS до osKernelStart() → crash.
+	 *
+	 * Порядок критичен:
+	 * 1. SysTick остановить и сбросить pending (пока PRIMASK=1 от bootloader'а)
+	 * 2. Только потом __enable_irq() — безопасно, SysTick уже не стрельнёт
+	 */
+	SysTick->CTRL = 0;                          // Стоп SysTick
+	SysTick->LOAD = 0;
+	SysTick->VAL  = 0;
+	SCB->ICSR = SCB_ICSR_PENDSTCLR_Msk;         // Сбросить pending SysTick
+
+    // Early UART Init (115200 baud @ 16MHz HSI)
+    RCC->APB1ENR |= RCC_APB1ENR_USART3EN;
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIODEN;
+    GPIOD->MODER &= ~(GPIO_MODER_MODER8_Msk | GPIO_MODER_MODER9_Msk);
+    GPIOD->MODER |= (2U << GPIO_MODER_MODER8_Pos) | (2U << GPIO_MODER_MODER9_Pos);
+    GPIOD->AFR[1] &= ~(0xFFU);
+    GPIOD->AFR[1] |= (7U << 0) | (7U << 4);
+    USART3->BRR = 0x8B;
+    USART3->CR1 = USART_CR1_UE | USART_CR1_TE;
+
+    EARLY_LOG_SYSTEM("[SYSTEM] Entered main() - SysTick cleared\r\n");
+
+  /* ── ITCM check #0: сразу после входа в main() ── */
+  {
+    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+    uint32_t *itcm_dst  = (uint32_t *)_sitcm;
+    if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
+      EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT ENTRY #0 ***\r\n");
+      while (1) { __NOP(); }
+    }
+    EARLY_LOG_SYSTEM("[SYSTEM] ITCM check #0 OK\r\n");
+  }
+
   read_reset_reason();
+  EARLY_LOG_SYSTEM("[SYSTEM] 1: read_reset_reason done\r\n");
   /* USER CODE END 1 */
 
   /* MPU Configuration--------------------------------------------------------*/
@@ -768,18 +980,186 @@ int main(void)
   MX_USART2_UART_Init();
   MX_CRC_Init();
   /* USER CODE BEGIN 2 */
+  // Проверка режима Bank флеш-памяти (всегда, логирование + опциональное переключение)
+  {
+      FLASH_OBProgramInitTypeDef ob_test = {0};
+      HAL_FLASHEx_OBGetConfig(&ob_test);
+
+      /* ── ITCM check 1d1: сразу после HAL_FLASHEx_OBGetConfig, до printf ── */
+      {
+        uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+        uint32_t *itcm_dst  = (uint32_t *)_sitcm;
+        if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
+          EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1d1 (after HAL_FLASHEx_OBGetConfig) ***\r\n");
+          while (1) { __NOP(); }
+        }
+        EARLY_LOG_SYSTEM("[SYSTEM] 1d1: ITCM OK\r\n");
+      }
+
+      // bit 29: 0 = Dual Bank, 1 = Single Bank
+      uint32_t is_single_bank = (ob_test.USERConfig & (1UL << 29)) ? 1 : 0;
+
+#if FORCE_FLASH_BANK_MODE == 1
+      if (is_single_bank) {
+          early_uart_print("\r\n[SYSTEM] Warning: Flash is Single Bank. Forcing Dual Bank mode!\r\n");
+          Switch_To_DualBank();
+      } else {
+          early_uart_print("\r\n[SYSTEM] Flash is already in Dual Bank mode (OK).\r\n");
+      }
+#elif FORCE_FLASH_BANK_MODE == 2
+      if (!is_single_bank) {
+          early_uart_print("\r\n[SYSTEM] Warning: Flash is Dual Bank. Forcing Single Bank mode!\r\n");
+          Switch_To_SingleBank();
+      } else {
+          early_uart_print("\r\n[SYSTEM] Flash is already in Single Bank mode (OK).\r\n");
+      }
+#else
+      if (is_single_bank) {
+          early_uart_print("\r\n[SYSTEM] Warning: Flash is Single Bank (no auto-fix).\r\n");
+      } else {
+          early_uart_print("\r\n[SYSTEM] Flash is Dual Bank (OK).\r\n");
+      }
+#endif
+
+      /* ── ITCM check 1d2: сразу после printf (теперь early_uart_print) ── */
+      {
+        uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+        uint32_t *itcm_dst  = (uint32_t *)_sitcm;
+        if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
+          EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1d2 (after bank print) ***\r\n");
+          while (1) { __NOP(); }
+        }
+        EARLY_LOG_SYSTEM("[SYSTEM] 1d2: ITCM OK\r\n");
+      }
+  }
+  EARLY_LOG_SYSTEM("[SYSTEM] 14: flash bank check done\r\n");
+
   // Инициализация массивов датчиков
   memset(ds18b20, 0, sizeof(ds18b20));
-  memset(dht22, 0, sizeof(dht22));
+
+  /* ── ITCM check 1e: после memset(ds18b20) ── */
+  {
+    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+    uint32_t *itcm_dst  = (uint32_t *)_sitcm;
+    if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
+      EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1e (after memset ds18b20) ***\r\n");
+      while (1) { __NOP(); }
+    }
+    EARLY_LOG_SYSTEM("[SYSTEM] 1e: ITCM OK\r\n");
+  }
+
+  /* dht22 перенесён в DTCM — memset после dtcm_alloc_init() (ниже) */
+
+  EARLY_LOG_SYSTEM("[SYSTEM] 15: sensor arrays zeroed\r\n");
   DWT_Init();
+
+  /* ── ITCM check 1g: после DWT_Init() ── */
+  {
+    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+    uint32_t *itcm_dst  = (uint32_t *)_sitcm;
+    if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
+      EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1g (after DWT_Init) ***\r\n");
+      while (1) { __NOP(); }
+    }
+    EARLY_LOG_SYSTEM("[SYSTEM] 1g: ITCM OK\r\n");
+  }
+
+  EARLY_LOG_SYSTEM("[SYSTEM] 16: DWT done\r\n");
   test_init();
-  printf("[SYSTEM] Reset CSR=0x%08lX\r\n", reset_csr_value);
-  printf("[SYSTEM] Reset flags: %s\r\n", reset_reason_str);
-  printf("[SYSTEM] Reset reason: %s (CSR=0x%08lX)\r\n", reset_reason_str, reset_csr_value);
+  EARLY_LOG_SYSTEM("[SYSTEM] 17: test_init done\r\n");
+
+  /* ── ITCM check #2: перед dtcm_alloc_init() ── */
+  {
+    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+    uint32_t *itcm_dst  = (uint32_t *)_sitcm;
+    uint32_t  itcm_size = (uint32_t)(_eitcm - _sitcm);
+    uint32_t  nwords    = itcm_size / 4;
+    uint32_t  errors    = 0;
+    for (uint32_t i = 0; i < nwords; i++) {
+      if (flash_src[i] != itcm_dst[i]) {
+        char buf[80];
+        snprintf(buf, sizeof(buf),
+                 "[SYSTEM] *** ITCM BAD [%lu] flash=0x%08lX itcm=0x%08lX\r\n",
+                 (unsigned long)i, (unsigned long)flash_src[i],
+                 (unsigned long)itcm_dst[i]);
+        EARLY_LOG_SYSTEM(buf);
+        errors++;
+        if (errors >= 8) break;
+      }
+    }
+    if (errors == 0) {
+      EARLY_LOG_SYSTEM("[SYSTEM] 17a: ITCM verify OK\r\n");
+    } else {
+      EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED ***\r\n");
+      while (1) { __NOP(); }
+    }
+  }
+
+  dtcm_alloc_init();
+  /* BSS → DTCM: присваиваем указатели (с проверкой на overflow) */
+  PidConf = dtcm_pid_conf;
+  /* ЭТАП 2: htim + dht22 + button + PinsLinks → DTCM (pool — NOLOAD, нужен memset) */
+  htim = dtcm_htim;
+  if (htim) memset(htim, 0, sizeof(TIM_HandleTypeDef) * NUMPIN);
+  dht22 = dtcm_dht22;
+  if (dht22) memset(dht22, 0, sizeof(dht22_pin_t) * MAX_DHT22_P);
+  button = dtcm_button;
+  if (button) memset(button, 0, sizeof(struct Button) * NUMPIN);
+  PinsLinks = dtcm_pinslinks;
+  if (PinsLinks) memset(PinsLinks, 0, sizeof(struct dbPinToPin) * NUMPINLINKS);
+  /* ZigbeeConf — в .bss, обнуляется стартапом автоматически */
+  if (dtcm_sec_deb_tm)     memset(dtcm_sec_deb_tm, 0, sizeof(uint32_t) * NUMPIN);
+  if (dtcm_sec_lasttrg)    memset(dtcm_sec_lasttrg, 0, sizeof(uint32_t) * NUMPIN);
+  if (dtcm_fade_state)     memset(dtcm_fade_state, 0, sizeof(FadeState_t) * NUMPIN);
+  if (dtcm_cron_ctxs)      memset(dtcm_cron_ctxs, 0, sizeof(lwdtc_cron_ctx_t) * NUMTASK);
+  if (dtcm_prev_pwm_dvalue) memset(dtcm_prev_pwm_dvalue, 0, sizeof(int) * NUMPIN);
+  if (dtcm_prev_gpio)      memset(dtcm_prev_gpio, 0xFF, sizeof(uint8_t) * NUMPIN);
+  if (dtcm_prev_duty) { for (int i = 0; i < NUMPIN; i++) dtcm_prev_duty[i] = -1; }
+  if (dtcm_zbee_last_cmd_tick) memset(dtcm_zbee_last_cmd_tick, 0, sizeof(uint32_t) * NUMZBEE);
+  usart_ring_dtcm_init();
+  gsm_dtcm_init();
+  net_dtcm_init();
+  zagotovka_dtcm_init();
+  {
+    char _sbuf[192];
+    snprintf(_sbuf, sizeof(_sbuf), "[SYSTEM] DTCM pool: %u B total at 0x%08lX\r\n",
+             (unsigned)dtcm_alloc_get_total(), (unsigned long)_sdtcm_pool);
+    early_uart_print(_sbuf);
+    snprintf(_sbuf, sizeof(_sbuf), "[SYSTEM] Reset CSR=0x%08lX\r\n", reset_csr_value);
+    early_uart_print(_sbuf);
+    snprintf(_sbuf, sizeof(_sbuf), "[SYSTEM] Reset flags: %s\r\n", reset_reason_str);
+    early_uart_print(_sbuf);
+    snprintf(_sbuf, sizeof(_sbuf), "[SYSTEM] Reset reason: %s (CSR=0x%08lX)\r\n", reset_reason_str, reset_csr_value);
+    early_uart_print(_sbuf);
+    /* OTA crash diagnostics (survives NVIC reset, lives in noinit_ram) */
+    if (dtcm_ota_magic == 0xDEADBEEF) {
+      snprintf(_sbuf, sizeof(_sbuf), "[OTA-DIAG] sector=%lu addr=0x%08lX\r\n", dtcm_ota_sector, dtcm_ota_addr);
+      early_uart_print(_sbuf);
+      snprintf(_sbuf, sizeof(_sbuf), "[OTA-DIAG] sr_erase=0x%08lX cr_erase=0x%08lX\r\n", dtcm_ota_sr_erase, dtcm_ota_cr_erase);
+      early_uart_print(_sbuf);
+      snprintf(_sbuf, sizeof(_sbuf), "[OTA-DIAG] sr_write=0x%08lX wr_addr=0x%08lX wr_word=0x%08lX\r\n",
+               dtcm_ota_sr_write, dtcm_ota_write_addr, dtcm_ota_write_word);
+      early_uart_print(_sbuf);
+      snprintf(_sbuf, sizeof(_sbuf), "[OTA-DIAG] pre_erase=0x%08lX\r\n", dtcm_ota_pre_erase0);
+      early_uart_print(_sbuf);
+      if (dtcm_ota_sr_erase & 0x80000000) {
+        early_uart_print("[OTA-DIAG] ** POST-ERASE VERIFY FAILED: sector NOT erased to 0xFF! **\r\n");
+      }
+      if (dtcm_ota_sr_erase & 0x7E) {
+        snprintf(_sbuf, sizeof(_sbuf), "[OTA-DIAG] ** FLASH_SR errors after erase: 0x%02lX **\r\n",
+                 (dtcm_ota_sr_erase >> 1) & 0x3F);
+        early_uart_print(_sbuf);
+      }
+      dtcm_ota_magic = 0;
+    }
+  }
   /* USER CODE END 2 */
 
   /* Init scheduler */
   osKernelInitialize();
+  /* Create the mutex(es) */
+  /* creation of actionMutexHandle */
+  actionMutexHandleHandle = osMutexNew(&actionMutexHandle_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -795,7 +1175,7 @@ int main(void)
 
   /* Create the queue(s) */
   /* creation of outputQueue */
-  outputQueueHandle = osMessageQueueNew (16, sizeof(struct data_pin_t), &outputQueue_attributes);
+  outputQueueHandle = osMessageQueueNew (64, sizeof(struct data_pin_t), &outputQueue_attributes);
 
   /* creation of usbQueue */
   usbQueueHandle = osMessageQueueNew (16, sizeof(uint8_t), &usbQueue_attributes);
@@ -804,7 +1184,10 @@ int main(void)
   mqttQueueHandle = osMessageQueueNew (32, sizeof(MqttMessage_t), &mqttQueue_attributes);
 
   /* creation of mqttRxQueue */
-  mqttRxQueueHandle = osMessageQueueNew (4, sizeof(MqttRxMsg_t), &mqttRxQueue_attributes);
+  mqttRxQueueHandle = osMessageQueueNew (32, sizeof(MqttRxMsg_t), &mqttRxQueue_attributes);
+
+  /* creation of zbeeCmdQueue */
+  zbeeCmdQueueHandle = osMessageQueueNew (64, sizeof(ZbeeCmdMsg_t), &zbeeCmdQueue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -1239,18 +1622,8 @@ void vApplicationMallocFailedHook(void)
 /*********************** для printf ******************************/
 /* PUTCHAR_PROTOTYPE перенесен в logger.c */
 /************************ PWM Fade *************************************/
-/* PWM Fade state — без динамических задач, без malloc */
-typedef struct {
-    bool     active;
-    float    current_duty;
-    float    delta;
-    uint32_t steps_left;
-    int      end_duty;
-    int      cronindex;
-    uint8_t  saved_pid_duty;   /* pwm_out PID до начала fade */
-} FadeState_t;
-
-static FadeState_t fade_state[NUMPIN] = {0};
+/* FadeState_t определён в dtcm_alloc.h — выделяется в DTCM через dtcm_fade_state */
+#define fade_state dtcm_fade_state
 
 /* Запускает (или перезапускает) плавное изменение PWM.
  * pwm_id       — индекс PWM-пина (topin == 5)
@@ -1424,6 +1797,7 @@ void StartConfigTask(void *argument)
           GetOneWireConfig(); // если файл "onewire.ini" существует, открываем
                               // его
           GetPidConfig();     // если файл "pid.ini" существует, открываем его
+          GetZigbeeConfig();  // загружаем конфигурацию Zigbee
 
           InitPin(); // Инициализация пинов
 
@@ -1502,6 +1876,9 @@ void StartConfigTask(void *argument)
         case 6:
           SetPidConfig(); // Сохранение PID конфигурации в "pid.ini"
           break;
+        case 7:
+          SetZigbeeConfig(); // Сохранение Zigbee конфигурации в "zigbee.ini"
+          break;
         default:
           printf("xQueueReceive get wrong data! \r\n");
           break;
@@ -1579,7 +1956,7 @@ void StartWebServerTask(void *argument)
            mif.mac[5]));
 
   struct mg_mgr *mgr =
-      (struct mg_mgr *)pvPortMalloc(sizeof(struct mg_mgr)); // Одноразовый при загрузке, живёт весь runtime
+      (struct mg_mgr *)dtcm_malloc(sizeof(struct mg_mgr)); // Одноразовый при загрузке, живёт весь runtime
   mg_mgr_init(mgr);                                   // Инициализируем менеджер
 
   // Настройка MQTT
@@ -1616,9 +1993,11 @@ void StartWebServerTask(void *argument)
   mg_tcpip_init(mgr, &mif);
 
   MG_INFO(("MAC: %M. Waiting for IP...", mg_print_mac, mif.mac));
+  LOG_MQTT("[BOOT] t=%lu waiting for IP...\r\n", (unsigned long)HAL_GetTick());
   while (mif.state != MG_TCPIP_STATE_READY) {
     mg_mgr_poll(mgr, 0);
   }
+  LOG_MQTT("[BOOT] t=%lu IP ready\r\n", (unsigned long)HAL_GetTick());
 
   {
     uint8_t *ip_bytes = (uint8_t *)&mif.ip;
@@ -1626,7 +2005,23 @@ void StartWebServerTask(void *argument)
     snprintf(g_mac_addr, sizeof(g_mac_addr), "%02X:%02X:%02X:%02X:%02X:%02X", mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]);
   }
 
+  /* Встроенный MQTT-брокер (только если включён в настройках;
+     таблица клиентов выделяется в DTCM один раз) */
+  if (SetSettings.check_mqtt_srv) {
+    mqtt_server_init(mgr, (uint16_t)SetSettings.mqtt_srv_prt);
+    LOG_MQTT("[BOOT] t=%lu mqtt_server_init() done, broker on port %d\r\n",
+             (unsigned long)HAL_GetTick(), SetSettings.mqtt_srv_prt);
+
+    /* Watchdog автовосстановления шлюза SLZB-06p7U: если шлюз не подключился
+     * к брокеру за SLZB_WD_WAIT_MS — перезагружаем его HTTP-запросом.
+     * IP берётся из настроек (Settings → MQTT Server → "SLZB IP");
+     * пустая строка = watchdog выключен. */
+    slzb_watchdog_init(SetSettings.slzb_host);
+  }
+
+  LOG_MQTT("[BOOT] t=%lu calling web_init()\r\n", (unsigned long)HAL_GetTick());
   web_init(mgr);
+  LOG_MQTT("[BOOT] t=%lu web_init() done\r\n", (unsigned long)HAL_GetTick());
 
   MqttMessage_t rxMsg = {0};
   BaseType_t status;
@@ -1660,6 +2055,12 @@ void StartWebServerTask(void *argument)
     uint32_t t_poll = HAL_GetTick();
     mg_mgr_poll(mgr, 0); // Было 10
     t_poll = HAL_GetTick() - t_poll;
+
+    /* Встроенный MQTT-брокер: keepalive-таймауты клиентов (сама проверяет флаг) */
+    mqtt_server_poll();
+    /* Watchdog SLZB-06p7U: автовосстановление связи с шлюзом (сама проверяет,
+       что брокер запущен и host задан) */
+    slzb_watchdog_poll(mgr);
     /* Статический пик времени выполнения mg_mgr_poll */
     {
       static uint32_t s_poll_exec_peak = 0;
@@ -1716,6 +2117,7 @@ void StartWebServerTask(void *argument)
       mg_conn_tls = n_tls;
       mg_conn_mqtt = n_mqtt;
       mg_conn_other = n_other;
+      mg_conn_mqttsrv = mqtt_server_client_count();
       if (active_conns > mg_conn_peak) {
         mg_conn_peak = active_conns;
       }
@@ -1734,8 +2136,41 @@ void StartWebServerTask(void *argument)
         }
     }
 
-    /* Explicit drain: rapidly clear the queue if disconnected to avoid buildup */
-    if (s_conn == NULL || s_conn->is_closing || !mqtt_connected_reported) {
+    /* Обработка исходящих Zigbee-команд */
+    {
+        ZbeeCmdMsg_t zcmd;
+        {
+            uint32_t cur_zbee = uxQueueMessagesWaiting(zbeeCmdQueueHandle);
+            if (cur_zbee > zbee_cmd_peak) {
+                zbee_cmd_peak = cur_zbee;
+            }
+        }
+        while (xQueueReceive(zbeeCmdQueueHandle, &zcmd, 0) == pdPASS) {
+            /* Локальный MQTT-сервер: публикация команд независимо от внешнего брокера */
+            mqtt_server_publish(zcmd.topic, zcmd.payload);
+            if (s_conn != NULL && mqtt_connected_reported) {
+                struct mg_mqtt_opts pub_opts;
+                memset(&pub_opts, 0, sizeof(pub_opts));
+                pub_opts.topic = mg_str(zcmd.topic);
+                pub_opts.message = mg_str(zcmd.payload);
+                pub_opts.qos = s_qos;
+                pub_opts.retain = false;
+                mg_mqtt_pub(s_conn, &pub_opts);
+                LOG_Z2M("zbee: MQTT PUB topic='%s'\r\n", zcmd.topic);
+            } else {
+                LOG_Z2M("zbee: MQTT DROP s_conn=%p connected=%d\r\n",
+                       (void*)s_conn, mqtt_connected_reported);
+            }
+        }
+    }
+
+    /* Explicit drain: rapidly clear the queue if disconnected to avoid buildup.
+     * НЕ дренажим, если работает локальный MQTT-сервер (check_mqtt_srv=1) —
+     * в этом случае у сообщений есть получатель (mqtt_server_publish) даже
+     * без внешнего брокера. Дренаж нужен только когда единственный потребитель —
+     * внешний клиент, и он не подключён. */
+    if (!SetSettings.check_mqtt_srv &&
+        (s_conn == NULL || s_conn->is_closing || !mqtt_connected_reported)) {
       MqttMessage_t drain;
       while (xQueueReceive(mqttQueueHandle, &drain, 0) == pdPASS) {
         /* Drop silently */
@@ -1752,38 +2187,30 @@ void StartWebServerTask(void *argument)
     }
     status = xQueueReceive(mqttQueueHandle, &rxMsg, 0);
     if (status == pdPASS) {
-			printf("[MQTT_Q] cmd=%d dev=%d state=%d\r\n", rxMsg.command,rxMsg.deviceId, rxMsg.state); // Подсветит кто спамит в MQTT.
+			// printf("[MQTT_Q] cmd=%d dev=%d state=%d\r\n", rxMsg.command,rxMsg.deviceId, rxMsg.state);
       /* Защита от повреждённых сообщений в очереди */
       if (rxMsg.deviceId >= NUMPIN && rxMsg.command != 1) {
         printf("MQTT queue: invalid deviceId=%d, cmd=%d — skipped\r\n", rxMsg.deviceId, rxMsg.command);
       } else {
       switch (rxMsg.command) {
       case 1: // DEVICE
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            strcpy(mqtt_topic, "/device/");
-            snprintf(mqtt_payload, sizeof(mqtt_payload), "DEVICE(s)/ACTION=%s", PinsConf[1].sclick);
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
-          }
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          strcpy(mqtt_topic, "/device/");
+          snprintf(mqtt_payload, sizeof(mqtt_payload), "DEVICE(s)/ACTION=%s", PinsConf[1].sclick);
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
         break;
       case 2: // Switch
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            snprintf(mqtt_topic, sizeof(mqtt_topic), "/switch/");
-            snprintf(mqtt_payload, sizeof(mqtt_payload), "ID:%d=%s", rxMsg.deviceId, rxMsg.state ? "ON" : "OFF");
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
-          }
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/switch/");
+          snprintf(mqtt_payload, sizeof(mqtt_payload), "ID:%d=%s", rxMsg.deviceId, rxMsg.state ? "ON" : "OFF");
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
@@ -1791,35 +2218,27 @@ void StartWebServerTask(void *argument)
       case 3: // BUTTON LONG_PRESS
       case 4: // BUTTON SINGLE_CLICK
       case 5: // BUTTON DOUBLE_CLICK
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            snprintf(mqtt_topic, sizeof(mqtt_topic), "/button/");
-            switch (rxMsg.command) {
-            case 3: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].lpress); break;
-            case 4: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick); break;
-            case 5: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].dclick); break;
-            }
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/button/");
+          switch (rxMsg.command) {
+          case 3: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].lpress); break;
+          case 4: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick); break;
+          case 5: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].dclick); break;
           }
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
         break;
       case 6: // SECURITY
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
-            snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick, PinsConf[rxMsg.deviceId].info);
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
-          }
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
+          snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick, PinsConf[rxMsg.deviceId].info);
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
@@ -1828,25 +2247,21 @@ void StartWebServerTask(void *argument)
       case 9: // PWM_TIMER — заменён на send_mqtt_timer_batch()
         break; // no-op: батч обрабатывает всё
       case 8: // OnOff
-        if (SetSettings.txmqttop[0] != '\0' && SetSettings.check_mqtt == 1) {
-          if (check_mqtt_connection(s_conn)) {
-            memset(mqtt_topic, 0, sizeof(mqtt_topic));
-            memset(mqtt_payload, 0, sizeof(mqtt_payload));
-            snprintf(mqtt_topic, sizeof(mqtt_topic), "/onoff/");
-            int written = snprintf(mqtt_payload, sizeof(mqtt_payload),
-                                   "ID=%d/OnOff=%s/%s",
-                                   rxMsg.deviceId,
-                                   PinsConf[rxMsg.deviceId].onoff ? "ON" : "OFF",
-                                   PinsConf[rxMsg.deviceId].info);
-            if (written < 0 || (size_t)written >= sizeof(mqtt_payload)) {
-              printf("[MQTT] payload truncated for deviceId=%d, skipping\r\n",
-                     rxMsg.deviceId);
-              break;
-            }
-            send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-          } else {
-            /* MQTT not connected — состояние логируется однократно в fn_mqtt */
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/onoff/");
+          int written = snprintf(mqtt_payload, sizeof(mqtt_payload),
+                                 "ID=%d/OnOff=%s/%s",
+                                 rxMsg.deviceId,
+                                 PinsConf[rxMsg.deviceId].onoff ? "ON" : "OFF",
+                                 PinsConf[rxMsg.deviceId].info);
+          if (written < 0 || (size_t)written >= sizeof(mqtt_payload)) {
+            printf("[MQTT] payload truncated for deviceId=%d, skipping\r\n",
+                   rxMsg.deviceId);
+            break;
           }
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
         }
@@ -1865,7 +2280,10 @@ void StartWebServerTask(void *argument)
 
           if (now - lsens_tk >= 5000) {
 	  lsens_tk = now;
-            if (s_conn != NULL && mqtt_connected_reported && !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining) {
+            /* Публикуем и при выключенном внешнем брокере — если локальный
+               MQTT-сервер включён (publish_sensor_batch сам разрулит conn==NULL) */
+            if (SetSettings.check_mqtt_srv ||
+                (s_conn != NULL && mqtt_connected_reported && !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining)) {
               publish_sensor_batch(s_conn);
             }
           }
@@ -1877,19 +2295,25 @@ void StartWebServerTask(void *argument)
           uint32_t now = HAL_GetTick();
           if (now - ltim_tk >= 1000) {
               ltim_tk = now;
-              if (s_conn != NULL && mqtt_connected_reported &&
-                  !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining) {
+              /* Публикуем и при выключенном внешнем брокере — если локальный
+                 MQTT-сервер включён (send_mqtt_timer_batch сам разрулит conn==NULL) */
+              if (SetSettings.check_mqtt_srv ||
+                  (s_conn != NULL && mqtt_connected_reported &&
+                   !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining)) {
                   send_mqtt_timer_batch(s_conn);
               }
           }
     }
+
+    /* Проверка таймаутов зондов возможностей zigbee-устройств */
+    zbee_probe_check_timeout();
+    zbee_learn_check_timeout();
 
 
 
     osDelay(1); /* Yield CPU to RTOS, preventing 100% CPU loop starvation */
   }
   mg_mgr_free(mgr);
-  vPortFree(mgr); // парный к pvPortMalloc() на строке инициализации
   /* USER CODE END StartWebServerTask */
 }
 
@@ -1915,30 +2339,77 @@ void StartOutputTask(void *argument)
           output_peak = cur_out;
         }
       }
-      if (data_pin.id >= 0 &&
-          data_pin.id < NUMPIN) { // data_pin.id - это ID Devices а не Switch!
-        switch (data_pin.action) {
-        case 0:
-          HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name,
-                            PinsInfo[data_pin.id].hal_pin, GPIO_PIN_RESET);
-          //					printf("case 0: %d-%d  \r\n",
-          //(int) data_pin.id, (int) data_pin.action);
-          break;
-        case 1:
-          HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name,
-                            PinsInfo[data_pin.id].hal_pin, GPIO_PIN_SET);
-          //					printf("case 1: %d-%d  \r\n",
-          //(int) data_pin.id, (int) data_pin.action);
-          break;
-        case 2:
-          HAL_GPIO_TogglePin(PinsInfo[data_pin.id].gpio_name,
-                             PinsInfo[data_pin.id].hal_pin);
-          //					printf("%d-%d  \r\n", (int)
-          // data_pin.id, (int) data_pin.action);
-          break;
-        default:
-          printf("Invalid action: %d\r\n", data_pin.action);
-          break;
+      if (data_pin.id >= 0 && data_pin.id < (NUMPIN + NUMZBEE)) {
+        if (IsZigbeePin(data_pin.id)) {
+          int zbi = ZbeeIdx(data_pin.id);
+          if (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_SWITCH) {
+            printf("[OUT] SKIP: slot %d is SWITCH, not actuator\r\n", zbi);
+          } else if (ZigbeeConf[zbi].zbee_ieee[0] != '\0' && ZigbeeConf[zbi].onoff) {
+            /* multi-EP команда — отправка на конкретный EP */
+            if (ZigbeeConf[zbi].ep_onoff > 0) {
+              const char *val_str;
+              char valbuf[8];
+              if (ZigbeeConf[zbi].cluster_flags & ZBEE_CL_ONOFF) {
+                val_str = (data_pin.action == 1 || (data_pin.action == 2 && !ZigbeeConf[zbi].state)) ? "1" : "0";
+              } else if (ZigbeeConf[zbi].cluster_flags & ZBEE_CL_DIMMER) {
+                snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
+                val_str = valbuf;
+              } else {
+                val_str = "0";
+              }
+              extern void SendZigbeeEPCommand(const char *ieee, uint8_t ep, uint16_t dp, const char *val);
+              SendZigbeeEPCommand(ZigbeeConf[zbi].zbee_ieee,
+                                    ZigbeeConf[zbi].zbee_endpoint,
+                                    ZigbeeConf[zbi].ep, val_str);
+            } else {
+              /* Стандартная ZCL-команда */
+              const char *cmd;
+              if (data_pin.action == 2) {
+                /* TOGGLE — инвертируем текущее состояние */
+                cmd = (ZigbeeConf[zbi].state) ? "OFF" : "ON";
+              } else {
+                cmd = (data_pin.action == 1) ? "ON" : "OFF";
+              }
+              uint8_t flags = ZigbeeConf[zbi].cluster_flags;
+              if (flags & ZBEE_CL_ONOFF) {
+                SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                                  ZigbeeConf[zbi].zbee_endpoint,
+                                  6, ZBEE_ATTR_ONOFF, cmd);
+              }
+              if (flags & ZBEE_CL_DIMMER) {
+                char valbuf[8];
+                snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
+                SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                                  ZigbeeConf[zbi].zbee_endpoint,
+                                  8, ZBEE_ATTR_DIMMER, valbuf);
+              }
+              if (flags & ZBEE_CL_COLOR) {
+                char valbuf[8];
+                snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
+                SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
+                                  ZigbeeConf[zbi].zbee_endpoint,
+                                  768, ZBEE_ATTR_COLOR, valbuf);
+              }
+            }
+          }
+        } else {
+          switch (data_pin.action) {
+          case 0:
+            HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name,
+                              PinsInfo[data_pin.id].hal_pin, GPIO_PIN_RESET);
+            break;
+          case 1:
+            HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name,
+                              PinsInfo[data_pin.id].hal_pin, GPIO_PIN_SET);
+            break;
+          case 2:
+            HAL_GPIO_TogglePin(PinsInfo[data_pin.id].gpio_name,
+                               PinsInfo[data_pin.id].hal_pin);
+            break;
+          default:
+            printf("Invalid action: %d\r\n", data_pin.action);
+            break;
+          }
         }
       } else {
         printf("Invalid pin number: %d\r\n", data_pin.id);
@@ -1961,7 +2432,8 @@ void StartCronTask(void *argument)
   /* USER CODE BEGIN StartCronTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
   init_offline_time();
-  static lwdtc_cron_ctx_t cron_ctxs[NUMTASK];
+  /* cron_ctxs выделяется в DTCM через dtcm_cron_ctxs (см. dtcm_alloc.h) */
+  lwdtc_cron_ctx_t *cron_ctxs = dtcm_cron_ctxs;
   int i = 0;
   char str[sizeof(dbCrontxt[0].activ)] = {0};
   int cfg_tasks = NUMTASK; // Количество возможно настроенных cron задач
@@ -2014,6 +2486,11 @@ void StartCronTask(void *argument)
         printf("[SYSTEM] Reset CSR=0x%08lX\r\n", reset_csr_value);
         printf("[SYSTEM] Reset flags: %s\r\n", reset_reason_str);
         printf("[SYSTEM] Reset reason: %s (CSR=0x%08lX)\r\n", reset_reason_str, reset_csr_value);
+        // printf("[SYSTEM][BOOT] FW=%s NUMPIN=%d NUMZBEE=%d\r\n",
+        //        FW_VERSION, NUMPIN, NUMZBEE);
+        // printf("[SYSTEM][BOOT] Compiled: %s %s\r\n", __DATE__, __TIME__);
+        // printf("[SYSTEM][BOOT] sizeof(ZigbeeConf)=%d\r\n",
+        //        (int)sizeof(ZigbeeVirtualPin));
       }
 
       if (cronetime != cronetime_old) {
@@ -2063,7 +2540,7 @@ void StartCronTask(void *argument)
         }
         // Проверка CRON выражений
         i = 0;
-        while (i < LWDTC_ARRAYSIZE(cron_ctxs)) {
+        while (i < NUMTASK) {
           if (lwdtc_cron_is_valid_for_time(&timez_copy, cron_ctxs, &i) == lwdtcOK) {
             taskENTER_CRITICAL();
             memcpy(str, dbCrontxt[i].activ, sizeof(str) - 1);
@@ -2186,6 +2663,10 @@ void StartInputTask(void *argument)
         }
       }
     }
+
+    /* Process Zigbee virtual buttons (RAW mode state machine) */
+    zbee_vbtn_tick();
+
     osDelay(10);
   }
   /* USER CODE END StartInputTask */
@@ -2260,7 +2741,7 @@ void StartEncoderTask(void *argument)
 	                                       if (val > 100) val = 100;
 	                                       PinsConf[idpwm].dvalue = (int8_t)val;
 	                                       mark_slice_dirty(&g_ver_encoder);
-                                       mark_slice_dirty(&g_ver_pins);
+	                                       mark_slice_dirty(&g_ver_pins);
 
 	                                       /* Применяем к железу только если включено */
 	                                       if (PinsConf[id].onoff != 0) {
@@ -2813,7 +3294,7 @@ void StartSecurityTask(void *argument)
           HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
 
       if (current_state != PinsConf[i].prvstate) {
-        if ((currtime - PinsConf[i].deb_tm) >= DEBOUNCE_DELAY) {
+        if ((currtime - sec_deb_tm[i]) >= DEBOUNCE_DELAY) {
           bool trigger_event = false;
 
           switch (PinsConf[i].ptype) {
@@ -2842,7 +3323,7 @@ void StartSecurityTask(void *argument)
           }
 
           if (trigger_event) { // Если обнаружено срабатывание
-            if ((currtime - PinsConf[i].lasttrg) >= 1000) {
+            if ((currtime - sec_lasttrg[i]) >= 1000) {
               if (PinsConf[i].onoff && PinsConf[i].sclick[0] != '\0' &&
                   strcmp(PinsConf[i].sclick, "None") != 0) {
                 action_handler(i, PinsConf[i].sclick, "Security action");
@@ -2850,17 +3331,12 @@ void StartSecurityTask(void *argument)
                 mqtt_queue_send_safe(6, i, current_state, 0);
               }
 
-              if (PinsConf[i].onoff && PinsConf[i].send_sms[0] != '\0' &&
-                  strcmp(PinsConf[i].send_sms, "None") != 0) {
-                send_sms(i);
-              }
-
-              PinsConf[i].lasttrg = currtime;
+              sec_lasttrg[i] = currtime;
             }
           }
           PinsConf[i].prvstate = current_state;
           PinsConf[i].state = current_state;
-          PinsConf[i].deb_tm = currtime;
+          sec_deb_tm[i] = currtime;
         }
       }
     }
@@ -3019,9 +3495,12 @@ void StartPIDTask(void *argument)
 * @param argument: Not used
 * @retval None
 */
-/* Функция диагностики памяти с delta-отслеживанием */
+/* Функция диагностики памяти с delta-отслеживанианием */
 static void heap_diagnostic(void)
 {
+    /* Пропускаем отчёт если категория SYSTEM отключена в фильтре логов */
+    if (!(g_log_filter_mask & LOG_MASK_SYSTEM)) return;
+
     static unsigned last_free = 0;
     static unsigned last_min_ever = 0;
     static uint32_t last_malloc_fail = 0;
@@ -3029,6 +3508,7 @@ static void heap_diagnostic(void)
     static uint32_t last_mqtt_rx_peak = 0;
     static uint32_t last_output_peak = 0;
     static uint32_t last_usb_peak = 0;
+    static uint32_t last_zbee_cmd_peak = 0;
     static uint32_t last_mg_conn_peak = 0;
     static uint32_t last_mg_poll_gap_peak = 0;
     static uint32_t last_mg_poll_gap_over_50ms_cnt = 0;
@@ -3051,6 +3531,7 @@ static void heap_diagnostic(void)
         mqtt_rx_peak != last_mqtt_rx_peak ||
         output_peak != last_output_peak ||
         usb_peak != last_usb_peak ||
+        zbee_cmd_peak != last_zbee_cmd_peak ||
         mg_conn_peak != last_mg_conn_peak ||
         mg_poll_gap_peak != last_mg_poll_gap_peak ||
         mg_poll_gap_over_50ms_cnt != last_mg_poll_gap_over_50ms_cnt ||
@@ -3058,7 +3539,7 @@ static void heap_diagnostic(void)
         req_encoder != last_req_encoder ||
         req_api != last_req_api) {
 
-        printf("\r\n=== DIAGNOSTIC REPORT ===\r\n");
+        printf("\r\n=== DIAGNOSTIC REPORT [FW:%s] ===\r\n", FW_VERSION);
         if (first_run) {
             printf("FreeRTOS free now:  %u B\r\n", current_free);
             printf("FreeRTOS min ever:  %u B\r\n", current_min);
@@ -3079,13 +3560,35 @@ static void heap_diagnostic(void)
         }
 
         printf("Malloc fail count:  %lu\r\n", current_malloc_fail);
+
+        size_t dtcm_used  = dtcm_alloc_get_used();
+        size_t dtcm_total = dtcm_alloc_get_total();
+        size_t dtcm_pct   = dtcm_total ? (dtcm_used * 100 / dtcm_total) : 0;
+
+        printf("[SYSTEM] DTCM pool used:     %u B / %u B (%u%%)\r\n",
+               (unsigned)dtcm_used, (unsigned)dtcm_total, (unsigned)dtcm_pct);
+        printf("[SYSTEM] DTCM pool free:     %u B\r\n",
+               (unsigned)dtcm_alloc_get_free());
+        printf("[SYSTEM] DTCM alloc fails:   %u\r\n",
+               (unsigned)dtcm_alloc_get_fail_count());
+
+        size_t itcm_used  = (size_t)(_eitcm - _sitcm);
+        size_t itcm_total = 16 * 1024;
+        size_t itcm_pct   = itcm_used * 100 / itcm_total;
+        printf("[SYSTEM] ITCM code used:     %u B / %u B (%u%%)\r\n",
+               (unsigned)itcm_used, (unsigned)itcm_total, (unsigned)itcm_pct);
+        printf("[SYSTEM] ITCM code free:     %u B\r\n",
+               (unsigned)(itcm_total - itcm_used));
+
         printf("MQTT TX queue peak: %lu / 32\r\n", mqtt_tx_peak);
-        printf("MQTT RX queue peak: %lu / 4\r\n", mqtt_rx_peak);
-        printf("Output queue peak:  %lu / 16\r\n", output_peak);
+        printf("MQTT RX queue peak: %lu / 32\r\n", mqtt_rx_peak);
+        printf("Output queue peak:  %lu / 64\r\n", output_peak);
         printf("USB queue peak:     %lu / 16\r\n", usb_peak);
-        printf("Mongoose conns peak: %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu]\r\n",
+        printf("Zbee cmd peak:      %lu / 64\r\n", zbee_cmd_peak);
+        printf("Mongoose conns peak: %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu MQTTSRV=%lu]\r\n",
                mg_conn_peak, mg_conn_cur,
-               mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other);
+               mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other,
+               (unsigned long)mg_conn_mqttsrv);
         printf("Mongoose gap peak:   %lu ms (starvation cnt: %lu)\r\n", mg_poll_gap_peak, (unsigned long)mg_poll_gap_over_50ms_cnt);
         printf("HTTP(s) Requests:   Total=%lu, API=%lu, Encoder=%lu\r\n",
                (unsigned long)req_total, (unsigned long)req_api, (unsigned long)req_encoder);
@@ -3098,6 +3601,7 @@ static void heap_diagnostic(void)
         last_mqtt_rx_peak = mqtt_rx_peak;
         last_output_peak = output_peak;
         last_usb_peak = usb_peak;
+        last_zbee_cmd_peak = zbee_cmd_peak;
         last_mg_conn_peak = mg_conn_peak;
         last_mg_poll_gap_peak = mg_poll_gap_peak;
         last_mg_poll_gap_over_50ms_cnt = mg_poll_gap_over_50ms_cnt;
@@ -3107,6 +3611,31 @@ static void heap_diagnostic(void)
     }
 }
 /* USER CODE END Header_StartDgnTask */
+/* ═══ ITCM runtime integrity check ═══
+ * Сравнивает ITCM-код с загрузочным образом во Flash (тот же принцип, что
+ * проверка 17a при старте). Ловит порчу ITCM в рантайме wild-записями,
+ * которая проявлялась как HardFault UNDEFINSTR (PC=0x24, dtcm_malloc).
+ * Возвращает число несовпавших слов (макс. 8), details первого несовпадения. */
+static uint32_t itcm_check_words(uint32_t *first_idx, uint32_t *exp_word, uint32_t *got_word)
+{
+  const uint32_t *flash_src = (const uint32_t *)&_sitcm_load;
+  const uint32_t *itcm_dst  = (const uint32_t *)_sitcm;
+  uint32_t n = (uint32_t)(_eitcm - _sitcm) / 4;
+  uint32_t errors = 0;
+  for (uint32_t i = 0; i < n; i++) {
+    if (flash_src[i] != itcm_dst[i]) {
+      if (errors == 0 && first_idx != NULL) {
+        *first_idx = i;
+        if (exp_word) *exp_word = flash_src[i];
+        if (got_word) *got_word = itcm_dst[i];
+      }
+      errors++;
+      if (errors >= 8) break;
+    }
+  }
+  return errors;
+}
+
 void StartDgnTask(void *argument)
 {
   /* USER CODE BEGIN StartDgnTask */
@@ -3153,7 +3682,23 @@ void StartDgnTask(void *argument)
 
       heap_diagnostic();
 
-		int printed_header = 0;
+      /* Проверка целостности ITCM в рантайме (подстраховка для DMA).
+       * MPU теперь ловит запись из CPU-кода мгновенно (MemManage Fault),
+       * но DMA не проходит через MPU — эта проверка ловит DMA-порчу.
+       * Без reset: если MPU не сработал, значит это DMA, и нужен лог
+       * для диагностики, а не слепой ребут-цикл. */
+      {
+        uint32_t fi = 0, fe = 0, fg = 0;
+        uint32_t itcm_errs = itcm_check_words(&fi, &fe, &fg);
+        if (itcm_errs != 0) {
+          printf("\r\n*** ITCM CORRUPTED (DMA?): %lu words, first @ITCM+0x%08lX (flash=0x%08lX itcm=0x%08lX) ***\r\n",
+                 (unsigned long)itcm_errs, (unsigned long)(fi * 4u),
+                 (unsigned long)fe, (unsigned long)fg);
+          printf("*** MPU did not catch this — likely DMA wild write ***\r\n");
+        }
+      }
+
+      int printed_header = 0;
 
 		for (size_t i = 0; i < num_tasks; i++) {
 			if (tasks[i].handle_ptr && *(tasks[i].handle_ptr)) {
@@ -3205,6 +3750,27 @@ void StartDgnTask(void *argument)
 			(uint32_t) xPortGetMinimumEverFreeHeapSize());
 			printf("Malloc fail count: %lu\r\n", malloc_fail_count);
 
+			{
+				size_t dtcm_used  = dtcm_alloc_get_used();
+				size_t dtcm_total = dtcm_alloc_get_total();
+				size_t dtcm_pct   = dtcm_total ? (dtcm_used * 100 / dtcm_total) : 0;
+				printf("\r\n""=== DTCM POOL ===\r\n");
+				printf("Used:  %u B / %u B (%u%%)\r\n",
+				       (unsigned)dtcm_used, (unsigned)dtcm_total, (unsigned)dtcm_pct);
+				printf("Free:  %u B\r\n", (unsigned)dtcm_alloc_get_free());
+				printf("Fails: %u\r\n", (unsigned)dtcm_alloc_get_fail_count());
+			}
+
+			{
+				size_t itcm_used  = (size_t)(_eitcm - _sitcm);
+				size_t itcm_total = 16 * 1024;
+				size_t itcm_pct   = itcm_used * 100 / itcm_total;
+				printf("\r\n""=== ITCM CODE ===\r\n");
+				printf("Used:  %u B / %u B (%u%%)\r\n",
+				       (unsigned)itcm_used, (unsigned)itcm_total, (unsigned)itcm_pct);
+				printf("Free:  %u B\r\n", (unsigned)(itcm_total - itcm_used));
+			}
+
 			printf("\r\n""=== QUEUE PEAKS ===\r\n");
 			printf("MQTT TX peak:  %lu / 32\r\n", mqtt_tx_peak);
 			printf("MQTT RX peak:  %lu / 4\r\n", mqtt_rx_peak);
@@ -3212,9 +3778,10 @@ void StartDgnTask(void *argument)
 			printf("USB peak:      %lu / 16\r\n", usb_peak);
 
 			printf("\r\n""=== MONGOOSE PEAKS ===\r\n");
-			printf("Conns peak:    %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu]\r\n",
+			printf("Conns peak:    %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu MQTTSRV=%lu]\r\n",
 			       mg_conn_peak, mg_conn_cur,
-			       mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other);
+			       mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other,
+			       (unsigned long)mg_conn_mqttsrv);
 			printf("Poll gap peak: %lu ms (starvation cnt: %lu)\r\n", mg_poll_gap_peak, (unsigned long)mg_poll_gap_over_50ms_cnt);
 
 			printf("\r\n""=== RUNTIME ===\r\n");
@@ -3262,12 +3829,13 @@ void StartLoggerTask(void *argument)
                   int total = prefix_len + msg_len;
                   /* Сборка в один буфер для одной неблокирующей передачи */
                   char tx_buf[256];
-                  if (total < (int)sizeof(tx_buf)) {
-                      memcpy(tx_buf, cat_prefixes[cat], prefix_len);
-                      memcpy(tx_buf + prefix_len, msg, msg_len);
-                      // Bounded timeout: 200ms хватает на ~2300 байт на 115200 bps
-                      HAL_UART_Transmit(&huart3, (uint8_t*)tx_buf, total, 200);
-                  }
+if (total < (int)sizeof(tx_buf)) {
+                        memcpy(tx_buf, cat_prefixes[cat], prefix_len);
+                        memcpy(tx_buf + prefix_len, msg, msg_len);
+                        logger_ring_push(tx_buf, total); /* копия для веб-вьюера */
+                        // Bounded timeout: 200ms хватает на ~2300 байт на 115200 bps
+                        HAL_UART_Transmit(&huart3, (uint8_t*)tx_buf, total, 200);
+                    }
               }
           }
       } else {
@@ -3301,9 +3869,30 @@ void MPU_Config(void)
   MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
+
+  /* Region 1: ITCM Read-Only — ловушка для «дикой записи».
+   * OTA-переменные перенесены в .noinit_ram (SRAM), в ITCM остался
+   * только .itcm код → весь регион можно защитить. Любая запись
+   * вызовет MemManage Fault с PC виновника в стек-фрейме и MMFAR
+   * (адрес записи). Execute разрешён — здесь горячий код. */
+  MPU_InitStruct.Number = MPU_REGION_NUMBER1;
+  MPU_InitStruct.BaseAddress = 0x00000000;
+  MPU_InitStruct.Size = MPU_REGION_SIZE_16KB;
+  MPU_InitStruct.SubRegionDisable = 0x0;
+  MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL0;
+  MPU_InitStruct.AccessPermission = MPU_REGION_PRIV_RO_URO;   /* Read-Only */
+  MPU_InitStruct.DisableExec = MPU_INSTRUCTION_ACCESS_ENABLE; /* Execute OK */
+  MPU_InitStruct.IsShareable = MPU_ACCESS_NOT_SHAREABLE;
+  MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
+  MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
+  HAL_MPU_ConfigRegion(&MPU_InitStruct);
+
   /* Enables the MPU */
   HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
 
+  /* Включаем исключение MemManage: без SHCSR.MEMFAULTENA нарушения
+   * доступа эскалируются в HardFault, минуя MemManage_Handler. */
+  SCB->SHCSR |= SCB_SHCSR_MEMFAULTENA_Msk;
 }
 
 /**

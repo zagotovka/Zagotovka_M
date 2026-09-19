@@ -1,0 +1,3 @@
+../Core/Src/freertos.c:63:13:sof_putchar	8	static
+../Core/Src/freertos.c:71:13:sof_puts	8	static
+../Core/Src/freertos.c:78:6:vApplicationStackOverflowHook	24	static,ignoring_inline_asm

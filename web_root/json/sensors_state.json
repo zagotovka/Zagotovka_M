@@ -1,0 +1,12 @@
+{
+  "ds18b20": [
+    {"addr": "2818BC75D0013C63", "temp": 22.5, "valid": true},
+    {"addr": "28B63A75D0013C7B", "temp": 21.8, "valid": true},
+    {"addr": "2849F575D0013C60", "temp": 23.1, "valid": true},
+    {"addr": "28F58575D0013C77", "temp": 20.4, "valid": true}
+  ],
+  "dht22": [
+    {"id": 22, "temp": 24.0, "humidity": 55},
+    {"id": 46, "temp": 22.5, "humidity": 48}
+  ]
+}

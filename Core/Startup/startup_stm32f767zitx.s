@@ -43,6 +43,12 @@ defined in linker script */
 .word  _sbss
 /* end address for the .bss section. defined in linker script */
 .word  _ebss
+/* start address for ITCM load image in Flash. defined in linker script */
+.word  _sitcm_load
+/* start address for .itcm section in ITCM RAM. defined in linker script */
+.word  _sitcm
+/* end address for .itcm section in ITCM RAM. defined in linker script */
+.word  _eitcm
 /* stack used for SystemInit_ExtMemCtl; always internal RAM used */
 
 /**
@@ -79,6 +85,23 @@ LoopCopyDataInit:
   adds r4, r0, r3
   cmp r4, r1
   bcc CopyDataInit
+
+/* Copy the .itcm section from Flash to ITCM RAM */
+  ldr r0, =_sitcm
+  ldr r1, =_eitcm
+  ldr r2, =_sitcm_load
+  movs r3, #0
+  b LoopCopyItcmInit
+
+CopyItcmInit:
+  ldr r4, [r2, r3]
+  str r4, [r0, r3]
+  adds r3, r3, #4
+
+LoopCopyItcmInit:
+  adds r4, r0, r3
+  cmp r4, r1
+  bcc CopyItcmInit
 
 /* Zero fill the bss segment. */
   ldr r2, =_sbss

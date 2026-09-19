@@ -553,19 +553,23 @@ const ArrayCron = ({ d, index }) => {
                   </div>
                 </div>
               `
-      : html`<div class="flex items-center justify-center p-8 text-slate-500 font-medium">No cron jobs available</div>`}
+      : html`<div class="flex items-center justify-center p-8 text-slate-500 font-medium">${language === 'ru' ? 'Нет доступных таймеров' : 'No cron jobs available'}</div>`}
         </div>
         <div class="w-full flex justify-between items-center mb-4 mt-2 bg-white/40 backdrop-blur-md border border-white/60 shadow-sm p-4 rounded-2xl">
           <button
             class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
             onclick=${() => setShowHelp(!showHelp)}
           >
-            ${showHelp ? 'Hide Help' : 'Show Help'}
+            ${showHelp
+      ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help')
+      : (language === 'ru' ? 'Показать справку' : 'Show Help')}
           </button>
           <div class="font-semibold text-slate-600 tracking-wide">
             ${varcron && (varcron.length - visibleCrons > 0)
-      ? `Still available: ${varcron.length - visibleCrons} cron jobs`
-      : 'No available: cron jobs!'}
+      ? (language === 'ru'
+          ? `Ещё доступно: ${varcron.length - visibleCrons} таймер(ов)`
+          : `Still available: ${varcron.length - visibleCrons} cron jobs`)
+      : (language === 'ru' ? 'Нет доступных таймеров!' : 'No available: cron jobs!')}
           </div>
           <div class="flex gap-2">
             ${varcron && (visibleCrons < varcron.length)
@@ -573,7 +577,7 @@ const ArrayCron = ({ d, index }) => {
                   <button
                     class="bg-emerald-500 hover:bg-emerald-600 shadow-md text-white font-black text-xl w-10 h-10 rounded-full transition-transform hover:scale-110 active:scale-95 flex items-center justify-center pb-1 shadow-emerald-500/30"
                     onclick=${addCron}
-                    title="Add Cron"
+                    title=${language === 'ru' ? 'Добавить таймер' : 'Add Cron'}
                   >+</button>
                 `
       : null}
@@ -582,7 +586,7 @@ const ArrayCron = ({ d, index }) => {
                   <button
                     class="bg-rose-500 hover:bg-rose-600 shadow-md text-white font-black text-xl w-10 h-10 rounded-full transition-transform hover:scale-110 active:scale-95 flex items-center justify-center pb-1 shadow-rose-500/30"
                     onclick=${deleteCron}
-                    title="Remove Cron"
+                    title=${language === 'ru' ? 'Удалить таймер' : 'Remove Cron'}
                   >-</button>
                 `
       : null}

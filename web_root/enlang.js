@@ -54,7 +54,8 @@ export const enencoder = [
   'On/Off - Enable or disable the encoder handler.', // 9
   'Action - The Edit button allows you to access the encoder settings menu.', // 10
   'PWM Frequency - PWM frequency of the controlled device (in Hertz).', // 11
-  'Resolution (steps) - Maximum number of steps from 0 to 100% for the PWM device.' // 12
+  'Resolution (steps) - Maximum number of steps from 0 to 100% for the PWM device.', // 12
+  'Zigbee - Bind to a Zigbee dimmer for automatic brightness control.' // 13
 ];
 
 export const enlangeditbutton = [
@@ -156,7 +157,14 @@ export const enlangsettings = [
   'Day Length - Duration of daylight, calculated automatically based on coordinates and current date.', // 22
   'Next full moon - Date and time of the next full moon, calculated automatically.', // 23
   'Date - Date for offline mode in dd.mm.yy format. Used when there is no access to the NTP server. Example: 15.03.25', // 24
-  'Time - Time for offline mode in hh:mm:ss format. Used when there is no access to the NTP server. Example: 14:30:00' // 25
+  'Time - Time for offline mode in hh:mm:ss format. Used when there is no access to the NTP server. Example: 14:30:00', // 25
+  'RX Z2M topic - Zigbee2MQTT topic prefix. Default: zigbee2mqtt. The device subscribes to {prefix}/data/... and publishes commands to {prefix}/cmd/.... Example: zigbee2mqtt', // 26
+  'MQTT Server - Experimental built-in MQTT broker. Limitations: maximum 6 clients, QoS 0 only, no retained messages, LWT or TLS. Do not mix it with the MQTT client on the same port. Settings changes require a device reboot.', // 27
+  'Port - Built-in MQTT server port. Default: 1884. Must not match the web interface port (8000/8443), otherwise the server will not start.', // 28
+  'Max clients - Maximum number of simultaneously connected broker clients (1-6). The firmware clamps this value regardless of user input.', // 29
+  'User - Username for connecting to the built-in broker. Leave empty if authentication is not required.', // 30
+  'Password - Password for connecting to the built-in broker. Leave empty if authentication is not required.', // 31
+  'SLZB IP - IP address of the SLZB-06p7U gateway for the auto-recovery watchdog. If the gateway does not connect to the broker within 40 seconds, the device will reboot it via its web API (no more than once per minute). IPv4 only, example: 192.168.1.115. Empty = watchdog disabled.' // 32
 ];
 
 export const enlangsettingsmap = {
@@ -269,7 +277,7 @@ export const enlangpid = [
   'PWM Pin - The PWM pin you selected on the "Select pin" page.', // 2
   'Sel. sensor - Specify one of the two types (DS18B20/DHT22) of temperature sensors.', // 3
   'Dev. ser. number - Serial number of the selected DS18B20 sensor (from the "OneWire pin" page).', // 4
-  'Presets - Select the preset that best matches the desired temperature and timing parameters.', // 5
+  'Presets - A ready-made set of settings for your device: warm floor, aquarium, incubator, refrigerator, etc. See the help under the table ("How does it work? Help" button) to learn how to choose.', // 5
   'T set. - Set the target temperature that the PID controller should maintain.', // 6
   'T cur. - Current temperature of the selected sensor.', // 7
   'Duty - Current PWM value.', // 8
@@ -278,3 +286,4 @@ export const enlangpid = [
   'Action - Button to enter the PID controller settings menu.', // 11
   'Auto tune - Automatic tuning of PID coefficients.' // 12
 ];
+

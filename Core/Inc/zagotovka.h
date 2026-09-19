@@ -22,6 +22,7 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 
+#include "version_gen.h"
 #define BUFFER_SIZE 10000 /* max Button = 9835 символов, это не точно! */
 #define SECURITY_BODY_MAX 4096U /* max body для handle_security_set (heap) */
 #define ENTER_CRITICAL() taskENTER_CRITICAL()
@@ -38,14 +39,26 @@ extern struct dbPinsConf PinsConf[NUMPIN];
 extern struct dbCron dbCrontxt[NUMTASK];
 extern struct dbSettings SetSettings;
 extern const char *s_json_header;
-extern struct dbPinToPin PinsLinks[NUMPINLINKS];
-void processPins(uint8_t i, uint8_t action);
+extern struct dbPinToPin *PinsLinks;  /* выделяется в DTCM через dtcm_pinslinks (main) */
+void processPins(uint16_t i, uint8_t action);
 
 void log_headers(const char *headers);
 /******************** Zerg section ****************************/
 // Статическая проверка на этапе компиляции
 #define STATIC_ASSERT(COND, MSG) typedef char static_assertion_##MSG[(COND) ? 1 : -1]
 #define BACKUP_OFFSET (((sizeof(HTTPSsettings) + 3) / 4) * 4) // Округление вверх до кратного 4
+/*
+ * ВНИМАНИЕ (совместимость между поколениями прошивок):
+ * Bank A и Bank B могут содержать РАЗНЫЕ версии прошивки сколько угодно
+ * долго. Обе версии читают/пишут ОДНУ И ТУ ЖЕ структуру HTTPSsettings
+ * в Flash-секторе 11. Если старый код (оставшийся в другом банке или
+ * в непереприошенном bootloader) не знает о новых полях — он трактует
+ * эти байты как соседние/padding и может затереть их при следующей записи.
+ *
+ * Правило: менять эту структуру ТОЛЬКО добавлением полей в конец,
+ * синхронно и байт-в-байт одинаково в Core/Inc/zagotovka.h и
+ * Bootloader/.../main.c. Не переставлять и не менять смысл существующих байт.
+ */
 typedef struct __attribute__((packed)) {
     uint32_t magic;          // Магическое значение для проверки валидности
     uint32_t crc;            // Контрольная сумма
@@ -58,12 +71,26 @@ typedef struct __attribute__((packed)) {
     uint32_t timeout;
     uint8_t retry_cnt;
     uint8_t connection_mode;
-    uint8_t version;    // Номер версии настроек (0-94)
-    uint8_t padding[1]; // Остаток для выравнивания чтобы размер стал 2728 байт (кратен 4)
-} HTTPSsettings; // ~11КБ
+    uint8_t ota_state;       // 0=нет данных, 1=пробная загрузка, 2=запрошен ручной откат,
+                             // 3=подтверждено, 4=автоматический откат (см. fw_meta.h)
+    uint8_t version;         // Номер версии настроек (0-94)
+    uint8_t ota_active_bank; // 0=Bank A (по умолчанию), 1=Bank B
+    uint8_t ota_pending;     // 1=есть незавершённое обновление
+    uint8_t ota_boot_retries; // счётчик перезапусков для OTA
+    uint8_t ota_prev_active_bank;    // банк, активный ДО текущего OTA-цикла
+    char    ota_bank_a_version[16];  // последняя подтверждённая версия в Bank A
+    char    ota_bank_b_version[16];  // последняя подтверждённая версия в Bank B
+} HTTPSsettings;
 
 // Проверка, что размер структуры не превышает размер сектора (256 КБ)
 STATIC_ASSERT(sizeof(HTTPSsettings) <= 256 * 1024, structure_size_exceeds_flash_sector);
+
+// Проверка, что размер структуры кратен 4 байтам — write_flash_data() и
+// HAL_FLASH_Program(..., FLASH_TYPEPROGRAM_WORD, ...) требуют этого строго.
+// Структура packed, поэтому компилятор сам не добивает выравнивание —
+// при добавлении/удалении полей проверяйте вручную (или см. padding[] ниже,
+// если ассерт вдруг сработает — верните недостающие байты туда).
+STATIC_ASSERT(sizeof(HTTPSsettings) % 4 == 0, structure_size_not_word_aligned);
 
 // Определяем функции доступа к полям настроек
 bool https_get_domain(char *domain, size_t max_len);
@@ -100,6 +127,8 @@ bool reset_to_defaults(void);
 bool backup_settings(void);
 bool restore_from_backup(void);
 
+const HTTPSsettings *get_valid_settings(void);
+bool update_and_write_settings(HTTPSsettings *settings);
 /****************** End Zerg section **************************/
 
 /******************** moon ****************************/
@@ -119,6 +148,7 @@ extern struct mg_connection * volatile s_conn;
 
 char* get_mqtt_url(void);
 char* get_mqtt_topic(void);
+const char* get_rxzbtop(void);
 void set_mqtt_url(const char* url);
 void set_mqtt_topic(const char* topic);
 
@@ -132,7 +162,7 @@ typedef struct {
     uint8_t owflag;
     uint8_t temp_cnt;
 } onewire_config_t;
-extern onewire_config_t ow_conf[MAX_DS18B20_P + MAX_DHT22_P];
+extern onewire_config_t *ow_conf;  /* выделяется в DTCM в zagotovka_dtcm_init() */
 
 /****************** End global_vars **************************/
 void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf, int num_pins);
@@ -140,19 +170,45 @@ void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm);
 
 void handle_pintopin_get(struct mg_connection *c);
 
-void handle_select_get(struct mg_connection *c);
+void handle_select_get(struct mg_connection *c, long offset, long limit);
 void handle_select_set(struct mg_connection *c, struct mg_http_message *hm);
 
 void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf, uint8_t num_pins);
 
 void handle_switch_get(struct mg_connection *c);
 void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_get(struct mg_connection *c, long offset, long limit);
+void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_enable(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_rescan(struct mg_connection *c, struct mg_http_message *hm);
+void SendZigbeeReadProbe(const char *ieee, uint8_t ep);
+void SendZigbeeReadProbeAllEndpoints(const char *ieee);
+void SendZigbeeReadProbeInteractive(const char *ieee);
+void zbee_probe_check_timeout(void);
+void zbee_learn_check_timeout(void);
+void handle_zigbee_learn_status(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_learn_start(struct mg_connection *c, struct mg_http_message *hm);
+bool zbee_is_valid_ieee(const char *s);
+
+void calc_display_id(int parent_id, int zbee_slot, int trigger_index,
+                     char *out, size_t out_size);
+void calc_zigbee_display_id(int index, char *out, size_t out_size);
+
+/* Helper: check if payload is a raw press/release word */
+int is_raw_payload(const char *payload);
+
+/* Cluster flags <-> JSON array conversion */
+uint8_t clusters_json_to_flags(const char *json_str);
+int clusters_flags_to_json(uint8_t flags, char *buf, size_t buflen);
 void gen_switch_json(const struct dbPinsInfo *pins_info,
 		const struct dbPinsConf *pins_conf, int num_pins, char *buffer,
 		int buffer_size);
 void parse_switch_json(char* json, struct dbPinsConf* PinsConf, const struct dbPinsInfo* PinsInfo, int count);
 
-void handle_button_get(struct mg_connection *c);
+void handle_button_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm);
 void gen_button_json(const struct dbPinsInfo *pins_info, struct dbPinsConf *pins_conf, int num_pins, char *buffer, int buffer_size);
 void parse_button_json(char* json, struct dbPinsConf* PinsConf,const struct dbPinsInfo* PinsInfo, int count);
@@ -165,7 +221,7 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info, const struct dbPinsCon
 void parse_encoder_json(const char* json, struct dbPinsConf* PinsConf, struct dbPinToPin* PinsLinks, struct dbPinsInfo* PinsInfo, uint8_t count);
 
 /* ─── PID Controller ─── */
-extern dbPidConf PidConf[PID_MAX_SLOTS];
+extern dbPidConf *PidConf;  /* выделяется в DTCM через dtcm_pid_conf */
 
 void handle_pid_get(struct mg_connection *c);
 void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm);
@@ -199,6 +255,7 @@ void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm);
 void gen_mysett_json(const struct dbSettings *settings, char *buffer, int buffer_size);
 void parse_mysett_json(char *json_string, struct dbSettings *settings);
 void mysett_cache_reload(void);
+void zagotovka_dtcm_init(void);
 
 void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm, struct dbPinToPin PinsLinks[NUMPINLINKS]);
 
@@ -228,6 +285,11 @@ void handle_security_set(struct mg_connection *c, struct mg_http_message *hm);
 void parse_sim800l_json(const char *buffer);
 
 void mqtt_message_handler(const char* topic, const char* payload);
+void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
+                       uint16_t cluster, uint8_t attribute,
+                       const char *json_cmd);
+void SendZigbeeEPCommand(const char *zbee_ieee, uint8_t endpoint,
+                           uint16_t dp, const char *val);
 
 void action_handler(uint8_t button_id, const char* action_str, const char* press_type);
 
@@ -290,21 +352,23 @@ void handle_logout(struct mg_connection *c);
 void handle_debug(struct mg_connection *c, struct mg_http_message *hm);
 void handle_stats_get(struct mg_connection *c);
 void handle_events_get(struct mg_connection *c, struct mg_http_message *hm);
+void handle_logs_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_settings_get(struct mg_connection *c);
 void handle_settings_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_commit(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_rollback(struct mg_connection *c, struct mg_http_message *hm);
+void handle_firmware_switch_bank(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_status(struct mg_connection *c);
 void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm);
 void handle_device_eraselast(struct mg_connection *c);
-void handle_select_get(struct mg_connection *c);
+void handle_select_get(struct mg_connection *c, long offset, long limit);
 void handle_pintopin_get(struct mg_connection *c);
 void handle_select_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_switch_get(struct mg_connection *c);
 void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm);
-void handle_button_get(struct mg_connection *c);
+void handle_button_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_encoder_get(struct mg_connection *c);
 void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm);
@@ -334,6 +398,8 @@ extern volatile uint32_t g_ver_switch;
 extern volatile uint32_t g_ver_button;
 extern volatile uint32_t g_ver_security;
 extern volatile uint32_t g_ver_pins;
+extern volatile uint32_t g_ver_zigbee;
+extern volatile uint32_t g_ver_select;
 
 /* ─── Mark slice dirty ─── */
 void mark_slice_dirty(volatile uint32_t *ver);
@@ -344,7 +410,7 @@ const char *json_escape_str(char *dst, const char *src, size_t dst_sz);
 void json_escape_send(struct mg_connection *c, const char *src);
 
 /* Content-Length HTTP handlers from net.c (Keep-Alive polling) */
-void handle_buttons(struct mg_connection *c);
+void handle_buttons(struct mg_connection *c, struct mg_http_message *hm);
 void handle_switches(struct mg_connection *c);
 void handle_encoders(struct mg_connection *c);
 

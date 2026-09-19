@@ -1,0 +1,71 @@
+{
+  "lang": "ru",
+  "zigbee": [
+    {
+      "id": 0,
+      "ieee": "588e81fffe36a343",
+      "ep": 1,
+      "clusters": [6],
+      "info": "Lamp Kuhnya",
+      "onoff": 1,
+      "brightness": 254,
+      "color_hex": 4283215872,
+      "role": 0
+    },
+    {
+      "id": 1,
+      "ieee": "00158d0007a1b2c3",
+      "ep": 1,
+      "clusters": [6],
+      "info": "Socket Hall",
+      "onoff": 0,
+      "brightness": 254,
+      "color_hex": 16753920,
+      "role": 0
+    },
+    {
+      "id": 2,
+      "ieee": "ec1bbdfffed45678",
+      "ep": 1,
+      "clusters": [6, 8],
+      "info": "Dimmer Bedroom",
+      "onoff": 1,
+      "brightness": 200,
+      "color_hex": 16776960,
+      "role": 0
+    },
+    {
+      "id": 3,
+      "ieee": "ec1bbdfffed45678",
+      "ep": 2,
+      "clusters": [6, 8, 768],
+      "info": "Color Lamp Bedroom",
+      "onoff": 0,
+      "brightness": 180,
+      "color_hex": 255,
+      "role": 0
+    },
+    {
+      "id": 4,
+      "ieee": "ec1bbdfffed45678",
+      "ep": 3,
+      "clusters": [6],
+      "info": "Button Bedroom",
+      "onoff": 0,
+      "brightness": 254,
+      "color_hex": 0,
+      "role": 3
+    },
+    {
+      "id": 5,
+      "ieee": "00124b001c6a7b5e",
+      "ep": 1,
+      "clusters": [6],
+      "info": "Relay Garage",
+      "onoff": 1,
+      "brightness": 254,
+      "color_hex": 0,
+      "role": 0
+    }
+  ]
+}

@@ -96,6 +96,13 @@ const SETTINGS_TIP_IDX = {
   'Password (MQTT)': 12,   // ключ для MQTT-пароля
   'TX topic':        13,
   'RX topic':        14,
+  'RX Z2M topic':    26,
+  'MQTT Server':     27,
+  'Port (srv)':      28,
+  'Max clients':     29,
+  'User (srv)':      30,
+  'Password (srv)':  31,
+  'SLZB IP':         32,
   'HTTPS domain':    15,
   'Private Key':     16,
   'Public Key':      17,
@@ -153,7 +160,9 @@ const LOG_CATEGORIES = [
   { id: 6, key: 'PID',       labelEn: 'PID Controller', labelRu: 'ПИД-регулятор' },
   { id: 7, key: 'SETTINGS',  labelEn: 'Settings',  labelRu: 'Настройки' },
   { id: 8, key: 'ETH',       labelEn: 'Ethernet',  labelRu: 'Ethernet' },
-  { id: 9, key: 'PHY',       labelEn: 'PHY',       labelRu: 'PHY' }
+  { id: 9, key: 'PHY',       labelEn: 'PHY',       labelRu: 'PHY' },
+  { id: 10, key: 'Z2M',      labelEn: 'Z2M',       labelRu: 'Z2M' },
+  { id: 11, key: 'OTA',      labelEn: 'OTA',       labelRu: 'OTA' }
 ];
 
 function Settings({ }) {
@@ -172,6 +181,8 @@ function Settings({ }) {
   const [isLoading, setIsLoading] = useState(true);
   const lastInputTime = useRef(0);
   const [logFilterOpen, setLogFilterOpen] = useState(false);
+  const [mqttSectionOpen, setMqttSectionOpen] = useState(false);
+  const mqttSectionInit = useRef(false);
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => {
     initGlobalTooltip();
@@ -209,7 +220,7 @@ function Settings({ }) {
     [0.0,   '(GMT +0:00) Western Europe Time, London, Lisbon, Casablanca'],
     [1.0,   '(GMT +1:00) Brussels, Copenhagen, Madrid, Paris'],
     [2.0,   '(GMT +2:00) Kaliningrad, South Africa'],
-    [3.0,   '(GMT +3:00) Moscow, St. Petersburg, Baghdad, Riyadh'],
+    [3.0,   '(GMT +3:00) Yashalta, Moscow, St. Petersburg, Baghdad, Riyadh'],
     [3.3,   '(GMT +3:30) Tehran'],
     [4.0,   '(GMT +4:00) Abu Dhabi, Muscat, Baku, Tbilisi'],
     [4.3,   '(GMT +4:30) Kabul'],
@@ -259,6 +270,18 @@ function Settings({ }) {
     return pattern.test(timeStr);
   };
 
+  // SLZB IP (watchdog шлюза SLZB-06p7U): поле опциональное (пусто = watchdog выключен),
+  // но если пользователь что-то ввёл — это должен быть строго IPv4-адрес.
+  // Мусор в этом поле нельзя: прошивка по нему шлёт шлюзу HTTP-reboot.
+  // На лету вычищаем всё, кроме цифр и точек, ограничиваем формат адреса.
+  const sanitizeIpInput = (value) => {
+    if (typeof value !== 'string') return '';
+    const parts = value.replace(/[^0-9.]/g, '').split('.').slice(0, 4);
+    return parts.map((p) => p.slice(0, 3)).join('.');
+  };
+
+  const isValidIpInput = (value) => ipRegex.test(value);
+
   const isFormValid = (settings, errors) => {
     const hasErrors = Object.values(errors).some((error) => error !== null);
     const requiredFieldsFilled = settings.usehttps
@@ -290,6 +313,12 @@ function Settings({ }) {
       case 'gateway':
       case 'mqtt_hst':
         if (value.length > 50) error = 'Слишком длинное имя хоста';
+        break;
+      case 'slzb_host':
+        // Опциональное поле: пусто = SLZB watchdog выключен (валидной считается и пустота).
+        if (value && value.trim() !== '' && !isValidIpInput(value)) {
+          error = 'Неверный формат IP-адреса (пример: 192.168.1.115)';
+        }
         break;
       case 'sb_mask':
         if (!subnetMaskRegex.test(value)) error = 'Неверная маска подсети';
@@ -357,7 +386,7 @@ function Settings({ }) {
     const formData = new FormData(formRef.current);
     let jsonData = { ...settings };
     for (const [key, value] of formData.entries()) {
-      if (['lon_de', 'lat_de', 'timezone', 'mqtt_prt'].includes(key)) {
+      if (['lon_de', 'lat_de', 'timezone', 'mqtt_prt', 'mqtt_srv_prt', 'mqtt_srv_maxcli'].includes(key)) {
         jsonData[key] = value === '' || value === null ? 0 : Number(value);
       } else {
         jsonData[key] = value;
@@ -371,13 +400,14 @@ function Settings({ }) {
     } else {
       delete jsonData.offldt;
     }
-    ['lon_de', 'lat_de', 'timezone', 'mqtt_prt'].forEach((key) => {
+    ['lon_de', 'lat_de', 'timezone', 'mqtt_prt', 'mqtt_srv_prt', 'mqtt_srv_maxcli'].forEach((key) => {
       if (jsonData[key] === null || jsonData[key] === '') jsonData[key] = 0;
     });
     jsonData.onsunrise = jsonData.onsunrise ? 1 : 0;
     jsonData.onsunset  = jsonData.onsunset  ? 1 : 0;
     jsonData.check_ip   = jsonData.check_ip   ? 1 : 0;
     jsonData.check_mqtt = jsonData.check_mqtt ? 1 : 0;
+    jsonData.check_mqtt_srv = jsonData.check_mqtt_srv ? 1 : 0;
     jsonData.usehttps   = jsonData.usehttps   ? 1 : 0;
 
     fetch('/api/mysett/set', {
@@ -403,7 +433,12 @@ function Settings({ }) {
 
   const handleChange = (key, value) => {
     let error = null;
-    if (key === 'offdate') {
+    if (key === 'slzb_host') {
+      // Чистим мусор ДО записи в state: буквы/пробелы/лишние точки просто
+      // не попадут в поле, а не появятся с красной рамкой
+      value = sanitizeIpInput(value);
+      error = validateInput(key, value);
+    } else if (key === 'offdate') {
       error = validateDateFormat(value) ? null : 'Неверный формат даты (д.м.гг)';
     } else if (key === 'offtime') {
       error = validateTimeFormat(value) ? null : 'Неверный формат времени (чч:мм:сс)';
@@ -420,9 +455,9 @@ function Settings({ }) {
       return newErrors;
     });
     let processedValue = value;
-    if (['lon_de', 'lat_de', 'timezone', 'mqtt_prt'].includes(key)) {
+    if (['lon_de', 'lat_de', 'timezone', 'mqtt_prt', 'mqtt_srv_prt', 'mqtt_srv_maxcli'].includes(key)) {
       processedValue = value === '' || value === null ? 0 : Number(value);
-    } else if (['onsunrise', 'onsunset', 'check_ip', 'check_mqtt', 'usehttps'].includes(key)) {
+    } else if (['onsunrise', 'onsunset', 'check_ip', 'check_mqtt', 'check_mqtt_srv', 'usehttps'].includes(key)) {
       processedValue = value ? 1 : 0;
     }
     setSettings(prev => ({ ...prev, [key]: processedValue }));
@@ -488,6 +523,14 @@ function Settings({ }) {
   useEffect(() => {
     setSubmitButtonDisabled(!isFormValid(settings, errors));
   }, [settings, errors]);
+
+  // Автораскрытие секции MQTT при первой загрузке, если Client или Server уже включены
+  useEffect(() => {
+    if (!isLoading && !mqttSectionInit.current) {
+      mqttSectionInit.current = true;
+      setMqttSectionOpen(!!(settings.check_mqtt || settings.check_mqtt_srv));
+    }
+  }, [isLoading]);
 
   if (isLoading) return html`<div>Loading...</div>`;
   if (!settings) return '';
@@ -656,32 +699,27 @@ function Settings({ }) {
           </div>
 
           <!-- ============================================================
-               MQTT
+               MQTT — общий блок (топики) + подсекции Client / Server
           ============================================================ -->
           <div class="w-full mb-6">
-            ${settings.check_mqtt ? html`
-              <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
-                <table class="w-full table-fixed text-left border-collapse">
-                  <thead>
-                    <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">
-                        <div class="flex items-center gap-3">
-                          <span>MQTT</span>
-                          <${MyPolzunok} value=${settings.check_mqtt} onChange=${(v) => handleChange('check_mqtt', v)} />
-                        </div>
-                      </th>
-                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
-                    </tr>
-                  </thead>
+            <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+              <table class="w-full table-fixed text-left border-collapse">
+                <thead>
+                  <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide" colspan="2">
+                      <div class="flex items-center gap-3">
+                        <span>MQTT</span>
+                        <${MyPolzunok} value=${mqttSectionOpen} onChange=${(v) => setMqttSectionOpen(v)} />
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                ${mqttSectionOpen ? html`
                   <tbody>
                 ${[
-                  { label: 'Host',     key: 'mqtt_hst',  type: 'text',     maxlength: 50 },
-                  { label: 'Port',     key: 'mqtt_prt',  type: 'number'   },
-                  { label: 'Client',   key: 'mqtt_clt',  type: 'text',     maxlength: 32 },
-                  { label: 'User',     key: 'mqtt_usr',  type: 'text',     maxlength: 32 },
-                  { label: 'Password', key: 'mqtt_pswd', type: 'password', maxlength: 32, tipLabel: 'Password (MQTT)' },
-                  { label: 'TX topic', key: 'txmqttop',  type: 'text',     maxlength: 32 },
-                  { label: 'RX topic', key: 'rxmqttop',  type: 'text',     maxlength: 32 }
+                  { label: 'TX topic',  key: 'txmqttop', type: 'text', maxlength: 32 },
+                  { label: 'RX topic',  key: 'rxmqttop', type: 'text', maxlength: 32 },
+                  { label: 'Z2M topic', key: 'rxzbtop',  type: 'text', maxlength: 32, tipLabel: 'RX Z2M topic', placeholder: 'zigbee2mqtt' }
                 ].map((item, index) => html`
                   <${FieldRow} label=${item.label} tip=${gt(item.tipLabel || item.label)} index=${index}>
                     <${pageSetting}
@@ -689,31 +727,170 @@ function Settings({ }) {
                       setfn=${(v) => handleChange(item.key, v)}
                       type=${item.type}
                       maxlength=${item.maxlength}
+                      placeholder=${item.placeholder || ''}
                       class=${`w-full px-3 py-2 bg-white/50 border ${errors[item.key] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                       error=${errors[item.key]}
                     />
                   <//>
                 `)}
                   </tbody>
-                </table>
-              </div>
-            ` : html`
+                ` : html`<tbody></tbody>`}
+              </table>
+            </div>
+
+            ${mqttSectionOpen ? html`
+            <div class="pl-6 mt-4 space-y-4 border-l-2 border-teal-500/30">
+
+              <!-- ---- MQTT Client ---- -->
               <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
                 <table class="w-full table-fixed text-left border-collapse">
                   <thead>
                     <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide" colspan="2">
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">
                         <div class="flex items-center gap-3">
-                          <span>MQTT</span>
+                          <span>MQTT Client</span>
                           <${MyPolzunok} value=${settings.check_mqtt} onChange=${(v) => handleChange('check_mqtt', v)} />
                         </div>
                       </th>
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
                     </tr>
                   </thead>
-                  <tbody></tbody>
+                  ${settings.check_mqtt ? html`
+                    <tbody>
+                  ${[
+                    { label: 'Host',     key: 'mqtt_hst',  type: 'text',     maxlength: 50 },
+                    { label: 'Port',     key: 'mqtt_prt',  type: 'number'   },
+                    { label: 'Client',   key: 'mqtt_clt',  type: 'text',     maxlength: 32 },
+                    { label: 'User',     key: 'mqtt_usr',  type: 'text',     maxlength: 32 },
+                    { label: 'Password', key: 'mqtt_pswd', type: 'password', maxlength: 32, tipLabel: 'Password (MQTT)' }
+                  ].map((item, index) => html`
+                    <${FieldRow} label=${item.label} tip=${gt(item.tipLabel || item.label)} index=${index}>
+                      <${pageSetting}
+                        value=${settings[item.key]}
+                        setfn=${(v) => handleChange(item.key, v)}
+                        type=${item.type}
+                        maxlength=${item.maxlength}
+                        class=${`w-full px-3 py-2 bg-white/50 border ${errors[item.key] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                        error=${errors[item.key]}
+                      />
+                    <//>
+                  `)}
+                    </tbody>
+                  ` : html`<tbody></tbody>`}
                 </table>
               </div>
-            `}
+
+              <!-- ---- MQTT Server (экспериментальный встроенный брокер) ---- -->
+              <div class="w-full overflow-auto rounded-2xl shadow-lg border border-amber-400/60 bg-white/30 backdrop-blur-sm">
+                <table class="w-full table-fixed text-left border-collapse">
+                  <thead>
+                    <tr class="bg-amber-500/10 border-b border-amber-500/20">
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3 cursor-help" data-tip=${gt('MQTT Server')}>
+                        <div class="flex items-center gap-3">
+                          <span>MQTT Server</span>
+                          <${MyPolzunok} value=${settings.check_mqtt_srv} onChange=${(v) => handleChange('check_mqtt_srv', v)} />
+                        </div>
+                      </th>
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
+                    </tr>
+                  </thead>
+                  ${settings.check_mqtt_srv ? html`
+                    <tbody>
+                  ${[
+                    { label: 'Port',        key: 'mqtt_srv_prt',    type: 'number',   tipLabel: 'Port (srv)',     min: 1, max: 65535 },
+                    { label: 'Max clients', key: 'mqtt_srv_maxcli', type: 'number',   tipLabel: 'Max clients',    min: 1, max: 6 },
+                    { label: 'User',        key: 'mqtt_srv_usr',    type: 'text',     maxlength: 32, tipLabel: 'User (srv)' },
+                    { label: 'Password',    key: 'mqtt_srv_pswd',   type: 'password', maxlength: 32, tipLabel: 'Password (srv)' },
+                    { label: 'SLZB IP',     key: 'slzb_host',       type: 'text',     maxlength: 15, tipLabel: 'SLZB IP', placeholder: '192.168.1.115' }
+                  ].map((item, index) => html`
+                    <${FieldRow} label=${item.label} tip=${gt(item.tipLabel || item.label)} index=${index}>
+                      <${pageSetting}
+                        value=${settings[item.key]}
+                        setfn=${(v) => handleChange(item.key, v)}
+                        name=${item.key}
+                        type=${item.type}
+                        maxlength=${item.maxlength}
+                        min=${item.min}
+                        max=${item.max}
+                        class=${`w-full px-3 py-2 bg-white/50 border ${errors[item.key] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                        error=${errors[item.key]}
+                      />
+                    <//>
+                  `)}
+                    </tbody>
+                  ` : html`<tbody></tbody>`}
+                </table>
+                ${settings.check_mqtt_srv ? html`
+                  <div class="px-6 py-3 text-sm font-semibold text-amber-700 bg-amber-500/10 border-t border-amber-500/20 space-y-2">
+                    ${settings.lang === 'ru' ? html`
+                      <p>MQTT Server — встроенный MQTT-брокер в настоящее время находится в разработке.</p>
+                      <p>MQTT Server поддерживает от 1 до 6 одновременно подключённых MQTT-клиентов. Вы можете изменить это значение, указав параметр <b>Max clients</b> в диапазоне от 1 до 6.</p>
+                      <p>Клиентом считается любое устройство или приложение, подключённое к серверу по MQTT. Например:</p>
+                      <ul class="list-disc pl-5 space-y-1">
+                        <li>Шлюз SLZB-06p7U занимает 1 клиентское подключение</li>
+                        <li>Подключённое Android-приложение с MQTT-клиентом — ещё одно подключение</li>
+                      </ul>
+                      <p>Таким образом, вы можете настроить сервер на работу с необходимым количеством клиентов (от 1 до 6 устройств или приложений).</p>
+                      <p class="font-bold pt-1">Технические ограничения</p>
+                      <ul class="list-disc pl-5 space-y-1">
+                        <li>Поддерживается только QoS 0</li>
+                        <li>Retained-сообщения, LWT и TLS не поддерживаются</li>
+                        <li>Не используйте MQTT Server и внешний MQTT-клиент на одном порту одновременно</li>
+                        <li>Изменение настроек (включая Max clients) требует перезагрузки устройства</li>
+                      </ul>
+                      <p class="font-bold pt-1">SLZB IP — watchdog шлюза SLZB-06p7U</p>
+                      <p>Если шлюз SLZB-06p7U не подключился к брокеру в течение 40 секунд после старта (или отвалился в процессе работы), устройство само перезагрузит его через веб-API — не чаще одного раза в минуту. Укажите в поле <b>SLZB IP</b> IP-адрес шлюза (например, 192.168.1.115). Пустое поле = watchdog выключен.</p>
+                      <p class="font-bold pt-1">Производительность при высокой нагрузке</p>
+                      <p>При высокой нагрузке возможны задержки и пропуски MQTT-сообщений от Zigbee-устройств.</p>
+                      <p>В настоящее время у автора проекта нет достаточного количества Zigbee-устройств и физического оборудования для полноценного тестирования MQTT Server при максимальной нагрузке. Поэтому невозможно гарантировать стабильную работу системы при одновременном использовании всех 89 физических пинов, 200 Zigbee-пинов и 50 таймеров, особенно если они одновременно отправляют MQTT-сообщения.</p>
+                      <p class="font-bold pt-1">Рекомендации при проблемах</p>
+                      <p>Если вы столкнётесь с задержками, пропусками сообщений или другими проблемами при высокой нагрузке, отключите MQTT Server и настройте MQTT Client. MQTT Client работает стабильно даже при больших нагрузках.</p>
+                      <p>Для этого потребуется внешнее устройство с установленным MQTT-сервером. Это может быть:</p>
+                      <ul class="list-disc pl-5 space-y-1">
+                        <li>Роутер с поддержкой MQTT-брокера</li>
+                        <li>Raspberry Pi</li>
+                        <li>Другое устройство (сервер, ПК и т.п.)</li>
+                      </ul>
+                      <p class="font-bold pt-1">Обратная связь</p>
+                      <p>Если вы используете встроенный MQTT Server и столкнулись с проблемами, пожалуйста, сообщите о своём опыте. Предоставьте подробности конфигурации и журналы работы — эта информация поможет автору внести необходимые изменения в код и расширить возможности проекта.</p>
+                    ` : html`
+                      <p>MQTT Server — the built-in MQTT broker is currently under development.</p>
+                      <p>MQTT Server supports from 1 to 6 simultaneously connected MQTT clients. You can change this value via the <b>Max clients</b> parameter, in the range from 1 to 6.</p>
+                      <p>A client is any device or application connected to the server over MQTT. For example:</p>
+                      <ul class="list-disc pl-5 space-y-1">
+                        <li>The SLZB-06p7U gateway takes up 1 client connection</li>
+                        <li>A connected Android app with an MQTT client — another connection</li>
+                      </ul>
+                      <p>This way, you can configure the server to work with the number of clients you need (from 1 to 6 devices or applications).</p>
+                      <p class="font-bold pt-1">Technical limitations</p>
+                      <ul class="list-disc pl-5 space-y-1">
+                        <li>Only QoS 0 is supported</li>
+                        <li>Retained messages, LWT and TLS are not supported</li>
+                        <li>Do not use MQTT Server and an external MQTT client on the same port at the same time</li>
+                        <li>Changing the settings (including Max clients) requires a device reboot</li>
+                      </ul>
+                      <p class="font-bold pt-1">SLZB IP — SLZB-06p7U gateway watchdog</p>
+                      <p>If the SLZB-06p7U gateway does not connect to the broker within 40 seconds after startup (or drops out during operation), the device will reboot it via its web API — no more than once per minute. Enter the gateway IP address in the <b>SLZB IP</b> field (for example, 192.168.1.115). An empty field = watchdog disabled.</p>
+                      <p class="font-bold pt-1">Performance under heavy load</p>
+                      <p>Under heavy load, delays and dropped MQTT messages from Zigbee devices are possible.</p>
+                      <p>The project author currently does not have enough Zigbee devices and physical hardware to fully test MQTT Server under maximum load. Therefore stable operation cannot be guaranteed when simultaneously using all 89 physical pins, 200 Zigbee pins and 50 timers, especially if they send MQTT messages at the same time.</p>
+                      <p class="font-bold pt-1">Recommendations if you run into problems</p>
+                      <p>If you encounter delays, dropped messages or other issues under heavy load, disable MQTT Server and set up MQTT Client instead. MQTT Client works reliably even under heavy load.</p>
+                      <p>For this you will need an external device with an MQTT server installed. This can be:</p>
+                      <ul class="list-disc pl-5 space-y-1">
+                        <li>A router with MQTT broker support</li>
+                        <li>A Raspberry Pi</li>
+                        <li>Another device (a server, a PC, etc.)</li>
+                      </ul>
+                      <p class="font-bold pt-1">Feedback</p>
+                      <p>If you use the built-in MQTT Server and run into problems, please share your experience. Provide configuration details and logs — this information will help the author make the necessary code changes and expand the project's capabilities.</p>
+                    `}
+                  </div>
+                ` : ''}
+              </div>
+
+            </div>
+            ` : ''}
           </div>
 
           <!-- ============================================================
@@ -967,7 +1144,7 @@ function Settings({ }) {
                     ${(settings.lang || 'ru') === 'ru' ? 'Маска логов в RAM:' : 'RAM Log Mask:'}
                   </span>
                   <span class="px-2 py-0.5 bg-cyan-600/10 text-cyan-700 rounded-md font-mono font-bold text-lg">
-                    ${settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0x3FF} (0x${(settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0x3FF).toString(16).toUpperCase()})
+                    ${settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0x7FF} (0x${(settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0x7FF).toString(16).toUpperCase()})
                   </span>
                 </div>
               </div>
@@ -982,7 +1159,7 @@ function Settings({ }) {
                     <span class="text-base font-bold text-slate-700 text-center">
                       ${(settings.lang || 'ru') === 'ru' ? 'Активные категории' : 'Active Categories'}
                     </span>
-                    <button type="button" onClick=${() => handleLogMaskChange(0x3FF)}
+                    <button type="button" onClick=${() => handleLogMaskChange(0x7FF)}
                       class="w-full py-3 text-sm font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded-xl hover:bg-teal-100 hover:text-teal-700 transition-all text-center shadow-sm">
                       ${(settings.lang || 'ru') === 'ru' ? 'Включить все' : 'Enable All'}
                     </button>
@@ -995,7 +1172,7 @@ function Settings({ }) {
                   <div class="w-3/4 px-6 py-6">
                     <div class="grid grid-cols-4 gap-3">
                       ${LOG_CATEGORIES.map(cat => {
-                        const maskVal = settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0x3FF;
+                        const maskVal = settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0x7FF;
                         const isEnabled = (maskVal & (1 << cat.id)) !== 0;
                         return html`
                           <label class=${`flex items-center gap-3 p-3 rounded-xl border cursor-pointer select-none transition-all duration-300 ${isEnabled ? 'bg-cyan-50/70 border-cyan-300 shadow-[0_2px_10px_rgba(34,211,238,0.15)] scale-[1.02]' : 'bg-slate-50/40 border-slate-200 hover:bg-slate-100/50'}`}>

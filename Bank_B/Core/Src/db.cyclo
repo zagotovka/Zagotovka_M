@@ -1,0 +1,7 @@
+../Core/Src/db.c:23:13:zbee_action_sclick	3
+../Core/Src/db.c:30:13:zbee_action_dclick	3
+../Core/Src/db.c:37:13:zbee_action_lpress	3
+../Core/Src/db.c:44:9:zbee_action_alloc	7
+../Core/Src/db.c:65:6:zbee_action_free	2
+../Core/Src/db.c:72:6:zbee_action_clear	1
+../Core/Src/db.c:79:9:GetPinView	3

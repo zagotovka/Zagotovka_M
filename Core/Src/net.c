@@ -3,12 +3,16 @@
 
 #include "net.h"
 #include "zagotovka.h"
+#include "logger.h"
 #include "ds18b20.h"
 #include "ds18b20Config.h"
 #include "main.h"
 #include "compat_ota.h"
+#include "fw_meta.h"
 #include "fmt_float.h"
 #include <stdlib.h>   // rand()
+#include <stdarg.h>   // va_list for ota_log_direct()
+#include "dtcm_alloc.h"
 
 struct user {
   const char *name, *pass;
@@ -29,6 +33,8 @@ static struct settings s_settings = {true, 1, 57, NULL};
 const char *s_json_header =
     "Content-Type: application/json\r\n"
     "Cache-Control: no-cache\r\n";
+
+extern struct dbPinsConf PinsConf[NUMPIN];
 
 /* ─── Static file header ─── */
 
@@ -279,6 +285,25 @@ void handle_events_get(struct mg_connection *c,
                 print_events, pageno, MG_ESC("totalCount"), MAX_EVENTS_NO);
 }
 
+/* Хвост системного лога для веб-вьюера. tmp[] на стеке WebServerTask
+ * (18 КБ) — НЕ static: в .bss свободно 64 байта, линкер-ASSERT
+ * ((_ebss + _Min_Stack_Size) <= _estack) заблокирует сборку. */
+void handle_logs_get(struct mg_connection *c, struct mg_http_message *hm) {
+  long since_l = mg_json_get_long(hm->body, "$.since", 0);
+  uint32_t since = since_l > 0 ? (uint32_t)since_l : 0;
+
+  char tmp[LOG_RING_SIZE];
+  size_t n = 0;
+  uint32_t cursor = 0;
+  bool dropped = false;
+  logger_ring_read(since, tmp, sizeof(tmp), &n, &cursor, &dropped);
+
+  mg_http_reply(c, 200, s_json_header, "{%m:%m,%m:%lu,%m:%d}\n",
+                MG_ESC("text"), mg_print_esc, (int) n, tmp,
+                MG_ESC("cursor"), (unsigned long) cursor,
+                MG_ESC("dropped"), dropped ? 1 : 0);
+}
+
 void handle_settings_set(struct mg_connection *c, struct mg_http_message *hm) {
   if (!require_post_json(c, hm)) return;
   struct mg_str body = hm->body;
@@ -316,58 +341,286 @@ void handle_settings_get(struct mg_connection *c) {
                 MG_ESC("device_name"), MG_ESC(s_settings.device_name));
 }
 
-void handle_firmware_upload(struct mg_connection *c,
-                                   struct mg_http_message *hm) {
-  char name[64], offset[20], total[20];
-  struct mg_str data = hm->body;
-  long ofs = -1, tot = -1;
-  name[0] = offset[0] = '\0';
-  mg_http_get_var(&hm->query, "name", name, sizeof(name));
-  mg_http_get_var(&hm->query, "offset", offset, sizeof(offset));
-  mg_http_get_var(&hm->query, "total", total, sizeof(total));
-  MG_INFO(("File %s, offset %s, len %lu", name, offset, data.len));
-  if ((ofs = mg_json_get_long(mg_str(offset), "$", -1)) < 0 ||
-      (tot = mg_json_get_long(mg_str(total), "$", -1)) < 0) {
-    mg_http_reply(c, 500, "", "offset and total not set\n");
-  } else if (ofs == 0 && mg_ota_begin((size_t) tot) == false) {
-    mg_http_reply(c, 500, "", "mg_ota_begin(%ld) failed\n", tot);
-  } else if (data.len > 0 && mg_ota_write(data.buf, data.len) == false) {
-    mg_http_reply(c, 500, "", "mg_ota_write(%lu) @%ld failed\n", data.len, ofs);
-    mg_ota_end();
-  } else if (data.len == 0 && mg_ota_end() == false) {
-    mg_http_reply(c, 500, "", "mg_ota_end() failed\n", tot);
-  } else {
-    mg_http_reply(c, 200, s_json_header, "true\n");
-    if (data.len == 0) {
-      // Successful mg_ota_end() called, schedule device reboot
-      mg_timer_add(c->mgr, 500, 0, (void (*)(void *)) mg_device_reset, NULL);
-    }
+/* ---- OTA upload session tracking (app layer, independent of the
+ * mongoose-internal s_size flag) -------------------------------------------
+ * last_ofs/s_ota_written track how many bytes we have ACTUALLY flashed so
+ * far, so duplicate/replayed/out-of-order chunks can be detected properly
+ * instead of only comparing against the single previous offset.
+ * s_ota_owner_id + s_ota_last_activity_ms let a stale session (client
+ * vanished mid-upload without sending the final 0-byte chunk) be detected
+ * and cleared automatically by ota_watchdog_fn(), instead of requiring a
+ * device reboot before the next OTA attempt can succeed. */
+static long          last_ofs               = -1; // last chunk offset actually written
+static size_t        s_ota_written          = 0;   // bytes actually flashed so far
+static size_t        s_ota_expected         = 0;   // expected firmware size, 0 = no session
+static unsigned long s_ota_owner_id         = 0;   // connection id that owns the session
+static uint64_t      s_ota_last_activity_ms = 0;
+
+#define OTA_SESSION_IDLE_TIMEOUT_MS (20 * 1000)  // abort if no activity for 20s
+
+static void ota_session_clear(void) {
+  last_ofs = -1;
+  s_ota_written = 0;
+  s_ota_expected = 0;
+  s_ota_owner_id = 0;
+}
+
+// Called from a repeating timer (see web_init()/ setup) to reclaim a
+// session that was abandoned mid-upload (dropped connection, closed tab,
+// etc.) without ever sending the terminating 0-byte chunk.
+void ota_watchdog_fn(void *arg) {
+  (void) arg;
+  if (s_ota_expected != 0 &&
+      mg_millis() - s_ota_last_activity_ms > OTA_SESSION_IDLE_TIMEOUT_MS) {
+    LOG_OTA("OTA session idle for >%dms, aborting stale session (owner conn=%lu, %u/%u bytes)\n",
+            OTA_SESSION_IDLE_TIMEOUT_MS, s_ota_owner_id,
+            (unsigned) s_ota_written, (unsigned) s_ota_expected);
+    mg_ota_end();      // clears the mongoose-internal s_size flag; CRC/size
+                        // mismatch is expected and harmless here, it will
+                        // just fail to swap partitions.
+    ota_session_clear();
   }
 }
 
+/* One-shot health-check timer: fires on the 3rd trial boot of Bank B.
+   If firmware survived OTA_BOOT_COMMIT_DELAY_MS with pending=1 state=1
+   retries=3, the new bank is considered healthy and committed.
+   Bootloader retry loop no longer increments, future boots use active bank. */
+
+void ota_health_check_fn(void *arg) {
+  (void) arg;
+  const HTTPSsettings *s = get_valid_settings();
+  if (s && s->ota_pending == 1 && s->ota_state == 1
+      && s->ota_boot_retries >= OTA_BOOT_RETRY_MAX) {
+    LOG_OTA("Health-check: firmware stable for %lums, committing OTA "
+            "(retries=%u)\n",
+            (unsigned long) OTA_BOOT_COMMIT_DELAY_MS,
+            (unsigned) s->ota_boot_retries);
+    mg_ota_commit();
+  }
+}
+
+extern UART_HandleTypeDef huart3;
+
+static void ota_log_direct(const char *fmt, ...) {
+    if (!(g_log_filter_mask & LOG_MASK_OTA)) return;
+    char msg[160];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(msg, sizeof(msg), fmt, ap);
+    va_end(ap);
+    if (n < 0) return;
+    const char *prefix = cat_prefixes[LOG_CAT_OTA];
+    HAL_UART_Transmit(&huart3, (uint8_t *) prefix, strlen(prefix), 50);
+    HAL_UART_Transmit(&huart3, (uint8_t *) msg, (uint16_t) n, 200);
+}
+
+void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm) {
+	char name[64], offset[20], total[20];
+	struct mg_str data = hm->body;
+	long ofs = -1, tot = -1;
+
+	name[0] = offset[0] = '\0';
+	mg_http_get_var(&hm->query, "name", name, sizeof(name));
+	mg_http_get_var(&hm->query, "offset", offset, sizeof(offset));
+	mg_http_get_var(&hm->query, "total", total, sizeof(total));
+
+	if ((ofs = mg_json_get_long(mg_str(offset), "$", -1)) < 0 || (tot =
+			mg_json_get_long(mg_str(total), "$", -1)) < 0) {
+		ota_log_direct("Upload error: offset or total not set\n");
+		mg_http_reply(c, 500, "", "offset and total not set\n");
+		return;
+	}
+
+	s_ota_last_activity_ms = mg_millis();
+
+	if (ofs == 0) {
+		// Start of a new OTA session.
+		if (s_ota_expected != 0) {
+			ota_log_direct(
+					"Aborting stale OTA session (owner conn=%lu, %u/%u bytes) to start a new one\n",
+					s_ota_owner_id, (unsigned ) s_ota_written,
+					(unsigned ) s_ota_expected);
+			mg_ota_end();
+			ota_session_clear();
+		}
+
+		/* ---- Bank safety check --------------------------------------
+		 * Каждая сборка несёт метку (fw_meta.c) о том, для какого банка
+		 * она слинкована. Целевой банк записи — всегда противоположный
+		 * активному. Если образ собран не для того банка — отклоняем ДО
+		 * вызова mg_ota_begin(): ни один байт ещё не пишется во flash. */
+		if (data.len >= FW_META_OFFSET + sizeof(fw_meta_t)) {
+			const fw_meta_t *meta =
+					(const fw_meta_t *) (data.buf + FW_META_OFFSET);
+			uint8_t want_bank = mg_ota_get_active_bank() ^ 1;
+			if (meta->magic == FW_META_MAGIC
+					&& meta->target_bank != want_bank) {
+				ota_log_direct(
+						"Upload rejected: image built for Bank %c, but Bank %c needs update\n",
+						meta->target_bank ? 'B' : 'A',
+						want_bank ? 'B' : 'A');
+				mg_http_reply(c, 400, "",
+						"Wrong bank image: built for Bank %c, need Bank %c\n",
+						meta->target_bank ? 'B' : 'A',
+						want_bank ? 'B' : 'A');
+				return;
+			}
+			/* magic не совпал — старая сборка без метки: проверку
+			 * пропускаем молча, чтобы не ломать совместимость. */
+		}
+
+		if (mg_ota_begin((size_t) tot) == false) {
+			// At this point we know (from the check above) no session was
+			// active at the app layer, so a false return here means the
+			// firmware is simply too big for the staging area, not a
+			// in-progress conflict -- there is nothing of ours to clean up.
+			ota_log_direct(
+					"Upload error: mg_ota_begin(%ld) failed (firmware too big?)\n",
+					tot);
+			mg_http_reply(c, 500, "", "mg_ota_begin(%ld) failed\n", tot);
+			return;
+		}
+		last_ofs = -1;
+		s_ota_written = 0;
+		s_ota_expected = (size_t) tot;
+		s_ota_owner_id = c->id;
+		ota_log_direct("OTA session started by conn=%lu, expecting %ld bytes\n", c->id,
+				tot);
+		mg_ota_reset_status();   // сбрасываем статус ДО начала записи чанков,чтобы не пересекаться по flash с mg_ota_write()
+	}
+
+	if (data.len > 0) {
+		if (s_ota_expected == 0) {
+			ota_log_direct(
+					"Upload error: chunk offset=%ld received but no session active\n",
+					ofs);
+			mg_http_reply(c, 409, "",
+					"No OTA session in progress, restart upload from offset 0\n");
+			return;
+		}
+		if ((size_t) ofs < s_ota_written) {
+			// Already-written data being retransmitted -- safe to ignore.
+			ota_log_direct("Duplicate chunk offset=%ld ignored (already at %u)\n", ofs,
+					(unsigned ) s_ota_written);
+			mg_http_reply(c, 200, s_json_header, "true\n");
+		} else if ((size_t) ofs > s_ota_written) {
+			// Gap: client and device disagree on how much has been flashed.
+			// Writing here would silently corrupt the image (flash writes are
+			// sequential and ignore `ofs`), so abort instead of guessing.
+			ota_log_direct(
+					"Upload error: offset gap (got %ld, expected %u), aborting session\n",
+					ofs, (unsigned ) s_ota_written);
+			mg_ota_end();
+			ota_session_clear();
+			mg_http_reply(c, 400, "",
+					"Offset gap detected, restart upload from offset 0\n");
+		} else {
+			ota_log_direct("Writing chunk: offset=%ld, len=%lu\n", ofs, data.len);
+			if (mg_ota_write(data.buf, data.len) == false) {
+				ota_log_direct("Upload error: mg_ota_write(%lu) @%ld failed\n",
+						data.len, ofs);
+				mg_http_reply(c, 500, "", "mg_ota_write(%lu) @%ld failed\n",
+						data.len, ofs);
+				mg_ota_end();
+				ota_session_clear();
+			} else {
+				last_ofs = ofs;
+				s_ota_written += data.len;
+				mg_http_reply(c, 200, s_json_header, "true\n");
+			}
+		}
+	} else if (data.len == 0) {
+		ota_log_direct("Final chunk received. Total size: %ld. Verifying...\n", tot);
+#if defined(__CORTEX_M) && (__CORTEX_M == 7U)
+		SCB_CleanInvalidateDCache();
+#endif
+    uint32_t prev_ota_state = mg_ota_mark_pending();  // выставляем ДО mg_ota_end()
+    if (mg_ota_end() == false) {
+        ota_log_direct("Upload error: mg_ota_end() failed, CRC or size mismatch\n");
+        mg_ota_cancel_pending(prev_ota_state);        // откатываем, свопа не было
+        mg_http_reply(c, 500, "", "mg_ota_end() failed, CRC or size mismatch\n");
+        ota_session_clear();
+    } else {
+        // Double Bank: mg_ota_end() вернул true — CRC+size ОК.
+        // HTTP 200 OK отправляется ПЕРВЫМ, потом через 500мс — ребут.
+        // Это даёт TCP-стеку время отправить ответ браузеру.
+        ota_log_direct("OTA SUCCESS! Rebooting device...\n");
+        mg_http_reply(c, 200, s_json_header, "true\n");
+        ota_session_clear();
+        mg_timer_add(c->mgr, 500, 0, (void (*)(void*)) mg_device_reset, NULL);
+    }
+}
+}
+
+
 void handle_firmware_commit(struct mg_connection *c, struct mg_http_message *hm) {
   if (!require_post_json(c, hm)) return;
+  if (s_ota_expected != 0) {
+    mg_http_reply(c, 409, "", "OTA upload in progress, wait until it finishes\n");
+    return;
+  }
   mg_http_reply(c, 200, s_json_header, "%s\n",
                 mg_ota_commit() ? "true" : "false");
 }
 
 void handle_firmware_rollback(struct mg_connection *c, struct mg_http_message *hm) {
   if (!require_post_json(c, hm)) return;
+  if (s_ota_expected != 0) {
+    mg_http_reply(c, 409, "", "OTA upload in progress, wait until it finishes\n");
+    return;
+  }
   mg_http_reply(c, 200, s_json_header, "%s\n",
                 mg_ota_rollback() ? "true" : "false");
 }
 
+void handle_firmware_switch_bank(struct mg_connection *c, struct mg_http_message *hm) {
+  if (!require_post_json(c, hm)) return;
+  if (s_ota_expected != 0) {
+    mg_http_reply(c, 409, "", "OTA upload in progress, wait until it finishes\n");
+    return;
+  }
+  mg_http_reply(c, 200, s_json_header, "%s\n",
+                mg_ota_switch_bank() ? "true" : "false");
+}
+
 static size_t print_status(void (*out)(char, void *), void *ptr, va_list *ap) {
   int fw = va_arg(*ap, int);
-  return mg_xprintf(out, ptr, "{%m:%d,%m:%c%lx%c,%m:%u,%m:%u}\n",
+  const HTTPSsettings *s = get_valid_settings();
+  return mg_xprintf(out, ptr, "{%m:%d,%m:%c%lx%c,%m:%u,%m:%u,%m:%m,%m:%u,%m:%u}\n",
                     MG_ESC("status"), mg_ota_status(fw), MG_ESC("crc32"), '"',
                     mg_ota_crc32(fw), '"', MG_ESC("size"), mg_ota_size(fw),
-                    MG_ESC("timestamp"), mg_ota_timestamp(fw));
+                    MG_ESC("timestamp"), mg_ota_timestamp(fw),
+                    MG_ESC("version"), MG_ESC(FW_VERSION),
+                    MG_ESC("retries"), (unsigned)(s ? s->ota_boot_retries : 0),
+                    MG_ESC("max_retries"), (unsigned) OTA_BOOT_RETRY_MAX);
 }
 
 void handle_firmware_status(struct mg_connection *c) {
-  mg_http_reply(c, 200, s_json_header, "[%M,%M]\n", print_status,
-                MG_FIRMWARE_CURRENT, print_status, MG_FIRMWARE_PREVIOUS);
+  const HTTPSsettings *s = get_valid_settings();
+  uint8_t active = mg_ota_get_active_bank();
+  /* Форма ответа изменилась: массив статусов теперь вложен в поле
+   * "firmwares" объекта + добавлены active_bank, версии банков и
+   * bank_a_valid/bank_b_valid — реальное наличие рабочего образа в банке
+   * по содержимому flash (MSP в векторной таблице, тот же критерий, что
+   * в bootloader'е и mg_ota_switch_bank()). Версия (bank_X_version)
+   * появляется только после mg_ota_commit(), т.е. только у образов,
+   * залитых через OTA: Bank A, прошитый напрямую через ST-Link, отдаёт
+   * пустую версию при bank_a_valid=true — фронтенд (update_page.js)
+   * завязан на валидность, а не на непустоту версии. */
+  mg_http_reply(c, 200, s_json_header,
+                "{%m:[%M,%M],%m:%d,%m:%m,%m:%m,%m:%s,%m:%s}\n",
+                MG_ESC("firmwares"), print_status, MG_FIRMWARE_CURRENT,
+                          print_status, MG_FIRMWARE_PREVIOUS,
+                MG_ESC("active_bank"), (int) active,
+                MG_ESC("bank_a_version"),
+                    MG_ESC(s ? s->ota_bank_a_version : ""),
+                MG_ESC("bank_b_version"),
+                    MG_ESC(s ? s->ota_bank_b_version : ""),
+                MG_ESC("bank_a_valid"),
+                    mg_ota_bank_image_valid(0) ? "true" : "false",
+                MG_ESC("bank_b_valid"),
+                    mg_ota_bank_image_valid(1) ? "true" : "false");
 }
 
 void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm) {
@@ -395,15 +648,28 @@ void handle_device_eraselast(struct mg_connection *c) {
 static uint32_t s_login_fail_count  = 0;
 static uint32_t s_login_block_until = 0;
 
+/* Лимит тела запроса для JSON API — защита от mg_iobuf_resiz starvation.
+   Firmware upload исключён явно, там body законно большой. */
+#define MAX_API_BODY_SIZE 8192
+
+/* Максимальный limit для пагинации /api/select/get — защита от OOB. */
+#define MAX_SELECT_PAGE_LIMIT 100
+
 /* TLS handshake timing tracking (per-connection) */
 #define TLS_HS_TRACK_MAX 4
 static struct {
 	unsigned long conn_id;
+	uint32_t      accept_cycles;
 	uint64_t      accept_ms;
 } s_tls_hs_track[TLS_HS_TRACK_MAX];
 
-char s_tls_cert[1024] = {0};  /* PEM certificate, loaded once in web_init() */
-char s_tls_key[512]   = {0};  /* PEM private key, loaded once in web_init() */
+char *s_tls_cert = NULL;  /* PEM certificate, loaded once in web_init() */
+char *s_tls_key  = NULL;  /* PEM private key, loaded once in web_init() */
+
+void net_dtcm_init(void) {
+    s_tls_cert = (char *)dtcm_tls_cert;
+    s_tls_key  = (char *)dtcm_tls_key;
+}
 bool s_tls_loaded = false;           /* true after successful preload */
 
 static void tls_hs_track_start(unsigned long conn_id) {
@@ -411,6 +677,7 @@ static void tls_hs_track_start(unsigned long conn_id) {
 		if (s_tls_hs_track[i].conn_id == 0) {
 			s_tls_hs_track[i].conn_id = conn_id;
 			s_tls_hs_track[i].accept_ms = mg_millis();
+			s_tls_hs_track[i].accept_cycles = DWT->CYCCNT;
 			return;
 		}
 	}
@@ -425,20 +692,22 @@ static uint32_t tls_hs_get_age_ms(unsigned long conn_id) {
 	return 0;  // не найдено — считаем что только начался
 }
 
-static uint64_t tls_hs_track_finish(unsigned long conn_id) {
+static uint64_t tls_hs_track_finish(unsigned long conn_id, uint32_t *out_cycles) {
 	for (int i = 0; i < TLS_HS_TRACK_MAX; i++) {
 		if (s_tls_hs_track[i].conn_id == conn_id) {
 			uint64_t elapsed = mg_millis() - s_tls_hs_track[i].accept_ms;
+			if (out_cycles) *out_cycles = DWT->CYCCNT - s_tls_hs_track[i].accept_cycles;
 			s_tls_hs_track[i].conn_id = 0;
 			return elapsed;
 		}
 	}
+	if (out_cycles) *out_cycles = 0;
 	return 0;
 }
 
 static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
                            volatile uint32_t *ver);
-void handle_buttons(struct mg_connection *c);
+void handle_buttons(struct mg_connection *c, struct mg_http_message *hm);
 void handle_switches(struct mg_connection *c);
 void handle_encoders(struct mg_connection *c);
 static void handle_get_pins(struct mg_connection *c, struct mg_http_message *hm);
@@ -514,7 +783,8 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
             // Кандидат на вытеснение: idle, буферы пусты, был хотя бы 1 запрос
             uint32_t last_used = *(uint32_t *)t->data;
-            if (t->send.len == 0 && t->recv.len == 0 && last_used > 0) {
+            if (t->send.len == 0 && t->recv.len == 0 && last_used > 0 &&
+                !(s_ota_expected != 0 && t->id == s_ota_owner_id)) {
                 if (last_used < oldest_time) {
                     oldest_time  = last_used;
                     oldest_idle  = t;
@@ -631,9 +901,42 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
     break;
 
     case MG_EV_TLS_HS: {
-        uint64_t hs_elapsed = tls_hs_track_finish(c->id);
-        MG_INFO(("TLS handshake complete: %llu ms (conn %lu)",
-                 (unsigned long long)hs_elapsed, (unsigned long)c->id));
+        // uint32_t hs_cycles = 0;
+        // uint64_t hs_elapsed = tls_hs_track_finish(c->id, &hs_cycles);
+        // uint32_t hs_ms = (uint32_t)hs_elapsed;
+        // uint32_t hs_us = (SystemCoreClock >= 1000000)
+        //     ? (hs_cycles / (SystemCoreClock / 1000000))
+        //     : (hs_cycles * 1000000 / SystemCoreClock);
+        // printf("[SYSTEM] TLS hs conn=%lu ms=%lu us=%lu cyc=%lu\r\n",
+        //        (unsigned long)c->id,
+        //        (unsigned long)hs_ms,
+        //        (unsigned long)hs_us,
+        //        (unsigned long)hs_cycles);
+        tls_hs_track_finish(c->id, NULL);
+    }
+    break;
+
+    case MG_EV_HTTP_HDRS: {
+        struct mg_http_message *hm = (struct mg_http_message *) ev_data;
+        if (!mg_match(hm->uri, mg_str("/api/firmware/upload"), NULL)) {
+            struct mg_str *cl_hdr = mg_http_get_header(hm, "Content-Length");
+            if (cl_hdr != NULL) {
+                int content_length = 0;
+                if (mg_str_to_num(*cl_hdr, 10, &content_length, sizeof(content_length))) {
+                    if (mg_match(hm->uri, mg_str("/api/select/set"), NULL)) {
+                        MG_DEBUG(("%lu select/set body size=%d", (unsigned long) c->id, content_length));
+                    }
+                    if (content_length > MAX_API_BODY_SIZE) {
+                        MG_ERROR(("%lu Rejecting oversized body: %d bytes (limit %d), uri=%.*s",
+                                  (unsigned long) c->id, content_length, MAX_API_BODY_SIZE,
+                                  (int) hm->uri.len, hm->uri.buf));
+                        mg_http_reply(c, 413, "Connection: close\r\n",
+                                      "{\"status\":false,\"message\":\"Payload too large\"}");
+                        c->is_draining = 1;
+                    }
+                }
+            }
+        }
     }
     break;
 /***************************************************************************/
@@ -698,7 +1001,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				} else if (mg_match(hm->uri, mg_str("/api/state/onewire"), NULL)) {
 					if (!check_etag_304(c, hm, &g_ver_onewire)) handle_onewire(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/button"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_button)) handle_buttons(c);
+					if (!check_etag_304(c, hm, &g_ver_button)) handle_buttons(c, hm);
 				} else if (mg_match(hm->uri, mg_str("/api/state/security"), NULL)) {
 					if (!check_etag_304(c, hm, &g_ver_security)) handle_security(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/switch"), NULL)) {
@@ -744,8 +1047,19 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			}
 			/* ── Keep-Alive GET poll endpoints (reuse connection, no TLS storm) ── */
 			if (mg_match(hm->uri, mg_str("/api/select/get"), NULL)) {
-				MG_INFO(("%lu Processing /api/select/get", c->id));
-				handle_select_get(c);
+				if (!check_etag_304(c, hm, &g_ver_select)) {
+					char buf[32];
+					long offset = 0, limit = 30;
+					if (mg_http_get_var(&hm->query, "offset", buf, sizeof(buf)) > 0)
+						offset = mg_json_get_long(mg_str(buf), "$", 0);
+					if (mg_http_get_var(&hm->query, "limit", buf, sizeof(buf)) > 0)
+						limit = mg_json_get_long(mg_str(buf), "$", 30);
+					if (offset < 0) offset = 0;
+					if (limit <= 0) limit = 30;
+					if (limit > MAX_SELECT_PAGE_LIMIT) limit = MAX_SELECT_PAGE_LIMIT;
+					MG_INFO(("%lu Processing /api/select/get offset=%ld limit=%ld", c->id, offset, limit));
+					handle_select_get(c, offset, limit);
+				}
 				keep_alive = true;
 				break;
 			}
@@ -811,6 +1125,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/events/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/events/get", c->id));
 				handle_events_get(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/logs/get"), NULL)) {
+				MG_INFO(("%lu Processing /api/logs/get", c->id));
+				handle_logs_get(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/settings/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/settings/get", c->id));
 				handle_settings_get(c);
@@ -820,9 +1137,19 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/upload"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/upload", c->id));
 				handle_firmware_upload(c, hm);
+				// Keep-Alive нужен только МЕЖДУ чанками одной OTA-сессии.
+				// На финальном чанке (успех -> reboot через 500мс) или при ошибке
+				// ota_session_clear() обнуляет s_ota_expected — соединение НЕ держим:
+				// иначе браузер переиспользует этот сокет для следующего запроса
+				// (например /api/firmware/status), а устройство уже ребутается —
+				// запрос зависает без ответа и без ошибки, и страница не обновляется.
+				keep_alive = (s_ota_expected != 0);
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/commit"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/commit", c->id));
 				handle_firmware_commit(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/firmware/switch-bank"), NULL)) {
+				MG_INFO(("%lu Processing /api/firmware/switch-bank", c->id));
+				handle_firmware_switch_bank(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/rollback"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/rollback", c->id));
 				handle_firmware_rollback(c, hm);
@@ -847,12 +1174,52 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/switch/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/switch/set", c->id));
 				handle_switch_set(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/get"), NULL)) {
+				if (!check_etag_304(c, hm, &g_ver_zigbee)) {
+					char buf[32];
+					long offset = 0, limit = 30;
+					if (mg_http_get_var(&hm->query, "offset", buf, sizeof(buf)) > 0)
+						offset = mg_json_get_long(mg_str(buf), "$", 0);
+					if (mg_http_get_var(&hm->query, "limit", buf, sizeof(buf)) > 0)
+						limit = mg_json_get_long(mg_str(buf), "$", 30);
+					if (offset < 0) offset = 0;
+					if (limit <= 0) limit = 30;
+					if (limit > MAX_SELECT_PAGE_LIMIT) limit = MAX_SELECT_PAGE_LIMIT;
+					MG_INFO(("%lu Processing /api/zigbee/get offset=%ld limit=%ld", c->id, offset, limit));
+					handle_zigbee_get(c, offset, limit);
+				}
+				keep_alive = true;
+				break;
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/set"), NULL)) {
+				MG_INFO(("%lu Processing /api/zigbee/set", c->id));
+				handle_zigbee_set(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/enable"), NULL)) {
+				MG_INFO(("%lu Processing /api/zigbee/enable", c->id));
+				handle_zigbee_enable(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/command"), NULL)) {
+				MG_INFO(("%lu Processing /api/zigbee/command", c->id));
+				handle_zigbee_command(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/rescan"), NULL)) {
+				MG_INFO(("%lu Processing /api/zigbee/rescan", c->id));
+				handle_zigbee_rescan(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/learn/status"), NULL)) {
+				MG_INFO(("%lu Processing /api/zigbee/learn/status", c->id));
+				handle_zigbee_learn_status(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/learn/get"), NULL)) {
+				MG_INFO(("%lu Processing /api/zigbee/learn/get", c->id));
+				handle_zigbee_learn_get(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/learn/label"), NULL)) {
+				MG_INFO(("%lu Processing /api/zigbee/learn/label", c->id));
+				handle_zigbee_learn_label(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/learn/start"), NULL)) {
+				MG_INFO(("%lu Processing /api/zigbee/learn/start", c->id));
+				handle_zigbee_learn_start(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/onoff/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/onoff/set", c->id));
 				handle_onoff_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/button/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/button/get", c->id));
-				handle_button_get(c);
+				handle_button_get(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/button/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/button/set", c->id));
 				handle_button_set(c, hm);
@@ -1003,7 +1370,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		}
 		if (s_active_conns > 0) s_active_conns--;
 		// Освобождаем слот трекинга handshake, если соединение было в процессе
-		tls_hs_track_finish(c->id);
+		tls_hs_track_finish(c->id, NULL);
 		MG_INFO(("%lu Connection closed (TLS: %d, listening: %d)",
 		         c->id, c->is_tls, c->is_listening));
 		break;
@@ -1074,6 +1441,17 @@ static uint8_t  s_tcp_delay_idx = 0;     /* индекс в таблице backo
 static const uint8_t s_backoff_tbl[] = {5, 10, 15, 30, 45, 60};
 #define BACKOFF_TBL_SZ (sizeof(s_backoff_tbl)/sizeof(s_backoff_tbl[0]))
 
+/* RAM-бюджет: над .bss лежит .noinit_ram (0x24 Б, dtcm_ota_*), а над ней
+ * стек (0x2007F800..0x20080000). ASSERT в .ld проверяет ТОЛЬКО _ebss —
+ * переполнение .noinit_ram поверх стека он НЕ ловит. Свободно ~8-24 Б
+ * (Bank A/B). Каждый новый static/глобал - только после сверки с .map! */
+#define MQTT_CLIENT_KEEPALIVE_S 20u  /* keepalive в CONNECT: связан И с интервалом PING,
+                                        И с порогом RX-watchdog ниже - не разъедутся */
+#define MQTT_CLIENT_PING_MS ((uint32_t)MQTT_CLIENT_KEEPALIVE_S * 1000u / 2u)
+
+static uint32_t s_mqtt_last_rx_ms = 0;      /* момент последнего ЛЮБОГО входящего байта от брокера */
+static uint32_t s_mqtt_watchdog_kills = 0;  /* сколько раз RX-watchdog форсировал реконнект */
+
 static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
   if (ev == MG_EV_OPEN) {
     MG_INFO(("%lu CREATED", c->id));
@@ -1093,9 +1471,11 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
 	s_mqtt_reconnect_reported = false; // Сброс: при следующем дисконнекте снова напечатает 1 раз
 	s_mqtt_conn_tick = mg_millis();    /* сбрасываем таймер watchdog  -  соединение здорово */
 	s_mqtt_alive_since = mg_millis();  /* запоминаем время успешного коннекта */
+	s_mqtt_last_rx_ms = (uint32_t) mg_millis(); /* CONNACK = первая живая активность брокера */
 	s_tcp_backoff = 0;                 /* сброс backoff  -  соединение успешно */
 	s_tcp_delay_idx = 0;
 	printf("[MQTT] txmqttop='%s' rxmqttop='%s'\r\n", SetSettings.txmqttop, SetSettings.rxmqttop);
+    LOG_Z2M("MQTT sub='%s' rxzbtop='%s'\r\n", s_sub_topic, get_rxzbtop());
     struct mg_str subt = mg_str(s_sub_topic);
     struct mg_str pubt = mg_str(get_mqtt_topic()), data = mg_str("Hello from stm32!");
     MG_INFO(("%lu CONNECTED to %s", c->id, get_mqtt_url()));
@@ -1112,6 +1492,16 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     sub_opts.topic = mg_str(subt_wildcard);
     mg_mqtt_sub(c, &sub_opts);
     MG_INFO(("%lu SUBSCRIBED to %s", c->id, subt_wildcard));
+
+    /* Подписка на zigbee2mqtt data если rxzbtop отличается от rxmqttop */
+    const char *zbtop = get_rxzbtop();
+    if (strcmp(zbtop, s_sub_topic) != 0) {
+      char zb_wildcard[64];
+      snprintf(zb_wildcard, sizeof(zb_wildcard), "%s/#", zbtop);
+      sub_opts.topic = mg_str(zb_wildcard);
+      mg_mqtt_sub(c, &sub_opts);
+      LOG_Z2M("MQTT SUBSCRIBED to '%s' (zigbee2mqtt data)\r\n", zb_wildcard);
+    }
     struct mg_mqtt_opts pub_opts;
     memset(&pub_opts, 0, sizeof(pub_opts));
     pub_opts.topic = pubt;
@@ -1120,7 +1510,163 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     mg_mqtt_pub(c, &pub_opts);
     MG_INFO(("%lu PUBLISHED %.*s -> %.*s", c->id, (int) data.len, data.buf, (int) pubt.len, pubt.buf));
     mqtt_publish_logfilter_status();
+
+    /* КРИТИЧНО: использовать фиксированные ZBEE_ATTR_*, а не zbee_attribute!
+       После зонда cluster_flags установлен, но zbee_attribute может быть 0
+       (по умолчанию) — тогда подписка уйдёт не на тот атрибут. */
+    for (int i = 0; i < NUMZBEE; i++) {
+      if (ZigbeeConf[i].zbee_ieee[0] != '\0') {
+        /* multi-EP слоты — подписка на конкретный EP */
+        if (ZigbeeConf[i].ep_onoff > 0) {
+          char zbee_sub_topic[96];
+          snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                   "%s/data/%s/%d/EF00/%04X",
+                   get_rxzbtop(),
+                   ZigbeeConf[i].zbee_ieee,
+                   ZigbeeConf[i].zbee_endpoint,
+                   ZigbeeConf[i].ep);
+          struct mg_mqtt_opts zbee_sub;
+          memset(&zbee_sub, 0, sizeof(zbee_sub));
+          zbee_sub.topic = mg_str(zbee_sub_topic);
+          zbee_sub.qos = s_qos;
+          mg_mqtt_sub(c, &zbee_sub);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d ep=%d)\r\n",
+                 zbee_sub_topic, NUMPIN + i, ZigbeeConf[i].ep);
+
+          /* Также подписываемся на кластер 8 (Dimmer) для этого EP */
+          if (ZigbeeConf[i].cluster_flags & ZBEE_CL_DIMMER) {
+            snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                     "%s/data/%s/%d/0008/%04X",
+                     get_rxzbtop(),
+                     ZigbeeConf[i].zbee_ieee,
+                     ZigbeeConf[i].zbee_endpoint,
+                     ZBEE_ATTR_DIMMER);
+            memset(&zbee_sub, 0, sizeof(zbee_sub));
+            zbee_sub.topic = mg_str(zbee_sub_topic);
+            zbee_sub.qos = s_qos;
+            mg_mqtt_sub(c, &zbee_sub);
+            printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d dimmer)\r\n",
+                   zbee_sub_topic, NUMPIN + i);
+          }
+
+          continue;
+        }
+
+        uint8_t flags = ZigbeeConf[i].cluster_flags;
+        if (flags & ZBEE_CL_ONOFF) {
+          char zbee_sub_topic[80];
+          snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                   "%s/data/%s/%d/0006/%04X",
+                   get_rxzbtop(),
+                   ZigbeeConf[i].zbee_ieee,
+                   ZigbeeConf[i].zbee_endpoint,
+                   ZBEE_ATTR_ONOFF);
+          struct mg_mqtt_opts zbee_sub;
+          memset(&zbee_sub, 0, sizeof(zbee_sub));
+          zbee_sub.topic = mg_str(zbee_sub_topic);
+          zbee_sub.qos = s_qos;
+          mg_mqtt_sub(c, &zbee_sub);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+        }
+        if (flags & ZBEE_CL_DIMMER) {
+          char zbee_sub_topic[80];
+          snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                   "%s/data/%s/%d/0008/%04X",
+                   get_rxzbtop(),
+                   ZigbeeConf[i].zbee_ieee,
+                   ZigbeeConf[i].zbee_endpoint,
+                   ZBEE_ATTR_DIMMER);
+          struct mg_mqtt_opts zbee_sub;
+          memset(&zbee_sub, 0, sizeof(zbee_sub));
+          zbee_sub.topic = mg_str(zbee_sub_topic);
+          zbee_sub.qos = s_qos;
+          mg_mqtt_sub(c, &zbee_sub);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+        }
+        if (flags & ZBEE_CL_COLOR) {
+          char zbee_sub_topic[80];
+          snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                   "%s/data/%s/%d/0300/%04X",
+                   get_rxzbtop(),
+                   ZigbeeConf[i].zbee_ieee,
+                   ZigbeeConf[i].zbee_endpoint,
+                   ZBEE_ATTR_COLOR);
+          struct mg_mqtt_opts zbee_sub;
+          memset(&zbee_sub, 0, sizeof(zbee_sub));
+          zbee_sub.topic = mg_str(zbee_sub_topic);
+          zbee_sub.qos = s_qos;
+          mg_mqtt_sub(c, &zbee_sub);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+        }
+        if (flags & ZBEE_CL_COVER) {
+          char zbee_sub_topic[80];
+          snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                   "%s/data/%s/%d/0102/%04X",
+                   get_rxzbtop(),
+                   ZigbeeConf[i].zbee_ieee,
+                   ZigbeeConf[i].zbee_endpoint,
+                   ZBEE_ATTR_COVER);
+          struct mg_mqtt_opts zbee_sub;
+          memset(&zbee_sub, 0, sizeof(zbee_sub));
+          zbee_sub.topic = mg_str(zbee_sub_topic);
+          zbee_sub.qos = s_qos;
+          mg_mqtt_sub(c, &zbee_sub);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+        }
+        if (flags & ZBEE_CL_THERMO) {
+          char zbee_sub_topic[80];
+          snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                   "%s/data/%s/%d/0201/%04X",
+                   get_rxzbtop(),
+                   ZigbeeConf[i].zbee_ieee,
+                   ZigbeeConf[i].zbee_endpoint,
+                   ZBEE_ATTR_THERMO);
+          struct mg_mqtt_opts zbee_sub;
+          memset(&zbee_sub, 0, sizeof(zbee_sub));
+          zbee_sub.topic = mg_str(zbee_sub_topic);
+          zbee_sub.qos = s_qos;
+          mg_mqtt_sub(c, &zbee_sub);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+        }
+        if (flags & ZBEE_CL_LOCK) {
+          char zbee_sub_topic[80];
+          snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                   "%s/data/%s/%d/0101/%04X",
+                   get_rxzbtop(),
+                   ZigbeeConf[i].zbee_ieee,
+                   ZigbeeConf[i].zbee_endpoint,
+                   ZBEE_ATTR_LOCK);
+          struct mg_mqtt_opts zbee_sub;
+          memset(&zbee_sub, 0, sizeof(zbee_sub));
+          zbee_sub.topic = mg_str(zbee_sub_topic);
+          zbee_sub.qos = s_qos;
+          mg_mqtt_sub(c, &zbee_sub);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+        }
+
+        /* Подписка на trigger топик если это кнопка (TRIGGER role) */
+        {
+          int is_trigger = (ZigbeeConf[i].zbee_role == ZBEE_ROLE_TRIGGER);
+          // printf("[SYSTEM][BOOT] zbee[%d] ieee='%s' is_trigger=%d\r\n",
+          //        i, ZigbeeConf[i].zbee_ieee, is_trigger);
+          if (is_trigger) {
+            char zbee_sub_topic[80];
+            snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
+                     "%s/trigger/%s",
+                     get_rxzbtop(),
+                     ZigbeeConf[i].zbee_ieee);
+            struct mg_mqtt_opts zbee_sub;
+            memset(&zbee_sub, 0, sizeof(zbee_sub));
+            zbee_sub.topic = mg_str(zbee_sub_topic);
+            zbee_sub.qos = s_qos;
+            mg_mqtt_sub(c, &zbee_sub);
+            printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d TRIGGER)\r\n", zbee_sub_topic, NUMPIN + i);
+          }
+        }
+      }
+    }
   } else if (ev == MG_EV_MQTT_MSG) {
+    s_mqtt_last_rx_ms = (uint32_t) mg_millis(); /* любой PUBLISH от брокера = брокер жив */
     // When we get echo response, print it
     struct mg_mqtt_message *mm = (struct mg_mqtt_message *) ev_data;
     printf("[MQTT] topic='%.*s' data='%.*s'\r\n",
@@ -1140,6 +1686,9 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
         printf("[MQTT] RX queue full, message dropped!\r\n");
       }
     }
+  } else if (ev == MG_EV_READ) {
+    s_mqtt_last_rx_ms = (uint32_t) mg_millis(); /* любой входящий байт, вкл. PINGRESP,
+                                                   который отдельно нигде не разбирается */
   } else if (ev == MG_EV_CLOSE) {
     MG_INFO(("%lu CLOSED", c->id));
     if (s_conn == c) {
@@ -1204,10 +1753,30 @@ void timer_fn_mqtt(void *arg) {
       s_close_since = 0;
     }
 
+    /* RX-watchdog: соединение официально открыто (CONNACK получен), но от
+     * брокера дольше 1.5x keepalive + 5с не пришло вообще ничего - ни PUBLISH,
+     * ни PONG на наш периодический PING. Аналог MQTT 3.1.1 [MQTT-3.1.2-24],
+     * симметрично mqtt_server.c: ловим "тихий" обрыв TCP (SLZB пропал без
+     * FIN/RST) - на голом TCP-таймауте lwIP это могло длиться вечно. */
+    if (s_conn != NULL && mqtt_connected_reported
+        && !s_conn->is_closing && !s_conn->is_draining) {
+      uint32_t idle  = (uint32_t) mg_millis() - s_mqtt_last_rx_ms;
+      uint32_t limit = MQTT_CLIENT_KEEPALIVE_S * 1500u + 5000u;
+      if (idle > limit) {
+        s_mqtt_watchdog_kills++;
+        printf("[MQTT] no data from broker for %lus (limit %lus), kills=%lu - "
+               "assuming dead, forcing reconnect\r\n",
+               (unsigned long)(idle / 1000), (unsigned long)(limit / 1000),
+               (unsigned long)s_mqtt_watchdog_kills);
+        s_conn->is_closing = 1;  /* следующий тик даст MG_EV_CLOSE -> быстрый реконнект */
+        return;
+      }
+    }
+
     if (s_conn != NULL) {
       if (mqtt_connected_reported && !s_conn->is_closing && !s_conn->is_draining) {
         static uint64_t s_last_ping = 0;
-        if (mg_millis() - s_last_ping >= 30000) {
+        if (mg_millis() - s_last_ping >= MQTT_CLIENT_PING_MS) {
           s_last_ping = mg_millis();
           mg_mqtt_ping(s_conn);
         }
@@ -1256,7 +1825,7 @@ void timer_fn_mqtt(void *arg) {
   opts.qos = s_qos;
   opts.topic = mg_str(get_mqtt_topic());
   opts.version = 4;
-  opts.keepalive = 60;
+  opts.keepalive = MQTT_CLIENT_KEEPALIVE_S;  /* было 60; см. комментарий у #define */
   opts.message = mg_str("bye");
 
   if (SetSettings.mqtt_clt[0] != '\0')
@@ -1301,7 +1870,7 @@ void timer_fn_mqtt(void *arg) {
  Returns false if data changed — caller proceeds with full chunked response. */
 static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
                            volatile uint32_t *ver) {
-    char etag[16], hdr[128];
+    char etag[16], hdr[160];
     snprintf(etag, sizeof(etag), "\"%lu\"", (unsigned long)*ver);
     struct mg_str *inm = mg_http_get_header(hm, "If-None-Match");
     int match = (inm && mg_strcmp(*inm, mg_str(etag)) == 0) ? 1 : 0;
@@ -1314,7 +1883,7 @@ static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
             "ETag: %s\r\nCache-Control: no-cache\r\n",
             etag);
         mg_http_reply(c, 304, hdr, "");
-        return true;  /* 304 sent, Keep-Alive — caller stops */
+        return true;  /* 304 sent, caller stops */
     }
     return false;     /* data changed, caller sends full response */
 }
@@ -1325,13 +1894,22 @@ static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
 const char *json_escape_str(char *dst, const char *src, size_t dst_sz) {
     size_t j = 0;
     for (size_t i = 0; src[i] && j < dst_sz - 1; i++) {
-        switch (src[i]) {
-            case '"':  if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = '"';  } break;
-            case '\\': if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = '\\'; } break;
-            case '\n': if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = 'n';  } break;
-            case '\r': if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = 'r';  } break;
-            case '\t': if (j+2 < dst_sz) { dst[j++] = '\\'; dst[j++] = 't';  } break;
-            default:   dst[j++] = src[i]; break;
+        unsigned char c = (unsigned char)src[i];
+        if (c < 0x20) {
+            /* все контрольные символы 0x00–0x1F → \u00XX */
+            static const char hex[] = "0123456789abcdef";
+            if (j + 6 < dst_sz) {
+                dst[j++] = '\\'; dst[j++] = 'u';
+                dst[j++] = '0';  dst[j++] = '0';
+                dst[j++] = hex[(c >> 4) & 0xF];
+                dst[j++] = hex[c & 0xF];
+            }
+        } else if (c == '"') {
+            if (j + 2 < dst_sz) { dst[j++] = '\\'; dst[j++] = '"'; }
+        } else if (c == '\\') {
+            if (j + 2 < dst_sz) { dst[j++] = '\\'; dst[j++] = '\\'; }
+        } else {
+            dst[j++] = src[i];
         }
     }
     dst[j] = '\0';
@@ -1406,7 +1984,9 @@ static void handle_get_pins(struct mg_connection *c,
         if (t == 0) continue;
 
         char esc_info[128];
+        char esc_pins[16];
         json_escape_str(esc_info, PinsConf[i].info, sizeof(esc_info));
+        json_escape_str(esc_pins, PinsInfo[i].pins, sizeof(esc_pins));
 
         switch (t) {
 
@@ -1420,7 +2000,7 @@ static void handle_get_pins(struct mg_connection *c,
                 "\"ptype\":%d,\"onoff\":%d,"
                 "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
                 "\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].ptype, PinsConf[i].onoff,
                 esc_sc, esc_dc, esc_lp, esc_info);
             break;
@@ -1430,7 +2010,7 @@ static void handle_get_pins(struct mg_connection *c,
             CHUNK_SEND_FMT(c, &first,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"SWITCH\","
                 "\"ptype\":%d,\"onoff\":%d,\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].ptype, PinsConf[i].onoff, esc_info);
             break;
 
@@ -1438,7 +2018,7 @@ static void handle_get_pins(struct mg_connection *c,
             CHUNK_SEND_FMT(c, &first,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"ONEWIRE\","
                 "\"onoff\":%d,\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].onoff, esc_info);
             break;
 
@@ -1447,7 +2027,7 @@ static void handle_get_pins(struct mg_connection *c,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"PWM\","
                 "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,"
                 "\"onoff\":%d,\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].dvalue, PinsConf[i].pwm, PinsConf[i].pwmmax,
                 PinsConf[i].onoff, esc_info);
             break;
@@ -1456,7 +2036,7 @@ static void handle_get_pins(struct mg_connection *c,
             CHUNK_SEND_FMT(c, &first,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"DEVICE\","
                 "\"onoff\":%d,\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].onoff, esc_info);
             break;
 
@@ -1465,7 +2045,7 @@ static void handle_get_pins(struct mg_connection *c,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"ENCODER\","
                 "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,"
                 "\"ponr\":%d,\"onoff\":%d,\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].dvalue, PinsConf[i].pwm, PinsConf[i].pwmmax,
                 PinsConf[i].ponr, PinsConf[i].onoff, esc_info);
             break;
@@ -1474,7 +2054,7 @@ static void handle_get_pins(struct mg_connection *c,
             CHUNK_SEND_FMT(c, &first,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"SECURITY\","
                 "\"ptype\":%d,\"onoff\":%d,\"info\":\"%s\"}",
-                i, PinsInfo[i].pins,
+                i, esc_pins,
                 PinsConf[i].ptype, PinsConf[i].onoff, esc_info);
             break;
 
@@ -1489,61 +2069,126 @@ static void handle_get_pins(struct mg_connection *c,
     c->is_draining = 1;
 }
 
-/* ─── /api/state/button (Keep-Alive polling) ─── */
-/* ─── /api/state/button (Keep-Alive polling) ─── */
-void handle_buttons(struct mg_connection *c) {
+/* ─── /api/state/button (Chunked — no g_body limit) ─── */
+void handle_buttons(struct mg_connection *c, struct mg_http_message *hm) {
 
-    int pos = 0;
+    char etag[16];
+    snprintf(etag, sizeof(etag), "\"%lu\"", (unsigned long)g_ver_button);
+
+    mg_printf(c,
+              "HTTP/1.1 200 OK\r\n"
+              "Content-Type: application/json\r\n"
+              "Transfer-Encoding: chunked\r\n"
+              "ETag: %s\r\n"
+              "Cache-Control: no-cache\r\n\r\n",
+              etag);
 
     /* ── Заголовок JSON ── */
-    pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-        "{\"lang\":\"%s\",\"buttons\":[", SetSettings.lang);
+    mg_http_printf_chunk(c, "{\"lang\":\"%s\",\"buttons\":[", SetSettings.lang);
 
     bool first = true;
 
-    /* ── Массив buttons ── */
+    /* ── Массив buttons (STM32) ── */
     for (int i = 0; i < NUMPIN; i++) {
         if (PinsConf[i].topin != 1) continue;
 
-        int remaining = (int)G_BODY_SIZE - pos;
-        if (remaining < 700) {  // 700 — максимум одной кнопки (3 строки × 200 + фикс.)
-            MG_ERROR(("buttons: OVERFLOW at pin %d, pos=%d remaining=%d",
-                      i, pos, remaining));
-            break;
-        }
-
         char esc_info[64], esc_sc[200], esc_dc[200], esc_lp[200];
+        char esc_pins[16];
         json_escape_str(esc_sc,   PinsConf[i].sclick, sizeof(esc_sc));
         json_escape_str(esc_dc,   PinsConf[i].dclick, sizeof(esc_dc));
         json_escape_str(esc_lp,   PinsConf[i].lpress, sizeof(esc_lp));
         json_escape_str(esc_info, PinsConf[i].info,   sizeof(esc_info));
+        json_escape_str(esc_pins, PinsInfo[i].pins,   sizeof(esc_pins));
 
-        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-            "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
+        CHUNK_SEND_FMT(c, &first,
+            "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
             "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
             "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
-            first ? "" : ",",
-            PinsConf[i].topin, i, PinsInfo[i].pins,
+            PinsConf[i].topin, i, esc_pins,
             PinsConf[i].ptype,
             esc_sc, esc_dc, esc_lp, esc_info,
             PinsConf[i].onoff);
+    }
 
-        first = false;
+    /* ── Zigbee trigger buttons ── */
+    for (int i = 0; i < NUMZBEE; i++) {
+        if (ZigbeeConf[i].zbee_role != ZBEE_ROLE_TRIGGER) continue;
+        if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
+
+        char esc_sclick[260], esc_dclick[260], esc_lpress[260];
+        char esc_label[64];
+        json_escape_str(esc_sclick, zbee_action_sclick(i), sizeof(esc_sclick));
+        json_escape_str(esc_dclick, zbee_action_dclick(i), sizeof(esc_dclick));
+        json_escape_str(esc_lpress, zbee_action_lpress(i), sizeof(esc_lpress));
+        json_escape_str(esc_label, ZigbeeConf[i].zbee_label, sizeof(esc_label));
+
+        int zbee_id = NUMPIN + i;
+        char display_id[24];
+        snprintf(display_id, sizeof(display_id), "%d", zbee_id);
+
+        char esc_pins[64];
+        if (ZigbeeConf[i].ep > 0) {
+            snprintf(esc_pins, sizeof(esc_pins), "EP%d", ZigbeeConf[i].ep);
+        } else if (ZigbeeConf[i].pt_single[0] != '\0') {
+            json_escape_str(esc_pins, ZigbeeConf[i].pt_single, sizeof(esc_pins));
+        } else {
+            snprintf(esc_pins, sizeof(esc_pins), "ZB_%s", ZigbeeConf[i].zbee_ieee);
+        }
+
+        CHUNK_SEND_FMT(c, &first,
+            "{\"topin\":1,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,"
+            "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
+            "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d,"
+            "\"display_id\":\"%s\",\"is_zigbee\":1,"
+            "\"vbtn_mode\":%d}",
+            zbee_id, esc_pins,
+            esc_sclick, esc_dclick, esc_lpress,
+            esc_label, ZigbeeConf[i].onoff,
+            display_id, ZigbeeConf[i].vbtn_mode);
     }
 
     /* ── Закрываем JSON ── */
-    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
+    mg_http_printf_chunk(c, "]}");
+    mg_http_write_chunk(c, "", 0);
+    c->is_draining = 1;
+}
 
-    /* ── Лог для контроля ── */
-    MG_DEBUG(("buttons: len=%d buf=%d", pos, (int)G_BODY_SIZE));
+/* ─── Вспомогательная: сборка pinact JSON из PinsLinks[] ─── */
+static int build_pinact_json(char *buf, size_t bufsize, int for_id) {
+    size_t p = 0;
+    if (bufsize < 3) { if (bufsize) buf[0] = '\0'; return 0; }
+    buf[p++] = '{';
+    bool pa_first = true;
 
-    /* ── Ответ с Content-Length → Keep-Alive работает ── */
-    char extra[128];
-    snprintf(extra, sizeof(extra), "%sETag: \"%lu\"\r\n",
-             s_json_header, (unsigned long)g_ver_button);
+    for (int k = 0; k < NUMPINLINKS; k++) {
+        if (PinsLinks[k].idin == 0 && PinsLinks[k].idout == 0) continue;
+        if (PinsLinks[k].idin != for_id) continue;
+        if (bufsize - p < 48) break;
 
-    mg_http_reply(c, 200, extra, "%s", g_body);
-    /* НЕТ c->is_draining = 1 — соединение остаётся живым! */
+        char name[32];
+        int target = PinsLinks[k].idout;
+        if (target < NUMPIN) {
+            json_escape_str(name, PinsInfo[target].pins, sizeof(name));
+        } else {
+            int zbi = target - NUMPIN;
+            if (zbi >= 0 && zbi < NUMZBEE) {
+                json_escape_str(name,
+                    ZigbeeConf[zbi].zbee_label[0] ? ZigbeeConf[zbi].zbee_label : "Zigbee",
+                    sizeof(name));
+            } else {
+                snprintf(name, sizeof(name), "?");
+            }
+        }
+
+        int written = snprintf(buf + p, bufsize - p, "%s\"%d\":\"%s\"",
+                                pa_first ? "" : ",", target, name);
+        if (written < 0 || (size_t)written >= bufsize - p) break;
+        p += (size_t)written;
+        pa_first = false;
+    }
+
+    if (p < bufsize - 2) { buf[p++] = '}'; buf[p] = '\0'; }
+    return (int)p;
 }
 
 /* ─── /api/state/switch (Keep-Alive polling) ─── */
@@ -1557,26 +2202,69 @@ void handle_switches(struct mg_connection *c) {
 
     bool first = true;
 
-    /* ── Массив switches ── */
+    /* ── Физические пины с topin == 3 ── */
     for (int i = 0; i < NUMPIN; i++) {
         if (PinsConf[i].topin != 3) continue;
 
         int remaining = (int)G_BODY_SIZE - pos;
-        if (remaining < 150) {
+        if (remaining < 450) {
             MG_ERROR(("switches: OVERFLOW at pin %d, pos=%d remaining=%d",
                       i, pos, remaining));
             break;
         }
 
         char esc_info[64];
+        char esc_pins[16];
         json_escape_str(esc_info, PinsConf[i].info, sizeof(esc_info));
+        json_escape_str(esc_pins, PinsInfo[i].pins, sizeof(esc_pins));
+
+        char pinact_buf[256];
+        build_pinact_json(pinact_buf, sizeof(pinact_buf), i);
 
         pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
-            "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
+            "\"pinact\":%s,\"info\":\"%s\",\"onoff\":%d}",
             first ? "" : ",",
-            PinsConf[i].topin, i, PinsInfo[i].pins,
-            PinsConf[i].ptype, esc_info, PinsConf[i].onoff);
+            PinsConf[i].topin, i, esc_pins,
+            PinsConf[i].ptype, pinact_buf, esc_info, PinsConf[i].onoff);
+
+        first = false;
+    }
+
+    /* ── Zigbee выключатели (zbee_role == ZBEE_ROLE_SWITCH) ── */
+    for (int i = 0; i < NUMZBEE; i++) {
+        if (ZigbeeConf[i].zbee_role != ZBEE_ROLE_SWITCH) continue;
+
+        int remaining = (int)G_BODY_SIZE - pos;
+        if (remaining < 450) {
+            MG_ERROR(("switches: OVERFLOW at zigbee %d, pos=%d remaining=%d",
+                      i, pos, remaining));
+            break;
+        }
+
+        char esc_info[64];
+        json_escape_str(esc_info, ZigbeeConf[i].info, sizeof(esc_info));
+
+        /* ID для Zigbee: NUMPIN + i (виртуальные пины) */
+        int zigbee_id = NUMPIN + i;
+
+        /* Payload: если vbtn_mode == PASSTHROUGH и pt_single задан, используем его */
+        char esc_pins[64];
+        if (ZigbeeConf[i].vbtn_mode == VBTN_MODE_PASSTHROUGH &&
+            ZigbeeConf[i].pt_single[0] != '\0') {
+            json_escape_str(esc_pins, ZigbeeConf[i].pt_single, sizeof(esc_pins));
+        } else {
+            snprintf(esc_pins, sizeof(esc_pins), "ZB_%s", ZigbeeConf[i].zbee_ieee);
+        }
+
+        char pinact_buf[256];
+        build_pinact_json(pinact_buf, sizeof(pinact_buf), zigbee_id);
+
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+            "%s{\"topin\":11,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,"
+            "\"pinact\":%s,\"info\":\"%s\",\"onoff\":%d}",
+            first ? "" : ",",
+            zigbee_id, esc_pins, pinact_buf, esc_info, ZigbeeConf[i].onoff);
 
         first = false;
     }
@@ -1586,6 +2274,9 @@ void handle_switches(struct mg_connection *c) {
     first = true;
 
     for (int i = 0; i < NUMPINLINKS; i++) {
+        if (PinsLinks[i].idin == 0 && PinsLinks[i].idout == 0)
+            continue;
+
         int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 80) {
             MG_ERROR(("switches: OVERFLOW at pintopin %d, pos=%d remaining=%d",
@@ -1593,10 +2284,13 @@ void handle_switches(struct mg_connection *c) {
             break;
         }
 
+        char esc_pp_pins[16];
+        json_escape_str(esc_pp_pins, PinsLinks[i].pins, sizeof(esc_pp_pins));
+
         pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
             first ? "" : ",",
-            PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins);
+            PinsLinks[i].idin, PinsLinks[i].idout, esc_pp_pins);
 
         first = false;
     }
@@ -1672,7 +2366,11 @@ void handle_encoders(struct mg_connection *c) {
         pinact[pa_off] = '\0';
 
         char esc_info[64];
+        char esc_pins[16];
+        char esc_encb[16];
         json_escape_str(esc_info, PinsConf[i].info, sizeof(esc_info));
+        json_escape_str(esc_pins, PinsInfo[i].pins, sizeof(esc_pins));
+        json_escape_str(esc_encb, encb_pin, sizeof(esc_encb));
 
         /* ── Проверка остатка буфера перед записью слота ── */
         int remaining = (int)G_BODY_SIZE - pos;
@@ -1686,13 +2384,15 @@ void handle_encoders(struct mg_connection *c) {
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\","
             "\"encoderb\":%d,\"encdrbpin\":\"%s\","
             "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,\"ponr\":%d,"
-            "\"pinact\":{%s},\"info\":\"%s\",\"onoff\":%d}",
+            "\"pinact\":{%s},\"info\":\"%s\",\"onoff\":%d,"
+            "\"zbee_bind\":%d}",
             first ? "" : ",",
-            PinsConf[i].topin, i, PinsInfo[i].pins,
-            encoderb_id, encb_pin,
+            PinsConf[i].topin, i, esc_pins,
+            encoderb_id, esc_encb,
             pwm_dvalue, pwm_freq, pwm_max,
             PinsConf[i].ponr,
-            pinact, esc_info, PinsConf[i].onoff);
+            pinact, esc_info, PinsConf[i].onoff,
+            PinsConf[i].zbee_bind_id);
 
         first = false;
     }
@@ -1702,6 +2402,9 @@ void handle_encoders(struct mg_connection *c) {
     first = true;
 
     for (int i = 0; i < NUMPINLINKS; i++) {
+        if (PinsLinks[i].idin == 0 && PinsLinks[i].idout == 0)
+            continue;
+
         int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 80) {
             MG_ERROR(("encoders: OVERFLOW at pintopin %d, pos=%d remaining=%d",
@@ -1709,10 +2412,13 @@ void handle_encoders(struct mg_connection *c) {
             break;
         }
 
+        char esc_pp_pins[16];
+        json_escape_str(esc_pp_pins, PinsLinks[i].pins, sizeof(esc_pp_pins));
+
         pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
             first ? "" : ",",
-            PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins);
+            PinsLinks[i].idin, PinsLinks[i].idout, esc_pp_pins);
 
         first = false;
     }
@@ -1756,7 +2462,9 @@ static void handle_pid(struct mg_connection *c) {
         }
 
         char esc_info[64];
+        char esc_pname[16];
         json_escape_str(esc_info, PidConf[i].info, sizeof(esc_info));
+        json_escape_str(esc_pname, pin_name, sizeof(esc_pname));
 
         /* Проверка — остаток буфера перед записью слота */
         int remaining = (int)G_BODY_SIZE - pos;
@@ -1775,8 +2483,8 @@ static void handle_pid(struct mg_connection *c) {
             "\"duty\":%d,\"info\":\"%s\",\"onoff\":%d,"
             "\"tune_state\":%u,\"tune_progress\":%u}",
             first ? "" : ",",
-            i + 1, pin_name,
-            pin_name, pin_id,
+            i + 1, esc_pname,
+            esc_pname, pin_id,
             PidConf[i].selsens == 1 ? "1" : "2",
             PidConf[i].sernum,
             PidConf[i].preset,
@@ -1836,15 +2544,20 @@ static void handle_security(struct mg_connection *c) {
         const char *send_sms = PinsConf[i].send_sms[0] ? PinsConf[i].send_sms : "NO";
 
         char esc_info2[64];
+        char esc_pins2[16];
+        char esc_action[64], esc_sms[16];
         json_escape_str(esc_info2, PinsConf[i].info, sizeof(esc_info2));
+        json_escape_str(esc_pins2, PinsInfo[i].pins, sizeof(esc_pins2));
+        json_escape_str(esc_action, action, sizeof(esc_action));
+        json_escape_str(esc_sms, send_sms, sizeof(esc_sms));
 
         pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
             "\"action\":\"%s\",\"send_sms\":\"%s\","
             "\"info\":\"%s\",\"onoff\":%d}",
             first ? "" : ",",
-            PinsConf[i].topin, i, PinsInfo[i].pins, PinsConf[i].ptype,
-            action, send_sms, esc_info2, PinsConf[i].onoff);
+            PinsConf[i].topin, i, esc_pins2, PinsConf[i].ptype,
+            esc_action, esc_sms, esc_info2, PinsConf[i].onoff);
 
         first = false;
     }
@@ -1936,11 +2649,15 @@ close_ds18b20:
     /* НЕТ c->is_draining = 1 — соединение остаётся живым! */
 }
 
-/* ─── /api/state/common ─── */
+/* ─── /api/state/common ───
+ * Поллинг-эндпоинт, опрашивается каждые 2с.
+ * Работает в режиме Keep-Alive. Защита от гонки OTA (когда upload-запрос
+ * попадает на закрывающийся сокет) реализована на фронтенде
+ * через pauseAll() перед аплоадом и защиту OTA-owner в MG_EV_ACCEPT. */
 static void handle_common(struct mg_connection *c) {
-    char b[320];
+    char b[400];
     char tbuf[256];
-    char extra[160];
+    char extra[192];
     parse_stm32time(tbuf, sizeof(tbuf), &SetSettings);
     unsigned long uptime = (unsigned long)(HAL_GetTick() / 1000);
     unsigned long heap = (unsigned long)xPortGetFreeHeapSize();
@@ -1951,8 +2668,8 @@ static void handle_common(struct mg_connection *c) {
         "ETag: \"%lu\"\r\n",
         (unsigned long)g_ver_common);
     snprintf(b, sizeof(b),
-        "{\"uptime\":%lu,\"heap\":%lu,\"ip\":\"%s\",\"gsm\":\"%s\",\"time\":%s}",
-        uptime, heap, "0.0.0.0", "ok", tbuf);
+        "{\"uptime\":%lu,\"heap\":%lu,\"ip\":\"%s\",\"gsm\":\"%s\",\"time\":%s,\"fw\":\"%s\"}",
+        uptime, heap, "0.0.0.0", "ok", tbuf, FW_VERSION);
     mg_http_reply(c, 200, extra, "%s", b);
 }
 
@@ -2082,11 +2799,13 @@ static void handle_onewire(struct mg_connection *c) {
                 MG_ERROR(("onewire: OVERFLOW before no-sensor pin %d, pos=%d", i, pos));
                 goto close_json;
             }
+            char esc_ow_pins[16];
+            json_escape_str(esc_ow_pins, PinsInfo[i].pins, sizeof(esc_ow_pins));
             pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
                 "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":0,"
                 "\"numsens\":0,\"info\":\"No active sensors found\",\"onoff\":0}",
                 first_pin ? "" : ",",
-                i, PinsInfo[i].pins);
+                i, esc_ow_pins);
             first_pin = false;
         }
     }
@@ -2125,15 +2844,14 @@ void web_init(struct mg_mgr *mgr) {
     // Инициализация настроек устройства
     s_settings.device_name = (char *)default_name;
 
-    // Allocate shared JSON buffer in FreeRTOS heap (saves 16KB of .bss)
-    if (g_body != NULL) {
-        vPortFree(g_body);  // Free previous buffer on re-init
-        g_body = NULL;
-    }
-    g_body = pvPortMalloc(G_BODY_SIZE);
+    // Allocate shared JSON buffer in DTCM pool (saves 32KB of FreeRTOS heap)
     if (g_body == NULL) {
-        MG_ERROR(("OOM: g_body allocation failed"));
-        return;
+        g_body = (char *)dtcm_malloc(G_BODY_SIZE);
+        if (g_body == NULL) {
+            MG_ERROR(("OOM: g_body allocation failed"));
+            return;
+        }
+        memset(g_body, 0, G_BODY_SIZE);
     }
 
     // Подключение упакованной файловой системы
@@ -2156,8 +2874,8 @@ void web_init(struct mg_mgr *mgr) {
     if (SetSettings.usehttps == 1) {
         /* Предзагрузка TLS-сертификатов ОДИН раз — до accept, без файлового I/O в mg_mgr_poll */
         uint32_t t_cert = HAL_GetTick();
-        bool cert_ok = https_get_tls_cert(s_tls_cert, sizeof(s_tls_cert));
-        bool key_ok  = https_get_tls_key(s_tls_key, sizeof(s_tls_key));
+        bool cert_ok = https_get_tls_cert(s_tls_cert, DTCM_BUF_TLS_CERT);
+        bool key_ok  = https_get_tls_key(s_tls_key, DTCM_BUF_TLS_KEY);
         printf("[TLS] cert+key preloaded: %lu ms\r\n", (unsigned long)(HAL_GetTick() - t_cert));
 
         if (!cert_ok || !key_ok) {
@@ -2190,6 +2908,23 @@ void web_init(struct mg_mgr *mgr) {
     // Добавление таймеров
     mg_timer_add(mgr, 10 * 1000, MG_TIMER_RUN_NOW | MG_TIMER_REPEAT, timer_sntp_fn, mgr);
     mg_timer_add(mgr, 1000, MG_TIMER_REPEAT | MG_TIMER_RUN_NOW, timer_fn_mqtt, mgr); // Не дублирует в web_init() т.к. setup_mqtt() не вызывается нигде в коде проекта!
+    mg_timer_add(mgr, 5000, MG_TIMER_REPEAT | MG_TIMER_RUN_NOW, ota_watchdog_fn, NULL);
+
+    /* OTA health-check: register ONLY on 3rd trial boot (retries >= 3).
+       On boots 1 and 2 no timer is created — user can still rollback via
+       future web-UI button (mg_ota_rollback). */
+    {
+        const HTTPSsettings *s = get_valid_settings();
+        if (s && s->ota_pending == 1 && s->ota_state == 1
+            && s->ota_boot_retries >= OTA_BOOT_RETRY_MAX) {
+            LOG_OTA("3rd trial boot (retries=%u), registering health-check "
+                    "timer (%lums)\n",
+                    (unsigned) s->ota_boot_retries,
+                    (unsigned long) OTA_BOOT_COMMIT_DELAY_MS);
+            mg_timer_add(mgr, OTA_BOOT_COMMIT_DELAY_MS, 0,
+                         ota_health_check_fn, NULL);
+        }
+    }
 }
 /*********************************** From Zagotovka ****************************************************/
 extern bool *flagmqtt;

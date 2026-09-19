@@ -11,12 +11,43 @@
 #define NUMPIN 89 // количество пинов
 #define PID_MAX_SLOTS 24 // макс. число PID-каналов
 #define NUMPINLINKS 100 // количество pin to pin
-#define NUMTASK 89 // кол-во CRON task
+#define NUMTASK 50 // кол-во CRON task
+
+/* Zigbee cluster bitflags */
+#define ZBEE_CL_ONOFF   0x01  // 0x0006
+#define ZBEE_CL_DIMMER  0x02  // 0x0008
+#define ZBEE_CL_COLOR   0x04  // 0x0300
+#define ZBEE_CL_COVER   0x08  // 0x0102 Window Covering
+#define ZBEE_CL_THERMO  0x10  // 0x0201 Thermostat
+#define ZBEE_CL_LOCK    0x20  // 0x0101 Door Lock
+
+/* Zigbee cluster fixed attributes — фиксированные атрибуты для актуаторов.
+   Поле zbee_attribute для них больше не используется. */
+#define ZBEE_ATTR_ONOFF   0x0000
+#define ZBEE_ATTR_DIMMER  0x0000
+#define ZBEE_ATTR_COLOR   0x0004
+#define ZBEE_ATTR_COVER   0x0008
+#define ZBEE_ATTR_THERMO  0x0000
+#define ZBEE_ATTR_LOCK    0x0000
+
+/* Пассивные кластеры (сенсоры/multi-EP — не зондируем, только слушаем) */
+#define ZBEE_CLUSTER_TEMP       0x0402
+#define ZBEE_CLUSTER_HUMIDITY   0x0405
+#define ZBEE_CLUSTER_OCCUPANCY  0x0406
+#define ZBEE_CLUSTER_MFR        0xEF00
+
+/* Роль устройства (пассивная классификация) */
+#define ZBEE_ROLE_UNKNOWN   0
+#define ZBEE_ROLE_ACTUATOR  1
+#define ZBEE_ROLE_SENSOR    2
+#define ZBEE_ROLE_TRIGGER   3
+#define ZBEE_ROLE_MFR       4
+#define ZBEE_ROLE_SWITCH    5
 
 #include "stdio.h"
 #include <stdbool.h>
 #include "stm32f7xx_hal.h"
-#define PINPAIRS 10 // ПОКА 10 пар {ID:Pin}.
+#define PINPAIRS 3 // Пар {ID:Pin} для каждой кнопки
 
 // Определение структуры для хранения пары {ID:Pin}.
 typedef struct {
@@ -33,7 +64,7 @@ struct dbCron {
 };
 
 struct dbPinsConf {     // Создали структуру с необходимым набором типов элиментов.
-	uint8_t topin;		// Type of pins: NONE - 0; BUTTON - 1; DEVICE - 2; SWITCH - 3; ONEWIRE - 4; PWM - 5; I2C - 6,7; Encoder - 8,9, SECURITY-10;
+	uint8_t topin;		// Type of pins: NONE-0; BUTTON-1; DEVICE-2; SWITCH-3; ONEWIRE-4; PWM-5; I2C-6,7; Encoder-8,9; SECURITY-10; ZIGBEE-11;
 	int pwm;		    // PWM frequency
 	int pwmmax;         // PWM максимальное значение сейчас пока 100
 	uint8_t on;			// Состояние выхода - 1-вкл, 0-выкл. К примеру 'EncoderB'.
@@ -57,12 +88,17 @@ struct dbPinsConf {     // Создали структуру с необходи
 	uint8_t act;        // Action (No action - 0, On - 1,  Off - 2, Toggle - 3, Value - 4, IncValue - 5)
 	short parametr;     // Parameter value for dimmer (0-255), value for IncValue (-255 to 255).
 	int timeout;        // Timeout (ms)
-	char send_sms[5];   // Send sms YES/NO.
-	PinAction pinact[PINPAIRS]; // Массив структур для хранения пар.
-	uint8_t state;      // Значение текущего состояния
-	uint8_t prvstate;   // Значение предыдущего состояния
-	uint32_t deb_tm;    // debounce time
-	uint32_t lasttrg;   // Last trigger time
+	// === ZIGBEE v6 ===
+	char     zbee_ieee[17];       // IEEE адрес, 16 + '\0' (без "0x")
+	uint8_t  zbee_endpoint;       // Endpoint (1-240)
+	uint16_t zbee_cluster;        // Cluster ID: 0x0006=OnOff, 0x0008=Level, 0x0300=Color
+	uint16_t zbee_attribute;      // Attribute ID (16-bit): 0x0000=OnOff state
+	char     zbee_label[30];      // Friendly name для UI (только для отображения)
+	// === ENCODER ↔ ZIGBEE BINDING ===
+	uint8_t  zbee_bind_id;        // ID привязанного Zigbee устройства (NUMPIN+zbi)
+	char     send_sms[5];         // Send sms YES/NO
+	uint8_t  prvstate;            // Предыдущее состояние (для edge detection)
+	uint8_t  state;               // Текущее состояние пина (0/1)
 };
 
 /* ─── PID Controller ─── */
@@ -212,7 +248,15 @@ struct dbSettings {	// Cтруктура для setting
 	char mqtt_pswd[32]; // MQTT Пароль для авторизации
 	char txmqttop[32];  // Transmit MQTT topic
 	char rxmqttop[32];  // Receive MQTT topic
+	char rxzbtop[32];   // Receive Zigbee2MQTT topic prefix (default "zigbee2mqtt")
 	char mqtt_hst[50];  // Your MQTT broker address or domain name (e.g. "192.168.1.100" or "broker.hivemq.com")
+	// Настройки MQTT Server (независимо от MQTT-клиента!)
+	short check_mqtt_srv;      // MQTT server on/off
+	int   mqtt_srv_prt;        // порт сервера (напр. 1884, НЕ совпадает с портом веб-интерфейса)
+	uint8_t mqtt_srv_maxcli;   // лимит одновременных клиентов (clamp в прошивке: MQTT_SRV_MAX_CLIENTS_HARDCAP)
+	char  mqtt_srv_usr[32];    // опционально: логин для подключения к серверу
+	char  mqtt_srv_pswd[32];   // опционально: пароль
+	char  slzb_host[16];       // IP шлюза SLZB-06p7U для watchdog'а автовосстановления (пусто = выключен), строго IPv4: "192.168.1.115"
 	// Настройки IP адреса
 	short check_ip;	// check DHCP on/off
 	short ip_addr0;	// IP адрес
@@ -249,6 +293,118 @@ struct dbSettings {	// Cтруктура для setting
 	uint32_t log_filter_mask; // Маска фильтра логов
 };
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  ZIGBEE PLAN B — отдельный массив ZigbeeConf[NUMZBEE]
+ * ═══════════════════════════════════════════════════════════════════════════ */
+#define NUMZBEE 200
 
+typedef struct {
+    char     zbee_ieee[17];      // IEEE-адрес без "0x", 16 hex + '\0'
+    uint8_t  zbee_endpoint;      // 1-240
+    uint8_t  cluster_flags;      // Bitmask: ZBEE_CL_ONOFF|ZBEE_CL_DIMMER|ZBEE_CL_COLOR
+    uint16_t zbee_attribute;     // 0x0000 и т.д., зависит от кластера (только для сенсоров)
+    char     zbee_label[30];     // Произвольное имя для UI
+    uint8_t  state;              // 0/1 — текущее состояние устройства
+    int      dvalue;             // яркость/hue/etc
+    uint8_t  onoff;              // Master-enable: 1=вкл, 0=выкл
+    uint32_t color_hex;          // Текущий цвет RGB (0xRRGGBB), по умолчанию 0xFFAA00
+    char     info[30];           // служебное поле
+    uint8_t  topin;              // всегда 11 (ZIGBEE), для унификации
+    uint8_t  zbee_role;          // ZBEE_ROLE_* — тип поведения
+    uint16_t sensor_cluster;     // какой кластер сработал (для SENSOR)
+    int      sensor_last_val;    // последнее значение сенсора
+    uint16_t ep_onoff;      // EP-номер для вкл/выкл (0 = не размечен)
+    uint16_t ep_brightness; // EP-номер для яркости
+    uint16_t ep_color;      // EP-номер для цвета
+    uint16_t ep;            // EP-номер этого слота (0 = не sub-slot)
+    uint8_t  device_type_override; // 0=Auto, 1=Socket, 2=Dimmer, 3=Color Lamp
+
+    /* ── Button action pool index (when zbee_role == ZBEE_ROLE_TRIGGER) ── */
+    uint8_t  action_pool_idx;     // Index into ZigbeeActionPool[] (0xFF = no actions)
+
+    uint8_t  vbtn_mode;          // 0 = PASSTHROUGH, 1 = RAW (auto-detected)
+    char     pt_single[12];      // Payload for single click (PASSTHROUGH)
+    char     pt_double[12];      // Payload for double click
+    char     pt_long[12];        // Payload for long press
+
+    /* ── Runtime state for RAW mode (not saved to flash) ── */
+    uint8_t  vbtn_state;         // 0=IDLE, 1=PRESSED, 2=WAIT_REPEAT, 3=RE_PRESSED, 5=LONG_HOLD
+    uint8_t  vbtn_repeat;        // Click counter (1 or 2)
+    uint8_t  vbtn_level;         // Current level (1=pressed, 0=released)
+    uint8_t  vbtn_auto_release;  // Auto-release flag for pulse click events
+    uint32_t vbtn_last_tick;     // Last event time
+    uint32_t vbtn_state_tick;    // Time of state entry
+
+    /* ── Switch payload mapping (when zbee_role == ZBEE_ROLE_SWITCH) ── */
+    char     switch_payload_on[32];    // Payload для state=1 (напр. "btn_double")
+    char     switch_payload_off[32];   // Payload для state=0 (напр. "btn_long")
+
+    /* ── Dimmer range auto-detection (from Learning Mode observations) ── */
+    uint16_t dimmer_min;         // Минимальное значение яркости (автоопределённое или ручное)
+    uint16_t dimmer_max;         // Максимальное значение яркости
+    uint16_t dimmer_cluster;     // Cluster: 0x0008=Level, 0xEF00=Manufacturer
+    uint8_t  dimmer_attr;        // Attribute: 0x0000=Level, DP# for Manufacturer
+} ZigbeeVirtualPin;
+
+extern ZigbeeVirtualPin ZigbeeConf[NUMZBEE];  /* в .bss — в DTCM не помещается вместе с g_body/MQTT */
+
+/* ── Action pool for Zigbee triggers (saves ~56 KB RAM) ── */
+#define NUMACTIONPOOL       50
+#define ACTION_POOL_IDX_NONE 0xFF
+
+typedef struct {
+    char     sclick[125];
+    char     dclick[125];
+    char     lpress[125];
+} ZigbeeActionPool;
+
+extern ZigbeeActionPool ZigbeeActionPoolArr[NUMACTIONPOOL];
+
+const char *zbee_action_sclick(int zbi);
+const char *zbee_action_dclick(int zbi);
+const char *zbee_action_lpress(int zbi);
+uint8_t zbee_action_alloc(void);
+void zbee_action_free(uint8_t idx);
+void zbee_action_clear(uint8_t idx);
+
+/* ── Virtual button constants ── */
+#define VBTN_STATE_IDLE        0
+#define VBTN_STATE_PRESSED     1
+#define VBTN_STATE_WAIT_REPEAT 2
+#define VBTN_STATE_RE_PRESSED  3
+#define VBTN_STATE_LONG_HOLD   5
+
+#define VBTN_MODE_PASSTHROUGH  0
+#define VBTN_MODE_RAW          1
+
+#define VBTN_DEBOUNCE_MS       30
+#define VBTN_DOUBLE_MS         300
+#define VBTN_LONG_MS           800
+#define VBTN_WATCHDOG_MS       5000
+
+/* ── Addressing: unified ID space ── */
+static inline bool IsZigbeePin(int id) { return id >= NUMPIN && id < NUMPIN + NUMZBEE; }
+static inline int  ZbeeIdx(int id)     { return id - NUMPIN; }
+
+/* ── Virtual button functions ── */
+void zbee_vbtn_tick(void);
+void zbee_vbtn_mqtt_event(int slot, const char *payload);
+void zbee_vbtn_auto_detect(int slot, const char *first_payload);
+void vbtn_execute(int slot, int event_type);
+
+/* ── PinView — тонкий интерфейс для общих операций ── */
+typedef struct {
+    uint8_t    topin;
+    uint8_t    state;
+    int        dvalue;
+    const char *label;
+    bool       is_zigbee;
+    void      *raw;        // dbPinsConf* либо ZigbeeVirtualPin*
+} PinView;
+
+/* Функции конфигурации zigbee.ini */
+void GetZigbeeConfig(void);
+void SetZigbeeConfig(void);
 
 #endif /* INC_DB_H_ */
+

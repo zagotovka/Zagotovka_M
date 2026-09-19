@@ -38,14 +38,15 @@ ENTRY(Reset_Handler)
 /* Highest address of the user mode stack */
 _estack = 0x20080000; /* Конец всей физической 512КБ RAM */
 
-_Min_Heap_Size = 0x8000; /* required amount of heap */
+_Min_Heap_Size = 0x8000; /* newlib malloc() не используется — вся динамика через FreeRTOS pvPortMalloc() */
 _Min_Stack_Size = 0x800; /* required amount of stack */
 
 /* Memories definition */
 MEMORY
 {
-  RAM      (xrw)    : ORIGIN = 0x20000000,   LENGTH = 512K
-  FLASH    (rx)     : ORIGIN = 0x8000000,    LENGTH = 2048K
+  ITCM     (rx)     : ORIGIN = 0x00000000,   LENGTH = 16K
+  RAM      (rw)    : ORIGIN = 0x20000000,   LENGTH = 512K
+  FLASH    (rx)     : ORIGIN = 0x08040000,  LENGTH = 768K  /* Active: Sectors 5-7 (0x08040000..0x080FFFFF) */
   ZERG_FLASH (rx)  : ORIGIN = 0x081C0000,   LENGTH = 256K  /* Sector 11 */
 }
 
@@ -58,6 +59,16 @@ SECTIONS
     . = ALIGN(4);
     KEEP(*(.isr_vector)) /* Startup code */
     . = ALIGN(4);
+  } >FLASH
+
+  /* Метка банка (fw_meta.c) — фиксированное смещение FW_META_OFFSET
+   * от начала образа, гарантированно попадает в первый (0-й) чанк
+   * OTA-загрузки. Должно совпадать с FW_META_OFFSET в Core/Inc/fw_meta.h.
+   * VMA задан явно (а не через ". =" между секциями): линкер с >FLASH
+   * может игнорировать межсекционные присваивания счётчика положения. */
+  .fw_meta (ORIGIN(FLASH) + 0x300) :
+  {
+    KEEP(*(.fw_meta))
   } >FLASH
 
   /* The program code and other data into "FLASH" Rom type memory */
@@ -76,6 +87,30 @@ SECTIONS
     . = ALIGN(4);
     _etext = .;        /* define a global symbols at end of code */
   } >FLASH
+
+  /* ITCM: горячий код (ISR, FreeRTOS kernel, latency-critical functions) */
+  .itcm :
+  {
+    . = ALIGN(4);
+    _sitcm = .;
+    *(.itcm)
+    *(.itcm*)
+    . = ALIGN(4);
+    _eitcm = .;
+  } >ITCM AT> FLASH
+  _sitcm_load = LOADADDR(.itcm);
+
+  /* Флаг подтверждения OTA (compat_ota.c): NOLOAD — не копируется из Flash
+     и не обнуляется как .bss, поэтому переживает mg_device_reset()
+     (NVIC_SystemReset). Не переживает реальную потерю питания — для этого
+     в compat_ota.c используется magic-число. Лежит сразу за .itcm в том же
+     регионе ITCM, свободного места достаточно (~1.2 КБ). */
+  .noinit_itcm (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.noinit_itcm)
+    . = ALIGN(4);
+  } >ITCM
 
   /* Constant data into "FLASH" Rom type memory */
   .rodata :
@@ -163,6 +198,20 @@ SECTIONS
     . = ALIGN(8);
   } >RAM
 
+  /* Пул DTCM: статические DMA-небезопасные объекты (стеки задач,
+     DSP-буферы, парсинг). НЕ подключён к pvPortMalloc()/heap_4 —
+     отдельный простой bump-allocator, см. dtcm_alloc.c.
+     ВНИМАНИЕ: DTCM не DMA-доступна! Buffers для Ethernet/USB/UART/SPI
+     через DMA сюда класть НЕЛЬЗЯ. */
+  .dtcm_pool (NOLOAD) :
+  {
+    . = ALIGN(8);
+    _sdtcm_pool = .;
+  } >RAM
+
+  /* _edtcm_pool — фиксированный адрес: конец DTCM пула (перед ethernet_dma) */
+  _edtcm_pool = 0x20020000 - 8;
+
   /* Принудительно фиксируем сетевую секцию на адрес 0x20020000 (начало AxiSRAM) */
   .ethernet_dma 0x20020000 (NOLOAD) :
   {
@@ -189,13 +238,26 @@ SECTIONS
     __bss_end__ = _ebss;
   } >RAM
 
-  /* Секция .zagotovka_section в области ZERG_FLASH */
-  .zagotovka_section ORIGIN(ZERG_FLASH) :
+  /* NOLOAD-переменные в SRAM: переживают NVIC_SystemReset(), но не POR.
+     Перенесены из ITCM (.noinit_itcm), чтобы MPU мог защитить весь ITCM
+     как Read-Only и ловить дикие записи через MemManage Fault. */
+  .noinit_ram (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.noinit_ram)
+    *(.noinit_ram*)
+    . = ALIGN(4);
+  } >RAM
+
+
+  /* Секция .zagotovka_section в области ZERG_FLASH (Sector 11).
+     NOLOAD — не попадает в .bin, т.к. настройки пишутся в рантайме через HAL_FLASH_Program. */
+  .zagotovka_section 0x081C0000 (NOLOAD) :
   {
       . = ALIGN(8);
       KEEP(*(.zagotovka_section))
       . = ALIGN(8);
-  } >ZERG_FLASH AT> FLASH
+  }
 
   /* Remove information from the compiler libraries */
   /DISCARD/ :

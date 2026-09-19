@@ -141,6 +141,18 @@ const HELP_CONTENT = {
               </ul>
             </div>
           </div>
+          <div style="margin-top:12px;">
+            <h2 style="font-weight:700; font-size:15px; margin-bottom:8px;">Формат полей Action</h2>
+            <p style="margin-bottom:8px;">Максимальное количество записей в формате <code>ID:Action</code> с разделителем <code>,</code> ограничено длиной строки — <b>124 символа</b>.</p>
+            <table style="width:100%; font-size:13px; border-collapse:collapse;">
+              <thead><tr><th style="border:1px solid #cbd5e1; padding:4px 8px;">Длина ID</th><th style="border:1px solid #cbd5e1; padding:4px 8px;">Пример</th><th style="border:1px solid #cbd5e1; padding:4px 8px;">Байт на запись</th><th style="border:1px solid #cbd5e1; padding:4px 8px;">Записей в строке</th></tr></thead>
+              <tbody>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 8px;">1 знак</td><td style="border:1px solid #cbd5e1; padding:4px 8px;"><code>5:1</code></td><td style="border:1px solid #cbd5e1; padding:4px 8px;">3 + запятая = 4</td><td style="border:1px solid #cbd5e1; padding:4px 8px;">до 31</td></tr>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 8px;">2 знака</td><td style="border:1px solid #cbd5e1; padding:4px 8px;"><code>15:1</code></td><td style="border:1px solid #cbd5e1; padding:4px 8px;">4 + запятая = 5</td><td style="border:1px solid #cbd5e1; padding:4px 8px;">до 24</td></tr>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 8px;">3 знака</td><td style="border:1px solid #cbd5e1; padding:4px 8px;"><code>155:1</code></td><td style="border:1px solid #cbd5e1; padding:4px 8px;">5 + запятая = 6</td><td style="border:1px solid #cbd5e1; padding:4px 8px;">до 20</td></tr>
+              </tbody>
+            </table>
+          </div>
     </div>
   `,
   en: html`
@@ -169,6 +181,18 @@ const HELP_CONTENT = {
                 <li><b>pid</b> — PWM output : (Duty value 0–100%)</li>
               </ul>
             </div>
+          </div>
+          <div style="margin-top:12px;">
+            <h2 style="font-weight:700; font-size:15px; margin-bottom:8px;">Action Field Format</h2>
+            <p style="margin-bottom:8px;">Maximum number of entries in <code>ID:Action</code> format with <code>,</code> separator is limited by string length — <b>124 characters</b>.</p>
+            <table style="width:100%; font-size:13px; border-collapse:collapse;">
+              <thead><tr><th style="border:1px solid #cbd5e1; padding:4px 8px;">ID Length</th><th style="border:1px solid #cbd5e1; padding:4px 8px;">Example</th><th style="border:1px solid #cbd5e1; padding:4px 8px;">Bytes per entry</th><th style="border:1px solid #cbd5e1; padding:4px 8px;">Entries in string</th></tr></thead>
+              <tbody>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 8px;">1 digit</td><td style="border:1px solid #cbd5e1; padding:4px 8px;"><code>5:1</code></td><td style="border:1px solid #cbd5e1; padding:4px 8px;">3 + comma = 4</td><td style="border:1px solid #cbd5e1; padding:4px 8px;">up to 31</td></tr>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 8px;">2 digits</td><td style="border:1px solid #cbd5e1; padding:4px 8px;"><code>15:1</code></td><td style="border:1px solid #cbd5e1; padding:4px 8px;">4 + comma = 5</td><td style="border:1px solid #cbd5e1; padding:4px 8px;">up to 24</td></tr>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 8px;">3 digits</td><td style="border:1px solid #cbd5e1; padding:4px 8px;"><code>155:1</code></td><td style="border:1px solid #cbd5e1; padding:4px 8px;">5 + comma = 6</td><td style="border:1px solid #cbd5e1; padding:4px 8px;">up to 20</td></tr>
+              </tbody>
+            </table>
           </div>
     </div>
   `
@@ -226,6 +250,55 @@ const TabOneWire = () => {
 
   const togglePin = (id) => setExpandedPins(prev => ({ ...prev, [id]: !prev[id] }));
   const clean = (s) => typeof s === 'string' ? s.replace(/[^\x20-\x7E\u0400-\u04FF]/g, '') : s;
+
+  // ---------------------------------------------------------------------
+  // Надёжное копирование в буфер обмена.
+  // navigator.clipboard доступен только в защищённом контексте (HTTPS
+  // или localhost). Устройство обычно открывают по обычному http://<ip>
+  // в локальной сети — там navigator.clipboard отсутствует или его
+  // вызов молча падает, поэтому кнопка "copy SN" не работала ни в
+  // Firefox, ни в Chrome. Делаем откат на document.execCommand('copy')
+  // через временный textarea, плюс явную обработку ошибок/отказа
+  // в разрешении, чтобы пользователь видел результат в любом случае.
+  // ---------------------------------------------------------------------
+  const copyToClipboard = (text, buttonEl) => {
+    const original = 'copy SN';
+    const showResult = (ok) => {
+      if (!buttonEl) return;
+      buttonEl.textContent = ok ? 'Copied!' : 'Copy failed';
+      setTimeout(() => { buttonEl.textContent = original; }, 1500);
+    };
+
+    const legacyFallbackCopy = () => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-9999px';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, ta.value.length);
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        showResult(ok);
+      } catch (e) {
+        showResult(false);
+      }
+    };
+
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(
+        () => showResult(true),
+        () => legacyFallbackCopy()
+      );
+    } else {
+      // Небезопасный контекст (обычный http://192.168.x.x) — сразу используем fallback.
+      legacyFallbackCopy();
+    }
+  };
 
   useEffect(() => { initGlobalTooltip(); }, []);
 
@@ -341,9 +414,7 @@ const TabOneWire = () => {
                 <span class="font-mono text-base text-slate-700 select-all">${clean(s.s_number)}</span>
                 <button class="px-4 py-1.5 rounded-full text-sm font-bold text-white bg-gradient-to-r from-teal-400 to-cyan-500" onclick=${(e) => {
                   e.stopPropagation();
-                  navigator.clipboard.writeText(clean(s.s_number));
-                  e.target.textContent = 'Copied!';
-                  setTimeout(() => e.target.textContent = 'copy SN', 1500);
+                  copyToClipboard(clean(s.s_number), e.target);
                 }}>copy SN</button>
               </span>
             `}
@@ -353,6 +424,7 @@ const TabOneWire = () => {
             <span class="text-slate-300">|</span>
             <${ActionBadge} isUpper=${true} value=${s.ut} unit="°C" str=${s.action_ut} />
             <${ActionBadge} isUpper=${false} value=${s.lt} unit="°C" str=${s.action_lt} />
+            ${s.info ? html`<span class="text-slate-300">|</span><span class="font-semibold text-sm text-amber-600" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:2px 10px;white-space:nowrap;">${s.info}</span>` : ''}
             <a href="#" class="ml-auto text-blue-600 font-semibold text-sm uppercase px-3 py-1 bg-white/70 rounded-lg" onclick=${(e) => {
               e.preventDefault();
               setSelectedSensor({ ...s, oneWireId: d.id, sensorType, pins: d.pins || d.pin });

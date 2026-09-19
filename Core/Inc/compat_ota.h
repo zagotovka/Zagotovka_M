@@ -32,20 +32,49 @@ void mg_device_reset(void);
 #define MG_FIRMWARE_PREVIOUS 1
 #endif
 
-/* OTA status codes (compatible with 7.13) */
-#define MG_OTA_UNAVAILABLE 0
-#define MG_OTA_FIRST_BOOT  1
-#define MG_OTA_UNCOMMITTED 2
-#define MG_OTA_COMMITTED   3
+/* Помечает "первая загрузка после OTA / не подтверждено" и возвращает
+ * ПРЕДЫДУЩЕЕ значение флага (для отката в mg_ota_cancel_pending(),
+ * если своп в итоге не состоялся).
+ * Целевой банк = противоположный активному (mg_ota_get_active_bank()),
+ * предыдущий активный банк запоминается в ota_prev_active_bank —
+ * bootloader откатывается именно на него. */
+uint32_t mg_ota_mark_pending(void);
+
+/* Откатывает флаг состояния OTA к значению prev_state, полученному
+ * ранее от mg_ota_mark_pending(). Вызывать только если mg_ota_end()
+ * вернул false (своп не произошёл, текущая прошивка не менялась). */
+void mg_ota_cancel_pending(uint32_t prev_state);
+
+/* Сбрасывает статус OTA в 0 ("нет данных"). вызывается сразу после успешного mg_ota_begin(), до начала записи чанков */
+void mg_ota_reset_status(void);
 
 /* ---- OTA query stubs ---------------------------------------------------- */
 int      mg_ota_status(int firmware);
+void     mg_ota_set_pending_bank(uint8_t target_bank, uint8_t prev_bank);
+uint8_t  mg_ota_get_active_bank(void);
 uint32_t mg_ota_crc32(int firmware);
 uint32_t mg_ota_timestamp(int firmware);
 size_t   mg_ota_size(int firmware);
 
 bool mg_ota_commit(void);
 bool mg_ota_rollback(void);
+
+/* Переключение активного банка без заливки нового образа:
+ * проверяет валидность образа в ПРОТИВОПОЛОЖНОМ банке, делает его
+ * активным (ota_active_bank=target, ota_pending=0, ota_state=3) и
+ * перезагружает устройство. Возвращает false, если образ в целевом
+ * банке невалиден (перезагрузки не будет). */
+bool mg_ota_switch_bank(void);
+
+/* Проверка реального наличия рабочего образа в банке по СОДЕРЖИМОМУ flash,
+ * а не по OTA-метаданным: начальный MSP в векторной таблице банка обязан
+ * указывать в SRAM (0x200xxxxx). Критерий полностью идентичен проверке
+ * app_image_valid() в bootloader'е, поэтому результат совпадает с решением
+ * bootloader'а "грузить/не грузить". Образ, залитый напрямую через ST-Link
+ * (без OTA-меток и без версии), считается валидным — версия появляется
+ * только после mg_ota_commit(), т.е. только для образов, залитых через OTA.
+ * bank: 0 = Bank A (0x08040000), 1 = Bank B (0x08100000). */
+bool mg_ota_bank_image_valid(uint8_t bank);
 
 /* ---- Flash stubs -------------------------------------------------------- */
 void  *mg_flash_start(void);

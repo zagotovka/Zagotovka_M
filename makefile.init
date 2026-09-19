@@ -1,0 +1,6 @@
+# Pre-build: generate packed_fs.c from web sources (runs before compilation)
+ifneq ($(MAKECMDGOALS),clean)
+PROJECT_ROOT := $(abspath $(CURDIR)/..)
+$(info [pre-build] Running web build + pack...)
+$(shell bash $(PROJECT_ROOT)/scripts/build_web_and_pack.sh 1>&2)
+endif

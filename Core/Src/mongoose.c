@@ -18,6 +18,11 @@
 // SPDX-License-Identifier: GPL-2.0-only or commercial
 
 #include "mongoose.h"
+#include "logger.h"
+#include "stm32f7xx_hal.h" /* UART_HandleTypeDef, HAL_UART_Transmit() */
+#include <string.h>        /* strlen */
+
+extern UART_HandleTypeDef huart3;
 
 #ifdef MG_ENABLE_LINES
 #line 1 "src/base64.c"
@@ -896,16 +901,15 @@ bool mg_ota_flash_begin(size_t new_firmware_size, struct mg_flash *flash) {
   if (s_size) {
     MG_ERROR(("OTA already in progress. Call mg_ota_end()"));
   } else {
-    size_t half = flash->size / 2;
     s_crc32 = 0;
-    s_addr = (char *) flash->start + half;
-    MG_DEBUG(("FW %lu bytes, max %lu", new_firmware_size, half));
-    if (new_firmware_size < half) {
+    s_addr = (char *) flash->start;  // пишем с начала целевого банка
+    MG_DEBUG(("FW %lu bytes, max %lu", new_firmware_size, flash->size));
+    if (new_firmware_size < flash->size) {
       ok = true;
       s_size = new_firmware_size;
-      MG_INFO(("Starting OTA, firmware size %lu", s_size));
+      MG_INFO(("Starting OTA at %p, firmware size %lu", flash->start, s_size));
     } else {
-      MG_ERROR(("Firmware %lu is too big to fit %lu", new_firmware_size, half));
+      MG_ERROR(("Firmware %lu too big for bank (%lu)", new_firmware_size, flash->size));
     }
   }
   return ok;
@@ -925,7 +929,36 @@ bool mg_ota_flash_write(const void *buf, size_t len, struct mg_flash *flash) {
       memcpy(tmp, (char *) buf + len_aligned_down, left);
       ok = flash->write_fn(s_addr + len_aligned_down, tmp, sizeof(tmp));
     }
-    s_crc32 = mg_crc32(s_crc32, (char *) buf, len);  // Update CRC
+    // Direct UART debug for non-aligned writes
+    if (len_aligned_down < len && (g_log_filter_mask & LOG_MASK_OTA)) {
+        char dbg[128];
+        int n;
+        const char *prefix = cat_prefixes[LOG_CAT_OTA];
+        HAL_UART_Transmit(&huart3, (uint8_t *) prefix, strlen(prefix), 50);
+        n = snprintf(dbg, sizeof(dbg),
+                     "WRITE_PAD: addr=%p len=%u aligned=%u left=%u ok=%d\r\n",
+                     s_addr, (unsigned)len, (unsigned)len_aligned_down, (unsigned)(len - len_aligned_down), ok);
+        HAL_UART_Transmit(&huart3, (uint8_t *) dbg, (uint16_t) n, 200);
+        // Read back the FULL 32-byte padded block from flash to verify
+        HAL_UART_Transmit(&huart3, (uint8_t *) "WRITE_VERIFY: ", 14, 50);
+        volatile char *faddr = (volatile char *)(s_addr + len_aligned_down);
+        for (size_t i = 0; i < flash->align; i++) {
+            n = snprintf(dbg, sizeof(dbg), "%02x ", (uint8_t)faddr[i]);
+            HAL_UART_Transmit(&huart3, (uint8_t *) dbg, (uint16_t) n, 50);
+        }
+        HAL_UART_Transmit(&huart3, (uint8_t *) "\r\n", 2, 20);
+        // Also verify the LAST 16 bytes of the aligned write
+        HAL_UART_Transmit(&huart3, (uint8_t *) "WRITE_ALIGNED_TAIL: ", 19, 50);
+        volatile char *atail = (volatile char *)(s_addr + len_aligned_down - 16);
+        for (size_t i = 0; i < 16; i++) {
+            n = snprintf(dbg, sizeof(dbg), "%02x ", (uint8_t)atail[i]);
+            HAL_UART_Transmit(&huart3, (uint8_t *) dbg, (uint16_t) n, 50);
+        }
+        HAL_UART_Transmit(&huart3, (uint8_t *) "\r\n", 2, 20);
+    }
+    // CRC over the original received data — matches mg_ota_flash_end() which
+    // reads exactly s_size bytes from flash (padding is beyond s_size).
+    s_crc32 = mg_crc32(s_crc32, (char *) buf, len);
     MG_DEBUG(("%#x %p %lu -> %d", s_addr - len, buf, len, ok));
     s_addr += len;
   }
@@ -933,14 +966,44 @@ bool mg_ota_flash_write(const void *buf, size_t len, struct mg_flash *flash) {
 }
 
 bool mg_ota_flash_end(struct mg_flash *flash) {
-  char *base = (char *) flash->start + flash->size / 2;
+  char *base = (char *) flash->start;  // образ лежит с начала целевого банка
   bool ok = false;
   if (s_size) {
     size_t size = (size_t) (s_addr - base);
+#if defined(__CORTEX_M) && (__CORTEX_M == 7U)
+    SCB_CleanInvalidateDCache();
+#endif
     uint32_t crc32 = mg_crc32(0, base, s_size);
+    // Direct UART debug dump — guaranteed delivery, bypasses MessageBuffer
+    if (g_log_filter_mask & LOG_MASK_OTA) {
+        char dbg[128];
+        int n;
+        const char *prefix = cat_prefixes[LOG_CAT_OTA];
+        HAL_UART_Transmit(&huart3, (uint8_t *) prefix, strlen(prefix), 50);
+        n = snprintf(dbg, sizeof(dbg),
+                     "FLASH_END: s_crc32=%lx crc32=%lx size=%u/%u\r\n",
+                     s_crc32, crc32, (unsigned)s_size, (unsigned)size);
+        HAL_UART_Transmit(&huart3, (uint8_t *) dbg, (uint16_t) n, 200);
+        // Dump first 32 bytes from flash staging area
+        HAL_UART_Transmit(&huart3, (uint8_t *) "FLASH_HEAD: ", 12, 50);
+        for (size_t i = 0; i < 32 && i < s_size; i++) {
+            n = snprintf(dbg, sizeof(dbg), "%02x ", (uint8_t)base[i]);
+            HAL_UART_Transmit(&huart3, (uint8_t *) dbg, (uint16_t) n, 50);
+        }
+        HAL_UART_Transmit(&huart3, (uint8_t *) "\r\n", 2, 20);
+        // Dump last 32 bytes from flash staging area
+        HAL_UART_Transmit(&huart3, (uint8_t *) "FLASH_TAIL: ", 12, 50);
+        char *tail = s_addr - 32;
+        if (tail > base) {
+            for (size_t i = 0; i < 32; i++) {
+                n = snprintf(dbg, sizeof(dbg), "%02x ", (uint8_t)tail[i]);
+                HAL_UART_Transmit(&huart3, (uint8_t *) dbg, (uint16_t) n, 50);
+            }
+        }
+        HAL_UART_Transmit(&huart3, (uint8_t *) "\r\n", 2, 20);
+    }
     if (size == s_size && crc32 == s_crc32) ok = true;
-    MG_DEBUG(("CRC: %x/%x, size: %lu/%lu, status: %s", s_crc32, crc32, s_size,
-              size, ok ? "ok" : "fail"));
+    LOG_OTA("CRC: %lx/%lx, size: %u/%u, status: %s\n", s_crc32, crc32, (unsigned)s_size, (unsigned)size, ok ? "ok" : "fail");
     s_size = 0;
     if (ok) ok = flash->swap_fn();
   }
@@ -5880,7 +5943,9 @@ void mg_multicast_restore(struct mg_connection *c, uint8_t *from) {
 #define MG_TCPIP_ACK_MS 150    // Timeout for ACKing
 #define MG_TCPIP_ARP_MS 100    // Timeout for ARP response
 #define MG_TCPIP_SYN_MS 15000  // Timeout for connection establishment
+#ifndef MG_TCPIP_FIN_MS
 #define MG_TCPIP_FIN_MS 1000   // Timeout for closing connection
+#endif
 
 #ifndef MG_TCPIP_WIN
 #define MG_TCPIP_WIN 6000  // TCP window size
@@ -7864,6 +7929,15 @@ static void mg_tcpip_poll(struct mg_tcpip_if *ifp, uint64_t now) {
 // our lock-free queue with preallocated buffer to copy data and return asap
 void mg_tcpip_qwrite(void *buf, size_t len, struct mg_tcpip_if *ifp) {
   char *p;
+  // Guard: RX queue not allocated yet (IRQ fired before mg_tcpip_init
+  // finished) or bad interface pointer. Drop the frame instead of
+  // memcpy'ing it into a near-NULL address (low RAM / ITCM) — that used
+  // to overwrite resident code (dtcm_malloc literal pool / driver struct)
+  // and later cause HardFault (UNDEFINSTR, PC=0x24).
+  if (ifp == NULL || ifp->recv_queue.buf == NULL) {
+    if (ifp != NULL) ifp->ndrop++;
+    return;
+  }
   if (mg_queue_book(&ifp->recv_queue, &p, len) >= len) {
     memcpy(p, buf, len);
     mg_queue_add(&ifp->recv_queue, len);
@@ -7881,14 +7955,23 @@ void mg_tcpip_init(struct mg_mgr *mgr, struct mg_tcpip_if *ifp) {
     memcpy(ifp->dhcp_name, "mip", 4);
   ifp->dhcp_name[sizeof(ifp->dhcp_name) - 1] = '\0';  // Just in case
 
+  // Allocate RX queue and TX buffer BEFORE driver init: the driver enables
+  // ETH RX interrupts (ETH->DMAIER), so frames can arrive from IRQ context
+  // (ETH_IRQHandler -> mg_tcpip_qwrite) before this function returns.
+  // With recv_queue.buf == NULL mg_tcpip_qwrite() would memcpy the frame
+  // into a near-NULL address (low RAM / ITCM) and corrupt resident code.
+  if (ifp->tx.buf == NULL) {
+    ifp->tx.buf = (char *) mg_calloc(1, ifp->framesize);
+    ifp->tx.len = ifp->framesize;
+  }
+  if (ifp->recv_queue.size == 0)
+    ifp->recv_queue.size = ifp->driver->rx ? ifp->framesize : 8192;
+  if (ifp->recv_queue.buf == NULL)
+    ifp->recv_queue.buf = (char *) mg_calloc(1, ifp->recv_queue.size);
+
   if (ifp->driver->init && !ifp->driver->init(ifp)) {
     MG_ERROR(("driver init failed"));
   } else {
-    ifp->tx.buf = (char *) mg_calloc(1, ifp->framesize),
-    ifp->tx.len = ifp->framesize;
-    if (ifp->recv_queue.size == 0)
-      ifp->recv_queue.size = ifp->driver->rx ? ifp->framesize : 8192;
-    ifp->recv_queue.buf = (char *) mg_calloc(1, ifp->recv_queue.size);
     ifp->timer_1000ms = mg_millis();
     mgr->ifp = ifp;
     ifp->mgr = mgr;
@@ -9899,26 +9982,33 @@ static struct mg_flash s_mg_flash_stm32f = {
 #define MG_FLASH_SIZE_REG_LOCATION \
   ((STM_DEV_ID >= 0x449) ? MG_FLASH_SIZE_REG_F7 : MG_FLASH_SIZE_REG_F4)
 
-static size_t flash_size(void) {
+static size_t __attribute__((unused)) flash_size(void) {
   return (MG_REG(MG_FLASH_SIZE_REG_LOCATION) & 0xFFFF) * 1024;
 }
 
 MG_IRAM static int is_dualbank(void) {
-  // only F42x/F43x series (0x419) support dual bank
-  return STM_DEV_ID == 0x419;
+  // F42x/F43x (0x419)
+  if (STM_DEV_ID == 0x419) return 1;
+  // F746/F756 (0x449), F767/F769 (0x451)
+  if (STM_DEV_ID == 0x449 || STM_DEV_ID == 0x451) {
+    // Check nDBANK bit (bit 29) in FLASH_OPTCR. 1 = Single Bank, 0 = Dual Bank
+    if ((MG_REG(MG_FLASH_BASE + MG_FLASH_OPTCR) & MG_BIT(29)) != 0) {
+      return 0; // Single bank
+    }
+    return 1; // Dual bank
+  }
+  return 0;
 }
 
 MG_IRAM static void flash_unlock(void) {
-  static bool unlocked = false;
-  if (unlocked == false) {
+  if (MG_REG(MG_FLASH_BASE + MG_FLASH_CR) & MG_BIT(31)) {
     MG_REG(MG_FLASH_BASE + MG_FLASH_KEYR) = 0x45670123;
     MG_REG(MG_FLASH_BASE + MG_FLASH_KEYR) = 0xcdef89ab;
-    unlocked = true;
   }
 }
 
-#define MG_FLASH_CONFIG_16_64_128 1   // used by STM32F7
-#define MG_FLASH_CONFIG_32_128_256 2  // used by STM32F4 and F2
+#define MG_FLASH_CONFIG_16_64_128 1   // used by STM32F7 dual bank
+#define MG_FLASH_CONFIG_32_128_256 2  // used by STM32F4, F2, and F7 single bank
 
 MG_IRAM static bool flash_page_start(volatile uint32_t *dst) {
   char *base = (char *) s_mg_flash_stm32f.start;
@@ -9929,7 +10019,7 @@ MG_IRAM static bool flash_page_start(volatile uint32_t *dst) {
   }
 
   uint32_t flash_config = MG_FLASH_CONFIG_16_64_128;
-  if (STM_DEV_ID >= 0x449) {
+  if (STM_DEV_ID < 0x449 || !is_dualbank()) {
     flash_config = MG_FLASH_CONFIG_32_128_256;
   }
 
@@ -9956,7 +10046,7 @@ MG_IRAM static int flash_sector(volatile uint32_t *addr) {
   }
   volatile char *p = (char *) addr;
   uint32_t flash_config = MG_FLASH_CONFIG_16_64_128;
-  if (STM_DEV_ID >= 0x449) {
+  if (STM_DEV_ID < 0x449 || !is_dualbank()) {
     flash_config = MG_FLASH_CONFIG_32_128_256;
   }
   int sector = -1;
@@ -9997,21 +10087,69 @@ MG_IRAM static bool mg_stm32f_erase(void *addr) {
     if (sector < 0) return false;
     uint32_t sector_reg = sector;
     if (is_dualbank() && sector >= 12) {
-      // 3.9.8 Flash control register (FLASH_CR) for F42xxx and F43xxx
-      // BITS[7:3]
-      sector_reg -= 12;
-      sector_reg |= MG_BIT(4);
+      // For F42x/F43x (0x419), BKSEL is bit 7 in FLASH_CR. SNB is bits 6:3.
+      // For F767/F769 (0x451), SNB is 5 bits (7:3). Sector 12 has SNB=16 (10000b).
+      // In both cases, the value shifted into bits 7:3 must be (sector - 12) + 16.
+      // So sector_reg should simply have 4 added to it.
+      sector_reg += 4;
     }
+
+    // Diagnostics: extern DTCM markers (survive NVIC reset)
+    extern uint32_t dtcm_ota_sector;
+    extern uint32_t dtcm_ota_magic;
+    extern uint32_t dtcm_ota_addr;
+    extern uint32_t dtcm_ota_sr_erase;
+    extern uint32_t dtcm_ota_cr_erase;
+    extern uint32_t dtcm_ota_pre_erase0;
+    dtcm_ota_sector = sector;
+    dtcm_ota_magic = 0xDEADBEEF;
+    dtcm_ota_addr = (uint32_t) addr;
+    dtcm_ota_sr_erase = 0;
+    dtcm_ota_cr_erase = 0;
+    
+    // ПРОВЕРКА OPTCR и OPTCR1
+    extern uint32_t dtcm_ota_sr_write;
+    extern uint32_t dtcm_ota_write_addr;
+    dtcm_ota_sr_write = MG_REG(MG_FLASH_BASE + 0x14); // OPTCR
+    dtcm_ota_write_addr = MG_REG(MG_FLASH_BASE + 0x18); // OPTCR1
+
+    // Pre-erase verification: read8 bytes at sector start
+    dtcm_ota_pre_erase0 = *(volatile uint32_t *) addr;
+    dtcm_ota_pre_erase0 = dtcm_ota_pre_erase0;  // volatile read
+
     flash_unlock();
     flash_wait();
     uint32_t cr = MG_BIT(1);       // SER
     cr |= MG_BIT(16);              // STRT
     cr |= (sector_reg & 31) << 3;  // sector
+    dtcm_ota_cr_erase = cr;        // save CR value BEFORE writing
     MG_REG(MG_FLASH_BASE + MG_FLASH_CR) = cr;
+    
+    // ДОБАВЛЕНО: Явное ожидание завершения стирания! 
+    // Без этого при выполнении кода из IRAM (во время single_bank_swap) 
+    // процессор не блокировался и следующая команда записи в FLASH_CR 
+    // игнорировалась (так как BSY был еще установлен).
+    flash_wait();
+    
+    // Diagnostics: capture FLASH_SR after erase
+    dtcm_ota_sr_erase = MG_REG(MG_FLASH_BASE + MG_FLASH_SR);
+
     ok = !flash_is_err();
-    MG_DEBUG(("Erase sector %lu @ %p %s. CR %#lx SR %#lx", sector, addr,
-              ok ? "ok" : "fail", MG_REG(MG_FLASH_BASE + MG_FLASH_CR),
-              MG_REG(MG_FLASH_BASE + MG_FLASH_SR)));
+
+    // Verify erase
+#if defined(__CORTEX_M) && (__CORTEX_M == 7U)
+    SCB_CleanInvalidateDCache();
+#endif
+    volatile uint32_t *check = (volatile uint32_t *) addr;
+    volatile uint32_t *check_end = check + (16 * 1024) / 4;
+    while (check < check_end) {
+      if (*check != 0xFFFFFFFF) {
+        dtcm_ota_sr_erase |= 0x80000000;  // marker: post-erase verify failed
+        return false;
+      }
+      check++;
+    }
+
     // After we have erased the sector, set CR flags for programming
     // 2 << 8 is word write parallelism, bit(0) is PG. RM0385, section 3.7.5
     MG_REG(MG_FLASH_BASE + MG_FLASH_CR) = MG_BIT(0) | (2 << 8);
@@ -10038,23 +10176,31 @@ MG_IRAM static bool mg_stm32f_write(void *addr, const void *buf, size_t len) {
   uint32_t *src = (uint32_t *) buf;
   uint32_t *end = (uint32_t *) ((char *) buf + len);
   bool ok = true;
+  extern uint32_t dtcm_ota_sr_write;
+  extern uint32_t dtcm_ota_write_addr;
+  extern uint32_t dtcm_ota_write_word;
   MG_ARM_DISABLE_IRQ();
   flash_unlock();
   flash_clear_err();
   MG_REG(MG_FLASH_BASE + MG_FLASH_CR) = MG_BIT(0) | MG_BIT(9);  // PG, 32-bit
   flash_wait();
-  MG_DEBUG(("Writing flash @ %p, %lu bytes", addr, len));
   while (ok && src < end) {
-    if (flash_page_start(dst) && mg_stm32f_erase(dst) == false) break;
+    if (flash_page_start(dst) && mg_stm32f_erase(dst) == false) {
+      ok = false;
+      break;
+    }
     *(volatile uint32_t *) dst++ = *src++;
     MG_DSB();  // ensure flash is written with no errors
     flash_wait();
-    if (flash_is_err()) ok = false;
+    if (flash_is_err()) {
+      // Diagnostics: capture FLASH_SR and address of failed write
+      dtcm_ota_sr_write = MG_REG(MG_FLASH_BASE + MG_FLASH_SR);
+      dtcm_ota_write_addr = (uint32_t)(dst - 1);
+      dtcm_ota_write_word = *(dst - 1);
+      ok = false;
+    }
   }
   if (!s_flash_irq_disabled) MG_ARM_ENABLE_IRQ();
-  MG_DEBUG(("Flash write %lu bytes @ %p: %s. CR %#lx SR %#lx", len, dst,
-            ok ? "ok" : "fail", MG_REG(MG_FLASH_BASE + MG_FLASH_CR),
-            MG_REG(MG_FLASH_BASE + MG_FLASH_SR)));
   MG_REG(MG_FLASH_BASE + MG_FLASH_CR) &= ~MG_BIT(0);  // Clear programming flag
   return ok;
 }
@@ -10066,32 +10212,49 @@ MG_IRAM void single_bank_swap(char *p1, char *p2, size_t size) {
   *(volatile unsigned long *) 0xe000ed0c = 0x5fa0004;
 }
 
+/* Адреса/ёмкость банков приложения (совпадают с Bootloader):
+ * Bank A = 0x08040000, Bank B = 0x08100000, под образ в банке 768 КБ
+ * (до сектора настроек 0x081C0000). */
+#define ZAG_BANK_A_ADDR   0x08040000u
+#define ZAG_BANK_B_ADDR   0x08100000u
+#define ZAG_BANK_CAPACITY 0x000C0000u   // 768K, реальная ёмкость банка
+
+extern uint8_t mg_ota_get_active_bank(void); /* compat_ota.c: SCB->VTOR */
+
+/* Сессионный дескриптор целевого банка.
+ * ВАЖНО: статический s_mg_flash_stm32f НЕ трогаем (кроме size) — его
+ * start/size (0x08000000, 2 МБ) использует секторная математика
+ * flash_page_start()/flash_sector(), рассчитанная на модель "вся flash +
+ * разделение пополам" и корректно отображающая адреса ОБЕИХ банков
+ * (Bank A и Bank B) в номера секторов и SNB. */
+static struct mg_flash s_ota_target_flash;
+
 bool mg_ota_begin(size_t new_firmware_size) {
-  s_mg_flash_stm32f.size = flash_size();
-#ifdef __ZEPHYR__
-  *((uint32_t *)0xE000ED94) = 0;
-  MG_DEBUG(("Jailbreak %s", *((uint32_t *)0xE000ED94) == 0 ? "successful" : "failed"));
-#endif
-  return mg_ota_flash_begin(new_firmware_size, &s_mg_flash_stm32f);
+  uint8_t active = mg_ota_get_active_bank();
+  /* ПРАВКА ПРОЕКТА (не апстрим Mongoose): пишем ТОЛЬКО в банк,
+   * противоположный исполняющемуся. Активный банк никогда не стирается
+   * и не перезаписывается — у пользователя всегда остаётся образ для
+   * отката (mg_ota_switch_bank() / rollback через bootloader). */
+  s_mg_flash_stm32f.size = 0x200000; // для секторной математики (не менять!)
+  s_ota_target_flash = s_mg_flash_stm32f;
+  s_ota_target_flash.start = (void *) (active ? ZAG_BANK_A_ADDR : ZAG_BANK_B_ADDR);
+  s_ota_target_flash.size  = ZAG_BANK_CAPACITY;
+  return mg_ota_flash_begin(new_firmware_size, &s_ota_target_flash);
 }
 
 bool mg_ota_write(const void *buf, size_t len) {
-  return mg_ota_flash_write(buf, len, &s_mg_flash_stm32f);
+  return mg_ota_flash_write(buf, len, &s_ota_target_flash);
 }
 
 bool mg_ota_end(void) {
-  if (mg_ota_flash_end(&s_mg_flash_stm32f)) {
-    // Swap partitions. Pray power does not go away
-    MG_INFO(("Swapping partitions, size %u (%u sectors)",
-             s_mg_flash_stm32f.size, STM_DEV_ID == 0x449 ? 8 : 12));
-    MG_INFO(("Do NOT power off..."));
-    mg_log_level = MG_LL_NONE;
-    s_flash_irq_disabled = true;
-    char *p1 = (char *) s_mg_flash_stm32f.start;
-    char *p2 = p1 + s_mg_flash_stm32f.size / 2;
-    size_t size = s_mg_flash_stm32f.size / 2;
-    // Runs in RAM, will reset when finished
-    single_bank_swap(p1, p2, size);
+  // Double Bank: образ уже записан в банк, противоположный активному.
+  // Копирование (single_bank_swap) не требуется — просто возвращаем успех;
+  // ребут планирует handle_firmware_upload() после отправки HTTP 200 OK.
+  // Bootloader прочитает ota_pending/ota_active_bank из Flash Sector 11
+  // и сделает jump_to_app() на активный банк.
+  if (mg_ota_flash_end(&s_ota_target_flash)) {
+    MG_INFO(("OTA CRC+size OK, ready to reboot"));
+    return true;
   }
   return false;
 }
@@ -11135,7 +11298,7 @@ static const uint32_t mg_sha256_k[64] = {
     0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
     0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
 
-void mg_sha256_init(mg_sha256_ctx *ctx) {
+__attribute__((section(".itcm"))) void mg_sha256_init(mg_sha256_ctx *ctx) {
   ctx->len = 0;
   ctx->bits = 0;
   ctx->state[0] = 0x6a09e667;
@@ -11148,7 +11311,7 @@ void mg_sha256_init(mg_sha256_ctx *ctx) {
   ctx->state[7] = 0x5be0cd19;
 }
 
-static void mg_sha256_chunk(mg_sha256_ctx *ctx) {
+__attribute__((section(".itcm"))) static void mg_sha256_chunk(mg_sha256_ctx *ctx) {
   int i, j;
   uint32_t a, b, c, d, e, f, g, h;
   uint32_t m[64];
@@ -11192,7 +11355,7 @@ static void mg_sha256_chunk(mg_sha256_ctx *ctx) {
   ctx->state[7] += h;
 }
 
-void mg_sha256_update(mg_sha256_ctx *ctx, const unsigned char *data,
+__attribute__((section(".itcm"))) void mg_sha256_update(mg_sha256_ctx *ctx, const unsigned char *data,
                       size_t len) {
   size_t i;
   for (i = 0; i < len; i++) {
@@ -11206,7 +11369,7 @@ void mg_sha256_update(mg_sha256_ctx *ctx, const unsigned char *data,
 }
 
 // TODO: make final reusable (remove side effects)
-void mg_sha256_final(unsigned char digest[32], mg_sha256_ctx *ctx) {
+__attribute__((section(".itcm"))) void mg_sha256_final(unsigned char digest[32], mg_sha256_ctx *ctx) {
   uint32_t i = ctx->len;
   if (i < 56) {
     ctx->buffer[i++] = 0x80;
@@ -11245,14 +11408,14 @@ void mg_sha256_final(unsigned char digest[32], mg_sha256_ctx *ctx) {
   }
 }
 
-void mg_sha256(uint8_t dst[32], uint8_t *data, size_t datasz) {
+__attribute__((section(".itcm"))) void mg_sha256(uint8_t dst[32], uint8_t *data, size_t datasz) {
   mg_sha256_ctx ctx;
   mg_sha256_init(&ctx);
   mg_sha256_update(&ctx, data, datasz);
   mg_sha256_final(dst, &ctx);
 }
 
-void mg_hmac_sha256(uint8_t dst[32], uint8_t *key, size_t keysz, uint8_t *data,
+__attribute__((section(".itcm"))) void mg_hmac_sha256(uint8_t dst[32], uint8_t *key, size_t keysz, uint8_t *data,
                     size_t datasz) {
   mg_sha256_ctx ctx;
   uint8_t k[64] = {0};
@@ -13819,7 +13982,7 @@ void gcm_zero_ctx(gcm_context *ctx) {
 //
 //
 
-int mg_aes_gcm_encrypt(unsigned char *output,  //
+__attribute__((section(".itcm"))) int mg_aes_gcm_encrypt(unsigned char *output,  //
                        const unsigned char *input, size_t input_length,
                        const unsigned char *key, const size_t key_len,
                        const unsigned char *iv, const size_t iv_len,
@@ -13838,7 +14001,7 @@ int mg_aes_gcm_encrypt(unsigned char *output,  //
   return (ret);
 }
 
-int mg_aes_gcm_decrypt(unsigned char *output, const unsigned char *input,
+__attribute__((section(".itcm"))) int mg_aes_gcm_decrypt(unsigned char *output, const unsigned char *input,
                        size_t input_length, const unsigned char *key,
                        const size_t key_len, const unsigned char *iv,
                        const size_t iv_len, unsigned char *aead,
@@ -14133,7 +14296,7 @@ static int mg_der_to_tlv(uint8_t *der, size_t dersz, struct mg_der_tlv *tlv) {
 }
 
 // Did we receive a full TLS record in the c->rtls buffer?
-static bool mg_tls_got_record(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static bool mg_tls_got_record(struct mg_connection *c) {
   return c->rtls.len >= (size_t) TLS_RECHDR_SIZE &&
          c->rtls.len >=
              (size_t) (TLS_RECHDR_SIZE + MG_LOAD_BE16(c->rtls.buf + 3));
@@ -14167,7 +14330,7 @@ static void mg_tls_drop_message(struct mg_connection *c) {
 }
 
 // TLS1.3 secret derivation based on the key label
-static void mg_tls_derive_secret(const char *label, uint8_t *key, size_t keysz,
+__attribute__((section(".itcm"))) static void mg_tls_derive_secret(const char *label, uint8_t *key, size_t keysz,
                                  uint8_t *data, size_t datasz, uint8_t *hash,
                                  size_t hashsz) {
   size_t labelsz = strlen(label);
@@ -14185,7 +14348,7 @@ static void mg_tls_derive_secret(const char *label, uint8_t *key, size_t keysz,
 
 // at this point we have x25519 shared secret, we can generate a set of derived
 // handshake encryption keys
-static void mg_tls_generate_handshake_keys(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static void mg_tls_generate_handshake_keys(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
 
   mg_sha256_ctx sha256;
@@ -14251,7 +14414,7 @@ static void mg_tls_generate_handshake_keys(struct mg_connection *c) {
 #endif
 }
 
-static void mg_tls_generate_application_keys(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static void mg_tls_generate_application_keys(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   uint8_t hash[32];
   uint8_t premaster_secret[32];
@@ -14494,7 +14657,7 @@ static void mg_tls_calc_cert_verify_hash(struct mg_connection *c,
 }
 
 // read and parse ClientHello record
-static int mg_tls_server_recv_hello(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static int mg_tls_server_recv_hello(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   struct mg_iobuf *rio = &c->rtls;
   uint8_t session_id_len;
@@ -14567,7 +14730,7 @@ fail:
 #define PLACEHOLDER_32B PLACEHOLDER_16B, PLACEHOLDER_16B
 
 // put ServerHello record into wio buffer
-static bool mg_tls_server_send_hello(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static bool mg_tls_server_send_hello(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   struct mg_iobuf *wio = &tls->send;
 
@@ -14626,7 +14789,7 @@ static bool mg_tls_server_send_hello(struct mg_connection *c) {
   return true;
 }
 
-static bool mg_tls_server_send_ext(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static bool mg_tls_server_send_ext(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   // server extensions
   uint8_t ext[6] = {0x08, 0, 0, 2, 0, 0};
@@ -14639,7 +14802,7 @@ static bool mg_tls_server_send_ext(struct mg_connection *c) {
 static const uint8_t secp256r1_sig_algs[12] = {
     0x00, 0x0d, 0x00, 0x08, 0x00, 0x06, 0x04, 0x03, 0x08, 0x04, 0x04, 0x01};
 
-static bool mg_tls_server_send_cert_request(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static bool mg_tls_server_send_cert_request(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   uint8_t req[13 + sizeof(secp256r1_sig_algs)];
   req[0] = MG_TLS_CERTIFICATE_REQUEST;  // handshake header
@@ -14656,7 +14819,7 @@ static bool mg_tls_server_send_cert_request(struct mg_connection *c) {
   return mg_tls_encrypt(c, req, sizeof(req), MG_TLS_HANDSHAKE);
 }
 
-static bool mg_tls_send_cert(struct mg_connection *c, bool is_client) {
+__attribute__((section(".itcm"))) static bool mg_tls_send_cert(struct mg_connection *c, bool is_client) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   int send_ca = !is_client && tls->ca_der.len > 0;
   // DER certificate + CA (server optional)
@@ -14892,7 +15055,7 @@ static bool mg_tls_rsa_sign(struct tls_data *tls, const uint8_t *em,
 #endif
 }
 
-static bool mg_tls_send_cert_verify(struct mg_connection *c, bool is_client) {
+__attribute__((section(".itcm"))) static bool mg_tls_send_cert_verify(struct mg_connection *c, bool is_client) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   uint8_t hash[32] = {0};
 
@@ -14977,7 +15140,7 @@ static bool mg_tls_send_cert_verify(struct mg_connection *c, bool is_client) {
   }
 }
 
-static bool mg_tls_server_send_finish(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static bool mg_tls_server_send_finish(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   mg_sha256_ctx sha256;
   uint8_t hash[32];
@@ -14991,7 +15154,7 @@ static bool mg_tls_server_send_finish(struct mg_connection *c) {
   return true;
 }
 
-static int mg_tls_server_recv_finish(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static int mg_tls_server_recv_finish(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   unsigned char *recv_buf;
   // we have to backup sha256 value to restore it later, since Finished record
@@ -15775,7 +15938,7 @@ static bool mg_tls_client_handshake(struct mg_connection *c) {
   return true;
 }
 
-static bool mg_tls_server_handshake(struct mg_connection *c) {
+__attribute__((section(".itcm"))) static bool mg_tls_server_handshake(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   switch (tls->state) {
     case MG_TLS_STATE_SERVER_START:
@@ -15807,6 +15970,7 @@ static bool mg_tls_server_handshake(struct mg_connection *c) {
       }
       tls->state = MG_TLS_STATE_SERVER_CONNECTED;
       c->is_tls_hs = 0;
+      mg_call(c, MG_EV_TLS_HS, NULL);
       break;
     case MG_TLS_STATE_SERVER_WAIT_CERT:
       if (mg_tls_recv_cert(c, false) < 0) break;
@@ -15823,7 +15987,7 @@ static bool mg_tls_server_handshake(struct mg_connection *c) {
   return true;
 }
 
-void mg_tls_handshake(struct mg_connection *c) {
+__attribute__((section(".itcm"))) void mg_tls_handshake(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   long n;
   bool res;
@@ -16248,7 +16412,7 @@ static int mg_parse_pem_certs(const struct mg_str pem, struct mg_str **ders) {
   return count;
 }
 
-void mg_tls_init(struct mg_connection *c, const struct mg_tls_opts *opts) {
+__attribute__((section(".itcm"))) void mg_tls_init(struct mg_connection *c, const struct mg_tls_opts *opts) {
   struct mg_str key;
   struct tls_data *tls =
       (struct tls_data *) mg_calloc(1, sizeof(struct tls_data));
@@ -17804,7 +17968,7 @@ static PORTABLE_8439_DECL void poly1305_calculate_mac(
 #define MG_OVERLAPPING(s, s_size, b, b_size) \
   (MG_PM(s) < MG_PM((b) + (b_size))) && (MG_PM(b) < MG_PM((s) + (s_size)))
 
-PORTABLE_8439_DECL size_t mg_chacha20_poly1305_encrypt(
+__attribute__((section(".itcm"))) PORTABLE_8439_DECL size_t mg_chacha20_poly1305_encrypt(
     uint8_t *restrict cipher_text, const uint8_t key[RFC_8439_KEY_SIZE],
     const uint8_t nonce[RFC_8439_NONCE_SIZE], const uint8_t *restrict ad,
     size_t ad_size, const uint8_t *restrict plain_text,
@@ -17819,7 +17983,7 @@ PORTABLE_8439_DECL size_t mg_chacha20_poly1305_encrypt(
   return new_size;
 }
 
-PORTABLE_8439_DECL size_t mg_chacha20_poly1305_decrypt(
+__attribute__((section(".itcm"))) PORTABLE_8439_DECL size_t mg_chacha20_poly1305_decrypt(
     uint8_t *restrict plain_text, const uint8_t key[RFC_8439_KEY_SIZE],
     const uint8_t nonce[RFC_8439_NONCE_SIZE], const uint8_t *restrict ad,
     size_t ad_size, const uint8_t *restrict cipher_text,
@@ -20056,7 +20220,7 @@ NS_INTERNAL bigint *bi_crt(BI_CTX *ctx, bigint *bi, bigint *dP, bigint *dQ,
 // - free bigints calling bi_free()
 // - bi_terminate(c)                    <-- frees c
 
-int mg_rsa_mod_pow(const uint8_t *mod, size_t modsz, const uint8_t *exp, size_t expsz, const uint8_t *msg, size_t msgsz, uint8_t *out, size_t outsz) {
+__attribute__((section(".itcm"))) int mg_rsa_mod_pow(const uint8_t *mod, size_t modsz, const uint8_t *exp, size_t expsz, const uint8_t *msg, size_t msgsz, uint8_t *out, size_t outsz) {
 	BI_CTX *bi_ctx = bi_initialize();
 	bigint *m1;
 	bigint *n = bi_import(bi_ctx, mod, (int) modsz);
@@ -20070,7 +20234,7 @@ int mg_rsa_mod_pow(const uint8_t *mod, size_t modsz, const uint8_t *exp, size_t 
 	return 0;
 }
 
-int mg_rsa_crt_sign(const uint8_t *em, size_t em_len,
+__attribute__((section(".itcm"))) int mg_rsa_crt_sign(const uint8_t *em, size_t em_len,
                     const uint8_t *dP, size_t dP_len,
                     const uint8_t *dQ, size_t dQ_len,
                     const uint8_t *p, size_t p_len,
@@ -23566,7 +23730,7 @@ static void x25519_core(mg_fe xs[5], const uint8_t scalar[X25519_BYTES],
   condswap(x2, x3, swap);
 }
 
-int mg_tls_x25519(uint8_t out[X25519_BYTES], const uint8_t scalar[X25519_BYTES],
+__attribute__((section(".itcm"))) int mg_tls_x25519(uint8_t out[X25519_BYTES], const uint8_t scalar[X25519_BYTES],
                   const uint8_t x1[X25519_BYTES], int clamp) {
   int i, ret;
   mg_fe xs[5], out_limbs;
@@ -28394,7 +28558,7 @@ void ETH_IRQHandler(void) {
   ETH->DMARPDR = 0;          // and resume RX
 }
 
-struct mg_tcpip_driver mg_tcpip_driver_stm32f = {
+const struct mg_tcpip_driver mg_tcpip_driver_stm32f = {
     mg_tcpip_driver_stm32f_init, mg_tcpip_driver_stm32f_tx, NULL,
     mg_tcpip_driver_stm32f_poll};
 #endif
@@ -29952,7 +30116,7 @@ static bool mg_tcpip_driver_xmc7_poll(struct mg_tcpip_if *ifp, bool s1) {
   return up;
 }
 
-void ETH_IRQHandler(void) {
+__attribute__((section(".itcm"))) void ETH_IRQHandler(void) {
   uint32_t irq_status = ETH0->INT_STATUS;
   if (irq_status & MG_BIT(1)) {
     for (uint8_t i = 0; i < 10; i++) {  // read as they arrive, but not forever

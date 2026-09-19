@@ -24,6 +24,10 @@
 #define MG_STMPACK_ARCH MG_ARCH_NEWLIB
 #endif
 
+/* OTA flash functions must be executed from RAM to prevent HardFault during flash swap.
+   The project's startup script copies the .itcm section to ITCM RAM. */
+#define MG_IRAM __attribute__((section(".itcm")))
+
 #define MG_ENABLE_PACKED_FS 1
 #define MG_ENABLE_MBEDTLS 0
 #define MG_ARCH MG_ARCH_CMSIS_RTOS2
@@ -74,4 +78,24 @@
 #define MG_ENABLE_CUSTOM_CALLOC 1
 #include "mg_alloc.h"
 
+/* ---- OTA / Firmware update -------------------------------------------
+ * Включаем встроенный в Mongoose потоковый механизм OTA-обновления для
+ * STM32 F-серии (F2/F4/F7). Реализация лежит в mongoose.c (секция
+ * "src/ota_stm32f.c") и даёт mg_ota_begin()/mg_ota_write()/mg_ota_end() —
+ * запись файла прошивки во flash по мере получения HTTP-чанков, без
+ * буферизации всего файла в RAM.
+ *
+ * Без этого define MG_OTA скатывается в MG_OTA_NONE (т.к. generic-макрос
+ * STM32F7 в проекте не определён — используется только STM32F767xx от
+ * CMSIS), и mg_ota_begin/write/end остаются объявленными, но не
+ * реализованными нигде — net.c, вызывающий их напрямую, не слинкуется.
+ *
+ * ВАЖНО: в mg_ota_begin() flash->start = 0x08040000, size = 0x180000 (1536 КБ).
+ * Это даёт active = Sectors 5-7 [0x08040000..0x080FFFFF],
+ * staging = Sectors 8-10 [0x08100000..0x081BFFFF].
+ * Sector 11 (ZERG_FLASH, 0x081C0000) зарезервирован под настройки.
+ */
+#define MG_OTA MG_OTA_STM32F
+
 // See https://mongoose.ws/documentation/#build-options
+#define MG_TCPIP_FIN_MS 200

@@ -12,7 +12,85 @@
 
 struct dbPinsConf PinsConf[NUMPIN];
 
-struct dbPinToPin PinsLinks[NUMPINLINKS];
+struct dbPinToPin *PinsLinks = NULL;  /* выделяется в DTCM через dtcm_pinslinks (main) */
+
+/* ── ZIGBEE PLAN B ── */
+ZigbeeVirtualPin ZigbeeConf[NUMZBEE];  /* в .bss — в DTCM не помещается вместе с g_body/MQTT */
+
+/* ── Action pool for Zigbee triggers ── */
+ZigbeeActionPool ZigbeeActionPoolArr[NUMACTIONPOOL];
+
+const char *zbee_action_sclick(int zbi) {
+    if (zbi < 0 || zbi >= NUMZBEE) return "";
+    uint8_t idx = ZigbeeConf[zbi].action_pool_idx;
+    if (idx >= NUMACTIONPOOL) return "";
+    return ZigbeeActionPoolArr[idx].sclick;
+}
+
+const char *zbee_action_dclick(int zbi) {
+    if (zbi < 0 || zbi >= NUMZBEE) return "";
+    uint8_t idx = ZigbeeConf[zbi].action_pool_idx;
+    if (idx >= NUMACTIONPOOL) return "";
+    return ZigbeeActionPoolArr[idx].dclick;
+}
+
+const char *zbee_action_lpress(int zbi) {
+    if (zbi < 0 || zbi >= NUMZBEE) return "";
+    uint8_t idx = ZigbeeConf[zbi].action_pool_idx;
+    if (idx >= NUMACTIONPOOL) return "";
+    return ZigbeeActionPoolArr[idx].lpress;
+}
+
+uint8_t zbee_action_alloc(void) {
+    for (int i = 0; i < NUMACTIONPOOL; i++) {
+        /* Проверяем, не назначен ли этот индекс уже какому-либо слоту ZigbeeConf */
+        bool is_used = false;
+        for (int z = 0; z < NUMZBEE; z++) {
+            if (ZigbeeConf[z].action_pool_idx == i) {
+                is_used = true;
+                break;
+            }
+        }
+        if (is_used) continue;
+
+        if (ZigbeeActionPoolArr[i].sclick[0] == '\0' &&
+            ZigbeeActionPoolArr[i].dclick[0] == '\0' &&
+            ZigbeeActionPoolArr[i].lpress[0] == '\0') {
+            return (uint8_t)i;
+        }
+    }
+    return ACTION_POOL_IDX_NONE;
+}
+
+void zbee_action_free(uint8_t idx) {
+    if (idx >= NUMACTIONPOOL) return;
+    ZigbeeActionPoolArr[idx].sclick[0] = '\0';
+    ZigbeeActionPoolArr[idx].dclick[0] = '\0';
+    ZigbeeActionPoolArr[idx].lpress[0] = '\0';
+}
+
+void zbee_action_clear(uint8_t idx) {
+    if (idx >= NUMACTIONPOOL) return;
+    ZigbeeActionPoolArr[idx].sclick[0] = '\0';
+    ZigbeeActionPoolArr[idx].dclick[0] = '\0';
+    ZigbeeActionPoolArr[idx].lpress[0] = '\0';
+}
+
+PinView GetPinView(int id) {
+    PinView v = {0};
+    if (id < NUMPIN) {
+        struct dbPinsConf *p = &PinsConf[id];
+        v = (PinView){ p->topin, p->state, p->dvalue, p->info, false, p };
+    } else {
+        int zbi = ZbeeIdx(id);
+        if (zbi >= 0 && zbi < NUMZBEE) {
+            ZigbeeVirtualPin *z = &ZigbeeConf[zbi];
+            v = (PinView){ z->topin, z->state, z->dvalue, z->zbee_label, true, z };
+        }
+    }
+    return v;
+}
+
 
 //struct dbCron CronTask[NUMTASK];
 

@@ -7,7 +7,7 @@ permissions:
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+[a-z]?'
 
 jobs:
   create-release:
@@ -40,6 +40,8 @@ jobs:
           body: "Релиз ${{ steps.get_version.outputs.version }}"
           draft: false
           prerelease: false
-          files: Proshivka/Zagotovka_M.bin
+          files: |
+            Proshivka/Zagotovka_Bank_A_v${{ steps.get_version.outputs.version }}.bin
+            Proshivka/Zagotovka_Bank_B_v${{ steps.get_version.outputs.version }}.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

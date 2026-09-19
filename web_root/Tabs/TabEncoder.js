@@ -107,6 +107,7 @@ function TabEncoder({ }) {
     const [language, setLanguage] = useState('ru');
     const [pintopin, setPintopin] = useState([]);
     const isPendingOnOff = useRef(false);
+    const isModalOpenRef = useRef(false);
 
     // Инициализируем глобальный tooltip один раз при монтировании
     useEffect(() => { initGlobalTooltip(); }, []);
@@ -134,6 +135,7 @@ function TabEncoder({ }) {
       registerPoll('encoders', '/api/state/encoder', function(data) {
         if (!active) return;
         if (isPendingOnOff.current) return;
+        if (isModalOpenRef.current) return; // Не обновлять пока модалка открыта
         if (data !== null && data !== undefined) {
           if (data.encoders) { setEncoder(data.encoders); setLanguage(data.lang); }
           if (data.pintopin) setPintopin(data.pintopin);
@@ -284,12 +286,14 @@ function TabEncoder({ }) {
       setModalType(type);
       setSelectedEncoder(encoderData);
       setIsModalOpen(true);
+      isModalOpenRef.current = true;
     };
 
     const closeModal = () => {
       setIsModalOpen(false);
       setModalType(null);
       setSelectedEncoder(null);
+      isModalOpenRef.current = false;
     };
 
     const helpContent = {
@@ -615,6 +619,15 @@ function TabEncoder({ }) {
               onChange=${(value) => handleEncoderChange({ ...d, onoff: value })}
             />
           </td>
+          <td class="px-6 py-2 text-sm">
+            ${d.zbee_bind && d.zbee_bind > 0 ? html`
+              <span class="font-mono text-sm text-cyan-700 font-semibold">
+                ID ${d.zbee_bind}
+              </span>
+            ` : html`
+              <span class="text-slate-400 text-sm">—</span>
+            `}
+          </td>
           <td class="px-6 py-2 text-sm whitespace-nowrap">
             <button
               onClick=${() => openModal('connection', d)}
@@ -662,6 +675,7 @@ function TabEncoder({ }) {
                         <${Th} title="Duty on restore" tooltipIndex=${7} />
                         <${Th} title="INFO" tooltipIndex=${8} />
                         <${Th} title="On/Off" tooltipIndex=${9} />
+                        <${Th} title="Zigbee" tooltipIndex=${13} />
                         <${Th} title="Action" tooltipIndex=${10} />
                       </tr>
                     </thead>

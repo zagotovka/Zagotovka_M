@@ -7,11 +7,17 @@
 
 #include "usart_ring.h"
 #include "stm32f7xx.h"  /* __DMB() */
+#include "dtcm_alloc.h"
 
 /////////////////// GSM USART /////////////////////
 volatile gsm_rx_buffer_index_t gsm_rx_buffer_head = 0;
 volatile gsm_rx_buffer_index_t gsm_rx_buffer_tail = 0;
-uint8_t gsm_rx_buffer[GSM_RX_BUFFER_SIZE] = {0,};
+uint8_t *gsm_rx_buffer = NULL;
+
+void usart_ring_dtcm_init(void) {
+    gsm_rx_buffer = dtcm_gsm_rx;
+    memset(gsm_rx_buffer, 0, GSM_RX_BUFFER_SIZE);
+}
 
 int16_t gsm_available(void)
 {

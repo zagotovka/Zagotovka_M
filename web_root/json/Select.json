@@ -713,6 +713,58 @@
       "pwm": 0,
       "i2cdata": 0,
       "i2cclok": 0
+    },
+    {
+      "id": 89,
+      "pins": "ZB0",
+      "topin": 11,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0,
+      "zbee_ieee": "588e81fffe36a343",
+      "zbee_endpoint": 1,
+      "zbee_device_type": "lamp",
+      "zbee_label": "Lamp Kuhnya",
+      "onoff": 1
+    },
+    {
+      "id": 90,
+      "pins": "ZB1",
+      "topin": 11,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0,
+      "zbee_ieee": "00158d0007a1b2c3",
+      "zbee_endpoint": 1,
+      "zbee_device_type": "socket",
+      "zbee_label": "Socket Hall",
+      "onoff": 0
+    },
+    {
+      "id": 91,
+      "pins": "ZB2",
+      "topin": 11,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0,
+      "zbee_ieee": "ec1bbdfffed45678",
+      "zbee_endpoint": 1,
+      "zbee_device_type": "dimmer",
+      "zbee_label": "Dimmer Bedroom",
+      "onoff": 0
+    },
+    {
+      "id": 92,
+      "pins": "ZB3",
+      "topin": 11,
+      "pwm": 0,
+      "i2cdata": 0,
+      "i2cclok": 0,
+      "zbee_ieee": "",
+      "zbee_endpoint": 1,
+      "zbee_device_type": "socket",
+      "zbee_label": "",
+      "onoff": 0
     }
   ]
 }

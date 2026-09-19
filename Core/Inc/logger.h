@@ -2,6 +2,8 @@
 #define INC_LOGGER_H_
 
 #include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include "FreeRTOS.h"
 #include "message_buffer.h"
 
@@ -16,7 +18,9 @@ typedef enum {
     LOG_CAT_SETTINGS  = 7,
     LOG_CAT_ETH       = 8,
     LOG_CAT_PHY       = 9,
-    LOG_CAT_COUNT     = 10
+    LOG_CAT_Z2M       = 10,
+    LOG_CAT_OTA       = 11,
+    LOG_CAT_COUNT     = 12
 } LogCategory_t;
 
 #define LOG_MASK_SYSTEM    (1u << LOG_CAT_SYSTEM)
@@ -29,7 +33,9 @@ typedef enum {
 #define LOG_MASK_SETTINGS  (1u << LOG_CAT_SETTINGS)
 #define LOG_MASK_ETH       (1u << LOG_CAT_ETH)
 #define LOG_MASK_PHY       (1u << LOG_CAT_PHY)
-#define LOG_MASK_ALL       0x3FFu
+#define LOG_MASK_Z2M       (1u << LOG_CAT_Z2M)
+#define LOG_MASK_OTA       (1u << LOG_CAT_OTA)
+#define LOG_MASK_ALL       0xFFFu
 
 // Compile-time controls (1 - enabled, 0 - disabled)
 #define LOG_CONF_SYSTEM_EN    1
@@ -42,6 +48,8 @@ typedef enum {
 #define LOG_CONF_SETTINGS_EN  1
 #define LOG_CONF_ETH_EN       1
 #define LOG_CONF_PHY_EN       1
+#define LOG_CONF_Z2M_EN       1
+#define LOG_CONF_OTA_EN       1
 
 extern volatile uint32_t g_log_filter_mask;
 
@@ -52,6 +60,32 @@ void logger_save_mask(void);
 void logger_send(LogCategory_t cat, const char *fmt, ...);
 const char* logger_get_category_name(LogCategory_t cat);
 void mqtt_publish_logfilter_status(void);
+
+/* ---- Кольцевой буфер для веб-просмотра логов (Dashboard) ----------------
+ * Отдельный от xMessageBuffer механизм: xMessageBuffer доставляет строки
+ * в UART3 в реальном времени, а это — маленький "хвост" уже ОТФОРМАТИРОВАННЫХ
+ * строк для отдачи по HTTP. Заполняется в StartLoggerTask() тем же вызовом,
+ * что и HAL_UART_Transmit — в веб видно ровно то же, что в терминале.
+ *
+ * ВНИМАНИЕ: буфер выделяется ЧЕРЕЗ pvPortMalloc(), а не static/.bss —
+ * в .map: .bss заканчивается на 0x2007F7C0, лимит MSP-стека 0x2007F800,
+ * свободно ровно 64 байта, а линкер-ASSERT ((_ebss + _Min_Stack_Size) <=
+ * _estack) не даст собрать статический массив. Берём из запаса FreeRTOS-кучи.
+ *
+ * Размер сознательно маленький (1 КБ ~ 30-40 строк) — нужен live-хвост,
+ * а не история. */
+#define LOG_RING_SIZE 1024u
+
+void logger_ring_push(const char *data, int len);
+
+/* Срез лога начиная с курсора since (0 = "всё, что есть сейчас").
+ * out/out_cap  - буфер вызывающего, не больше LOG_RING_SIZE
+ * out_len      - сколько байт реально записано в out
+ * cursor       - курсор для следующего запроса клиента
+ * dropped      - true, если часть данных между since и текущим моментом
+ *                уже вытеснена из кольца (клиент отстал) */
+void logger_ring_read(uint32_t since, char *out, size_t out_cap,
+                      size_t *out_len, uint32_t *cursor, bool *dropped);
 
 // Exported for StartLoggerTask in main.c
 extern MessageBufferHandle_t xMessageBuffer;
@@ -96,5 +130,13 @@ extern const char* cat_prefixes[];
 #define LOG_PHY(fmt, ...) \
     do { if (LOG_CONF_PHY_EN && (g_log_filter_mask & LOG_MASK_PHY)) \
         logger_send(LOG_CAT_PHY, fmt, ##__VA_ARGS__); } while(0)
+
+#define LOG_Z2M(fmt, ...) \
+    do { if (LOG_CONF_Z2M_EN && (g_log_filter_mask & LOG_MASK_Z2M)) \
+        logger_send(LOG_CAT_Z2M, fmt, ##__VA_ARGS__); } while(0)
+
+#define LOG_OTA(fmt, ...) \
+    do { if (LOG_CONF_OTA_EN && (g_log_filter_mask & LOG_MASK_OTA)) \
+        logger_send(LOG_CAT_OTA, fmt, ##__VA_ARGS__); } while(0)
 
 #endif /* INC_LOGGER_H_ */

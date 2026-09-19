@@ -1,4 +1,3 @@
-#include "logger.h"
 #include "FreeRTOS.h"
 #include "message_buffer.h"
 #include "task.h"
@@ -16,6 +15,10 @@ void SetSettingsConfig(void);
 
 MessageBufferHandle_t xMessageBuffer = NULL;
 volatile uint32_t g_log_filter_mask = LOG_MASK_ALL;
+
+/* ---- Кольцевой буфер для веб-просмотра логов ---------------------------- */
+static char              *s_log_ring      = NULL;   /* pvPortMalloc(LOG_RING_SIZE) */
+static volatile uint32_t  s_log_write_pos = 0;      /* монотонный курсор записи */
 
 typedef struct {
     TaskHandle_t task_handle;
@@ -35,7 +38,9 @@ const char* cat_prefixes[] = {
     "[PID] ",
     "[SETTINGS] ",
     "[ETH] ",
-    "[PHY] "
+    "[PHY] ",
+    "[Z2M] ",
+    "[OTA] "
 };
 
 const char* logger_get_category_name(LogCategory_t cat) {
@@ -50,6 +55,8 @@ const char* logger_get_category_name(LogCategory_t cat) {
         case LOG_CAT_SETTINGS:  return "SETTINGS";
         case LOG_CAT_ETH:       return "ETH";
         case LOG_CAT_PHY:       return "PHY";
+        case LOG_CAT_Z2M:       return "Z2M";
+        case LOG_CAT_OTA:       return "OTA";
         default:                return "UNKNOWN";
     }
 }
@@ -57,6 +64,16 @@ const char* logger_get_category_name(LogCategory_t cat) {
 void logger_init(void) {
     xMessageBuffer = xMessageBufferCreate(4096);
     memset(g_task_bufs, 0, sizeof(g_task_bufs));
+
+    /* Один раз за всё время работы, из кучи — не из .bss (там свободно
+     * 64 байта на весь проект, линкер-ASSERT заблокирует static-массив).
+     * Неудача не фатальна: UART3-логирование продолжит работать как
+     * раньше, просто веб-вьюер будет пуст. */
+    s_log_ring = pvPortMalloc(LOG_RING_SIZE);
+    if (s_log_ring == NULL) {
+        printf("[SYSTEM] WARN: log ring alloc failed (%u B) - web log viewer disabled\r\n",
+               (unsigned)LOG_RING_SIZE);
+    }
 }
 
 void logger_set_mask(uint32_t mask) {
@@ -101,7 +118,16 @@ void logger_send(LogCategory_t cat, const char *fmt, ...) {
         total_len++; // include null terminator
 
         if (xMessageBuffer != NULL) {
+            /* Несколько задач-писателей (WebServerTask/CronTask/GSM/Sensors...)
+             * могут вызвать logger_send() одновременно. xMessageBuffer
+             * официально небезопасен для нескольких писателей без внешней
+             * синхронизации (см. документацию FreeRTOS) — без критической
+             * секции гонка может повредить границы сообщений в потоке,
+             * из-за чего читатель (StartLoggerTask) видит "задвоенные" или
+             * оборванные строки. Блокировка короткая (block time = 0). */
+            taskENTER_CRITICAL();
             xMessageBufferSend(xMessageBuffer, buf, total_len, 0);
+            taskEXIT_CRITICAL();
         } else {
             // Before scheduler: print directly to UART
             HAL_UART_Transmit(&huart3, (uint8_t*)cat_prefixes[cat], strlen(cat_prefixes[cat]), 50);
@@ -111,6 +137,17 @@ void logger_send(LogCategory_t cat, const char *fmt, ...) {
 }
 
 static TaskLogBuffer_t* get_task_buffer(void) {
+    /* Без этой проверки printf() до старта планировщика (до osKernelStart)
+     * попадал в полный пайплайн: буферизация в g_task_bufs, парсинг
+     * префикса, memcpy в send_buf, xMessageBufferSend/HAL_UART_Transmit
+     * с cat_prefixes. В результате первый символ \r\n оказывался
+     * записанным по нулевому указателю → corruption word[0] ITCM.
+     * Теперь до запуска планировщика всегда safe path — прямой
+     * HAL_UART_Transmit в __io_putchar. */
+    if (xTaskGetSchedulerState() == taskSCHEDULER_NOT_STARTED) {
+        return NULL;
+    }
+
     TaskHandle_t current_task = xTaskGetCurrentTaskHandle();
     if (current_task == NULL) {
         return NULL;
@@ -160,6 +197,7 @@ static LogCategory_t parse_category_from_string(const char *str, int *prefix_len
     if (strncmp(str, "[SETTINGS]", 10) == 0) { *prefix_len = 10; return LOG_CAT_SETTINGS; }
     if (strncmp(str, "[ETH]", 5) == 0) { *prefix_len = 5; return LOG_CAT_ETH; }
     if (strncmp(str, "[PHY]", 5) == 0) { *prefix_len = 5; return LOG_CAT_PHY; }
+    if (strncmp(str, "[OTA]", 5) == 0) { *prefix_len = 5; return LOG_CAT_OTA; }
     *prefix_len = 0;
     return LOG_CAT_SYSTEM;
 }
@@ -219,7 +257,11 @@ int __io_putchar(int ch) {
             send_buf[1 + send_len] = '\0';
 
             if (xMessageBuffer != NULL) {
+                /* См. комментарий в logger_send(): несколько задач-писателей,
+                 * xMessageBuffer требует критической секции вокруг send. */
+                taskENTER_CRITICAL();
                 xMessageBufferSend(xMessageBuffer, send_buf, send_len + 2, 0);
+                taskEXIT_CRITICAL();
             } else {
                 // Before scheduler: print directly to UART
                 HAL_UART_Transmit(&huart3, (uint8_t*)cat_prefixes[cat], strlen(cat_prefixes[cat]), 50);
@@ -229,4 +271,68 @@ int __io_putchar(int ch) {
         buf->len = 0;
     }
     return ch;
+}
+
+/* ---- Кольцевой буфер для веб-просмотра логов ----------------------------
+ * Один писатель (StartLoggerTask), один читатель (WebServerTask).
+ * Курсор = монотонное число записанных байт, никаких индексов head/tail
+ * и проблем с обёрткой курсора. */
+
+void logger_ring_push(const char *data, int len) {
+    if (s_log_ring == NULL || len <= 0) return;
+    if ((uint32_t)len > LOG_RING_SIZE) {          /* защита от аномально длинной строки */
+        data += (len - LOG_RING_SIZE);
+        len = (int)LOG_RING_SIZE;
+    }
+
+    taskENTER_CRITICAL();                         /* короткая секция: максимум 1 КБ memcpy */
+    uint32_t pos   = s_log_write_pos % LOG_RING_SIZE;
+    uint32_t first = LOG_RING_SIZE - pos;         /* сколько влезает до конца кольца */
+    if ((uint32_t)len <= first) {
+        memcpy(s_log_ring + pos, data, (size_t)len);
+    } else {
+        memcpy(s_log_ring + pos, data, first);
+        memcpy(s_log_ring, data + first, (size_t)len - first);
+    }
+    s_log_write_pos += (uint32_t)len;
+    taskEXIT_CRITICAL();
+}
+
+void logger_ring_read(uint32_t since, char *out, size_t out_cap,
+                      size_t *out_len, uint32_t *cursor, bool *dropped) {
+    if (out_len) *out_len = 0;
+    if (cursor)  *cursor  = 0;
+    if (dropped) *dropped = false;
+    if (s_log_ring == NULL || out == NULL || out_cap == 0) return;
+    if (out_cap > LOG_RING_SIZE) out_cap = LOG_RING_SIZE;
+
+    taskENTER_CRITICAL();          /* держим секцию на всё копирование - буфер 1 КБ,
+                                    * микросекунды, зато данные гарантированно консистентны */
+    uint32_t total  = s_log_write_pos;
+    uint32_t avail  = (total > LOG_RING_SIZE) ? LOG_RING_SIZE : total;
+    uint32_t oldest = total - avail;               /* самый старый ещё доступный курсор */
+
+    if (since > total) since = total;              /* клиент "из будущего" - отдаём пусто */
+    uint32_t start = (since > oldest) ? since : oldest;
+    bool     lost  = (since > 0) && (since < oldest);
+
+    uint32_t n = total - start;
+    if (n > out_cap) {                             /* буфер вызывающего меньше накопленного */
+        start = total - (uint32_t)out_cap;
+        n = (uint32_t)out_cap;
+        lost = true;
+    }
+
+    for (uint32_t i = 0; i < n; ) {
+        uint32_t pos   = (start + i) % LOG_RING_SIZE;
+        uint32_t chunk = LOG_RING_SIZE - pos;
+        if (chunk > n - i) chunk = n - i;
+        memcpy(out + i, s_log_ring + pos, chunk);
+        i += chunk;
+    }
+    taskEXIT_CRITICAL();
+
+    *out_len = n;
+    *cursor  = total;
+    *dropped = lost;
 }

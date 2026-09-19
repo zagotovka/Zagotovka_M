@@ -66,6 +66,7 @@ void set_comand(char *buff);
 void check_speed(void);
 void init_sim800l_module(void);
 void process_sim800l_data(void);
+void gsm_dtcm_init(void);
 
 /* Новые общие функции обработки команд */
 void execute_commands(char *cmd_str);

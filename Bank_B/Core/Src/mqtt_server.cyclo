@@ -1,0 +1,9 @@
+../Core/Src/mqtt_server.c:165:25:srv_client	4
+../Core/Src/mqtt_server.c:175:13:srv_send_connack	1
+../Core/Src/mqtt_server.c:110:15:srv_varint_end.constprop	4
+../Core/Src/mqtt_server.c:477:13:mqtt_srv_cb	110
+../Core/Src/mqtt_server.c:591:6:mqtt_server_init	13
+../Core/Src/mqtt_server.c:640:6:mqtt_server_poll	14
+../Core/Src/mqtt_server.c:694:6:mqtt_server_publish	16
+../Core/Src/mqtt_server.c:722:9:mqtt_server_client_count	1
+../Core/Src/mqtt_server.c:726:9:mqtt_server_slzb_connected	7

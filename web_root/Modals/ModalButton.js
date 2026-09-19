@@ -17,7 +17,7 @@ const ModalButton = ({
   const [buttonInfo, setButtonInfo] = useState(selectedButton?.info || '');
   const [onoff, setOnOff] = useState(selectedButton?.onoff || 0);
   const [ptype, setPtype] = useState(selectedButton?.ptype || 0);
-  const [sclick, setSclick] = useState(selectedButton?.sclick || '');
+  const [sclick, setSclick] = useState(selectedButton?.sclick || selectedButton?.action || '');
   const [dclick, setDclick] = useState(selectedButton?.dclick || '');
   const [lpress, setLpress] = useState(selectedButton?.lpress || '');
   const [pinOptions, setPinOptions] = useState([]);
@@ -28,7 +28,7 @@ const ModalButton = ({
   });
   const [submitError, setSubmitError] = useState(null);
 
-  const doubleClickLongPressRegex = /^(None|\d{1,2}:[012])(,\d{1,2}:[012])*$/;
+  const doubleClickLongPressRegex = /^(None|\d{1,4}(\.\d)?:[012])(,\d{1,4}(\.\d)?:[012])*$/;
 
   const validateInput = (value) => {
     if (!value || value.trim() === '' || value.toLowerCase() === 'none') {
@@ -36,7 +36,7 @@ const ModalButton = ({
     }
     return doubleClickLongPressRegex.test(value)
       ? null
-      : 'Incorrect format. Use "None" or "pin:value" format.';
+      : 'Format: None, 6:1, 93.1:2 (pin:value, 0=OFF 1=ON 2=TOGGLE)';
   };
 
   const handleInputChange = (key, value) => {
@@ -59,9 +59,10 @@ const ModalButton = ({
   useEffect(() => {
     fetch('/api/select/get')
       .then((response) => response.json())
-      .then((data) => {
+      .then((response) => {
+        const data = response.data || response;
         if (Array.isArray(data)) {
-          setPinOptions(data.filter((pin) => pin.topin === 2));
+          setPinOptions(data.filter((pin) => pin.topin === 2 || pin.topin === 11));
         } else {
           setPinOptions([]);
         }
@@ -83,11 +84,11 @@ const ModalButton = ({
     const updatedButton = {
       ...selectedButton,
       info: buttonInfo,
+      onoff,
+      ptype,
       sclick: sclick || 'None',
       dclick: dclick || 'None',
-      lpress: lpress || 'None',
-      onoff,
-      ptype
+      lpress: lpress || 'None'
     };
 
     fetch('/api/button/set', {
@@ -116,14 +117,17 @@ const ModalButton = ({
     setErrors({ sclick: null, dclick: null, lpress: null });
   };
 
-  const renderConnectionModal = () => html`
+  const renderConnectionModal = () => {
+    const displayId = selectedButton.display_id || selectedButton.id;
+
+    return html`
     <form onSubmit=${handleSubmit}>
       <div class="modal-body">
         <table class="table-auto w-full">
           <tbody>
             <tr class="bg-gray-200">
               <td class="p-2 font-bold">ID</td>
-              <td class="p-2">${selectedButton.id}</td>
+              <td class="p-2">${displayId}</td>
             </tr>
             <tr class="bg-white">
               <td class="p-2 font-bold">Pin</td>
@@ -134,7 +138,7 @@ const ModalButton = ({
               <td class="p-2">
                 <select
                   name="setrpins"
-                  value=${pinOptions.some(opt => opt.pins === selectedButton?.setrpins) ? selectedButton?.setrpins : ''}
+                  value=${pinOptions.some(opt => (opt.pins === selectedButton?.setrpins || opt.id.toString() === selectedButton?.setrpins) ? selectedButton?.setrpins : '')}
                   onChange=${(e) =>
       onButtonChange({
         ...selectedButton,
@@ -145,8 +149,8 @@ const ModalButton = ({
                   <option value="">Select a connection</option>
                   ${pinOptions.map(
         (option) => html`
-                      <option value=${option.pins}>
-                        ${option.pins} (ID: ${option.id})
+                      <option value=${option.topin === 11 ? option.id : option.pins}>
+                        ${option.pins || option.zbee_label || 'Pin ' + option.id} (ID: ${option.id})
                       </option>
                     `
       )}
@@ -166,15 +170,20 @@ const ModalButton = ({
       </div>
     </form>
   `;
+  };
 
-  const renderEditModal = () => html`
+  const renderEditModal = () => {
+    const isZigbee = selectedButton.is_zigbee;
+    const displayId = selectedButton.display_id || selectedButton.id;
+
+    return html`
     <form onSubmit=${handleSubmit}>
       <div class="modal-body">
         <table class="table-auto w-full">
           <tbody>
             <tr class="bg-gray-200">
               <td class="p-2 font-bold">ID</td>
-              <td class="p-2">${selectedButton.id}</td>
+              <td class="p-2">${displayId}</td>
             </tr>
             <tr class="bg-white">
               <td class="p-2 font-bold">Pin</td>
@@ -185,13 +194,16 @@ const ModalButton = ({
               <td class="p-2">
                 <select
                   name="ptype"
-                  value=${ptype}
+                  value=${isZigbee ? 0 : ptype}
                   onChange=${(e) => setPtype(parseInt(e.target.value))}
-                  class="border rounded p-2 w-full"
+                  class="border rounded p-2 w-full ${isZigbee ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}"
+                  disabled=${isZigbee}
                 >
                   <option value="0">None</option>
-                  <option value="1">GPIO_PULLUP</option>
-                  <option value="2">GPIO_PULLDOWN</option>
+                  ${!isZigbee && html`
+                    <option value="1">GPIO_PULLUP</option>
+                    <option value="2">GPIO_PULLDOWN</option>
+                  `}
                 </select>
               </td>
             </tr>
@@ -214,7 +226,8 @@ const ModalButton = ({
                       class="border rounded p-2 w-full ${errors[type]
         ? 'border-red-500'
         : ''}"
-                      placeholder="None"
+                      placeholder="None, 6:1, 93.1:2"
+                      maxLength="124"
                     />
                     ${errors[type] &&
       html`<p class="text-red-500 text-sm">${errors[type]}</p>`}
@@ -261,6 +274,7 @@ const ModalButton = ({
       ${submitError && html`<p class="text-red-500 mt-2">${submitError}</p>`}
     </form>
   `;
+  };
 
   const modalContent = html`
     <div
