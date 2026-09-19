@@ -15,3 +15,7 @@ Bank_B/
 *.o
 .aider*
 /Release_OTA/
+
+# Принудительное отслеживание папки Proshivka и её содержимого
+!**/Proshivka/
+!**/Proshivka/**

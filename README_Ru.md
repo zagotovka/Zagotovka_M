@@ -89,7 +89,9 @@ d. <a href="https://easyeda.com/editor#id=|125ff34d97324d308c97b01793449de7|1bc6
 
 ### Сборка и подключение. <a href="https://youtu.be/0MEFwOGv__A"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/b01398d510e53b7798d8fa7cf06d6fbc/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
 
-## [Скачать прошивку](https://github.com/zagotovka/Zagotovka_M/raw/main/Proshivka/Zagotovka_M.bin) и как прошить stm32? <a href="https://youtu.be/C4c-W71eqqY"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/55e08612c6f4ec527f6d10fa24ae89fb/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
+## [Скачать прошивку](https://github.com/zagotovka/Zagotovka_M/releases/latest) и как прошить stm32? <a href="https://youtu.be/C4c-W71eqqY"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/55e08612c6f4ec527f6d10fa24ae89fb/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
+
+Проект теперь использует двухбанковую (Bank A / Bank B) организацию флеш-памяти. Для первой прошивки скачайте и прошейте образ Bank A; Bank B используется для последующих OTA-обновлений. Актуальные образы обоих банков также доступны в папке [Proshivka](https://github.com/zagotovka/Zagotovka_M/tree/main/Proshivka).
 
 ## Видеогид по интерфейсу.
 
@@ -152,4 +154,4 @@ d. <a href="https://easyeda.com/editor#id=|125ff34d97324d308c97b01793449de7|1bc6
 | 2.6.1 | 07-09-2026 | Защита ITCM через MPU; исправлена запись NULL в stdout, повреждавшая ITCM. |
 | 2.6.2 | 11-09-2026 | Добавлена проверка соответствия .bin-файла прошивки неактивному банку. |
 | 2.7.0 | 13-09-2026 | Реализован встроенный MQTT-сервер. |
-| 2.8.0 | 14-09-2026 | На странице Logger добавлен живой хвост SYSTEM LOG; версия прошивки встроена в имя релизного .bin-файла. |
+| 2.8.0 | 14-09-2026 | На Dashboard добавлен живой хвост SYSTEM LOG; версия прошивки встроена в имя релизного .bin-файла. |
