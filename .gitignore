@@ -1,2 +1,6 @@
 /Debug/
 /Release/
+
+# STM32CubeIDE build output
+Bank_A/
+Bank_B/
