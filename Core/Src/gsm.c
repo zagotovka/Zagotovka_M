@@ -52,6 +52,12 @@ void gsm_dtcm_init(void) {
     invpins   = (char *)dtcm_gsm_invpins;
     buf       = (char *)dtcm_gsm_buf;
     str2      = (char *)dtcm_gsm_str2;
+    /* pool — NOLOAD: стартап .bss-обнуление не выполняется */
+    memset(dtmf_buf, 0, DTCM_BUF_GSM_DTMF);
+    memset(vldpins, 0, DTCM_BUF_GSM_VLDPINS);
+    memset(invpins, 0, DTCM_BUF_GSM_INVPINS);
+    memset(buf, 0, DTCM_BUF_GSM_BUF);
+    memset(str2, 0, DTCM_BUF_GSM_STR2);
 }
 
 /* ────────────────────────────────────────────────────────────

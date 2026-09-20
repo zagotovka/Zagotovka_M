@@ -404,6 +404,7 @@ extern volatile uint32_t g_ver_select;
 /* ─── Mark slice dirty ─── */
 void mark_slice_dirty(volatile uint32_t *ver);
 void mark_slice_dirty_from_isr(volatile uint32_t *ver);
+void etag_version_seed(void);
 
 /* JSON string escaping (defined in net.c) */
 const char *json_escape_str(char *dst, const char *src, size_t dst_sz);

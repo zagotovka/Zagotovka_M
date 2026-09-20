@@ -196,6 +196,29 @@ void mark_slice_dirty_from_isr(volatile uint32_t *ver) {
     taskEXIT_CRITICAL_FROM_ISR(uxSaved);
 }
 
+/* Случайный salt в старших битах g_ver_*: ETag меняется между загрузками,
+ * иначе браузер с закешированным ETag "1" после перезагрузки получает 304
+ * и показывает устаревшую страницу. Вызывается после MX_RNG_Init(). */
+void etag_version_seed(void) {
+  extern RNG_HandleTypeDef hrng;
+  uint32_t r = 0;
+  if (HAL_RNG_GenerateRandomNumber(&hrng, &r) != HAL_OK)
+    r = HAL_GetTick(); /* fallback: редкий случай, лучше чем ничего */
+  uint32_t salt = (r & 0xFFFFu) << 16;
+  if (salt == 0) salt = 0x00010000u;
+  g_ver_common   = salt | 1;
+  g_ver_sensors  = salt | 1;
+  g_ver_pid      = salt | 1;
+  g_ver_encoder  = salt | 1;
+  g_ver_onewire  = salt | 1;
+  g_ver_switch   = salt | 1;
+  g_ver_button   = salt | 1;
+  g_ver_security = salt | 1;
+  g_ver_pins     = salt | 1;
+  g_ver_zigbee   = salt | 1;
+  g_ver_select   = salt | 1;
+}
+
 extern uint64_t s_boot_timestamp;
 extern osMessageQueueId_t outputQueueHandle;
 /* A3: global data_pin removed — each function uses a local copy */
@@ -545,6 +568,19 @@ static void cascade_delete_pin_id(int deleted_id) {
   bool changed_zigbee = false;
   bool changed_settings = false;
 
+  /* 0. Гасим физический выход ДО сброса topin (шаг 1): повторной
+   * инициализации пинов при NONE нет — PWM держал бы последний CCR,
+   * а DEVICE-выход последний уровень GPIO до перезагрузки */
+  if (deleted_id > 0 && deleted_id < NUMPIN) {
+    if (PinsConf[deleted_id].topin == 5) { /* PWM */
+      PinsConf[deleted_id].dvalue = 0;
+      __HAL_TIM_SET_COMPARE(&htim[deleted_id], PinsInfo[deleted_id].tim_channel, 0);
+    } else if (PinsConf[deleted_id].topin == 2) { /* DEVICE (GPIO-выход) */
+      HAL_GPIO_WritePin(PinsInfo[deleted_id].gpio_name,
+                        PinsInfo[deleted_id].hal_pin, GPIO_PIN_RESET);
+    }
+  }
+
   // 1. Физический пин: полная очистка собственных полей
   if (deleted_id >= 0 && deleted_id < NUMPIN) {
     PinsConf[deleted_id].topin = 0;
@@ -622,6 +658,34 @@ static void cascade_delete_pin_id(int deleted_id) {
   if (strip_id_from_sunrise_sunset(SetSettings.srise_pins, deleted_id) > 0) changed_settings = true;
   if (strip_id_from_sunrise_sunset(SetSettings.sset_pins, deleted_id) > 0) changed_settings = true;
 
+  // 9b. PID — слоты, привязанные к удаляемому пину
+  bool changed_pid = false;
+  for (int i = 0; i < PID_MAX_SLOTS; i++) {
+    if (PidConf[i].pwm_pin_id == (uint8_t)deleted_id) {
+      /* PWM-пин удалён: слот теряет смысл целиком */
+      if (PidConf[i].tune_state == PID_TUNE_STEP ||
+          PidConf[i].tune_state == PID_TUNE_BIAS) {
+        pid_autotune_stop(i);
+      }
+      pid_set_pwm(i, 0); /* до memset: использует pwm_pin_id */
+      taskENTER_CRITICAL();
+      memset(&PidConf[i], 0, sizeof(PidConf[i]));
+      taskEXIT_CRITICAL();
+      changed_pid = true;
+    } else if (PidConf[i].sensor_pin_id == (uint8_t)deleted_id) {
+      /* Датчик удалён: отвязываем и выключаем регулятор, пресет сохраняем */
+      PidConf[i].onoff = 0;
+      PidConf[i].selsens = PID_SENS_NONE;
+      PidConf[i].sensor_pin_id = 0;
+      PidConf[i].sensor_sub_idx = 0;
+      PidConf[i].sernum[0] = '\0';
+      pid_set_pwm(i, 0);
+      PidConf[i].pwm_out = 0;
+      PidConf[i].integral = 0.0f;
+      changed_pid = true;
+    }
+  }
+
   // 10. Сохранение изменений на флешку
   if (usbQueueHandle) {
     uint8_t usbnum;
@@ -630,6 +694,7 @@ static void cascade_delete_pin_id(int deleted_id) {
     if (changed_cron)     { usbnum = 3; xQueueSend(usbQueueHandle, &usbnum, 0); }
     if (changed_pintopin) { usbnum = 4; xQueueSend(usbQueueHandle, &usbnum, 0); }
     if (changed_onewire)  { usbnum = 5; xQueueSend(usbQueueHandle, &usbnum, 0); }
+    if (changed_pid)      { usbnum = 6; xQueueSend(usbQueueHandle, &usbnum, 0); }
     if (changed_zigbee)   { usbnum = 7; xQueueSend(usbQueueHandle, &usbnum, 0); }
   }
 
@@ -644,6 +709,7 @@ static void cascade_delete_pin_id(int deleted_id) {
   mark_slice_dirty(&g_ver_zigbee);
   mark_slice_dirty(&g_ver_select);
   mark_slice_dirty(&g_ver_common);
+  if (changed_pid) mark_slice_dirty(&g_ver_pid);
 }
 
 void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,

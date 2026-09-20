@@ -1098,6 +1098,7 @@ int main(void)
   dtcm_alloc_init();
   /* BSS → DTCM: присваиваем указатели (с проверкой на overflow) */
   PidConf = dtcm_pid_conf;
+  if (PidConf) memset(PidConf, 0, sizeof(dbPidConf) * PID_MAX_SLOTS);
   /* ЭТАП 2: htim + dht22 + button + PinsLinks → DTCM (pool — NOLOAD, нужен memset) */
   htim = dtcm_htim;
   if (htim) memset(htim, 0, sizeof(TIM_HandleTypeDef) * NUMPIN);
@@ -1120,6 +1121,7 @@ int main(void)
   gsm_dtcm_init();
   net_dtcm_init();
   zagotovka_dtcm_init();
+  etag_version_seed(); /* случайный ETag-salt: после ребута браузер не должен получать 304 */
   {
     char _sbuf[192];
     snprintf(_sbuf, sizeof(_sbuf), "[SYSTEM] DTCM pool: %u B total at 0x%08lX\r\n",

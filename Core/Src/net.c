@@ -2476,16 +2476,30 @@ static void handle_pid(struct mg_connection *c) {
 
         char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[i].tmpset, 1);
         char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), PidConf[i].tmpcur, 1);
+
+        /* pinact: пустой объект, если PWM-пин не привязан (иначе UI покажет "(0)") */
+        char pinact[40];
+        if (pin_id > 0 && pin_id < NUMPIN) {
+            snprintf(pinact, sizeof(pinact), "\"%s\":%d", esc_pname, pin_id);
+        } else {
+            pinact[0] = '\0';
+        }
+
+        /* selsens: "0" = NONE, "1" = DS18B20, "2" = DHT22 (NONE раньше ложно шёл как "2") */
+        const char *s_sens =
+            (PidConf[i].selsens == 1) ? "1" :
+            (PidConf[i].selsens == 2) ? "2" : "0";
+
         pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-            "%s{\"id\":%d,\"pins\":\"%s\",\"pinact\":{\"%s\":%d},"
+            "%s{\"id\":%d,\"pins\":\"%s\",\"pinact\":{%s},"
             "\"selsens\":\"%s\",\"sernum\":\"%s\",\"presets\":\"%u\","
             "\"tmpset\":\"%s\",\"tmpcur\":\"%s\","
             "\"duty\":%d,\"info\":\"%s\",\"onoff\":%d,"
             "\"tune_state\":%u,\"tune_progress\":%u}",
             first ? "" : ",",
             i + 1, esc_pname,
-            esc_pname, pin_id,
-            PidConf[i].selsens == 1 ? "1" : "2",
+            pinact,
+            s_sens,
             PidConf[i].sernum,
             PidConf[i].preset,
             s_ts, s_tc,

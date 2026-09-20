@@ -283,7 +283,7 @@ function presetOptions(lang) {
 /* Короткое имя для ячейки таблицы */
 function presetName(lang, id) {
   const p = findPreset(id);
-  return p ? p[langOf(lang)].name : String(id || '');
+  return p ? p[langOf(lang)].name : 'N/A';
 }
 
 /* ---------------------------------------------------------------------------
@@ -923,7 +923,7 @@ function TabPid({ }) {
 
   const getSensorLabel = (value) => {
     const s = SENSOR_OPTIONS.find(s => s.value === String(value));
-    return s ? s.label : value;
+    return s ? s.label : 'N/A';
   };
 
   // -------------------------------------------------------------------------
@@ -948,6 +948,9 @@ function TabPid({ }) {
     const isRunning  = (tuneState === TUNE_STEP || tuneState === TUNE_BIAS);
     const isDone     = (tuneState === TUNE_DONE);
     const isError    = (tuneState === TUNE_ERROR);
+
+    // Слот не сконфигурирован: нет привязанного PWM-пина
+    const hasPin = d.pinact && Object.keys(d.pinact).length > 0;
 
     // Кнопка Run tune / Done / Error
     const btnStyle = isDone
@@ -994,17 +997,18 @@ function TabPid({ }) {
         <td class="px-4 py-3 text-sm text-slate-800 font-medium">${d.id}</td>
         <td class="px-4 py-3 text-sm text-slate-700 font-mono">
           ${(() => {
+            if (!hasPin) return 'N/A';
             const entries = Object.entries(d.pinact || {});
-            if (!entries.length) return '—';
+            if (!entries.length) return 'N/A';
             const [pinName, pinId] = entries[0];
             return `${pinName}(${pinId})`;
           })()}
         </td>
-        <td class="px-4 py-3 text-sm text-slate-700">${getSensorLabel(d.selsens)}</td>
-        <td class="px-4 py-3 text-sm font-mono ${d.selsens === '1' ? 'text-slate-700' : 'text-slate-400 italic'}">${d.selsens === '1' ? (d.sernum || '—') : 'N/A'}</td>
-        <td class="px-4 py-3 text-sm text-slate-700">${getPresetLabel(d.presets)}</td>
-        <td class="px-4 py-3 text-sm text-slate-700 font-mono">${d.tmpset}</td>
-        <td class="px-4 py-3 text-sm text-slate-700 font-mono">${d.tmpcur}</td>
+        <td class="px-4 py-3 text-sm text-slate-700">${!hasPin || String(d.selsens) === '0' ? 'N/A' : getSensorLabel(d.selsens)}</td>
+        <td class="px-4 py-3 text-sm font-mono ${d.selsens === '1' && hasPin ? 'text-slate-700' : 'text-slate-400 italic'}">${d.selsens === '1' && hasPin ? (d.sernum || '—') : 'N/A'}</td>
+        <td class="px-4 py-3 text-sm text-slate-700">${!hasPin ? 'N/A' : getPresetLabel(d.presets)}</td>
+        <td class="px-4 py-3 text-sm text-slate-700 font-mono">${!hasPin ? 'N/A' : d.tmpset}</td>
+        <td class="px-4 py-3 text-sm text-slate-700 font-mono">${!hasPin ? 'N/A' : d.tmpcur}</td>
         <td class="px-4 py-3 text-sm text-slate-800 font-mono ${!d.onoff ? 'text-rose-500 font-bold' : ''}">${!d.onoff ? 'OFF' : (d.duty !== undefined ? d.duty : '—')}</td>
         <td class="px-4 py-3 text-sm text-slate-600">${d.info}</td>
         <td class="px-4 py-3">

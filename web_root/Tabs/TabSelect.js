@@ -219,7 +219,7 @@ const HELP_CONTENT = {
             <li>Связи между пинами (PinsLinks)</li>
             <li>Действия кнопок (single click / double click / long press)</li>
             <li>Таймеры и крон-задачи</li>
-            <li>Действия датчиков温度 (OneWire DS18B20 / DHT22)</li>
+            <li>Действия датчиков (OneWire DS18B20 / DHT22)</li>
             <li>Zigbee-кнопки (виртуальные пины)</li>
             <li>Рассвет / Закат (Sunrise / Sunset)</li>
             <li>Привязка энкодеров к Zigbee</li>

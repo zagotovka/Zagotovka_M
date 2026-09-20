@@ -37,11 +37,11 @@
 ../Core/Src/net.c:669:6:net_dtcm_init	1
 ../Core/Src/net.c:1894:13:json_escape_str	9
 ../Core/Src/net.c:1955:13:handle_get_pins	47
-../Core/Src/net.c:2442:13:handle_pid	6
+../Core/Src/net.c:2442:13:handle_pid	8
 ../Core/Src/net.c:2157:12:build_pinact_json.part.0.constprop.isra	12
 ../Core/Src/net.c:2073:6:handle_buttons	18
 ../Core/Src/net.c:2195:6:handle_switches	17
 ../Core/Src/net.c:2314:6:handle_encoders	24
 ../Core/Src/net.c:728:6:fn	300
-../Core/Src/net.c:2843:6:web_init	26
-../Core/Src/net.c:2931:6:setup_mqtt	10
+../Core/Src/net.c:2857:6:web_init	26
+../Core/Src/net.c:2945:6:setup_mqtt	10
