@@ -1778,123 +1778,134 @@ void StartConfigTask(void *argument)
   int usbflag = 1;
   FILINFO finfo;
   for (;;) {
-    switch (Appli_state) {
-    case APPLICATION_READY:
-      if (usbflag == 1) {
-        osDelay(1000);
-        printf("APPLICATION_READY! \r\n");
+	    switch (Appli_state) {
+	    case APPLICATION_READY:
+	      if (usbflag == 1) {
+	        osDelay(1000);
+	        printf("APPLICATION_READY! \r\n");
 
-        FRESULT fresult = f_stat(
-            "settings.ini", &finfo); // Проверяем существует ли файл или нет!?
-        if (fresult == FR_OK) {
-          GetSettingsConfig(); // если файл "settings.ini" существует, открываем
-                               // его и перезаписываем
-          mysett_cache_reload();
-          g_log_filter_mask = g_log_filter_from_file ? SetSettings.log_filter_mask : LOG_MASK_ALL;
-          GetCronConfig();     // если файл "cron.ini" существует, открываем для
-                               // чтения.
-          GetPinConfig();      // если файл "pins.ini" существует, открываем для
-                               // чтения.
-          GetPinToPin(); // если файл "pintopin.ini" существует, открываем его
-          GetOneWireConfig(); // если файл "onewire.ini" существует, открываем
-                              // его
-          GetPidConfig();     // если файл "pid.ini" существует, открываем его
-          GetZigbeeConfig();  // загружаем конфигурацию Zigbee
+	        // Каждый .ini-файл загружается НЕЗАВИСИМО от наличия остальных:
+	        // если файл найден на флешке — читаем его (Get*Config), если файла
+	        // нет — создаём его с настройками по умолчанию (Set*Config /
+	        // StartSettingsConfig).
 
-          InitPin(); // Инициализация пинов
+	        if (f_stat("settings.ini", &finfo) == FR_OK) {
+	          GetSettingsConfig(); // "settings.ini" существует — читаем его
+	          mysett_cache_reload();
+	          g_log_filter_mask = g_log_filter_from_file ? SetSettings.log_filter_mask : LOG_MASK_ALL;
+	        } else {
+	          StartSettingsConfig(); // "settings.ini" не существует — создаём с настройками по умолчанию
+	          g_log_filter_mask = LOG_MASK_ALL;
+	        }
 
-          if (SetSettings.sim800l == 1) { // Если модуль sim800l включен
-            xTaskNotifyGive(
-                SIM800LTaskHandle); // ТО ВКЛЮЧАЕМ ЗАДАЧУ SIM800LTask
-            ulTaskNotifyTake(pdTRUE,
-                             portMAX_DELAY); // Ждем уведомления от SIM800LTask
-          }
+	        if (f_stat("cron.ini", &finfo) == FR_OK) {
+	          GetCronConfig(); // "cron.ini" существует — читаем его
+	        } else {
+	          SetCronConfig(); // "cron.ini" не существует — создаём его
+	        }
 
-          xTaskNotifyGive(
-              WebServerTaskHandle);          // ТО ВКЛЮЧАЕМ ЗАДАЧУ WebServerTask
-          xTaskNotifyGive(CronTaskHandle);   // И ВКЛЮЧАЕМ ЗАДАЧУ CronTask
-          xTaskNotifyGive(OutputTaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ OutputTask
-          xTaskNotifyGive(InputTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ InputTask
-          xTaskNotifyGive(EncoderTaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ PWMTask
+	        if (f_stat("pins.ini", &finfo) == FR_OK) {
+	          GetPinConfig(); // "pins.ini" существует — читаем его
+	        } else {
+	          SetPinConfig(); // "pins.ini" не существует — создаём его
+	        }
 
-          xTaskNotifyGive(ServiceTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ TechnolTask
-          xTaskNotifyGive(SecurityTaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ SecurityTask
+	        if (f_stat("pintopin.ini", &finfo) == FR_OK) {
+	          GetPinToPin(); // "pintopin.ini" существует — читаем его
+	        } else {
+	          SetPinToPin(); // "pintopin.ini" не существует — создаём его
+	        }
 
-          osDelay(100);
-          xTaskNotifyGive(ds18b20TaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ ds18b20
-          xTaskNotifyGive(dht22TaskHandle);   // И ВКЛЮЧАЕМ ЗАДАЧУ dht22
-          xTaskNotifyGive(PIDTaskHandle);     // И ВКЛЮЧАЕМ ЗАДАЧУ PIDTask
-          xTaskNotifyGive(my_DgnTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ DgnTask
+	        if (f_stat("onewire.ini", &finfo) == FR_OK) {
+	          GetOneWireConfig(); // "onewire.ini" существует — читаем его
+	        } else {
+	          SetOneWireConfig(); // "onewire.ini" не существует — создаём его
+	        }
 
-        } else { // Файл "pins.ini" не существует, создаем его и записываем
-                 // данные
-          StartSettingsConfig();
-          g_log_filter_mask = LOG_MASK_ALL;
+	        if (f_stat("pid.ini", &finfo) == FR_OK) {
+	          GetPidConfig(); // "pid.ini" существует — читаем его
+	        } else {
+	          SetPidConfig(); // "pid.ini" не существует — создаём его
+	        }
 
-          xTaskNotifyGive(WebServerTaskHandle); // ВКЛЮЧАЕМ ЗАДАЧУ WebServerTask
-          xTaskNotifyGive(CronTaskHandle);      // ВКЛЮЧАЕМ ЗАДАЧУ CronTask
-          xTaskNotifyGive(OutputTaskHandle);    // ВКЛЮЧАЕМ ЗАДАЧУ OutputTask
-          xTaskNotifyGive(InputTaskHandle);     // ВКЛЮЧАЕМ ЗАДАЧУ InputTask
-          xTaskNotifyGive(EncoderTaskHandle);   // ВКЛЮЧАЕМ ЗАДАЧУ PWMTask
+	        if (f_stat("zigbee.ini", &finfo) == FR_OK) {
+	          GetZigbeeConfig(); // "zigbee.ini" существует — читаем его
+	        } else {
+	          SetZigbeeConfig(); // "zigbee.ini" не существует — создаём его
+	        }
 
-          osDelay(100);
-          xTaskNotifyGive(ServiceTaskHandle);  // ВКЛЮЧАЕМ ЗАДАЧУ TechnolTask
-          xTaskNotifyGive(ds18b20TaskHandle);  // ВКЛЮЧАЕМ ЗАДАЧУ ds18b20
-          xTaskNotifyGive(dht22TaskHandle);    // ВКЛЮЧАЕМ ЗАДАЧУ dht22
-          xTaskNotifyGive(SecurityTaskHandle); // ВКЛЮЧАЕМ ЗАДАЧУ SecurityTask
-          xTaskNotifyGive(PIDTaskHandle);      // ВКЛЮЧАЕМ ЗАДАЧУ PIDTask
-          xTaskNotifyGive(my_DgnTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ DgnTask
-        }
-        usbflag = 0;
-      }
-      // Функция для чтения целых чисел из очереди
-      if (xQueueReceive(usbQueueHandle, &usbnum, portMAX_DELAY) == pdTRUE) {
-        {
-          uint32_t cur_usb = uxQueueMessagesWaiting(usbQueueHandle) + 1;
-          if (cur_usb > usb_peak) {
-            usb_peak = cur_usb;
-          }
-        }
-        switch (usbnum) {
-        case 1:
-          SetPinConfig(); // Если файл "pins.ini" не существует, создаем его и
-                          // записываем данные
-          break;
-        case 2:
-          SetSettingsConfig(); // Когда сохраняем форму в файл "setings.ini"
-          break;
-        case 3:
-          SetCronConfig(); // Если файл "cron.ini" не существует, создаем его и
-                           // записываем данные
-          break;
-        case 4:
-          SetPinToPin(); // Если файл "pintopin.ini" не существует, создаем его
-                         // и записываем данные
-          break;
-        case 5:
-          SetOneWireConfig(); // Если файл "onewire.ini" не существует, создаем
-                              // его и записываем данные
-          break;
-        case 6:
-          SetPidConfig(); // Сохранение PID конфигурации в "pid.ini"
-          break;
-        case 7:
-          SetZigbeeConfig(); // Сохранение Zigbee конфигурации в "zigbee.ini"
-          break;
-        default:
-          printf("xQueueReceive get wrong data! \r\n");
-          break;
-        }
-        //				printf("xQueueReceive number: %u\n",
-        // usbnum);
-      }
-      break;
-    default:
-      // printf("Wrong data! \r\n");
-      break;
-    }
-    osDelay(1);
-  }
+	        InitPin(); // Инициализация пинов — теперь всегда выполняется после всех загрузок,
+	                   // независимо от того, какие файлы нашлись, а какие были созданы заново
+
+	        if (SetSettings.sim800l == 1) { // Если модуль sim800l включен
+	          xTaskNotifyGive(
+	              SIM800LTaskHandle); // ТО ВКЛЮЧАЕМ ЗАДАЧУ SIM800LTask
+	          ulTaskNotifyTake(pdTRUE,
+	                           portMAX_DELAY); // Ждем уведомления от SIM800LTask
+	        }
+
+	        xTaskNotifyGive(
+	            WebServerTaskHandle);          // ТО ВКЛЮЧАЕМ ЗАДАЧУ WebServerTask
+	        xTaskNotifyGive(CronTaskHandle);   // И ВКЛЮЧАЕМ ЗАДАЧУ CronTask
+	        xTaskNotifyGive(OutputTaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ OutputTask
+	        xTaskNotifyGive(InputTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ InputTask
+	        xTaskNotifyGive(EncoderTaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ PWMTask
+
+	        xTaskNotifyGive(ServiceTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ TechnolTask
+	        xTaskNotifyGive(SecurityTaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ SecurityTask
+
+	        osDelay(100);
+	        xTaskNotifyGive(ds18b20TaskHandle); // И ВКЛЮЧАЕМ ЗАДАЧУ ds18b20
+	        xTaskNotifyGive(dht22TaskHandle);   // И ВКЛЮЧАЕМ ЗАДАЧУ dht22
+	        xTaskNotifyGive(PIDTaskHandle);     // И ВКЛЮЧАЕМ ЗАДАЧУ PIDTask
+	        xTaskNotifyGive(my_DgnTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ DgnTask
+
+	        usbflag = 0;
+	      }
+	      // Функция для чтения целых чисел из очереди
+	      if (xQueueReceive(usbQueueHandle, &usbnum, portMAX_DELAY) == pdTRUE) {
+	        {
+	          uint32_t cur_usb = uxQueueMessagesWaiting(usbQueueHandle) + 1;
+	          if (cur_usb > usb_peak) {
+	            usb_peak = cur_usb;
+	          }
+	        }
+	        switch (usbnum) {
+	        case 1:
+	          SetPinConfig(); // Сохранение конфигурации пинов в "pins.ini"
+	          break;
+	        case 2:
+	          SetSettingsConfig(); // Когда сохраняем форму в файл "setings.ini"
+	          break;
+	        case 3:
+	          SetCronConfig(); // Сохранение конфигурации cron в "cron.ini"
+	          break;
+	        case 4:
+	          SetPinToPin(); // Сохранение pin-to-pin связей в "pintopin.ini"
+	          break;
+	        case 5:
+	          SetOneWireConfig(); // Сохранение конфигурации OneWire в "onewire.ini"
+	          break;
+	        case 6:
+	          SetPidConfig(); // Сохранение PID конфигурации в "pid.ini"
+	          break;
+	        case 7:
+	          SetZigbeeConfig(); // Сохранение Zigbee конфигурации в "zigbee.ini"
+	          break;
+	        default:
+	          printf("xQueueReceive get wrong data! \r\n");
+	          break;
+	        }
+	        //				printf("xQueueReceive number: %u\n",
+	        // usbnum);
+	      }
+	      break;
+	    default:
+	      // printf("Wrong data! \r\n");
+	      break;
+	    }
+	    osDelay(1);
+	  }
   /* USER CODE END 5 */
 }
 
@@ -2700,7 +2711,7 @@ void StartEncoderTask(void *argument)
   for (uint8_t id = 0; id < NUMPIN; id++) {
       if (PinsConf[id].topin == 8) {
           uint8_t idpinb_init = PinsConf[id].encoderb;
-          if (idpinb_init != 0) {
+          if (idpinb_init > 0 && idpinb_init < NUMPIN) {
               uint8_t init_A = HAL_GPIO_ReadPin(PinsInfo[id].gpio_name, PinsInfo[id].hal_pin);
               uint8_t init_B = HAL_GPIO_ReadPin(PinsInfo[idpinb_init].gpio_name, PinsInfo[idpinb_init].hal_pin);
               enc_state[id] = (init_A << 1) | init_B;
@@ -2714,7 +2725,7 @@ void StartEncoderTask(void *argument)
 	  for (uint8_t id = 0; id < NUMPIN; id++) {
 	           if (PinsConf[id].topin == 8) {
 	               uint8_t idpinb = PinsConf[id].encoderb;
-	               if (idpinb == 0) continue;
+	               if (idpinb == 0 || idpinb >= NUMPIN) continue;
 
 	               uint8_t curr_A = HAL_GPIO_ReadPin(PinsInfo[id].gpio_name, PinsInfo[id].hal_pin);
 	               uint8_t curr_B = HAL_GPIO_ReadPin(PinsInfo[idpinb].gpio_name, PinsInfo[idpinb].hal_pin);

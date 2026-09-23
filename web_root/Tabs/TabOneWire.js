@@ -125,6 +125,15 @@ const HELP_CONTENT = {
         <span style="display:block;"><b style="color:#dc2626;">OFF</b> — выключить</span>
         <span style="display:block;"><b style="color:#d97706;">TG</b> — переключить состояние пина (toggle)</span>
       </div>
+      <div style="margin-bottom:10px; background:#fef3c7; border:1px solid #fbbf24; border-radius:10px; padding:12px 14px;">
+        <p style="margin-bottom:6px; font-weight:700; color:#92400e;">⚠ Сколько датчиков можно подключить</p>
+        <ul style="margin:0; padding-left:18px; color:#78350f;">
+          <li style="margin-bottom:4px;"><b>DS18B20</b> — можно подключать несколько датчиков на один пин (это цифровая шина с адресацией по серийному номеру): до <b>10 датчиков на пин</b>, и не более <b>2 пинов</b> под DS18B20. Итого до 20 датчиков DS18B20.</li>
+          <li style="margin-bottom:4px;"><b>DHT22</b> — у этого датчика нет адреса на шине, поэтому на один пин можно подключить только <b>1 датчик</b>. Каждый DHT22 требует отдельный пин (доступно до <b>20 пинов</b> под DHT22).</li>
+          <li style="margin-bottom:4px;">Если для DS18B20 «Кол-во сенсоров» показывает 0 — при последнем поиске датчики на шине не найдены. Проверьте провода и подтягивающий резистор ~4,7 кОм между линией данных и +3,3В.</li>
+          <li>После смены типа датчика или пина настройки сохраняются сразу, но повторный поиск устройств на шине выполняется только при <b>перезагрузке контроллера</b> — не забудьте перезагрузить устройство после изменений.</li>
+        </ul>
+      </div>
           <div>
             <h2 class="text-xl font-bold mb-2">Отслеживание изменений</h2>
             <div class="bg-teal-50 p-4 rounded-lg border border-teal-100 text-sm">
@@ -165,6 +174,15 @@ const HELP_CONTENT = {
         <span style="display:block;"><b style="color:#16a34a;">ON</b> — turn the pin on when the threshold is reached</span>
         <span style="display:block;"><b style="color:#dc2626;">OFF</b> — turn it off</span>
         <span style="display:block;"><b style="color:#d97706;">TG</b> — toggle the pin state</span>
+      </div>
+      <div style="margin-bottom:10px; background:#fef3c7; border:1px solid #fbbf24; border-radius:10px; padding:12px 14px;">
+        <p style="margin-bottom:6px; font-weight:700; color:#92400e;">⚠ How many sensors you can connect</p>
+        <ul style="margin:0; padding-left:18px; color:#78350f;">
+          <li style="margin-bottom:4px;"><b>DS18B20</b> — several sensors can share one pin (it's a digital bus, each sensor has its own serial number): up to <b>10 sensors per pin</b>, and no more than <b>2 pins</b> configured for DS18B20. Up to 20 DS18B20 sensors total.</li>
+          <li style="margin-bottom:4px;"><b>DHT22</b> — this sensor has no bus address, so only <b>1 sensor</b> can be connected per pin. Each DHT22 needs its own pin (up to <b>20 pins</b> available for DHT22).</li>
+          <li style="margin-bottom:4px;">If "Count of sensors" shows 0 for DS18B20 — no devices were found on the last bus scan. Check the wiring and the ~4.7kΩ pull-up resistor between the data line and +3.3V.</li>
+          <li>Settings save immediately when you change a sensor type or pin, but the actual bus scan only runs on <b>controller reboot</b> — reboot the device after making changes.</li>
+        </ul>
       </div>
           <div>
             <h2 class="text-xl font-bold mb-2">Change Tracking</h2>
@@ -220,13 +238,15 @@ const TabOneWire = () => {
       colOnOff:    'Вкл/Выкл',
       colActions:  'Действия',
       noSensors:   'Нет сенсоров для этого OneWire пина.',
-      noData:      'Нет данных сенсора для этого OneWire пина.',
+      noData:      'Нет данных сенсора для этого OneWire пина. Проверьте подключение и подтягивающий резистор ~4,7 кОм.',
       noPins:      'Нет настроенных OneWire пинов!',
       errFetch:    (e) => `Ошибка получения данных: ${e}`,
       edit:        'Ред.',
       showHelp:    'Показать справку',
       hideHelp:    'Скрыть справку',
       title:       'OneWire(s) pin(s)',
+      subtitle:    'Здесь настраиваются датчики температуры (DS18B20) и температуры/влажности (DHT22), подключённые к контроллеру, и действия при выходе показаний за заданные пределы.',
+      expandHint:  'Нажмите на строку, чтобы посмотреть список датчиков на этом пине',
     },
     en: {
       colId:       'ID',
@@ -236,13 +256,15 @@ const TabOneWire = () => {
       colOnOff:    'On/Off',
       colActions:  'Actions',
       noSensors:   'No connected sensors for this OneWire pin.',
-      noData:      'No sensor data available for this OneWire pin.',
+      noData:      'No sensor data available for this OneWire pin. Check the wiring and the ~4.7kOhm pull-up resistor.',
       noPins:      'No available pins configured as OneWire!',
       errFetch:    (e) => `Error fetching sensor data: ${e}`,
       edit:        'Edit',
       showHelp:    'Show Help',
       hideHelp:    'Hide Help',
       title:       'OneWire(s) pin(s)',
+      subtitle:    'Configure temperature (DS18B20) and temperature/humidity (DHT22) sensors connected to the controller, and the actions to run when readings go outside the set limits.',
+      expandHint:  'Click the row to see the list of sensors on this pin',
     },
   };
 
@@ -383,7 +405,7 @@ const TabOneWire = () => {
           </td>
           <td class="px-6 py-4" onclick=${(e) => e.stopPropagation()}>
             <button class="text-blue-600 hover:text-blue-800 font-semibold transition-colors" onclick=${() => openOneWireModal(device)}>${T.edit}</button>
-            ${hasChildren && html`<span class="ml-3 text-slate-400 text-xs">${isExpanded ? '▲' : '▼'}</span>`}
+            ${hasChildren && html`<span class="ml-3 text-slate-400 text-xs" title=${T.expandHint}>${isExpanded ? '▲' : '▼'}</span>`}
           </td>
         </tr>
         ${isExpanded && hasChildren ? html`
@@ -447,7 +469,8 @@ const TabOneWire = () => {
   return html`
     <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col items-center">
       <div class="w-full relative z-10">
-        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 uppercase">${T.title}</div>
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 uppercase">${T.title}</div>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${T.subtitle}</p>
         <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6 overflow-auto">
           <table class="w-full text-left border-collapse whitespace-nowrap">
             <thead>

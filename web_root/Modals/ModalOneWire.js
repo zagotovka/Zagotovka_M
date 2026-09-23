@@ -78,6 +78,25 @@ function ModalOneWire({
     }
   };
 
+  // ---------------------------------------------------------------------
+  // Подсказки под полями: сколько датчиков реально можно повесить.
+  // DS18B20 — цифровая шина с адресацией по серийному номеру, до 10
+  // датчиков на один пин. DHT22 — адреса на шине не имеет, поэтому
+  // физически поддерживает только 1 датчик на пин (numdevices
+  // принудительно = 1 и недоступно для редактирования, см. handleChange).
+  // ---------------------------------------------------------------------
+  const sensorTypeHint = formData.typsensor === 1
+    ? 'DS18B20: цифровая шина — на этот пин можно повесить несколько датчиков (до 10 шт.), каждый со своим серийным номером.'
+    : formData.typsensor === 2
+      ? 'DHT22: у датчика нет адреса на шине, поэтому на один пин можно подключить только 1 датчик DHT22.'
+      : 'Выберите тип датчика, подключённого к этому пину, либо оставьте None, если пин не используется.';
+
+  const countHint = formData.typsensor === 1
+    ? 'Определяется автоматически при поиске на шине (максимум 10 на пин). Изменится только после перезагрузки контроллера.'
+    : formData.typsensor === 2
+      ? 'Для DHT22 всегда 1 — этот датчик не поддерживает несколько устройств на одном пине.'
+      : '—';
+
   const modalContent = html`
     <div
       class="fixed inset-0 z-[999] bg-black bg-opacity-50 flex items-center justify-center p-4"
@@ -139,6 +158,7 @@ function ModalOneWire({
                       <option value="1">DS18B20</option>
                       <option value="2">DHT22</option>
                     </select>
+                    <p class="text-xs text-gray-500 mt-1">${sensorTypeHint}</p>
                   </td>
                 </tr>
                 <tr class="bg-gray-200">
@@ -155,6 +175,7 @@ function ModalOneWire({
                       readonly=${formData.typsensor !== 1}
                       disabled=${isSubmitting}
                     />
+                    <p class="text-xs text-gray-500 mt-1">${countHint}</p>
                   </td>
                 </tr>
                 <tr class="bg-white">
@@ -168,6 +189,9 @@ function ModalOneWire({
                 </tr>
               </tbody>
             </table>
+            <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mt-4">
+              ⚠ После сохранения повторный поиск датчиков на шине выполняется только при перезагрузке контроллера — перезагрузите устройство, чтобы изменения вступили в силу.
+            </p>
           </div>
           <div class="modal-footer flex justify-end mt-4">
             <button

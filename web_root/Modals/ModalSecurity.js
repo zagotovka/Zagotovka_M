@@ -21,6 +21,9 @@ const ModalSecurity = ({
   const [send_sms, setSend_sms] = useState(selectedSecurity?.send_sms || '');
   const [action, setAction] = useState(selectedSecurity?.action || '');
   const [pinOptions, setPinOptions] = useState([]);
+  const [selectedConnection, setSelectedConnection] = useState(
+    selectedSecurity?.setrpins || ''
+  );
   const [errors, setErrors] = useState({
     send_sms: null,
     action: null
@@ -81,6 +84,51 @@ const ModalSecurity = ({
   const handleSubmit = (e) => {
     e.preventDefault();
 
+    // ── Connection: раньше это поле вообще не отправлялось на STM32 ──
+    // (onChange только обновлял локальный state и сразу закрывал модалку).
+    // ВАЖНО: сам backend (parse_monitoring_json) на данный момент тоже не
+    // читает setrpins/pinact вообще — см. комментарий с патчем для C-кода,
+    // который нужно добавить, чтобы это реально заработало end-to-end.
+    if (modalType === 'connection') {
+      const selectedPin = pinOptions.find(
+        (pin) => pin.pins === selectedConnection || pin.id.toString() === selectedConnection
+      );
+
+      const jsonData = {
+        type: 'monitoring',
+        id: selectedSecurity.id,
+        pins: selectedSecurity.pins,
+        setrpins: selectedConnection,
+        pinact: selectedPin ? { [selectedPin.id]: selectedPin.pins } : {}
+      };
+
+      fetch('/api/security/set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(jsonData)
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error('Network response was not ok');
+          }
+          return response.json();
+        })
+        .then((data) => {
+          if (data.error) {
+            throw new Error(data.error);
+          }
+          onSecurityChange({ ...selectedSecurity, ...jsonData });
+          hideModal();
+        })
+        .catch((error) => {
+          console.error('Error:', error);
+          setSubmitError('Failed to save changes. Please try again.');
+        });
+
+      return;
+    }
+
+    // ── Edit (без изменений) ──
     if (Object.values(errors).some((error) => error !== null)) {
       setSubmitError('Please correct the errors before submitting.');
       return;
@@ -147,12 +195,8 @@ const ModalSecurity = ({
               <td class="p-2">
                 <select
                   name="setrpins"
-                  value=${pinOptions.some(opt => opt.pins === selectedSecurity?.setrpins) ? selectedSecurity?.setrpins : ''}
-                  onChange=${(e) =>
-      onSecurityChange({
-        ...selectedSecurity,
-        setrpins: e.target.value
-      })}
+                  value=${pinOptions.some(opt => opt.pins === selectedConnection) ? selectedConnection : ''}
+                  onChange=${(e) => setSelectedConnection(e.target.value)}
                   class="border rounded p-2 w-full"
                 >
                   <option value="">Select a connection</option>

@@ -21,6 +21,9 @@ const ModalButton = ({
   const [dclick, setDclick] = useState(selectedButton?.dclick || '');
   const [lpress, setLpress] = useState(selectedButton?.lpress || '');
   const [pinOptions, setPinOptions] = useState([]);
+  const [selectedConnection, setSelectedConnection] = useState(
+    selectedButton?.setrpins || ''
+  );
   const [errors, setErrors] = useState({
     sclick: null,
     dclick: null,
@@ -57,7 +60,10 @@ const ModalButton = ({
   };
 
   useEffect(() => {
-    fetch('/api/select/get')
+    // limit=100 обязателен: без него бэкенд отдаёт только пины с ID 0-29
+    // (дефолт offset=0, limit=30 в handle_select_get), из-за чего пины
+    // с ID >= 30 не попадали в pinOptions и связи для них могли тихо сбрасываться.
+    fetch('/api/select/get?limit=100')
       .then((response) => response.json())
       .then((response) => {
         const data = response.data || response;
@@ -76,6 +82,41 @@ const ModalButton = ({
   const handleSubmit = (e) => {
     e.preventDefault();
 
+    // ── Connection: раньше это поле вообще не отправлялось на STM32 ──
+    // (onChange только обновлял локальный state и закрывал модалку, а
+    // handleSubmit слал объект без setrpins/pinact). Теперь собираем и
+    // реально сохраняем через /api/button/set.
+    if (modalType === 'connection') {
+      const selectedPin = pinOptions.find(
+        (pin) => pin.pins === selectedConnection || pin.id.toString() === selectedConnection
+      );
+
+      const jsonData = {
+        id: selectedButton.id,
+        pins: selectedButton.pins,
+        setrpins: selectedConnection,
+        pinact: selectedPin ? { [selectedPin.id]: selectedPin.pins } : {}
+      };
+
+      fetch('/api/button/set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(jsonData)
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          onButtonChange({ ...selectedButton, ...jsonData });
+          hideModal();
+        })
+        .catch((error) => {
+          console.error('Error:', error);
+          setSubmitError('Failed to save changes. Please try again.');
+        });
+
+      return;
+    }
+
+    // ── Edit (без изменений) ──
     if (Object.values(errors).some((error) => error !== null)) {
       setSubmitError('Please correct the errors before submitting.');
       return;
@@ -138,12 +179,8 @@ const ModalButton = ({
               <td class="p-2">
                 <select
                   name="setrpins"
-                  value=${pinOptions.some(opt => (opt.pins === selectedButton?.setrpins || opt.id.toString() === selectedButton?.setrpins) ? selectedButton?.setrpins : '')}
-                  onChange=${(e) =>
-      onButtonChange({
-        ...selectedButton,
-        setrpins: e.target.value
-      })}
+                  value=${pinOptions.some(opt => opt.pins === selectedConnection || opt.id.toString() === selectedConnection) ? selectedConnection : ''}
+                  onChange=${(e) => setSelectedConnection(e.target.value)}
                   class="border rounded p-2 w-full"
                 >
                   <option value="">Select a connection</option>

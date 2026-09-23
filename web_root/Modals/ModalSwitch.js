@@ -78,15 +78,45 @@ function ModalSwitch({
 
     if (modalType === 'edit') {
       jsonData.onoff = onoff;
+      // ptype обязательно как число: FormData отдаёт значение <select> строкой
+      // ("1"), а mg_json_get_num на STM32 распознаёт только "голые" числа,
+      // не строки в кавычках — из-за этого ptype тихо не сохранялся.
+      jsonData.ptype = ptype;
     } else if (modalType === 'connection') {
+      // ВАЖНО: берём значение из React-state (selectedConnection), а не из
+      // FormData/jsonData.setrpins. Если пин, который был выбран ранее,
+      // на момент открытия модалки выпал из pinOptions (например, сменился
+      // topin), <select> в DOM визуально сбрасывается на пустой пункт —
+      // и FormData тогда прочитает "" вместо реального selectedConnection.
+      delete jsonData.setrpins;
+
       const selectedPin = pinOptions.find(
-        (pin) => pin.pins === jsonData.setrpins || pin.id.toString() === jsonData.setrpins
+        (pin) => pin.pins === selectedConnection || pin.id.toString() === selectedConnection
       );
+
       if (selectedPin) {
+        // Найдено совпадение — обычное сохранение новой связи.
+        jsonData.setrpins = selectedConnection;
         jsonData.pinact = {
           ...selectedSwitch.pinact,
           [selectedPin.id]: selectedPin.pins
         };
+      } else if (selectedConnection === '') {
+        // Пользователь осознанно выбрал "Select a connection" — это
+        // единственный случай, когда связь действительно нужно очистить.
+        jsonData.setrpins = '';
+        jsonData.pinact = {};
+      } else {
+        // selectedConnection не пустой, но совпадения в pinOptions нет
+        // (гонка/фильтр /api/select/get). НЕ отправляем "setrpins" вовсе —
+        // backend (parse_switch_json, Zigbee-ветка) стирает PinsLinks
+        // безусловным memset() как только видит ключ "setrpins" в теле,
+        // независимо от того, есть ли рядом валидный "pinact". Раз нам
+        // нечем заменить старую связь — просто не трогаем её на бэкенде.
+        console.warn(
+          'Connection не найден в pinOptions, сохранение пропущено во избежание потери данных:',
+          selectedConnection
+        );
       }
     }
 

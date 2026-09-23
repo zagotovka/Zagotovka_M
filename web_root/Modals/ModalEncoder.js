@@ -39,7 +39,11 @@ function ModalEncoder({
   const percentToSteps = (percent) => Math.round((percent * pwmmax) / 100);
 
   useEffect(() => {
-    fetch('/api/select/get', {
+    fetch('/api/select/get?limit=100', {
+      // limit=100 обязателен: без него бэкенд отдаёт только пины с ID 0-29
+      // (дефолт offset=0, limit=30 в handle_select_get), из-за чего пины
+      // Encoder B / PWM с ID >= 30 не попадали в encoderBOptions/pwmOptions,
+      // и Save тихо сбрасывал encoderb в 255 ("не задано").
       method: 'GET',
       cache: 'no-store',
       headers: {
@@ -69,14 +73,16 @@ function ModalEncoder({
         setEncoderBOptions(encoderBPins);
         setPwmOptions(pwmPins);
 
-        if (selectedEncoder.encoderb || selectedEncoder.encdrbpin) {
-          const selectedOption = encoderBPins.find(
-            (option) => String(option.id) === String(selectedEncoder.encoderb) || option.pins === selectedEncoder.encdrbpin
-          );
-          setEncoderB({
-            pin: selectedOption ? selectedOption.pins : '',
-            id: selectedOption ? selectedOption.id : ''
-          });
+	if (selectedEncoder.encoderb || selectedEncoder.encdrbpin) {
+	  const selectedOption = encoderBPins.find(
+	    (option) => String(option.id) === String(selectedEncoder.encoderb) 
+		     || option.pins === selectedEncoder.encdrbpin
+	  );
+	  setEncoderB({
+	    // fallback на исходные данные, а не на пустую строку
+	    pin: selectedOption ? selectedOption.pins : (selectedEncoder.encdrbpin || ''),
+	    id: selectedOption ? selectedOption.id : (selectedEncoder.encoderb || '')
+	  });
         }
       })
       .catch((error) => {
