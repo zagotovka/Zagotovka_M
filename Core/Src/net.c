@@ -665,6 +665,7 @@ static struct {
 
 char *s_tls_cert = NULL;  /* PEM certificate, loaded once in web_init() */
 char *s_tls_key  = NULL;  /* PEM private key, loaded once in web_init() */
+extern osMutexId_t s_mysett_mutexHandle;  /* создаётся в main() (CubeMX) */
 
 void net_dtcm_init(void) {
     s_tls_cert = (char *)dtcm_tls_cert;
@@ -873,8 +874,12 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
                 tls_hs_track_start(c->id);
 
                 /* Сертификаты уже загружены в web_init() — никакого файлового I/O */
+                if (s_mysett_mutexHandle)
+                    osMutexAcquire(s_mysett_mutexHandle, osWaitForever);
                 if (!s_tls_loaded ||
                     s_tls_cert[0] == '\0' || s_tls_key[0] == '\0') {
+                    if (s_mysett_mutexHandle)
+                        osMutexRelease(s_mysett_mutexHandle);
                     MG_ERROR(("TLS cert/key not preloaded"));
                     c->is_draining = 1;
                     c->is_closing  = 1;
@@ -886,6 +891,8 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
                     .key  = mg_str(s_tls_key),
                 };
                 mg_tls_init(c, &opts);
+                if (s_mysett_mutexHandle)
+                    osMutexRelease(s_mysett_mutexHandle);
 
                 if (c->tls == NULL) {
                     MG_ERROR(("Error: TLS initialization failed"));
@@ -2888,6 +2895,8 @@ void web_init(struct mg_mgr *mgr) {
     if (SetSettings.usehttps == 1) {
         /* Предзагрузка TLS-сертификатов ОДИН раз — до accept, без файлового I/O в mg_mgr_poll */
         uint32_t t_cert = HAL_GetTick();
+        if (s_mysett_mutexHandle)
+            osMutexAcquire(s_mysett_mutexHandle, osWaitForever);
         bool cert_ok = https_get_tls_cert(s_tls_cert, DTCM_BUF_TLS_CERT);
         bool key_ok  = https_get_tls_key(s_tls_key, DTCM_BUF_TLS_KEY);
         printf("[TLS] cert+key preloaded: %lu ms\r\n", (unsigned long)(HAL_GetTick() - t_cert));
@@ -2906,6 +2915,8 @@ void web_init(struct mg_mgr *mgr) {
         } else {
             s_tls_loaded = true;
         }
+        if (s_mysett_mutexHandle)
+            osMutexRelease(s_mysett_mutexHandle);
 
         if (s_tls_loaded) {
             struct mg_connection *https_conn = mg_http_listen(mgr, https_url, (mg_event_handler_t)fn, (void *)CONN_TYPE_LISTENER);

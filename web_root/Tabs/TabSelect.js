@@ -300,6 +300,7 @@ function TabSelect({ }) {
   const lastChangeTime = useRef(0);
   const lastPollData = useRef(null);
   const serverSnapshot = useRef({});
+  const serverSim800l = useRef(false);
 
   const buildSnapshotEntry = (d) => ({
     topin: d.topin.toString(),
@@ -343,6 +344,7 @@ function TabSelect({ }) {
       const data = r.data || r;
       setSelect(data);
       setGpsEnabled(r.sim800l === 1);
+      serverSim800l.current = (r.sim800l === 1);
       if (r.lang) setLanguage(r.lang);
 
       const initialValues = {};
@@ -441,10 +443,12 @@ function TabSelect({ }) {
       }
     });
 
+    const gpsChanged = gpsEnabled !== serverSim800l.current;
+
     setIsButtonDisabled(true);
     setCountdown(3);
 
-    if (changed.length === 0) {
+    if (changed.length === 0 && !gpsChanged) {
       setSubmissionStatus('success');
       return;
     }
@@ -455,8 +459,16 @@ function TabSelect({ }) {
       const CHUNK_SIZE = 20; // ~20 записей ≈ 3КБ, комфортно для mg_iobuf
       const jsonBase = { lang: language, sim800l: gpsEnabled ? 1 : 0 };
 
+      // Если изменился только тумблер SIM800L — changed пуст, но запрос всё
+      // равно нужен: бэкенд применит sim800l и запишет setings.ini.
+      // Пустой data:[] безопасен — parse_select_json пропустит цикл по пинам.
+      const slices = [];
       for (let i = 0; i < changed.length; i += CHUNK_SIZE) {
-        const slice = changed.slice(i, i + CHUNK_SIZE);
+        slices.push(changed.slice(i, i + CHUNK_SIZE));
+      }
+      if (slices.length === 0) slices.push([]);
+
+      for (const slice of slices) {
         const response = await fetch('/api/select/set', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -465,6 +477,7 @@ function TabSelect({ }) {
         if (!response.ok) throw new Error('Network response was not ok');
       }
 
+      serverSim800l.current = gpsEnabled;
       setSubmissionStatus('success');
 
       const updatedValues = {};

@@ -271,6 +271,11 @@ osMutexId_t actionMutexHandleHandle;
 const osMutexAttr_t actionMutexHandle_attributes = {
   .name = "actionMutexHandle"
 };
+/* Definitions for s_mysett_mutex */
+osMutexId_t s_mysett_mutexHandle;
+const osMutexAttr_t s_mysett_mutex_attributes = {
+  .name = "s_mysett_mutex"
+};
 /* USER CODE BEGIN PV */
 extern struct dbSettings SetSettings;
 extern struct dbCron dbCrontxt[NUMTASK];
@@ -942,9 +947,6 @@ int main(void)
 
   /* MPU Configuration--------------------------------------------------------*/
   MPU_Config();
-  /* Барьеры после MPU_Config — гарантируют, что MPU активна до кеша */
-  __DSB();
-  __ISB();
 
   /* Enable the CPU Cache */
 
@@ -1162,6 +1164,9 @@ int main(void)
   /* Create the mutex(es) */
   /* creation of actionMutexHandle */
   actionMutexHandleHandle = osMutexNew(&actionMutexHandle_attributes);
+
+  /* creation of s_mysett_mutex */
+  s_mysett_mutexHandle = osMutexNew(&s_mysett_mutex_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -1760,6 +1765,32 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
   }
 }
 
+
+/* USER CODE END Header_StartDgnTask */
+/* ═══ ITCM runtime integrity check ═══
+ * Сравнивает ITCM-код с загрузочным образом во Flash (тот же принцип, что
+ * проверка 17a при старте). Ловит порчу ITCM в рантайме wild-записями,
+ * которая проявлялась как HardFault UNDEFINSTR (PC=0x24, dtcm_malloc).
+ * Возвращает число несовпавших слов (макс. 8), details первого несовпадения. */
+static uint32_t itcm_check_words(uint32_t *first_idx, uint32_t *exp_word, uint32_t *got_word)
+{
+  const uint32_t *flash_src = (const uint32_t *)&_sitcm_load;
+  const uint32_t *itcm_dst  = (const uint32_t *)_sitcm;
+  uint32_t n = (uint32_t)(_eitcm - _sitcm) / 4;
+  uint32_t errors = 0;
+  for (uint32_t i = 0; i < n; i++) {
+    if (flash_src[i] != itcm_dst[i]) {
+      if (errors == 0 && first_idx != NULL) {
+        *first_idx = i;
+        if (exp_word) *exp_word = flash_src[i];
+        if (got_word) *got_word = itcm_dst[i];
+      }
+      errors++;
+      if (errors >= 8) break;
+    }
+  }
+  return errors;
+}
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartConfigTask */
@@ -3623,32 +3654,8 @@ static void heap_diagnostic(void)
         last_req_api = req_api;
     }
 }
-/* USER CODE END Header_StartDgnTask */
-/* ═══ ITCM runtime integrity check ═══
- * Сравнивает ITCM-код с загрузочным образом во Flash (тот же принцип, что
- * проверка 17a при старте). Ловит порчу ITCM в рантайме wild-записями,
- * которая проявлялась как HardFault UNDEFINSTR (PC=0x24, dtcm_malloc).
- * Возвращает число несовпавших слов (макс. 8), details первого несовпадения. */
-static uint32_t itcm_check_words(uint32_t *first_idx, uint32_t *exp_word, uint32_t *got_word)
-{
-  const uint32_t *flash_src = (const uint32_t *)&_sitcm_load;
-  const uint32_t *itcm_dst  = (const uint32_t *)_sitcm;
-  uint32_t n = (uint32_t)(_eitcm - _sitcm) / 4;
-  uint32_t errors = 0;
-  for (uint32_t i = 0; i < n; i++) {
-    if (flash_src[i] != itcm_dst[i]) {
-      if (errors == 0 && first_idx != NULL) {
-        *first_idx = i;
-        if (exp_word) *exp_word = flash_src[i];
-        if (got_word) *got_word = itcm_dst[i];
-      }
-      errors++;
-      if (errors >= 8) break;
-    }
-  }
-  return errors;
-}
 
+/* USER CODE END Header_StartDgnTask */
 void StartDgnTask(void *argument)
 {
   /* USER CODE BEGIN StartDgnTask */
@@ -3882,30 +3889,9 @@ void MPU_Config(void)
   MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
-
-  /* Region 1: ITCM Read-Only — ловушка для «дикой записи».
-   * OTA-переменные перенесены в .noinit_ram (SRAM), в ITCM остался
-   * только .itcm код → весь регион можно защитить. Любая запись
-   * вызовет MemManage Fault с PC виновника в стек-фрейме и MMFAR
-   * (адрес записи). Execute разрешён — здесь горячий код. */
-  MPU_InitStruct.Number = MPU_REGION_NUMBER1;
-  MPU_InitStruct.BaseAddress = 0x00000000;
-  MPU_InitStruct.Size = MPU_REGION_SIZE_16KB;
-  MPU_InitStruct.SubRegionDisable = 0x0;
-  MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL0;
-  MPU_InitStruct.AccessPermission = MPU_REGION_PRIV_RO_URO;   /* Read-Only */
-  MPU_InitStruct.DisableExec = MPU_INSTRUCTION_ACCESS_ENABLE; /* Execute OK */
-  MPU_InitStruct.IsShareable = MPU_ACCESS_NOT_SHAREABLE;
-  MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
-  MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
-  HAL_MPU_ConfigRegion(&MPU_InitStruct);
-
   /* Enables the MPU */
   HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
 
-  /* Включаем исключение MemManage: без SHCSR.MEMFAULTENA нарушения
-   * доступа эскалируются в HardFault, минуя MemManage_Handler. */
-  SCB->SHCSR |= SCB_SHCSR_MEMFAULTENA_Msk;
 }
 
 /**

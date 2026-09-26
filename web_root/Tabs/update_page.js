@@ -638,10 +638,10 @@ export function FirmwareUpdate({ }) {
         <!-- Bank switch и Reboot разнесены по разным краям одной строки (оба
              ребутят устройство, не должны стоять рядом с Commit или друг
              с другом). Форма и заливка — те же, что у «Загрузить новую
-             прошивку» (единый стиль по всей странице), но добавлено тонкое
-             amber-кольцо (ring), которое ничего не ломает в цветовой схеме,
-             а просто читается как "осторожно, действие необратимо" —
-             отдельно от confirm()-диалога, который остаётся основной защитой. -->
+             прошивку» (единый стиль по всей странице). Предупреждение о
+             необратимости действия обеспечивается confirm()-диалогом
+             (onswitchbankConfirm / onrebootConfirm), без дополнительной
+             окантовки кнопок. -->
         <div class="w-full flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
           <button
             onclick=${onswitchbankConfirm}
@@ -655,7 +655,7 @@ export function FirmwareUpdate({ }) {
                   : `Switches the active bank to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} without uploading a new image, then reboots`)}
             class=${bankSwitchDisabled
               ? "inline-flex justify-center items-center gap-2 py-3 px-6 rounded-full text-sm font-bold bg-slate-200 text-slate-400 shadow-inner cursor-not-allowed"
-              : "inline-flex justify-center items-center gap-2 py-3 px-6 rounded-full text-sm font-bold text-white shadow-md ring-2 ring-amber-300 ring-offset-2 ring-offset-white/50 transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95"}
+              : "inline-flex justify-center items-center gap-2 py-3 px-6 rounded-full text-sm font-bold text-white shadow-md transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95"}
           >
             ${!bankSwitchDisabled && html`<${Icons.refresh} class="w-4" />`}
             ${language === 'ru'
@@ -665,7 +665,7 @@ export function FirmwareUpdate({ }) {
 
           <button
             onclick=${onrebootConfirm}
-            class="inline-flex justify-center items-center gap-2 py-3 px-6 rounded-full text-sm font-bold text-white shadow-md ring-2 ring-amber-300 ring-offset-2 ring-offset-white/50 transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95"
+            class="inline-flex justify-center items-center gap-2 py-3 px-6 rounded-full text-sm font-bold text-white shadow-md transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95"
             title=${language === 'ru' ? 'Перезагрузить устройство (требуется подтверждение)' : 'Reboot device (requires confirmation)'}
           >
             <${Icons.refresh} class="w-4" />

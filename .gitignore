@@ -1,5 +1,6 @@
 /Debug/
 /Release/
+/Release_OTA/
 
 # STM32CubeIDE build output
 Bank_A/
@@ -14,7 +15,9 @@ Bank_B/
 /web_root/node_modules/
 *.o
 .aider*
-/Release_OTA/
+
+# STM32CubeMX temp file
+mx.scratch
 
 # Принудительное отслеживание папки Proshivka и её содержимого
 !**/Proshivka/

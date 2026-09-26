@@ -1,3 +1,0 @@
-../Core/Src/freertos.c:63:13:sof_putchar	3
-../Core/Src/freertos.c:71:13:sof_puts	3
-../Core/Src/freertos.c:78:6:vApplicationStackOverflowHook	8

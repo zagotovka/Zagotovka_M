@@ -424,13 +424,14 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
         "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d,"
         "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
         "\"clusters\":%s,\"zbee_attribute\":%d,"
-        "\"zbee_label\":\"%s\"}",
+        "\"zbee_label\":\"%s\",\"role\":%d}",
         (first ? "" : ","), (long)NUMPIN + i,
         zb.zbee_ieee[0] != '\0' ? zb.zbee_label : "",
         zb.topin,
         zb.zbee_ieee, zb.zbee_endpoint,
         clbuf, zb.zbee_attribute,
-        zb.zbee_label);
+        zb.zbee_label,
+        zb.zbee_role);
       first = 0;
       emitted++;
     }
@@ -2209,6 +2210,7 @@ char *s_cached_tls_ca   = NULL;
 char *s_cached_domain   = NULL;
 char *s_cached_tg_token = NULL;
 static bool s_mysett_cache_valid     = false;
+extern osMutexId_t s_mysett_mutexHandle;  /* создаётся в main() (CubeMX) */
 
 static void zbee_probe_dtcm_init(void);
 static void zbee_learn_dtcm_init(void);
@@ -2233,12 +2235,16 @@ void zagotovka_dtcm_init(void) {
 }
 
 void mysett_cache_reload(void) {
+    if (s_mysett_mutexHandle)
+        osMutexAcquire(s_mysett_mutexHandle, osWaitForever);
     https_get_tls_cert(s_tls_cert, DTCM_BUF_TLS_CERT);
     https_get_tls_key(s_tls_key, DTCM_BUF_TLS_KEY);
     https_get_tls_ca(s_cached_tls_ca, DTCM_BUF_CACHE_TLS_CA);
     https_get_domain(s_cached_domain, DTCM_BUF_CACHE_DOMAIN);
     https_get_telegram_token(s_cached_tg_token, DTCM_BUF_CACHE_TG_TOKEN);
     s_mysett_cache_valid = true;
+    if (s_mysett_mutexHandle)
+        osMutexRelease(s_mysett_mutexHandle);
 }
 
 /* ──── stream_mysett_json: потоковая отправка без f_read и taskYIELD ──── */
@@ -2246,7 +2252,12 @@ static void stream_mysett_json(struct mg_connection *c,
                                const struct dbSettings *s) {
   char buf[512];
 
+  if (s_mysett_mutexHandle)
+    osMutexAcquire(s_mysett_mutexHandle, osWaitForever);
+
   if (!s_mysett_cache_valid) {
+    if (s_mysett_mutexHandle)
+      osMutexRelease(s_mysett_mutexHandle);
     mg_http_write_chunk(c, "{\"error\":\"cache not ready\"}", 27);
     mg_http_write_chunk(c, "", 0);
     return;
@@ -2303,6 +2314,9 @@ static void stream_mysett_json(struct mg_connection *c,
 
   mg_http_write_chunk(c, "}", 1);
   mg_http_write_chunk(c, "", 0);
+
+  if (s_mysett_mutexHandle)
+    osMutexRelease(s_mysett_mutexHandle);
 }
 
 /* ──── handle_mysett_get: HTTP GET /api/mysett/get ──── */
@@ -4122,6 +4136,32 @@ void handle_security_get(struct mg_connection *c) {
                    "\"info\":\"%s\",\"onoff\":%d}",
                    conf.topin, i, PinsInfo[i].pins, conf.ptype,
                    action, send_sms, conf.info, conf.onoff);
+    mg_http_write_chunk(c, buf, (size_t)len);
+  }
+
+  /* Zigbee-устройства (ID 89..NUMPIN+NUMZBEE-1): раньше сюда не попадали
+   * вовсе. Отдаём только реально сконфигурированные слоты (с непустым IEEE).
+   * role нужен фронтенду (web_root/zigbeeRoles.js) для фильтрации
+   * не-актуаторов (SENSOR/TRIGGER/SWITCH). */
+  for (int i = 0; i < NUMZBEE; i++) {
+    ZigbeeVirtualPin zb;
+    taskENTER_CRITICAL();
+    zb = ZigbeeConf[i];
+    taskEXIT_CRITICAL();
+
+    if (zb.zbee_ieee[0] == '\0')
+      continue;
+
+    if (!first_pin)
+      mg_send(c, ",", 1);
+    else
+      first_pin = 0;
+
+    len = snprintf(buf, sizeof(buf),
+                   "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"role\":%d,"
+                   "\"onoff\":%d}",
+                   zb.topin, NUMPIN + i, zb.zbee_label, zb.zbee_role,
+                   zb.onoff);
     mg_http_write_chunk(c, buf, (size_t)len);
   }
 
@@ -6397,7 +6437,26 @@ void action_handler(uint8_t button_id, const char *action_str,
                       .idout; // Используем int, чтобы корректно обработать -1
 
               /* Защита от мусора или неинициализированных связей (-1) */
-              if (out_id < 0 || out_id >= NUMPIN) {
+              if (out_id < 0) {
+                continue;
+              }
+
+              /* Zigbee-слоты (ID 89..NUMPIN+NUMZBEE-1): раньше отсекались
+               * проверкой out_id >= NUMPIN и команда молча терялась. Отправляем
+               * их в outputQueue — StartOutputTask сам различает физический
+               * пин/Zigbee и отбрасывает роль ZBEE_ROLE_SWITCH. */
+              if (out_id >= NUMPIN) {
+                if (out_id < NUMPIN + NUMZBEE) {
+                  data_pin_t data_pin = {0}; /* A3: локальная копия */
+                  data_pin.id = out_id;
+                  data_pin.action = action;
+                  if (xQueueSend(outputQueueHandle, (void *)&data_pin, 0) !=
+                      pdPASS) {
+                    printf("Failed to send cascaded command %d for ZBEE ID %d "
+                           "to queue\n",
+                           action, out_id);
+                  }
+                }
                 continue;
               }
 

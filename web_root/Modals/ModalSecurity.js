@@ -238,7 +238,7 @@ const ModalSecurity = ({
               <td class="p-2">${selectedSecurity.pins}</td>
             </tr>
             <tr class="bg-gray-200">
-              <td class="p-2 font-bold">Ptype</td>
+              <td class="p-2 font-bold">Type of sensor</td>
               <td class="p-2">
                 <select
                   name="ptype"

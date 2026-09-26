@@ -1,3 +1,0 @@
-../Core/Src/slzb_watchdog.c:30:13:slzb_reboot_cb	24	static
-../Core/Src/slzb_watchdog.c:57:6:slzb_watchdog_init	24	static
-../Core/Src/slzb_watchdog.c:106:6:slzb_watchdog_poll	72	static
