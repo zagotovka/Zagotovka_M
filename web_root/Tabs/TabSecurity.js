@@ -1,4 +1,4 @@
-import { ModalSIM800L } from '../Modals/ModalSIM800L.js';
+import { ModalSIM800L, maskPhone, EyeIcon, EyeSlashIcon } from '../Modals/ModalSIM800L.js';
 import { ModalSecurity } from '../Modals/ModalSecurity.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
 import { registerPoll, unregisterPoll } from '../pollQueue.js';
@@ -53,6 +53,7 @@ const TabSecurity = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connected');
   const [lastSaveTime, setLastSaveTime] = useState(0);
+  const [revealTablePhone, setRevealTablePhone] = useState(false); // по умолчанию номер скрыт
 
   const i18n = {
     ru: {
@@ -61,6 +62,7 @@ const TabSecurity = () => {
       colId: 'ID', colPin: 'Pin', colType: 'Type of sensor', colSendSms: 'Send SMS', colEditPin: 'Edit Pin',
       notConfigured: 'Не настроено', notSet: 'Не задан', noInfo: 'Нет инфо', noData: 'Нет доступных данных мониторинга',
       edit: 'Ред.', showHelp: 'Показать справку', hideHelp: 'Скрыть справку',
+      showNumber: 'Показать номер', hideNumber: 'Скрыть номер',
       connRetry: 'Connection problems. Retrying...', connLost: 'Connection lost. Check your internet connection.'
     },
     en: {
@@ -69,6 +71,7 @@ const TabSecurity = () => {
       colId: 'ID', colPin: 'Pin', colType: 'Type of sensor', colSendSms: 'Send SMS', colEditPin: 'Edit Pin',
       notConfigured: 'Not configured', notSet: 'Not set', noInfo: 'No info', noData: 'No monitoring data available',
       edit: 'Edit', showHelp: 'Show Help', hideHelp: 'Hide Help',
+      showNumber: 'Show number', hideNumber: 'Hide number',
       connRetry: 'Connection problems. Retrying...', connLost: 'Connection lost. Check your internet connection.'
     }
   };
@@ -361,7 +364,25 @@ const TabSecurity = () => {
                 <tr class="bg-white/80 hover:bg-slate-200/80 transition-colors">
                   <td class="px-6 py-4 text-sm text-slate-800 font-medium">${sim800lData.sim800l === 1 ? 'PA3(1)' : T.notConfigured}</td>
                   <td class="px-6 py-4 text-sm text-slate-800 font-medium">${sim800lData.sim800l === 1 ? 'PD5(35)' : T.notConfigured}</td>
-                  <td class="px-6 py-4 text-sm text-slate-800 font-medium">${sim800lData.tel || T.notSet}</td>
+                  <td class="px-6 py-4 text-sm text-slate-800 font-medium">
+                    ${sim800lData.tel
+                      ? html`
+                          <div class="flex items-center gap-2">
+                            <span>${revealTablePhone ? sim800lData.tel : maskPhone(sim800lData.tel)}</span>
+                            <button
+                              type="button"
+                              onClick=${() => setRevealTablePhone((v) => !v)}
+                              class="text-gray-500 hover:text-gray-700"
+                              title=${revealTablePhone ? T.hideNumber : T.showNumber}
+                            >
+                              ${revealTablePhone
+                                ? html`<${EyeSlashIcon} class="w-4 h-4" />`
+                                : html`<${EyeIcon} class="w-4 h-4" />`}
+                            </button>
+                          </div>
+                        `
+                      : T.notSet}
+                  </td>
                   <td class="px-6 py-4 text-sm text-slate-800 font-medium">${sim800lData.info || T.noInfo}</td>
                   <td class="px-6 py-4 text-sm text-slate-800 font-medium"><${MyPolzunok} value=${sim800lData.onoff} onChange=${(v) => handleSim800lSave({ ...sim800lData, onoff: v })} /></td>
                   <td class="px-6 py-4 text-sm text-slate-800 font-medium"><button onClick=${() => setIsModalOpenSim800L(true)} class="text-teal-600 hover:text-cyan-600 font-bold transition-colors">${T.edit}</button></td>
@@ -406,7 +427,7 @@ const TabSecurity = () => {
           ${showHelpSecurity && html`<div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">${helpContentSecurity[language]}</div>`}
         </div>
       </div>
-      ${isModalOpenSim800L && html`<${ModalSIM800L} hideModal=${() => setIsModalOpenSim800L(false)} title=${T.edit} selectedGps=${sim800lData} onSave=${handleSim800lSave} />`}
+      ${isModalOpenSim800L && html`<${ModalSIM800L} hideModal=${() => setIsModalOpenSim800L(false)} title=${T.edit} selectedGps=${sim800lData} onSave=${handleSim800lSave} language=${language} />`}
       ${isSecurityModalOpen && html`<${ModalSecurity} modalType=${modalType} page="TabSecurity" hideModal=${() => setIsSecurityModalOpen(false)} title=${T.edit} selectedSecurity=${selectedSecurity} onSecurityChange=${(upd) => { setMonitoring(prev => prev.map(i => i.id === upd.id ? upd : i)); setIsSecurityModalOpen(false); }} />`}
     </div>
   `;

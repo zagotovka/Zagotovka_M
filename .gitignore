@@ -5,6 +5,7 @@
 # STM32CubeIDE build output
 Bank_A/
 Bank_B/
+/.settings/stm32cubeide.project.prefs
 
 # Generated build artifacts
 /Core/Src/packed_fs.c

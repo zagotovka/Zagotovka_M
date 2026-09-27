@@ -280,7 +280,7 @@ struct dbSettings {	// Cтруктура для setting
 //	uint8_t macaddr5;	// MAC address
 	// Настройки GPS
 	uint8_t sim800l;    // GPS on или off
-	char tel[20];       // Mobile number
+	char tel[24];       // Mobile number (+ и до 20 цифр + '\0')
 	uint8_t monflg;     // Monitoring flag
 	uint8_t sec;        // OFFLINE Секунды: 30
 	uint8_t min;        // OFFLINE Минуты: 20

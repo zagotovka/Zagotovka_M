@@ -13,6 +13,7 @@
 #include "usart_ring.h" /* GSM_RX_BUFFER_SIZE, DTMF_BUF_SIZE, gsm_available(), gsm_read() */
 #include "zagotovka.h" /* send_sms(), action_handler() */
 #include "dtcm_alloc.h"
+#include "logger.h"    /* LOG_GSM() — вывод с учётом фильтра категорий */
 
 #define SEND_STR_SIZE 64
 
@@ -38,7 +39,7 @@ extern void Error_Handler(void);
 
 /* ───── Переменные GSM-модуля (перенесены из main.c) ───── */
 char *dtmf_buf = NULL;       /* буфер DTMF-цифр              */
-uint8_t dtmf_idx = 0;               /* индекс в dtmf_buf             */
+uint16_t dtmf_idx = 0;              /* индекс в dtmf_buf (512 байт)  */
 char *vldpins = NULL;        /* валидные пины  (результат)    */
 char *invpins = NULL;        /* невалидные пины (результат)   */
 int validcnt = 0;
@@ -138,10 +139,8 @@ void check_speed(void) {
         osDelay(1);
       }
       if (strstr(str, "OK") != NULL) {
-        char cbuf[64] = {0};
-        snprintf(cbuf, 64, "Uart modem was %lu, switched to 57600\n",
-                 huart2.Init.BaudRate);
-        HAL_UART_Transmit(myDEBUG, (uint8_t *)cbuf, strlen(cbuf), 100);
+        LOG_GSM("Uart modem was %lu, switched to 57600\n",
+                (unsigned long)huart2.Init.BaudRate);
         HAL_UART_Transmit(GSM, (uint8_t *)"AT+IPR=57600\r\n",
                           strlen("AT+IPR=57600\r\n"), 1000);
         osDelay(250);
@@ -190,10 +189,7 @@ void set_comand(char *buff) {
 
       if ((p = strstr(str, "+CPAS:")) != NULL) {
         if (strstr(str, "0") == NULL) {
-          HAL_UART_Transmit(myDEBUG, (uint8_t *)p, strlen(p), 1000);
-          HAL_UART_Transmit(myDEBUG,
-                            (uint8_t *)"\n+CPAS not ready, must be '0'\n",
-                            strlen("\n+CPAS not ready, must be '0'\n"), 1000);
+          LOG_GSM("%s\n+CPAS not ready, must be '0'\n", p);
           for (int retry = 0; retry < 50; retry++) {
             HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
             osDelay(100);
@@ -203,10 +199,7 @@ void set_comand(char *buff) {
         }
       } else if ((p = strstr(str, "+CREG:")) != NULL) {
         if (strstr(str, "0,1") == NULL) {
-          HAL_UART_Transmit(myDEBUG, (uint8_t *)p, strlen(p), 1000);
-          HAL_UART_Transmit(myDEBUG,
-                            (uint8_t *)"\n+CREG not ready, must be '0,1'\n",
-                            strlen("\n+CREG not ready, must be '0,1'\n"), 1000);
+          LOG_GSM("%s\n+CREG not ready, must be '0,1'\n", p);
           for (int retry = 0; retry < 50; retry++) {
             HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
             osDelay(100);
@@ -216,16 +209,12 @@ void set_comand(char *buff) {
         }
       }
       p = 0;
-      char dbg_str[SEND_STR_SIZE + 32] = {0};
-      snprintf(dbg_str, SEND_STR_SIZE + 32, "Set %s %s\n", buff, str);
-      HAL_UART_Transmit(myDEBUG, (uint8_t *)dbg_str, strlen(dbg_str), 1000);
+      LOG_GSM("Set %s %s\n", buff, str);
       return;
     }
     osDelay(500);
   }
-  HAL_UART_Transmit(myDEBUG, (uint8_t *)"Not reply ", strlen("Not reply "),
-                    1000);
-  HAL_UART_Transmit(myDEBUG, (uint8_t *)buff, strlen(buff), 1000);
+  LOG_GSM("Not reply %s\n", buff);
   for (int retry = 0; retry < 50; retry++) {
     HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
     osDelay(100);
@@ -383,8 +372,7 @@ void execute_commands(char *cmd_str) {
             char cmd_msg[16];
             int cmd_len = snprintf(cmd_msg, sizeof(cmd_msg), "%d:%d", pin, value);
             if (cmd_len < 0 || cmd_len >= (int)sizeof(cmd_msg)) {
-              HAL_UART_Transmit(myDEBUG, (uint8_t *)"Error: cmd_msg overflow\n",
-                                strlen("Error: cmd_msg overflow\n"), 1000);
+              LOG_GSM("Error: cmd_msg overflow\n");
               continue;
             }
 
@@ -396,8 +384,7 @@ void execute_commands(char *cmd_str) {
               pin_len = snprintf(pin_str, sizeof(pin_str), "%s", cmd_msg);
 
             if (pin_len < 0 || pin_len >= (int)sizeof(pin_str)) {
-              HAL_UART_Transmit(myDEBUG, (uint8_t *)"Error: pin_str overflow\n",
-                                strlen("Error: pin_str overflow\n"), 1000);
+              LOG_GSM("Error: pin_str overflow\n");
               continue;
             }
 
@@ -405,9 +392,7 @@ void execute_commands(char *cmd_str) {
               strcat(vldpins, pin_str);
               validcnt++;
             } else {
-              HAL_UART_Transmit(myDEBUG,
-                                (uint8_t *)"Error: vldpins buffer full\n",
-                                strlen("Error: vldpins buffer full\n"), 1000);
+              LOG_GSM("Error: vldpins buffer full\n");
             }
 
           } else if (PinsConf[pin].topin == 1 && (value >= 3 && value <= 5)) {
@@ -481,9 +466,7 @@ void execute_commands(char *cmd_str) {
             invldcnt++;
           }
 
-          char err_msg[64];
-          snprintf(err_msg, sizeof(err_msg), "Error %s\n", invalid_cmd);
-          HAL_UART_Transmit(myDEBUG, (uint8_t *)err_msg, strlen(err_msg), 1000);
+          LOG_GSM("Error %s\n", invalid_cmd);
         }
         cmd = end;
       }
@@ -501,12 +484,8 @@ void execute_commands(char *cmd_str) {
   action_handler(0, vldpins, "CMD");
 
   /* Отладочный вывод */
-  char valid_msg[128];
-  char invalid_msg[128];
-  snprintf(valid_msg, sizeof(valid_msg), "Parsed cmds: %.100s\n", vldpins);
-  snprintf(invalid_msg, sizeof(invalid_msg), "Invld pins/cmd: %.100s\n", invpins);
-  HAL_UART_Transmit(myDEBUG, (uint8_t *)valid_msg, strlen(valid_msg), 1000);
-  HAL_UART_Transmit(myDEBUG, (uint8_t *)invalid_msg, strlen(invalid_msg), 1000);
+  LOG_GSM("Parsed cmds: %.100s\n", vldpins);
+  LOG_GSM("Invld pins/cmd: %.100s\n", invpins);
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -631,9 +610,7 @@ void send_command_result_sms(void) {
 
     if (strlen(message) > 0) {
         /* Выводим финальное сообщение в консоль отладки */
-        char dbg_msg[300];
-        snprintf(dbg_msg, sizeof(dbg_msg), "Final SMS: %.250s\n", message);
-        HAL_UART_Transmit(myDEBUG, (uint8_t *)dbg_msg, strlen(dbg_msg), 1000);
+        LOG_GSM("Final SMS: %.170s\n", message);
 
         char str[128];
         snprintf(str, sizeof(str), "AT+CMGS=\"%s\"\r\n", SetSettings.tel);
@@ -673,14 +650,14 @@ void process_sim800l_data(void) {
 
   /* ── ЗВОНОК ── */
   if (strstr(buf, "RING") != NULL) {
-    if (SetSettings.tel[0] != '\0') {
-      if (strstr(buf, SetSettings.tel) != NULL) {
-        incoming_call();
-      } else {
-        HAL_UART_Transmit(myDEBUG, (uint8_t *)"Unknow number or empty!\n",
-                          strlen("Unknow number or empty!\n"), 1000);
-        disable_connection();
-      }
+    if (SetSettings.tel[0] == '\0') {
+      LOG_GSM("RING, but mobile number is not set\n");
+    } else if (strstr(buf, SetSettings.tel) != NULL) {
+      LOG_GSM("Incoming call answered\n");
+      incoming_call();
+    } else {
+      LOG_GSM("Unknow number or empty!\n");
+      disable_connection();
     }
   }
 
@@ -757,10 +734,7 @@ void process_sim800l_data(void) {
           sms_text[--j] = '\0';
 
         /* Отладочный вывод — убрать после проверки */
-        HAL_UART_Transmit(myDEBUG, (uint8_t *)"SMS body: [",
-                          strlen("SMS body: ["), 1000);
-        HAL_UART_Transmit(myDEBUG, (uint8_t *)sms_text, strlen(sms_text), 1000);
-        HAL_UART_Transmit(myDEBUG, (uint8_t *)"]\n", 2, 1000);
+        LOG_GSM("SMS body: [%.170s]\n", sms_text);
 
         /* ── Быстрые команды 777 / 222 ── */
         if (strstr(sms_text, "777") != NULL) {
@@ -844,16 +818,11 @@ void process_sim800l_data(void) {
             validcnt = 0;
             invldcnt = 0;
           } else {
-            HAL_UART_Transmit(myDEBUG, (uint8_t *)"Unknown SMS content: ",
-                              strlen("Unknown SMS content: "), 1000);
-            HAL_UART_Transmit(myDEBUG, (uint8_t *)sms_text, strlen(sms_text),
-                              1000);
-            HAL_UART_Transmit(myDEBUG, (uint8_t *)"\n", 1, 1000);
+            LOG_GSM("Unknown SMS content: %.160s\n", sms_text);
           }
         }
       } else {
-        HAL_UART_Transmit(myDEBUG, (uint8_t *)"Unknow number sms\n",
-                          strlen("Unknow number sms\n"), 1000);
+        LOG_GSM("Unknow number sms\n");
       }
     }
   }
@@ -917,8 +886,7 @@ void process_sim800l_data(void) {
     if (dtmf_idx >= DTCM_BUF_GSM_DTMF - 1) {
       memset(dtmf_buf, 0, DTCM_BUF_GSM_DTMF);
       dtmf_idx = 0;
-      HAL_UART_Transmit(myDEBUG, (uint8_t *)"Buffer overflow, cleared\n",
-                        strlen("Buffer overflow, cleared\n"), 1000);
+      LOG_GSM("Buffer overflow, cleared\n");
     }
 
     /* ── NO CARRIER: конец звонка — отправляем SMS-отчёт ── */

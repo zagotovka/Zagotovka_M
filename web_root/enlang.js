@@ -243,7 +243,7 @@ export const enLangsecurity = [
   '', // 0
   'RXD Pin - Receive Data Pin (RX).', // 1
   'TXD Pin - Transmit Data Pin (TX).', // 2
-  'Phone Number - Phone number for SMS notifications and calls.', // 3
+  'Phone Number - Your own phone number. The SIM800L module will accept incoming calls and SMS commands ONLY from this number. This is NOT the number of the SIM card inserted into the module itself!', // 3
   'Info - Additional information for quick navigation.', // 4
   'OnOff - Enable or disable the SIM800L module.', // 5
   'Action - The Edit button allows you to access the settings menu.' // 6
