@@ -39,6 +39,9 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
   const [clickTypes, setClickTypes] = useState({});  // { obsKey: 'single' | 'double' | 'long' }
   const pollRef = useRef(null);
   const mergedRef = useRef({});
+  const flashRef = useRef({});         // obsKey -> id таймера подсветки
+  const lastTickRef = useRef({});      // obsKey -> последний известный last_seen_tick
+  const [flashKeys, setFlashKeys] = useState({}); // obsKey -> true, пока горит подсветка
 
   useEffect(() => {
     mergedRef.current = {};
@@ -49,7 +52,16 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
     setClickTypes({});
     setSavedType(null);
     setError(null);
+    // --- сброс подсветки повторов ---
+    Object.values(flashRef.current).forEach(clearTimeout);
+    flashRef.current = {};
+    lastTickRef.current = {};
+    setFlashKeys({});
   }, [ieee]);
+
+  useEffect(() => {
+    return () => { Object.values(flashRef.current).forEach(clearTimeout); };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -72,6 +84,22 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
               mergedRef.current[k] = obs;
             } else {
               mergedRef.current[k] = { ...mergedRef.current[k], ...obs };
+            }
+            /* Детект повторного нажатия: tick изменился с прошлого опроса */
+            if (obs.source === 'trigger' && typeof obs.last_seen_tick === 'number') {
+              const prevTick = lastTickRef.current[k];
+              if (prevTick !== undefined && prevTick !== obs.last_seen_tick) {
+                clearTimeout(flashRef.current[k]);
+                setFlashKeys(prev => ({ ...prev, [k]: true }));
+                flashRef.current[k] = setTimeout(() => {
+                  setFlashKeys(prev => {
+                    const next = { ...prev };
+                    delete next[k];
+                    return next;
+                  });
+                }, 2000);
+              }
+              lastTickRef.current[k] = obs.last_seen_tick;
             }
           }
           setObservations(Object.values(mergedRef.current));
@@ -313,13 +341,16 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                       <td class="py-2 font-mono text-xs text-slate-400" colspan="2">
                         trigger
                       </td>
-                      <td class="py-2 font-mono text-xs">
+                      <td class="py-2 font-mono text-xs rounded px-1 transition-colors duration-300 ${flashKeys[obsKey(o)] ? 'bg-amber-100' : 'bg-transparent'}">
                         "${o.payload}"
+                        ${flashKeys[obsKey(o)] && html`
+                          <span class="text-black text-lg font-bold ml-1 align-middle" title="${lang === 'ru' ? 'Нажато повторно' : 'Pressed again'}">↻</span>
+                        `}
                       </td>
                       <td class="py-2">
                         <input type="text"
                                class="border rounded px-2 py-1 text-sm w-full"
-                               placeholder="${lang === 'ru' ? 'Напр. Двойной клик' : 'e.g. Double Click'}"
+                               placeholder="${lang === 'ru' ? 'Появится в Info (напр. Кухня - Вкл)' : 'Shown in Info (e.g. Kitchen - On)'}"
                                value=${names[obsKey(o)] || ''}
                                onInput=${e => setNames(prev => ({
                                  ...prev,
@@ -388,7 +419,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                       <td class="py-2">
                         <input type="text"
                                class="border rounded px-2 py-1 text-sm w-full"
-                               placeholder="${lang === 'ru' ? 'Напр. Яркость' : 'e.g. Brightness'}"
+                               placeholder="${lang === 'ru' ? 'Появится в Info (напр. Яркость)' : 'Shown in Info (e.g. Brightness)'}"
                                value=${names[obsKey(o)] || ''}
                                onInput=${e => setNames(prev => ({
                                  ...prev,

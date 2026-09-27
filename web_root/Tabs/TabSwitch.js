@@ -565,7 +565,7 @@ function TabSwitch({ }) {
     return html`
       <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
         <td class="px-6 py-2 text-sm text-slate-800">${d.id}</td>
-        <td class="px-6 py-2 text-sm text-slate-800 font-medium">${d.pins}</td>
+        <td class="px-6 py-2 text-sm text-slate-800 font-medium">${isGpioPin(d.pins) ? d.pins : 'Z2M'}</td>
         <td class="px-6 py-2 text-sm text-slate-700">
           ${['None', 'GPIO_PULLUP', 'GPIO_PULLDOWN'][d.ptype]}
         </td>

@@ -4348,6 +4348,7 @@ typedef struct {
     int      obs_max;    // реальный max за всю сессию
     uint8_t  changed;
     char     payload[32]; // для trigger-сообщений ("btn_double")
+    uint32_t last_seen_tick; // HAL_GetTick() последнего срабатывания триггера
 } ZigbeeLearnObs;
 
 #define OBS_SOURCE_DATA      0
@@ -5037,7 +5038,10 @@ static void zbee_learn_observe_trigger(const char *payload) {
         ZigbeeLearnObs *o = &s_zbee_learn.obs[i];
         if (o->used && o->source == OBS_SOURCE_TRIGGER &&
             strcmp(o->payload, payload) == 0) {
-            return; /* уже записано */
+            /* Обновляем метку времени — фронтенд сам определит повтор,
+             * сравнив это значение с предыдущим опросом */
+            o->last_seen_tick = HAL_GetTick();
+            return;
         }
         if (!o->used) {
             o->used = 1;
@@ -5045,6 +5049,7 @@ static void zbee_learn_observe_trigger(const char *payload) {
             o->payload[0] = '\0';
             strncpy(o->payload, payload, sizeof(o->payload) - 1);
             o->payload[sizeof(o->payload) - 1] = '\0';
+            o->last_seen_tick = HAL_GetTick();
             return;
         }
     }
@@ -5118,8 +5123,8 @@ void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm
 
         if (o->source == OBS_SOURCE_TRIGGER) {
             off += snprintf(body + off, DTCM_BUF_ZBEE_BODY - off,
-                             "{\"source\":\"trigger\",\"payload\":\"%s\"}",
-                             o->payload);
+                             "{\"source\":\"trigger\",\"payload\":\"%s\",\"last_seen_tick\":%lu}",
+                             o->payload, (unsigned long)o->last_seen_tick);
         } else {
             const char *cl_name = "Unknown";
             switch (o->cluster) {
