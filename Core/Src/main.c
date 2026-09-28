@@ -570,11 +570,12 @@ void pwm_event_handler(Button *handle) {
     break;
   case LONG_PRESS_HOLD:
     //	  if(PinsConf[handle->button_id].sclick == 2){
-    for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+    for (int a = 0; a < NUMPINLINKS; a++) {
       if (PinsLinks[a].idin == handle->button_id) {
         // PinsInfo[i].tim->CCR1 = 50;
         //  PWM
         i = PinsLinks[a].idout;
+        if (i < 0 || i >= NUMPIN) continue; /* Zigbee/мусор — не PWM */
         if (PinsConf[i].topin == 5) {
           if (is_pin_in_autotune(i)) break; /* AutoTune lock */
           // dvalue - ПРОЦЕНТ 0-100, step = 1%
@@ -612,12 +613,13 @@ void pwm_event_handler(Button *handle) {
     break;
   case SINGLE_CLICK: // Одиночное нажатие кнопки
                      //	  if(PinsConf[handle->button_id].sclick == 2){
-    for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+    for (int a = 0; a < NUMPINLINKS; a++) {
       if (PinsLinks[a].idin == handle->button_id) {
         // PinsInfo[i].tim->CCR1 = 50;
         // for (uint8_t i = 0; i < NUMPIN; i++) {
         //  PWM
         i = PinsLinks[a].idout;
+        if (i < 0 || i >= NUMPIN) continue; /* Zigbee/мусор — не PWM */
         if (PinsConf[i].topin == 5) {
           if (is_pin_in_autotune(i)) break; /* AutoTune lock */
           // dvalue - ПРОЦЕНТ 0-100, step = 1%
@@ -1650,10 +1652,11 @@ void start_pwm_fade(uint8_t pwm_id, uint32_t duration_sec,
 
     /* Encoder onoff — ПРИОРИТЕТНЫЙ рубильник */
     bool enc_on = true;
-    for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+    for (int a = 0; a < NUMPINLINKS; a++) {
         if (PinsLinks[a].idout == pwm_id) {
-            uint8_t enc_id = PinsLinks[a].idin;
-            if (PinsConf[enc_id].topin == 8 && PinsConf[enc_id].onoff == 0) {
+            int enc_id = PinsLinks[a].idin;
+            if (enc_id >= 0 && enc_id < NUMPIN &&
+                PinsConf[enc_id].topin == 8 && PinsConf[enc_id].onoff == 0) {
                 enc_on = false;
                 break;
             }
@@ -2641,7 +2644,7 @@ void StartInputTask(void *argument)
       200) { pinTimes[i] = millis;
 
                       // OUTPUT (вынести в отдельную функцию)
-                      for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+                      for (int a = 0; a < NUMPINLINKS; a++) {
                               if (PinsLinks[a].idin == i) {
                                       data_pin.id = PinsLinks[a].idout;
                                       data_pin.action = 2;
@@ -2658,7 +2661,7 @@ void StartInputTask(void *argument)
       200) { pinTimes[i] = millis;
 
                       // OUTPUT (вынести в отдельную функцию)
-                      for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+                      for (int a = 0; a < NUMPINLINKS; a++) {
                               if (PinsLinks[a].idin == i) {
                                       data_pin.id = PinsLinks[a].idout;
                                       data_pin.action = 2;
@@ -2774,9 +2777,10 @@ void StartEncoderTask(void *argument)
 	                           enc_counter[id] = 0;
 
 	                           /* Обновляем dvalue для всех связанных PWM, даже если onoff=0 */
-	                           for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+	                           for (int a = 0; a < NUMPINLINKS; a++) {
 	                               if (PinsLinks[a].idin == id) {
-	                                   uint8_t idpwm = PinsLinks[a].idout;
+	                                   int idpwm = PinsLinks[a].idout;
+	                                   if (idpwm < 0 || idpwm >= NUMPIN) continue; /* Zigbee/мусор — не PWM */
 	                                   if (PinsConf[idpwm].topin == 5) {
 	                                       if (is_pin_in_autotune(idpwm)) continue; /* AutoTune lock */
 	                                       // Изменяем значение в памяти
@@ -3104,10 +3108,11 @@ void StartServiceTask(void *argument)
 
 	        /* Encoder onoff — ПРИОРИТЕТНЫЙ рубильник */
 	        bool enc_on = true;
-	        for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+	        for (int a = 0; a < NUMPINLINKS; a++) {
 	            if (PinsLinks[a].idout == i) {
-	                uint8_t enc_id = PinsLinks[a].idin;
-	                if (PinsConf[enc_id].topin == 8 && PinsConf[enc_id].onoff == 0) {
+	                int enc_id = PinsLinks[a].idin;
+	                if (enc_id >= 0 && enc_id < NUMPIN &&
+	                    PinsConf[enc_id].topin == 8 && PinsConf[enc_id].onoff == 0) {
 	                    enc_on = false;
 	                    break;
 	                }

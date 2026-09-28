@@ -1026,7 +1026,7 @@ void GetPinConfig() {
                               sizeof(PinsConf[currentPin].zbee_label));
         }
         else if (strcmp(key, "zbee_bind_id") == 0)
-            PinsConf[currentPin].zbee_bind_id = (uint8_t)atoi(value);
+            PinsConf[currentPin].zbee_bind_id = (uint16_t)atoi(value);
       }
       //            printf("Finished processing pin at index %d\n", currentPin);
       inObject = false;

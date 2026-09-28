@@ -134,7 +134,7 @@ void Error_Handler(void);
 typedef struct data_pin_t {
 	int id;  // ID of Device (не выключателя!)
 	int action;  // действие с Device
-	uint8_t cntrlid;  // ID of Switch
+	uint16_t cntrlid;  // ID of Switch (может быть Zigbee: до NUMPIN+NUMZBEE)
 } data_pin_t;
 
 // Структура для передачи данных MQTT

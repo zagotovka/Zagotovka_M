@@ -203,6 +203,11 @@ int is_raw_payload(const char *payload);
 /* Cluster flags <-> JSON array conversion */
 uint8_t clusters_json_to_flags(const char *json_str);
 int clusters_flags_to_json(uint8_t flags, char *buf, size_t buflen);
+
+/* Флаг «в PinsLinks нет свободных слотов» — выставляется в parse_*,
+ * HTTP-хендлеры set отвечают 507 (см. handle_switch_set и др.) */
+extern volatile bool g_pintopin_overflow;
+
 void gen_switch_json(const struct dbPinsInfo *pins_info,
 		const struct dbPinsConf *pins_conf, int num_pins, char *buffer,
 		int buffer_size);

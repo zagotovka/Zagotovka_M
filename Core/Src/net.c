@@ -2276,33 +2276,11 @@ void handle_switches(struct mg_connection *c) {
         first = false;
     }
 
-    /* ── Массив pintopin ── */
-    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "],\"pintopin\":[");
-    first = true;
-
-    for (int i = 0; i < NUMPINLINKS; i++) {
-        if (PinsLinks[i].idin == 0 && PinsLinks[i].idout == 0)
-            continue;
-
-        int remaining = (int)G_BODY_SIZE - pos;
-        if (remaining < 80) {
-            MG_ERROR(("switches: OVERFLOW at pintopin %d, pos=%d remaining=%d",
-                      i, pos, remaining));
-            break;
-        }
-
-        char esc_pp_pins[16];
-        json_escape_str(esc_pp_pins, PinsLinks[i].pins, sizeof(esc_pp_pins));
-
-        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-            "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
-            first ? "" : ",",
-            PinsLinks[i].idin, PinsLinks[i].idout, esc_pp_pins);
-
-        first = false;
-    }
-
-    /* ── Закрываем JSON ── */
+    /* ── Закрываем JSON ──
+     * Массив pintopin больше не встраивается в state-ответы:
+     * при NUMPINLINKS=1024 (~45 Б/запись) он не помещается в g_body.
+     * Полный список отдаёт отдельный стриминговый /api/pintopin/get,
+     * который фронтенд и так опрашивает первоисточником (TabSwitch/TabButton/TabEncoder). */
     pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
 
     /* ── Лог для контроля ── */
@@ -2338,38 +2316,34 @@ void handle_encoders(struct mg_connection *c) {
         const char *encb_pin = (encoderb_id != 255 && encoderb_id < NUMPIN)
             ? PinsInfo[encoderb_id].pins : "";
 
-        /* ── PWM параметры через PinsLinks ── */
+        /* ── PWM параметры + pinact через PinsLinks — один проход ──
+         * dvalue берётся от совпадения с наибольшим idout (как в старом
+         * двойном цикле), pinact собирается за один проход без O(N²). */
         int pwm_dvalue = 0, pwm_freq = 0, pwm_max = 0;
-        for (int j = 0; j < NUMPIN; j++) {
-            if (PinsConf[j].topin != 5) continue;
-            for (int k = 0; k < NUMPINLINKS; k++) {
-                if (PinsLinks[k].idin == i && PinsLinks[k].idout == j) {
-                    pwm_dvalue = PinsConf[j].dvalue;
-                    pwm_freq   = PinsConf[j].pwm;
-                    pwm_max    = PinsConf[j].pwmmax;
-                    break;
-                }
-            }
-        }
-
-        /* ── pinact — стековый буфер, собирается локально ── */
+        int best_out = -1;
         char pinact[256];
         int pa_off   = 0;
         int pa_first = 1;
-        for (int j = 0; j < NUMPIN; j++) {
-            if (PinsConf[j].topin != 5) continue;
-            for (int k = 0; k < NUMPINLINKS; k++) {
-                if (PinsLinks[k].idin == i && PinsLinks[k].idout == j
-                    && PinsLinks[k].pins[0] != '\0') {
-                    pa_off += snprintf(pinact + pa_off, sizeof(pinact) - pa_off,
-                        "%s\"%s\":%d",
-                        pa_first ? "" : ",",
-                        PinsLinks[k].pins, PinsLinks[k].idout);
-                    pa_first = 0;
-                }
+        for (int k = 0; k < NUMPINLINKS; k++) {
+            if (PinsLinks[k].idin != i) continue;
+            int out_id = PinsLinks[k].idout;
+            if (out_id < 0 || out_id >= NUMPIN) continue;
+            if (PinsConf[out_id].topin != 5) continue;
+            if (out_id > best_out) {
+                best_out   = out_id;
+                pwm_dvalue = PinsConf[out_id].dvalue;
+                pwm_freq   = PinsConf[out_id].pwm;
+                pwm_max    = PinsConf[out_id].pwmmax;
+            }
+            if (PinsLinks[k].pins[0] != '\0') {
+                pa_off += snprintf(pinact + pa_off, sizeof(pinact) - pa_off,
+                    "%s\"%s\":%d",
+                    pa_first ? "" : ",",
+                    PinsLinks[k].pins, out_id);
+                if (pa_off >= (int)sizeof(pinact)) pa_off = (int)sizeof(pinact) - 1;
+                pa_first = 0;
             }
         }
-        if (pa_off >= (int)sizeof(pinact)) pa_off = sizeof(pinact) - 1;
         pinact[pa_off] = '\0';
 
         char esc_info[64];
@@ -2404,33 +2378,9 @@ void handle_encoders(struct mg_connection *c) {
         first = false;
     }
 
-    /* ── Массив pintopin ── */
-    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "],\"pintopin\":[");
-    first = true;
-
-    for (int i = 0; i < NUMPINLINKS; i++) {
-        if (PinsLinks[i].idin == 0 && PinsLinks[i].idout == 0)
-            continue;
-
-        int remaining = (int)G_BODY_SIZE - pos;
-        if (remaining < 80) {
-            MG_ERROR(("encoders: OVERFLOW at pintopin %d, pos=%d remaining=%d",
-                      i, pos, remaining));
-            break;
-        }
-
-        char esc_pp_pins[16];
-        json_escape_str(esc_pp_pins, PinsLinks[i].pins, sizeof(esc_pp_pins));
-
-        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-            "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
-            first ? "" : ",",
-            PinsLinks[i].idin, PinsLinks[i].idout, esc_pp_pins);
-
-        first = false;
-    }
-
-    /* ── Закрываем JSON ── */
+    /* ── Закрываем JSON ──
+     * Массив pintopin больше не встраивается (см. комментарий в handle_switches) —
+     * полный список отдаёт /api/pintopin/get. */
     pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
 
     /* ── Лог для контроля ── */
@@ -2865,12 +2815,17 @@ void web_init(struct mg_mgr *mgr) {
     // Инициализация настроек устройства
     s_settings.device_name = (char *)default_name;
 
-    // Allocate shared JSON buffer in DTCM pool (saves 32KB of FreeRTOS heap)
+    // Allocate shared JSON buffer: DTCM pool, fallback to FreeRTOS heap
     if (g_body == NULL) {
         g_body = (char *)dtcm_malloc(G_BODY_SIZE);
         if (g_body == NULL) {
-            MG_ERROR(("OOM: g_body allocation failed"));
-            return;
+            /* DTCM-пул исчерпан — HTTP-сервер всё равно должен подняться */
+            g_body = (char *)pvPortMalloc(G_BODY_SIZE);
+            if (g_body == NULL) {
+                MG_ERROR(("OOM: g_body allocation failed (DTCM and heap)"));
+                return;
+            }
+            MG_INFO(("g_body allocated from FreeRTOS heap (DTCM pool full)"));
         }
         memset(g_body, 0, G_BODY_SIZE);
     }

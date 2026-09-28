@@ -155,3 +155,4 @@ This project uses semantic versioning. The version number follows the MAJOR.MINO
 | 2.6.2 | 11-09-2026 | Added validation that the .bin firmware matches the inactive bank.|
 | 2.7.0 | 13-09-2026 | Implemented a built-in MQTT server.|
 | 2.8.0 | 14-09-2026 | Added live SYSTEM LOG tail to the Dashboard; embedded firmware version in release .bin file names.|
+| 2.9.0 | 28-09-2026 | Raised the pin-to-pin link limit from 100 to 1024; fixed Zigbee ID truncation (IDs above 255) and out-of-bounds reads; links API now streamed in chunks; moved link storage from the DTCM pool to .bss.|

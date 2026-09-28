@@ -184,6 +184,10 @@ volatile uint32_t g_ver_pins     = 1;
 volatile uint32_t g_ver_zigbee   = 1;
 volatile uint32_t g_ver_select   = 1;
 
+/* Флаг «в PinsLinks нет свободных слотов» — сбрасывается при входе в parse_*,
+ * выставляется при неудачной записи связи. HTTP-хендлеры отдают 507 вместо 200. */
+volatile bool g_pintopin_overflow = false;
+
 void mark_slice_dirty(volatile uint32_t *ver) {
     taskENTER_CRITICAL();
     (*ver)++;
@@ -605,7 +609,7 @@ static void cascade_delete_pin_id(int deleted_id) {
 
   // 3. Encoder zbee_bind — сбросить zbee_bind_id
   for (int i = 0; i < NUMPIN; i++) {
-    if (PinsConf[i].zbee_bind_id == (uint8_t)deleted_id) {
+    if (PinsConf[i].zbee_bind_id == (uint16_t)deleted_id) {
       PinsConf[i].zbee_bind_id = 0;
       changed_pins = true;
     }
@@ -889,9 +893,10 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
     PinsConf[onoffid].onoff = onoff;
     printf("Updated pin %" PRId32 ": onoff = %d\n", onoffid, onoff);
 
-    for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+    for (int a = 0; a < NUMPINLINKS; a++) {
       if (PinsLinks[a].idin == (int)onoffid) {
-        uint8_t idpwm = PinsLinks[a].idout;
+        int idpwm = PinsLinks[a].idout;
+        if (idpwm < 0 || idpwm >= NUMPIN) continue; /* Zigbee/мусор — не PWM */
         if (PinsConf[idpwm].topin == 5) {
           if (is_pin_in_autotune(idpwm)) continue;
           uint32_t pulse = 0;
@@ -964,11 +969,18 @@ void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
 }
 
 void handle_pintopin_get(struct mg_connection *c) {
-  int pos = 0;
-  int elements_added = 0;
+  /* Стримим напрямую в сокет чанками: лимит g_body (32К) не ограничивает
+   * количество связей (при NUMPINLINKS > ~700 JSON не влезает в g_body). */
+  mg_printf(c, "HTTP/1.1 200 OK\r\n"
+               "Content-Type: application/json\r\n"
+               "Transfer-Encoding: chunked\r\n"
+               "Connection: close\r\n\r\n");
 
-  pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "[");
+  char buf[512];
+  size_t n = 0;
+  n += (size_t)snprintf(buf + n, sizeof(buf) - n, "[");
 
+  bool first = true;
   for (int i = 0; i < NUMPINLINKS; i++) {
     struct dbPinToPin link;
     taskENTER_CRITICAL();
@@ -978,27 +990,27 @@ void handle_pintopin_get(struct mg_connection *c) {
     if (link.idin == 0 && link.idout == 0)
       continue;
 
+    /* Флашим буфер, если очередная запись может не поместиться */
+    if (sizeof(buf) - n < 64) {
+      mg_http_write_chunk(c, buf, n);
+      n = 0;
+    }
+
     char esc_pp_pins[16];
     json_escape_str(esc_pp_pins, link.pins, sizeof(esc_pp_pins));
 
-    int remaining = G_BODY_SIZE - pos;
-    if (remaining < 80)
-      break;
-
-    if (elements_added > 0)
-      pos += snprintf(g_body + pos, G_BODY_SIZE - pos, ",");
-
-    pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-                    "{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
-                    link.idin, link.idout, esc_pp_pins);
-    elements_added++;
+    int w = snprintf(buf + n, sizeof(buf) - n,
+                     "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
+                     first ? "" : ",", link.idin, link.idout, esc_pp_pins);
+    if (w < 0 || (size_t)w >= sizeof(buf) - n)
+      break; /* не должно происходить: флаш при остатке < 64 */
+    n += (size_t)w;
+    first = false;
   }
 
-  pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]");
-
-  const char *extra_headers =
-      "Connection: close\r\nContent-Type: application/json\r\n";
-  mg_http_reply(c, 200, extra_headers, "%s", g_body);
+  n += (size_t)snprintf(buf + n, sizeof(buf) - n, "]");
+  mg_http_write_chunk(c, buf, n);
+  mg_http_write_chunk(c, "", 0); /* терминальный чанк — keep-alive сохраняется */
 }
 
 void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm) {
@@ -1006,15 +1018,23 @@ void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm) {
     //	printf("We got a switch JSON: %.*s\n", (int) hm->body.len,
     // hm->body.buf);
     parse_switch_json(hm->body.buf, PinsConf, PinsInfo, NUMPIN);
-    char response[256]; // Формируем корректный JSON-ответ
-    snprintf(
-        response, sizeof(response),
-        "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
-        (unsigned long)hm->body.len);
-    // printf("Sending response: %s\n", response);//чтобы увидеть, какой именно
-    // ответ формируется перед отправкой клиенту:
-    mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s",
-                  response); // Отправляем ответ клиенту
+    /* Нет свободных слотов в PinsLinks — сообщаем клиенту, а не молча теряем связь */
+    if (g_pintopin_overflow) {
+      mg_http_reply(c, 507, "Content-Type: application/json\r\n",
+                    "{\"status\":false,\"message\":\"No free slots in "
+                    "PinsLinks (limit %d). Remove unused connections "
+                    "first.\"}", NUMPINLINKS);
+    } else {
+      char response[256]; // Формируем корректный JSON-ответ
+      snprintf(
+          response, sizeof(response),
+          "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
+          (unsigned long)hm->body.len);
+      // printf("Sending response: %s\n", response);//чтобы увидеть, какой именно
+      // ответ формируется перед отправкой клиенту:
+      mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s",
+                    response); // Отправляем ответ клиенту
+    }
   } else {                   // Обработка пустого тела запроса
     mg_http_reply(c, 400, "Content-Type: application/json\r\n",
                   "{\"status\":false,\"message\":\"Empty request body\"}");
@@ -1102,6 +1122,7 @@ void gen_switch_json(const struct dbPinsInfo *pins_info,
 void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
                        const struct dbPinsInfo *PinsInfo, int count) {
   struct mg_str body = mg_str_n(json, strlen(json));
+  g_pintopin_overflow = false;
 
   long id_val = mg_json_get_long(body, "$.id", -1);
   if (id_val < 0) {
@@ -1136,8 +1157,8 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
       char *pins = mg_json_get_str(body, "$.pins");
       if (pins) {
         /* Очищаем старую связь для этого idin */
-        for (short j = 0; j < NUMPINLINKS; j++) {
-          if (PinsLinks[j].idin == (uint8_t)id_val) {
+        for (int j = 0; j < NUMPINLINKS; j++) {
+          if (PinsLinks[j].idin == (short)id_val) {
             memset(&PinsLinks[j], 0, sizeof(PinsLinks[j]));
           }
         }
@@ -1160,16 +1181,16 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
               keybuf[klen] = '\0';
               int pin_id = atoi(keybuf);
 
-              short findex = -1;
-              for (short j = 0; j < NUMPINLINKS; j++) {
+              int findex = -1;
+              for (int j = 0; j < NUMPINLINKS; j++) {
                 if (PinsLinks[j].idin == 0 && PinsLinks[j].idout == 0) {
                   findex = j;
                   break;
                 }
               }
               if (findex != -1) {
-                PinsLinks[findex].idin = (uint8_t)id_val;
-                PinsLinks[findex].idout = (uint8_t)pin_id;
+                PinsLinks[findex].idin = (short)id_val;
+                PinsLinks[findex].idout = (short)pin_id;
                 if (pin_id < NUMPIN) {
                   strncpy(PinsLinks[findex].pins, PinsInfo[pin_id].pins,
                           sizeof(PinsLinks[findex].pins) - 1);
@@ -1178,6 +1199,9 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
                   memcpy(PinsLinks[findex].pins, "ZBEE", 4);
                 }
                 PinsLinks[findex].pins[sizeof(PinsLinks[findex].pins) - 1] = '\0';
+              } else {
+                g_pintopin_overflow = true;
+                printf("No free space in PinsLinks (idin=%ld)!\r\n", id_val);
               }
             }
           }
@@ -1192,7 +1216,7 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
   }
 
   /* ── Физический пин (id < NUMPIN) ── */
-  uint8_t id = (uint8_t)id_val;
+  int id = (int)id_val;
   if (id >= count) {
     printf("switch ID out of bounds %d\r\n", id);
     if (my_DgnTaskHandle)
@@ -1238,7 +1262,7 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
           size_t klen = klen_raw < sizeof(keybuf) - 1 ? klen_raw : sizeof(keybuf) - 1;
           memcpy(keybuf, kbuf, klen);
           keybuf[klen] = '\0';
-          uint8_t pin_id = (uint8_t)atoi(keybuf);
+          int pin_id = atoi(keybuf);
           char valbuf[16];
           const char *vbuf = val.buf;
           size_t vlen_raw = val.len;
@@ -1250,9 +1274,9 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
           memcpy(valbuf, vbuf, vlen);
           valbuf[vlen] = '\0';
 
-          short findex = -1;
-          short eindex = -1;
-          for (short i = 0; i < NUMPINLINKS; i++) {
+          int findex = -1;
+          int eindex = -1;
+          for (int i = 0; i < NUMPINLINKS; i++) {
             if (PinsLinks[i].idin == id && PinsLinks[i].idout == pin_id) {
               eindex = i;
               break;
@@ -1274,6 +1298,7 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
             }
             PinsLinks[indextu].pins[sizeof(PinsLinks[indextu].pins) - 1] = '\0';
           } else {
+            g_pintopin_overflow = true;
             printf("No free space in PinsLinks array. Last checked: findex=%d, "
                    "eindex=%d\r\n",
                    findex, eindex);
@@ -1355,6 +1380,15 @@ void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
     }
 
     parse_button_json(hm->body.buf, PinsConf, PinsInfo, NUMPIN);
+    if (g_pintopin_overflow) {
+      MG_INFO(("Response headers for connection %ld:", c->id));
+      log_headers(extra_headers);
+      mg_http_reply(c, 507, extra_headers,
+                    "{\"status\":false,\"message\":\"No free slots in "
+                    "PinsLinks (limit %d). Remove unused connections "
+                    "first.\"}", NUMPINLINKS);
+      return;
+    }
     char response[256];
     snprintf(
         response, sizeof(response),
@@ -1410,6 +1444,7 @@ void gen_button_json(const struct dbPinsInfo *pins_info,
 void parse_button_json(char *json, struct dbPinsConf *PinsConf,
                        const struct dbPinsInfo *PinsInfo, int count) {
   struct mg_str body = mg_str_n(json, strlen(json));
+  g_pintopin_overflow = false;
 
   long id_val = mg_json_get_long(body, "$.id", -1);
   if (id_val < 0) {
@@ -1462,9 +1497,9 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
           memcpy(valbuf, vbuf, vlen);
           valbuf[vlen] = '\0';
 
-          short findex = -1;
-          short eindex = -1;
-          for (short i = 0; i < NUMPINLINKS; i++) {
+          int findex = -1;
+          int eindex = -1;
+          for (int i = 0; i < NUMPINLINKS; i++) {
             if (PinsLinks[i].idin == id && PinsLinks[i].idout == pin_id) {
               eindex = i;
               break;
@@ -1487,6 +1522,7 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
             }
             PinsLinks[indextu].pins[sizeof(PinsLinks[indextu].pins) - 1] = '\0';
           } else {
+            g_pintopin_overflow = true;
             printf("No free space in PinsLinks array. Last checked: "
                    "findex=%d, eindex=%d\r\n",
                    findex, eindex);
@@ -1557,6 +1593,15 @@ void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm) {
 
   if (hm->body.len > 0) {
     parse_encoder_json(hm->body.buf, PinsConf, PinsLinks, PinsInfo, NUMPIN);
+    if (g_pintopin_overflow) {
+      MG_INFO(("Response headers for connection %ld:", c->id));
+      log_headers(extra_headers);
+      mg_http_reply(c, 507, extra_headers,
+                    "{\"status\":false,\"message\":\"No free slots in "
+                    "PinsLinks (limit %d). Remove unused connections "
+                    "first.\"}", NUMPINLINKS);
+      return;
+    }
     char response[256];
     snprintf(
         response, sizeof(response),
@@ -1684,6 +1729,7 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
                         struct dbPinsInfo *PinsInfo, uint8_t count) {
   struct mg_str body = mg_str_n(json, strlen(json));
   uint8_t usbnum = 255;
+  g_pintopin_overflow = false;
 
   long id_val = mg_json_get_long(body, "$.id", -1);
   if (id_val < 0) {
@@ -1719,7 +1765,7 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
     long pwm_json = mg_json_get_long(body, "$.pwm", -1);
     for (uint8_t j = 0; j < count; j++) {
       if (PinsConf[j].topin == 5) {
-        for (short k = 0; k < NUMPINLINKS; k++) {
+        for (int k = 0; k < NUMPINLINKS; k++) {
           if (PinsLinks[k].idin == id && PinsLinks[k].idout == j) {
             if (is_pin_in_autotune(j)) break;
             if (dvalue_json >= 0 && pwm_json >= 0) {
@@ -1778,7 +1824,7 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
       mg_free(info);
     }
     PinsConf[id].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[id].onoff);
-    PinsConf[id].zbee_bind_id = (uint8_t)mg_json_get_long(body, "$.zbee_bind", PinsConf[id].zbee_bind_id);
+    PinsConf[id].zbee_bind_id = (uint16_t)mg_json_get_long(body, "$.zbee_bind", PinsConf[id].zbee_bind_id);
     printf("Type 2 (Edit): id=%d, pins=%s, topin=%d, ponr=%d, info=%s, "
            "onoff=%d\r\n",
            id, PinsInfo[id].pins, PinsConf[id].topin, PinsConf[id].ponr,
@@ -1821,11 +1867,11 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
           size_t klen = klen_raw < sizeof(keybuf) - 1 ? klen_raw : sizeof(keybuf) - 1;
           memcpy(keybuf, kbuf, klen);
           keybuf[klen] = '\0';
-          uint8_t value = (uint8_t)mg_json_get_long(
+          int value = (int)mg_json_get_long(
               mg_str_n(val.buf, val.len), "$", 0);
 
           bool found = false;
-          for (uint8_t i = 0; i < NUMPINLINKS; i++) {
+          for (int i = 0; i < NUMPINLINKS; i++) {
             if (PinsLinks[i].idin == id && PinsLinks[i].idout == value) {
               strncpy(PinsLinks[i].pins, keybuf, sizeof(PinsLinks[i].pins) - 1);
               PinsLinks[i].pins[sizeof(PinsLinks[i].pins) - 1] = '\0';
@@ -1837,15 +1883,15 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
           }
           if (!found) {
             int free_i = -1;
-            for (uint8_t i = 0; i < NUMPINLINKS; i++) {
+            for (int i = 0; i < NUMPINLINKS; i++) {
               if (PinsLinks[i].idin == 0 && PinsLinks[i].idout == 0) {
                 free_i = i;
                 break;
               }
             }
             if (free_i != -1) {
-              PinsLinks[free_i].idin = id;
-              PinsLinks[free_i].idout = value;
+              PinsLinks[free_i].idin = (short)id;
+              PinsLinks[free_i].idout = (short)value;
               strncpy(PinsLinks[free_i].pins, keybuf,
                       sizeof(PinsLinks[free_i].pins) - 1);
               PinsLinks[free_i].pins[sizeof(PinsLinks[free_i].pins) - 1] = '\0';
@@ -1853,13 +1899,14 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
                      PinsLinks[free_i].idin, PinsLinks[free_i].idout,
                      PinsLinks[free_i].pins);
             } else {
+              g_pintopin_overflow = true;
               printf("No free space in PinsLinks!\r\n");
             }
           }
         }
       }
     }
-    PinsConf[id].zbee_bind_id = (uint8_t)mg_json_get_long(body, "$.zbee_bind", PinsConf[id].zbee_bind_id);
+    PinsConf[id].zbee_bind_id = (uint16_t)mg_json_get_long(body, "$.zbee_bind", PinsConf[id].zbee_bind_id);
     printf("Type 1 (Connection): id=%d, pins=%s, encoderB=%d, encdrBpin=%s, zbee_bind=%d\r\n",
            id, PinsInfo[id].pins, PinsConf[id].encoderb, PinsConf[id].encbpin,
            PinsConf[id].zbee_bind_id);
@@ -3313,7 +3360,7 @@ void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm,
     return;
   }
 
-  uint8_t id = (uint8_t)id_val;
+  int id = (int)id_val;
   char *bracket_pos = strchr(pin_str, '(');
   if (bracket_pos != NULL) {
     *bracket_pos = '\0';
@@ -4743,13 +4790,15 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                             bool found_pwm = false;
                             for (int e = 0; e < NUMPIN; e++) {
                                 if (PinsConf[e].topin == 8 &&
-                                    PinsConf[e].zbee_bind_id == (uint8_t)zbee_id) {
+                                    PinsConf[e].zbee_bind_id == (uint16_t)zbee_id) {
                                     found_encoder = true;
                                     PinsConf[e].dvalue = mapped;
                                     /* Ищем PWM пин через PinsLinks (как Cron и Encoder task) */
                                     for (int k = 0; k < NUMPINLINKS; k++) {
+                                        int link_out = PinsLinks[k].idout;
                                         if (PinsLinks[k].idin == e &&
-                                            PinsConf[PinsLinks[k].idout].topin == 5) {
+                                            link_out >= 0 && link_out < NUMPIN &&
+                                            PinsConf[link_out].topin == 5) {
                                             found_pwm = true;
                                             int pwm_id = PinsLinks[k].idout;
                                             PinsConf[pwm_id].dvalue = mapped;
@@ -4883,7 +4932,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                     int zbee_id = NUMPIN + i;
                     for (int e = 0; e < NUMPIN; e++) {
                         if (PinsConf[e].topin == 8 &&
-                            PinsConf[e].zbee_bind_id == (uint8_t)zbee_id) {
+                            PinsConf[e].zbee_bind_id == (uint16_t)zbee_id) {
                             PinsConf[e].dvalue = mapped;
                             if (PinsConf[e].encoderb > 0 &&
                                 PinsConf[e].encoderb < NUMPIN &&
@@ -5570,7 +5619,8 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
     ZigbeeConf[zbi].pt_long[0] = '\0';
     ZigbeeConf[zbi].vbtn_mode = VBTN_MODE_RAW;
 
-    if (trigger_count > 0 && trigger_count <= 3) {
+    if (trigger_count > 0 &&
+        (trigger_count <= 3 || (has_switch && !is_raw_payload(trigger_payloads[0])))) {
         /* Определяем тип payloads: RAW или PASSTHROUGH */
         int is_passthrough = 0;
         if (trigger_payloads[0][0]) {
@@ -5586,32 +5636,38 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                 for (int k = 0; k < trigger_count; k++) {
                     if (used[k] || trigger_switch_value[k] < 0) continue;
 
-                    int want = (trigger_switch_value[k] == 1) ? 0 : 1;
+                    /* switch_value: 1 = ON, 0 = OFF, 2 = Toggle (одна кнопка, без пары) */
+                    int is_toggle = (trigger_switch_value[k] == 2);
                     int pair_idx = -1;
-                    for (int m = 0; m < trigger_count; m++) {
-                        if (m == k || used[m]) continue;
-                        if (trigger_switch_value[m] == want) {
-                            pair_idx = m;
-                            break;
+
+                    if (!is_toggle) {
+                        int want = (trigger_switch_value[k] == 1) ? 0 : 1;
+                        for (int m = 0; m < trigger_count; m++) {
+                            if (m == k || used[m]) continue;
+                            if (trigger_switch_value[m] == want) {
+                                pair_idx = m;
+                                break;
+                            }
+                        }
+
+                        if (pair_idx < 0) {
+                            LOG_Z2M("zbee: LEARN SWITCH '%s' без пары (не выбрано противоположное значение)\r\n",
+                                    trigger_payloads[k]);
+                            used[k] = 1;
+                            continue;
                         }
                     }
 
-                    if (pair_idx < 0) {
-                        LOG_Z2M("zbee: LEARN SWITCH '%s' без пары (не выбрано противоположное значение)\r\n",
-                                trigger_payloads[k]);
-                        used[k] = 1;
-                        continue;
-                    }
-
-                    int on_idx  = (trigger_switch_value[k] == 1) ? k : pair_idx;
-                    int off_idx = (trigger_switch_value[k] == 1) ? pair_idx : k;
+                    int on_idx  = is_toggle ? k : ((trigger_switch_value[k] == 1) ? k : pair_idx);
+                    int off_idx = is_toggle ? -1 : ((trigger_switch_value[k] == 1) ? pair_idx : k);
 
                     int target_zbi = is_first ? zbi : alloc_zbee_slot();
                     is_first = 0;
                     if (target_zbi < 0) {
                         LOG_Z2M("zbee: LEARN SWITCH no free slot for '%s'/'%s'\r\n",
-                                trigger_payloads[on_idx], trigger_payloads[off_idx]);
-                        used[k] = used[pair_idx] = 1;
+                                trigger_payloads[on_idx], off_idx >= 0 ? trigger_payloads[off_idx] : "-");
+                        used[k] = 1;
+                        if (pair_idx >= 0) used[pair_idx] = 1;
                         continue;
                     }
                     if (target_zbi != zbi) {
@@ -5631,8 +5687,12 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                             sizeof(ZigbeeConf[target_zbi].pt_single) - 1);
                     strncpy(ZigbeeConf[target_zbi].switch_payload_on, trigger_payloads[on_idx],
                             sizeof(ZigbeeConf[target_zbi].switch_payload_on) - 1);
-                    strncpy(ZigbeeConf[target_zbi].switch_payload_off, trigger_payloads[off_idx],
-                            sizeof(ZigbeeConf[target_zbi].switch_payload_off) - 1);
+                    if (off_idx >= 0) {
+                        strncpy(ZigbeeConf[target_zbi].switch_payload_off, trigger_payloads[off_idx],
+                                sizeof(ZigbeeConf[target_zbi].switch_payload_off) - 1);
+                    } else {
+                        ZigbeeConf[target_zbi].switch_payload_off[0] = '\0';
+                    }
 
                     const char *nm = trigger_names[on_idx][0] ? trigger_names[on_idx] : trigger_payloads[on_idx];
                     strncpy(ZigbeeConf[target_zbi].zbee_label, nm,
@@ -5644,9 +5704,10 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
 
                     LOG_Z2M("zbee: LEARN SWITCH gang %d slot %d (id=%d) on='%s' off='%s'\r\n",
                             gang_num, target_zbi, NUMPIN + target_zbi,
-                            trigger_payloads[on_idx], trigger_payloads[off_idx]);
+                            trigger_payloads[on_idx], off_idx >= 0 ? trigger_payloads[off_idx] : "(toggle)");
 
-                    used[k] = used[pair_idx] = 1;
+                    used[k] = 1;
+                    if (pair_idx >= 0) used[pair_idx] = 1;
                 }
 
                 if (gang_num == 0) {
@@ -6645,7 +6706,7 @@ void processPins(uint16_t i, uint8_t action) {
       return;
     }
   }
-  for (uint8_t a = 0; a < NUMPINLINKS; a++) {
+  for (int a = 0; a < NUMPINLINKS; a++) {
     if (PinsLinks[a].idin == i) {
       data_pin_t data_pin = {0};
       data_pin.id = PinsLinks[a].idout;

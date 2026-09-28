@@ -41,7 +41,9 @@ uint8_t             *dtcm_prev_gpio       = NULL;
 int16_t             *dtcm_prev_duty       = NULL;
 uint32_t            *dtcm_zbee_last_cmd_tick = NULL;
 
-/* ЭТАП 2: dht22 + button + PinsLinks → DTCM */
+/* ЭТАП 2: dht22 + button + PinsLinks → DTCM
+ * (PinsLinks при 1024 связях = 10 240 Б из .bss: DTCM-пул нужен под g_body 32К) */
+static struct dbPinToPin s_pinslinks_bss[NUMPINLINKS];  /* .bss, не DTCM */
 dht22_pin_t          *dtcm_dht22       = NULL;
 struct Button        *dtcm_button      = NULL;
 struct dbPinToPin    *dtcm_pinslinks   = NULL;
@@ -85,11 +87,11 @@ __attribute__((section(".itcm"))) void dtcm_alloc_init(void)
     dtcm_prev_duty       = dtcm_malloc(sizeof(int16_t) * NUMPIN);
     dtcm_zbee_last_cmd_tick = dtcm_malloc(sizeof(uint32_t) * NUMZBEE);
 
-    /* ЭТАП 2: htim + dht22 + button + PinsLinks → DTCM */
+    /* ЭТАП 2: htim + dht22 + button → DTCM, PinsLinks → .bss */
     dtcm_htim        = dtcm_malloc(sizeof(TIM_HandleTypeDef) * NUMPIN);
     dtcm_dht22       = dtcm_malloc(sizeof(dht22_pin_t) * MAX_DHT22_P);
     dtcm_button      = dtcm_malloc(sizeof(struct Button) * NUMPIN);
-    dtcm_pinslinks   = dtcm_malloc(sizeof(struct dbPinToPin) * NUMPINLINKS);
+    dtcm_pinslinks   = s_pinslinks_bss;  /* 1024 связи = 10 240 Б — в .bss */
 
     /* Проверяем что всё выделилось */
     if (!dtcm_zbee_body || !dtcm_zbee_raw || !dtcm_sensor_batch ||

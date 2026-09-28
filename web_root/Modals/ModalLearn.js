@@ -381,6 +381,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                               <option value="">—</option>
                               <option value="1">${lang === 'ru' ? '1 (Вкл)' : '1 (On)'}</option>
                               <option value="0">${lang === 'ru' ? '0 (Выкл)' : '0 (Off)'}</option>
+                              <option value="2">${lang === 'ru' ? 'Toggle (одна кнопка)' : 'Toggle (single button)'}</option>
                             </select>
                           `}
                           ${labels[obsKey(o)] === 'button' && html`
@@ -461,6 +462,54 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                 </tbody>
               </table>
             </div>
+          `}
+
+          ${observations.some(o => labels[obsKey(o)] === 'switch') && html`
+            <details open class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm text-blue-900">
+              <summary class="cursor-pointer font-medium">
+                💡 ${lang === 'ru' ? 'Как настроить выключатель — простыми словами' : 'How to set up a switch — in plain words'}
+              </summary>
+              <div class="mt-3 space-y-3">
+                <p>
+                  ${lang === 'ru'
+                    ? 'Нажмите на выключатель несколько раз и посмотрите, сколько строк появилось в таблице для одной клавиши:'
+                    : 'Press the switch a few times and look at how many rows appear in the table for a single key:'}
+                </p>
+
+                <div class="bg-white rounded-lg p-3 border border-blue-100">
+                  <div class="font-medium mb-1">
+                    🔘 ${lang === 'ru' ? 'Появилась ОДНА строка — «Toggle (одна кнопка)»' : 'ONE row appeared — “Toggle (single button)”'}
+                  </div>
+                  <p class="text-blue-800">
+                    ${lang === 'ru'
+                      ? 'Так ведут себя кнопки «нажал — отпустил», которые сами возвращаются на место. Каждое нажатие шлёт одно и то же сообщение. В строке выберите «Выключатель» и «Toggle (одна кнопка)». Тогда каждое нажатие будет переключать свет: было включено — выключит, было выключено — включит.'
+                      : 'These are spring-return buttons (press and release). Every press sends the same message. In the row choose “Switch” and “Toggle (single button)”. Each press will then flip the light: on becomes off, off becomes on.'}
+                  </p>
+                </div>
+
+                <div class="bg-white rounded-lg p-3 border border-blue-100">
+                  <div class="font-medium mb-1">
+                    🔀 ${lang === 'ru' ? 'Появились ДВЕ разные строки — «1 (Вкл)» и «0 (Выкл)»' : 'TWO different rows appeared — “1 (On)” and “0 (Off)”'}
+                  </div>
+                  <p class="text-blue-800">
+                    ${lang === 'ru'
+                      ? 'Так ведёт себя клавиша-качелька, которая остаётся в положении «вкл» или «выкл». Каждое положение шлёт своё сообщение. Вспомните, какое положение было при появлении каждой строки: у строки «клавиша вверху / включено» выберите «1 (Вкл)», у строки «клавиша внизу / выключено» выберите «0 (Выкл)».'
+                      : 'This is a rocker key that stays in the “on” or “off” position. Each position sends its own message. Remember which position produced each row: for the “key up / on” row choose “1 (On)”, for the “key down / off” row choose “0 (Off)”.'}
+                  </p>
+                </div>
+
+                <p class="text-blue-800">
+                  ${lang === 'ru'
+                    ? 'Если у выключателя несколько клавиш — у каждой будут свои строки. Проделайте то же самое для каждой клавиши и впишите понятное имя в колонку «Название» (например, «Кухня — свет»): оно потом будет видно в таблице Zigbee Devices в колонке Info.'
+                    : 'If the switch has several keys, each key will have its own rows. Repeat the steps for every key and type a clear name in the “Name” column (for example “Kitchen — light”): it will later be shown in the Info column of the Zigbee Devices table.'}
+                </p>
+                <p class="text-blue-700 text-xs">
+                  ${lang === 'ru'
+                    ? 'Подсказка: когда вы нажимаете на кнопку повторно, ячейка в колонке «Значение» на 2 секунды подсвечивается жёлтым со значком ↻ — так видно, какая именно строка соответствует вашему нажатию.'
+                    : 'Tip: when you press a button again, its cell in the “Value” column flashes yellow with a ↻ icon for 2 seconds, so you can see which row matches your press.'}
+                </p>
+              </div>
+            </details>
           `}
 
           ${error && html`

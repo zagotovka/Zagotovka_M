@@ -10,7 +10,7 @@
 
 #define NUMPIN 89 // количество пинов
 #define PID_MAX_SLOTS 24 // макс. число PID-каналов
-#define NUMPINLINKS 100 // количество pin to pin
+#define NUMPINLINKS 1024 // количество pin to pin (связь = 10 байт в DTCM)
 #define NUMTASK 50 // кол-во CRON task
 
 /* Zigbee cluster bitflags */
@@ -95,7 +95,7 @@ struct dbPinsConf {     // Создали структуру с необходи
 	uint16_t zbee_attribute;      // Attribute ID (16-bit): 0x0000=OnOff state
 	char     zbee_label[30];      // Friendly name для UI (только для отображения)
 	// === ENCODER ↔ ZIGBEE BINDING ===
-	uint8_t  zbee_bind_id;        // ID привязанного Zigbee устройства (NUMPIN+zbi)
+	uint16_t zbee_bind_id;        // ID привязанного Zigbee устройства (NUMPIN+zbi, до 288)
 	char     send_sms[5];         // Send sms YES/NO
 	uint8_t  prvstate;            // Предыдущее состояние (для edge detection)
 	uint8_t  state;               // Текущее состояние пина (0/1)
