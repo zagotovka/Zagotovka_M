@@ -290,6 +290,26 @@ function TabSwitch({ }) {
     closeModal();
   };
 
+  // Сохранение из модалок "Edit switch" / "Edit Connection": /api/switch/set
+  // уже записал info/ptype/связи. /api/onoff/set нужен ТОЛЬКО если On/Off
+  // реально переключён в модалке: parse_onoff_json() для Zigbee-выключателя
+  // вызывает processPins() (включает все пины из Device connection), а для
+  // физического — выставляет ШИМ-выходам dvalue, т.е. Save "щёлкал"
+  // выключателем. Ползунок в таблице по-прежнему использует handleSwitchChange.
+  const handleSwitchSaved = (updatedSwitch) => {
+    console.log('handleSwitchSaved:', updatedSwitch);
+    if (updatedSwitch.onoff !== selectedSwitch?.onoff) {
+      handleSwitchChange(updatedSwitch);
+    } else {
+      setSwitch((prevSwitches) =>
+        prevSwitches.map((sw) =>
+          sw.id === updatedSwitch.id ? updatedSwitch : sw
+        )
+      );
+      closeModal();
+    }
+  };
+
   const getRelayConnection = (switchId) => {
     const connection = pintopin.find((item) => item.idin === switchId);
     return connection ? `${connection.pins} (${connection.idout})` : '';
@@ -703,7 +723,7 @@ function TabSwitch({ }) {
                 ? 'Edit Connection'
                 : 'Edit switch'}
               selectedSwitch=${selectedSwitch}
-              onSwitchChange=${handleSwitchChange}
+              onSwitchChange=${handleSwitchSaved}
             />
           `}
       </div>

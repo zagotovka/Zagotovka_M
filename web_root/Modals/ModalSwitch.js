@@ -183,7 +183,7 @@ function ModalSwitch({
                   </tr>
                   <tr class="bg-white">
                     <td class="p-2 font-bold">Pin</td>
-                    <td class="p-2">${selectedSwitch.pins}</td>
+                    <td class="p-2">${isZigbee ? 'Z2M' : selectedSwitch.pins}</td>
                   </tr>
                   <tr class="bg-gray-200">
                     <td class="p-2 font-bold">Connection</td>
@@ -234,7 +234,7 @@ function ModalSwitch({
                   </tr>
                   <tr class="bg-white">
                     <td class="p-2 font-bold">Pin</td>
-                    <td class="p-2">${selectedSwitch.pins}</td>
+                    <td class="p-2">${isZigbee ? 'Z2M' : selectedSwitch.pins}</td>
                   </tr>
                   <tr class="bg-gray-200">
                     <td class="p-2 font-bold">Pullup type</td>

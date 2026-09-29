@@ -176,6 +176,24 @@ function TabEncoder({ }) {
         });
     };
 
+    // Сохранение из модалок "Edit Encoder" / "Edit Connection": /api/encoder/set
+    // уже записал info/pwm/связи. /api/onoff/set нужен ТОЛЬКО если On/Off
+    // реально переключён в модалке: parse_onoff_json() выставляет ШИМ-выходам
+    // в связях значение dvalue*pwmmax/100, т.е. Save "включал" их. Ползунок
+    // в таблице по-прежнему использует handleEncoderChange.
+    const handleEncoderSaved = (updatedEncoder) => {
+      console.log('handleEncoderSaved:', updatedEncoder);
+      if (updatedEncoder.onoff !== selectedEncoder?.onoff) {
+        handleEncoderChange(updatedEncoder);
+      } else {
+        setEncoder((prevEncoders) =>
+          prevEncoders.map((enc) =>
+            enc.id === updatedEncoder.id ? updatedEncoder : enc
+          )
+        );
+      }
+    };
+
     const getConnectedPins = (encoderId) => {
       const encoderItem = varencoder.find((enc) => enc.id === encoderId);
       const connectedPins = [];
@@ -716,7 +734,7 @@ function TabEncoder({ }) {
           ? 'Edit Connection'
           : 'Edit Encoder'}
                 selectedEncoder=${selectedEncoder}
-                handleEncoderChange=${handleEncoderChange}
+                handleEncoderChange=${handleEncoderSaved}
               />
             `}
         </div>

@@ -624,6 +624,8 @@ const TabButton = () => {
       )
     );
 
+    isPendingOnOff.current = true;
+
     fetch('/api/onoff/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -643,6 +645,28 @@ const TabButton = () => {
       });
 
     closeModal();
+  };
+
+  // Сохранение из модалок "Edit Button pin" / "Edit Connection": /api/button/set
+  // уже записал info/sclick/связи. /api/onoff/set нужен ТОЛЬКО если On/Off
+  // реально переключён в модалке: parse_onoff_json() для Zigbee-кнопки
+  // выполняет vbtn_execute() (sclick), т.е. Save "нажимал" кнопку, а для
+  // физического — выставлял ШИМ-выходам dvalue. Ползунок в таблице
+  // по-прежнему использует handleButtonChange.
+  const handleButtonSaved = (updatedButton) => {
+    console.log('handleButtonSaved:', updatedButton);
+    if (updatedButton.onoff !== selectedButton?.onoff) {
+      handleButtonChange(updatedButton);
+    } else {
+      setButton((prevButtons) =>
+        prevButtons.map((button) =>
+          button.id === updatedButton.id
+            ? { ...button, ...updatedButton }
+            : button
+        )
+      );
+      closeModal();
+    }
   };
 
   // -------------------------------------------------------------------------
@@ -766,7 +790,7 @@ const TabButton = () => {
             ? 'Edit Connection'
             : 'Edit Button pin'}
           selectedButton=${selectedButton}
-          onButtonChange=${handleButtonChange}
+          onButtonChange=${handleButtonSaved}
         />
       `}
   `;

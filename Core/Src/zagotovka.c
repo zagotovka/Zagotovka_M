@@ -821,6 +821,29 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
   }
 }
 
+/* mg_json_get_str() не умеет пустые строки: для токена "" внутренняя проверка
+ * len > 2 отсекает его и функция возвращает NULL, из-за чего пустое значение
+ * молча игнорировалось и в настройках оставалось старое (User/Password
+ * MQTT-сервера невозможно было очистить). Обёртка ниже возвращает
+ * malloc'нутую строку (в т.ч. пустую ""), если ключ присутствует в JSON
+ * и является строкой; отсутствие ключа / не-строка / битые escape — NULL
+ * (старое значение сохраняется, как и раньше).
+ * Определена до первого использования (parse_switch_json и все parse_* ниже). */
+static char *json_get_str_allow_empty(struct mg_str json, const char *path) {
+  char *result = NULL;
+  int len = 0, off = mg_json_get(json, path, &len);
+  if (off >= 0 && len >= 2 && json.buf[off] == '"') {
+    if (len == 2) {
+      result = (char *) mg_calloc(1, 1);          // "" — пустая строка
+    } else if ((result = (char *) mg_calloc(1, (size_t) len)) != NULL &&
+               mg_json_unescape(json, path, result, (size_t) len) == 0) {
+      mg_free(result);
+      result = NULL;
+    }
+  }
+  return result;
+}
+
 void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
                       int num_pins) {
   struct mg_str body = mg_str_n(json_string, strlen(json_string));
@@ -1018,6 +1041,12 @@ void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm) {
     //	printf("We got a switch JSON: %.*s\n", (int) hm->body.len,
     // hm->body.buf);
     parse_switch_json(hm->body.buf, PinsConf, PinsInfo, NUMPIN);
+    /* ETag меняем сразу, как в handle_onoff_set: Zigbee-ветка пишет конфиг
+     * через SetZigbeeConfig() (usbnum=7), который g_ver_switch НЕ трогает,
+     * а физическая — только когда разгрузится очередь USB-записи
+     * (SetPinConfig). Без немедленного инкремента браузер получает 304
+     * и показывает старое info, даже если значение уже очищено в RAM. */
+    mark_slice_dirty(&g_ver_switch);
     /* Нет свободных слотов в PinsLinks — сообщаем клиенту, а не молча теряем связь */
     if (g_pintopin_overflow) {
       mg_http_reply(c, 507, "Content-Type: application/json\r\n",
@@ -1142,7 +1171,7 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
     }
     if (mg_json_get(body, "$.onoff", NULL) >= 0) {
       ZigbeeConf[zbi].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", ZigbeeConf[zbi].onoff);
-      char *info = mg_json_get_str(body, "$.info");
+      char *info = json_get_str_allow_empty(body, "$.info");
       if (info) {
         strncpy(ZigbeeConf[zbi].info, info, sizeof(ZigbeeConf[zbi].info) - 1);
         ZigbeeConf[zbi].info[sizeof(ZigbeeConf[zbi].info) - 1] = '\0';
@@ -1229,7 +1258,7 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
     if (ptype_val >= 0) {
       PinsConf[id].ptype = (uint8_t)ptype_val;
     }
-    char *info = mg_json_get_str(body, "$.info");
+    char *info = json_get_str_allow_empty(body, "$.info");
     if (info) {
       strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
       PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
@@ -1355,7 +1384,7 @@ void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
           ZigbeeActionPoolArr[idx].lpress[sizeof(ZigbeeActionPoolArr[idx].lpress) - 1] = '\0';
           mg_free(lpress_str);
         } else if (lpress_str) { mg_free(lpress_str); }
-        char *info = mg_json_get_str(body, "$.info");
+        char *info = json_get_str_allow_empty(body, "$.info");
         if (info) {
           strncpy(ZigbeeConf[zbi].zbee_label, info,
                   sizeof(ZigbeeConf[zbi].zbee_label) - 1);
@@ -1558,7 +1587,7 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
       PinsConf[id].lpress[sizeof(PinsConf[id].lpress) - 1] = '\0';
       mg_free(lpress);
     }
-    char *info = mg_json_get_str(body, "$.info");
+    char *info = json_get_str_allow_empty(body, "$.info");
     if (info) {
       strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
       PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
@@ -1817,7 +1846,7 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
       }
     }
     PinsConf[id].ponr = (uint8_t)mg_json_get_long(body, "$.ponr", PinsConf[id].ponr);
-    char *info = mg_json_get_str(body, "$.info");
+    char *info = json_get_str_allow_empty(body, "$.info");
     if (info) {
       strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
       PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
@@ -2081,7 +2110,7 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
     has_activ = true;
     mg_free(activ_str);
   }
-  char *info_str = mg_json_get_str(body, "$.info");
+  char *info_str = json_get_str_allow_empty(body, "$.info");
   if (info_str) {
     strncpy(temp_info, info_str, sizeof(temp_info) - 1);
     temp_info[sizeof(temp_info) - 1] = '\0';
@@ -3024,28 +3053,6 @@ bool is_c_like_format(const char *value) {
   return (strstr(value, "\\n") != NULL && strstr(value, "\"") != NULL);
 }
 
-/* mg_json_get_str() не умеет пустые строки: для токена "" внутренняя проверка
- * len > 2 отсекает его и функция возвращает NULL, из-за чего пустое значение
- * молча игнорировалось и в настройках оставалось старое (User/Password
- * MQTT-сервера невозможно было очистить). Обёртка ниже возвращает
- * malloc'нутую строку (в т.ч. пустую ""), если ключ присутствует в JSON
- * и является строкой; отсутствие ключа / не-строка / битые escape — NULL
- * (старое значение сохраняется, как и раньше). */
-static char *json_get_str_allow_empty(struct mg_str json, const char *path) {
-  char *result = NULL;
-  int len = 0, off = mg_json_get(json, path, &len);
-  if (off >= 0 && len >= 2 && json.buf[off] == '"') {
-    if (len == 2) {
-      result = (char *) mg_calloc(1, 1);          // "" — пустая строка
-    } else if ((result = (char *) mg_calloc(1, (size_t) len)) != NULL &&
-               mg_json_unescape(json, path, result, (size_t) len) == 0) {
-      mg_free(result);
-      result = NULL;
-    }
-  }
-  return result;
-}
-
 /* Строгая проверка IPv4-адреса: ровно 4 октета по 1-3 цифры, значения 0-255,
  * разделители — только '.', посторонних символов быть не должно. Используется
  * для slzb_host (IP шлюза SLZB-06p7U): мусор в этом поле не должен попадать
@@ -3940,7 +3947,7 @@ bool parse_sensor_json(const char *json_string) {
     char *aclh = mg_json_get_str(body, "$.actlowhum");
     if (aclh) { strncpy(t_dht22->actlh, aclh, sizeof(t_dht22->actlh) - 1); mg_free(aclh); }
 
-    char *info = mg_json_get_str(body, "$.info");
+    char *info = json_get_str_allow_empty(body, "$.info");
     if (info) { strncpy(t_dht22->info, info, sizeof(t_dht22->info) - 1); mg_free(info); }
 
     mg_free(sensorNumber);
@@ -3996,7 +4003,7 @@ bool parse_sensor_json(const char *json_string) {
       mg_free(aclt);
     }
 
-    char *info = mg_json_get_str(body, "$.info");
+    char *info = json_get_str_allow_empty(body, "$.info");
     if (info) {
       strncpy(t_ds18b20->sensors[sensor_index].info, info,
               sizeof(t_ds18b20->sensors[sensor_index].info) - 1);
@@ -6745,7 +6752,7 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
     PinsConf[id].send_sms[sizeof(PinsConf[id].send_sms) - 1] = '\0';
     mg_free(send_sms);
   }
-  char *info = mg_json_get_str(body, "$.info");
+  char *info = json_get_str_allow_empty(body, "$.info");
   if (info) {
     strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
     PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
@@ -8948,7 +8955,7 @@ void parse_pid_json(const char *json) {
     }
   }
 
-  char *info = mg_json_get_str(body, "$.info");
+  char *info = json_get_str_allow_empty(body, "$.info");
   if (info) {
     strncpy(PidConf[id].info, info, sizeof(PidConf[id].info) - 1);
     PidConf[id].info[sizeof(PidConf[id].info) - 1] = '\0';
@@ -10062,7 +10069,7 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
     }
 
     /* Label — требует записи на флешку */
-    char *info = mg_json_get_str(json, "$.info");
+    char *info = json_get_str_allow_empty(json, "$.info");
     if (info) {
       if (strcmp(ZigbeeConf[id].zbee_label, info) != 0) config_changed = true;
       strncpy(ZigbeeConf[id].zbee_label, info, sizeof(ZigbeeConf[id].zbee_label) - 1);
