@@ -429,14 +429,7 @@ export function TabZigbee({}) {
                                 ${language === 'ru' ? 'Управление' : 'Control'}
                               </button>
                               <button
-                                onClick=${() => {
-                                  setLearnIeee(head.zbee_ieee);
-                                  fetch('/api/zigbee/learn/start', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ ieee: head.zbee_ieee })
-                                  }).catch(err => console.error('Error starting learn:', err));
-                                }}
+                                onClick=${() => setLearnIeee(head.zbee_ieee)}
                                 style="background: linear-gradient(to right, #6366f1, #8b5cf6);"
                                 class="px-3 py-1.5 rounded-full text-xs font-bold text-white shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 hover:opacity-90"
                               >

@@ -1221,6 +1221,9 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/zigbee/learn/start"), NULL)) {
 				MG_INFO(("%lu Processing /api/zigbee/learn/start", c->id));
 				handle_zigbee_learn_start(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/learn/stop"), NULL)) {
+				MG_INFO(("%lu Processing /api/zigbee/learn/stop", c->id));
+				handle_zigbee_learn_stop(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/onoff/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/onoff/set", c->id));
 				handle_onoff_set(c, hm);

@@ -37,6 +37,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
   const [rawRanges, setRawRanges] = useState({});  // manual override: { obsKey: { min, max } }
   const [switchValues, setSwitchValues] = useState({});  // { obsKey: '1' | '0' }
   const [clickTypes, setClickTypes] = useState({});  // { obsKey: 'single' | 'double' | 'long' }
+  const [sessionTick, setSessionTick] = useState(0); // bump -> перезапуск сессии («Повторить»)
   const pollRef = useRef(null);
   const mergedRef = useRef({});
   const flashRef = useRef({});         // obsKey -> id таймера подсветки
@@ -62,6 +63,29 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
   useEffect(() => {
     return () => { Object.values(flashRef.current).forEach(clearTimeout); };
   }, []);
+
+  /* Остановка сессии обучения на контроллере при закрытии модального окна
+     (крестик, Отмена, клик по фону, успешное сохранение, смена устройства).
+     Прошивка останавливает сессию только если IEEE совпадает с активной,
+     поэтому запоздавший запрос не убьёт сессию другого устройства.
+     pagehide — на случай закрытия вкладки/ухода со страницы: cleanup React
+     при этом не гарантирован. Это подстраховка, а не замена heartbeat:
+     на мобильных браузерах pagehide срабатывает не всегда. */
+  useEffect(() => {
+    const stop = () => {
+      fetch('/api/zigbee/learn/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ieee }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+    window.addEventListener('pagehide', stop);
+    return () => {
+      window.removeEventListener('pagehide', stop);
+      stop();
+    };
+  }, [ieee]);
 
   useEffect(() => {
     let alive = true;
@@ -103,7 +127,11 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
             }
           }
           setObservations(Object.values(mergedRef.current));
-        } else if (Object.keys(mergedRef.current).length > 0) {
+        } else if (sd.ieee === ieee && sd.end_reason && sd.end_reason !== 'none') {
+          /* Сессия этого устройства завершена прошивкой (таймаут, пропажа
+             браузера, stop, сохранение) — опрос больше не нужен. На первый
+             опрос после старта не среагирует: learn/start уже отработан
+             и end_reason новой сессии — 'none'. */
           setObservations(Object.values(mergedRef.current));
           clearInterval(pollRef.current);
         }
@@ -112,13 +140,39 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
       }
     };
 
-    poll();
-    pollRef.current = setInterval(poll, 1500);
+    /* learn/start отправляется отсюда, а не из TabZigbee: к первому опросу
+       статус уже гарантированно относится к новой сессии. «Повторить»
+       (sessionTick) проходит через тот же путь. */
+    (async () => {
+      try {
+        await fetch('/api/zigbee/learn/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ieee }),
+        });
+      } catch (e) { /* упала сеть — poll покажет ошибку */ }
+      if (!alive) return;
+      poll();
+      pollRef.current = setInterval(poll, 1500);
+    })();
+
     return () => { alive = false; clearInterval(pollRef.current); };
-  }, [ieee]);
+  }, [ieee, sessionTick]);
+
+  const restart = () => {
+    setError(null);
+    setSessionTick(t => t + 1);
+  };
 
   const isActive = status?.active;
-  const timedOut = status && !status.active && status.remaining_ms === 0;
+  /* Полный таймаут приходит от прошивки (timeout_ms) — интерфейс ничего не хардкодит */
+  const learnMinutes = Math.round((status?.timeout_ms || 900000) / 60000);
+  const sameSession = status && status.ieee === ieee;
+  /* Причина завершения именно ЭТОЙ сессии (ieee сравнивается, чтобы не принять
+     конец старой сессии за конец текущей) */
+  const sessionOver = sameSession && !status.active &&
+    status.end_reason && status.end_reason !== 'none';
+  const endReason = status?.end_reason;
   const hasData = observations.length > 0;
 
   const handleSave = async () => {
@@ -184,15 +238,13 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
   };
 
   const remaining = status?.remaining_ms || 0;
-  const remainMins = Math.floor(remaining / 60000);
-  const remainSecs = Math.ceil((remaining % 60000) / 1000);
-
-  const typeIcon = (t) => ({
-    dimmer: '🔆', color_lamp: '💡', sensor: '📡',
-    trigger: '🔘', switch: '🔀', multi_ep: '🏭', cover: '🚪',
-    thermostat: '🌡️', lock: '🔒', socket: '🔌',
-    multi_ep: '✱',
-  }[t] || '🔌');
+  /* Округляем ВСЕ миллисекунды до целых секунд сразу, а уже потом делим на минуты
+     и секунды. Раньше секунды округлялись отдельно (ceil от остатка), из-за чего
+     на старте получалось «14 мин 60 сек» вместо «15 мин 00 сек». */
+  const totalSecs = Math.max(0, Math.ceil(remaining / 1000));
+  const remainMins = Math.floor(totalSecs / 60);
+  const remainSecs = totalSecs % 60;
+  const remainSecsText = remainMins > 0 ? String(remainSecs).padStart(2, '0') : String(remainSecs);
 
   const typeLabel = (t) => ({
     dimmer: lang === 'ru' ? 'Диммер' : 'Dimmer',
@@ -209,11 +261,11 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
   }[t] || t);
 
   return html`
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+    <div class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[5vh]"
          onClick=${e => e.target === e.currentTarget && onClose?.()}>
-      <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col overflow-hidden">
 
-        <div class="flex items-center justify-between px-6 py-4 border-b">
+        <div class="flex items-center justify-between px-6 py-4 border-b shrink-0">
           <h2 class="text-xl font-bold text-slate-800">
             ${savedType
               ? (lang === 'ru' ? 'Устройство определено!' : 'Device identified!')
@@ -223,11 +275,10 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                   onClick=${onClose}>×</button>
         </div>
 
-        <div class="px-6 py-4">
+        <div class="px-6 py-4 flex-1 min-h-0 overflow-y-auto">
 
           ${savedType && html`
             <div class="text-center py-8">
-              <div class="text-5xl mb-4">${typeIcon(savedType)}</div>
               <div class="text-2xl font-bold text-slate-800 mb-1">${typeLabel(savedType)}</div>
               <div class="text-sm text-slate-400 mb-4">${ieee}</div>
 
@@ -275,7 +326,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
             </div>
           `}
 
-          ${!savedType && !isActive && !timedOut && html`
+          ${!savedType && !isActive && !sessionOver && html`
             <div class="text-center py-6 text-slate-500">
               ${lang === 'ru' ? 'Ожидание...' : 'Waiting...'}
             </div>
@@ -285,47 +336,72 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
             <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
               <p class="text-sm text-amber-800 mb-2">
                 ${lang === 'ru'
-                  ? 'Автоопределение не сработало. Пожалуйста, физически подействуйте на устройство (нажмите кнопку / поверните диммер / откройте дверь) в течение следующих 5 минут.'
-                  : 'Auto-detection failed. Please physically interact with the device (press button / turn dimmer / open door) within the next 5 minutes.'}
+                  ? `Автоопределение не сработало. Пожалуйста, физически подействуйте на устройство (нажмите кнопку / поверните диммер / откройте дверь). Каждое новое нажатие обновляет таймер: если не действовать ${learnMinutes} минут, сессия завершится.`
+                  : `Auto-detection failed. Please physically interact with the device (press a button / turn the dimmer / open the door). Every new interaction refreshes the timer: if nothing is touched for ${learnMinutes} minutes, the session ends.`}
               </p>
               <p class="text-xs text-amber-600">
                 ${lang === 'ru'
-                  ? 'Во время обучения (5 мин) постарайтесь не трогать другие Zigbee-устройства — это может задержать распознавание из-за общей очереди сообщений.'
-                  : 'During learning (5 min), avoid triggering other Zigbee devices — this may delay recognition due to the shared message queue.'}
+                  ? `Во время обучения (пауза дольше ${learnMinutes} минут завершает сессию) постарайтесь не трогать другие Zigbee-устройства — это может задержать распознавание из-за общей очереди сообщений.`
+                  : `During learning (a pause longer than ${learnMinutes} min ends the session), avoid triggering other Zigbee devices — this may delay recognition due to the shared message queue.`}
               </p>
               <div class="mt-3 text-center">
                 ${remainMins > 0 && html`
                   <span class="text-3xl font-mono font-bold text-amber-600">${remainMins}</span>
                   <span class="text-sm text-amber-500 ml-1">${lang === 'ru' ? 'мин' : 'min'}</span>
                 `}
-                <span class="text-3xl font-mono font-bold text-amber-600">${remainSecs}</span>
+                <span class="text-3xl font-mono font-bold text-amber-600">${remainSecsText}</span>
                 <span class="text-sm text-amber-500 ml-1">${lang === 'ru' ? 'сек' : 'sec'}</span>
               </div>
             </div>
           `}
 
-          ${timedOut && !hasData && html`
+          ${sessionOver && !savedType && html`
             <div class="text-center py-6">
-              <div class="text-4xl mb-3">📭</div>
-              <p class="text-slate-600 mb-1">
-                ${lang === 'ru'
-                  ? 'Устройство ничего не публикует в MQTT.'
-                  : 'Device publishes nothing to MQTT.'}
-              </p>
-              <p class="text-xs text-slate-400">
-                ${lang === 'ru'
-                  ? 'Возможно, устройство не поддерживает Zigbee или находится слишком далеко от координатора.'
-                  : 'The device may not support Zigbee or may be too far from the coordinator.'}
-              </p>
+              ${endReason === 'heartbeat' && html`
+                <p class="text-slate-600 mb-1">
+                  ${lang === 'ru'
+                    ? 'Связь с браузером прервалась — сессия обучения остановлена.'
+                    : 'Browser connection was lost — the learning session was stopped.'}
+                </p>
+              `}
+              ${endReason === 'timeout' && !hasData && html`
+                <p class="text-slate-600 mb-1">
+                  ${lang === 'ru'
+                    ? 'Устройство ничего не публиковало в MQTT.'
+                    : 'Device published nothing to MQTT.'}
+                </p>
+                <p class="text-xs text-slate-400 mb-1">
+                  ${lang === 'ru'
+                    ? 'Возможно, устройство не поддерживает Zigbee или находится слишком далеко от координатора.'
+                    : 'The device may not support Zigbee or may be too far from the coordinator.'}
+                </p>
+              `}
+              ${endReason === 'timeout' && hasData && html`
+                <p class="text-slate-600 mb-1">
+                  ${lang === 'ru'
+                    ? `Пауза без нажатий превысила ${learnMinutes} минут — сессия завершена. Уже увиденное осталось в таблице ниже.`
+                    : `No presses for over ${learnMinutes} minutes — the session ended. What was observed is kept in the table below.`}
+                </p>
+              `}
+              ${(endReason === 'stopped' || endReason === 'saved') && html`
+                <p class="text-slate-600 mb-1">
+                  ${lang === 'ru' ? 'Сессия обучения остановлена.' : 'The learning session was stopped.'}
+                </p>
+              `}
+              <button class="mt-3 px-6 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+                      onClick=${restart}>
+                ${lang === 'ru' ? 'Повторить' : 'Retry'}
+              </button>
             </div>
           `}
 
-          ${(isActive || timedOut) && hasData && html`
+          ${(isActive || sessionOver) && hasData && html`
             <div class="mb-4">
               <p class="text-sm text-slate-500 mb-2">
                 ${lang === 'ru' ? 'Мы увидели:' : 'We observed:'}
               </p>
-              <table class="w-full text-sm">
+              <div class="overflow-x-auto">
+              <table class="w-full text-sm [&_th]:border-0 [&_td]:border-0 [&_th]:px-2 [&_td]:px-2">
                 <thead>
                   <tr class="text-left text-slate-500 border-b">
                     <th class="py-2">EP</th>
@@ -349,7 +425,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                       </td>
                       <td class="py-2">
                         <input type="text"
-                               class="border rounded px-2 py-1 text-sm w-full"
+                               class="border rounded px-2 py-1 text-sm w-full min-w-[9rem]"
                                placeholder="${lang === 'ru' ? 'Появится в Info (напр. Кухня - Вкл)' : 'Shown in Info (e.g. Kitchen - On)'}"
                                value=${names[obsKey(o)] || ''}
                                onInput=${e => setNames(prev => ({
@@ -358,7 +434,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                                }))} />
                       </td>
                       <td class="py-2">
-                        <div class="flex items-center gap-1">
+                        <div class="flex flex-wrap items-center gap-1">
                           <select class="border rounded px-2 py-1 text-sm bg-white"
                                   value=${labels[obsKey(o)] || 'ignore'}
                                   onChange=${e => setLabels(prev => ({
@@ -419,7 +495,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                       </td>
                       <td class="py-2">
                         <input type="text"
-                               class="border rounded px-2 py-1 text-sm w-full"
+                               class="border rounded px-2 py-1 text-sm w-full min-w-[9rem]"
                                placeholder="${lang === 'ru' ? 'Появится в Info (напр. Яркость)' : 'Shown in Info (e.g. Brightness)'}"
                                value=${names[obsKey(o)] || ''}
                                onInput=${e => setNames(prev => ({
@@ -428,7 +504,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                                }))} />
                       </td>
                       <td class="py-2">
-                        <div class="flex items-center gap-1">
+                        <div class="flex flex-wrap items-center gap-1">
                           <select class="border rounded px-2 py-1 text-sm bg-white"
                                   value=${labels[obsKey(o)] || 'ignore'}
                                   onChange=${e => setLabels(prev => ({
@@ -461,13 +537,14 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
                   `)}
                 </tbody>
               </table>
+              </div>
             </div>
           `}
 
           ${observations.some(o => labels[obsKey(o)] === 'switch') && html`
             <details open class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm text-blue-900">
               <summary class="cursor-pointer font-medium">
-                💡 ${lang === 'ru' ? 'Как настроить выключатель — простыми словами' : 'How to set up a switch — in plain words'}
+                ${lang === 'ru' ? 'Как настроить выключатель — простыми словами' : 'How to set up a switch — in plain words'}
               </summary>
               <div class="mt-3 space-y-3">
                 <p>
@@ -478,7 +555,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
 
                 <div class="bg-white rounded-lg p-3 border border-blue-100">
                   <div class="font-medium mb-1">
-                    🔘 ${lang === 'ru' ? 'Появилась ОДНА строка — «Toggle (одна кнопка)»' : 'ONE row appeared — “Toggle (single button)”'}
+                    ${lang === 'ru' ? 'Появилась ОДНА строка — «Toggle (одна кнопка)»' : 'ONE row appeared — “Toggle (single button)”'}
                   </div>
                   <p class="text-blue-800">
                     ${lang === 'ru'
@@ -489,7 +566,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
 
                 <div class="bg-white rounded-lg p-3 border border-blue-100">
                   <div class="font-medium mb-1">
-                    🔀 ${lang === 'ru' ? 'Появились ДВЕ разные строки — «1 (Вкл)» и «0 (Выкл)»' : 'TWO different rows appeared — “1 (On)” and “0 (Off)”'}
+                    ${lang === 'ru' ? 'Появились ДВЕ разные строки — «1 (Вкл)» и «0 (Выкл)»' : 'TWO different rows appeared — “1 (On)” and “0 (Off)”'}
                   </div>
                   <p class="text-blue-800">
                     ${lang === 'ru'
@@ -543,7 +620,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
             return html`
               <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-sm">
                 <div class="flex items-center gap-2 text-amber-700 font-medium mb-1">
-                  💡 ${lang === 'ru' ? 'Определение диапазона диммера' : 'Dimmer range detection'}
+                  ${lang === 'ru' ? 'Определение диапазона диммера' : 'Dimmer range detection'}
                 </div>
                 <div class="text-amber-600 mb-3">
                   ${lang === 'ru'
@@ -630,7 +707,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
           })()}
         </div>
 
-        <div class="flex justify-end gap-3 px-6 py-4 border-t">
+        <div class="flex justify-end gap-3 px-6 py-4 border-t shrink-0 bg-white">
           <button class="px-4 py-2 rounded-lg border text-sm"
                   onClick=${onClose}>
             ${lang === 'ru' ? 'Отмена' : 'Cancel'}

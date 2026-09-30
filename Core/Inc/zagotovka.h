@@ -184,13 +184,13 @@ void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm);
 void handle_zigbee_rescan(struct mg_connection *c, struct mg_http_message *hm);
 void SendZigbeeReadProbe(const char *ieee, uint8_t ep);
 void SendZigbeeReadProbeAllEndpoints(const char *ieee);
-void SendZigbeeReadProbeInteractive(const char *ieee);
 void zbee_probe_check_timeout(void);
 void zbee_learn_check_timeout(void);
 void handle_zigbee_learn_status(struct mg_connection *c, struct mg_http_message *hm);
 void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *hm);
 void handle_zigbee_learn_start(struct mg_connection *c, struct mg_http_message *hm);
+void handle_zigbee_learn_stop(struct mg_connection *c, struct mg_http_message *hm);
 bool zbee_is_valid_ieee(const char *s);
 
 void calc_display_id(int parent_id, int zbee_slot, int trigger_index,

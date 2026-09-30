@@ -4358,7 +4358,6 @@ typedef struct {
     uint8_t  sent_this_stage;
     uint8_t  retry_count;
     uint8_t  pending;
-    uint8_t  allow_learning;
 } ZigbeeProbe;
 
 static ZigbeeProbe *s_zbee_probe_pool = NULL;  /* выделяется в DTCM в zagotovka_dtcm_init() */
@@ -4417,8 +4416,26 @@ static bool zbee_probe_active_for(const char *ieee, uint8_t ep) {
 }
 
 /* ── LEARNING_MODE: объявления (полные тела — после mqtt_zigbee_handler) ── */
-#define ZBEE_LEARN_TIMEOUT_MS   300000
+#define ZBEE_LEARN_TIMEOUT_MS      900000u  /* 15 мин БЕЗ нажатий/данных — окно скользящее:
+                                               каждое нажатие кнопки/новые данные
+                                               обновляют отсчёт (см. zbee_learn_observe) */
+#define ZBEE_LEARN_TOTAL_MAX_MS   7200000u  /* жёсткий потолок всей сессии: 2 часа */
+#define ZBEE_LEARN_HEARTBEAT_MS    90000u  /* нет опросов learn/status -> браузер ушёл.
+                                              90 сек, а не 60: фоновые вкладки Chrome
+                                              тормозят таймеры до 1 опроса/мин, 60 сек
+                                              — ровно впритык, будут ложные завершения */
 #define ZBEE_LEARN_MAX_OBS      16
+
+/* Причина завершения сессии (end_reason в /api/zigbee/learn/status) */
+#define ZBEE_END_NONE       0
+#define ZBEE_END_TIMEOUT    1
+#define ZBEE_END_STOPPED    2
+#define ZBEE_END_HEARTBEAT  3
+#define ZBEE_END_SAVED      4
+
+static const char *const k_learn_end_reason[] = {
+    "none", "timeout", "stopped", "heartbeat", "saved"
+};
 
 typedef struct {
     uint8_t  used;
@@ -4440,8 +4457,11 @@ typedef struct {
 
 typedef struct {
     char     ieee[17];
-    uint32_t started_at;
+    uint32_t started_at;        /* последнее нажатие/данные — скользящее окно 15 мин */
+    uint32_t total_started_at;  /* старт сессии — жёсткий потолок 2 часа */
+    uint32_t last_poll_tick;    /* последний опрос learn/status|get — пульс браузера */
     uint8_t  active;
+    uint8_t  end_reason;
     ZigbeeLearnObs obs[ZBEE_LEARN_MAX_OBS];
 } ZigbeeLearnSession;
 
@@ -4449,6 +4469,8 @@ static ZigbeeLearnSession s_zbee_learn = {0};
 static ZigbeeLearnObs *obs_copy = NULL;  /* DTCM, выделяется в zbee_learn_dtcm_init();
                                             всегда полностью memcpy перед чтением */
 static void zbee_learn_start(const char *ieee);
+static void zbee_learn_finish(uint8_t reason);
+static void zbee_learn_unsub(void);
 static void zbee_learn_observe(uint16_t ep, uint16_t cluster, uint16_t attr, int val);
 static void zbee_learn_observe_trigger(const char *payload);
 
@@ -4482,21 +4504,16 @@ static void zbee_probe_finalize_slot(int slot) {
     }
 
     uint8_t flags = ZBEE_CL_ONOFF;
-    uint8_t any_actuator = 0;
     for (int s = 0; s < ZBEE_PROBE_NUM_STAGES; s++) {
         if (p->sent[s] && p->seen[s]) {
             flags |= zbee_probe_cl_bit[s];
-            any_actuator = 1;
         }
     }
 
-    uint8_t role = ZigbeeConf[zbi].zbee_role;
-    if (!any_actuator &&
-        role != ZBEE_ROLE_SENSOR &&
-        p->allow_learning &&
-        !s_zbee_learn.active) {
-        zbee_learn_start(p->ieee);
-    }
+    /* Режим обучения НИКОГДА не запускается автоматически из зонда: сессия
+     * должна начинаться только по явному действию пользователя — открытому
+     * окну обучения (handle_zigbee_learn_start). Иначе сессия стартует без
+     * открытого окна, никто не опрашивает learn/status и heartbeat её гасит. */
 
     taskENTER_CRITICAL();
     ZigbeeConf[zbi].cluster_flags = flags;
@@ -4674,16 +4691,6 @@ void SendZigbeeReadProbe(const char *ieee, uint8_t ep) {
 void SendZigbeeReadProbeAllEndpoints(const char *ieee) {
     for (uint8_t ep = 1; ep <= 4; ep++) {
         SendZigbeeReadProbe(ieee, ep);
-    }
-}
-
-void SendZigbeeReadProbeInteractive(const char *ieee) {
-    SendZigbeeReadProbeAllEndpoints(ieee);
-    for (int i = 0; i < ZBEE_PROBE_POOL_SIZE; i++) {
-        if (s_zbee_probe_pool[i].pending &&
-            strcmp(s_zbee_probe_pool[i].ieee, ieee) == 0) {
-            s_zbee_probe_pool[i].allow_learning = 1;
-        }
     }
 }
 
@@ -5071,6 +5078,8 @@ static void zbee_learn_start(const char *ieee) {
     memset(&s_zbee_learn, 0, sizeof(s_zbee_learn));
     strncpy(s_zbee_learn.ieee, ieee, sizeof(s_zbee_learn.ieee) - 1);
     s_zbee_learn.started_at = HAL_GetTick();
+    s_zbee_learn.total_started_at = s_zbee_learn.started_at;
+    s_zbee_learn.last_poll_tick = s_zbee_learn.started_at;
     s_zbee_learn.active = 1;
 
     if (s_conn && !s_conn->is_closing) {
@@ -5094,6 +5103,10 @@ static void zbee_learn_start(const char *ieee) {
 
 static void zbee_learn_observe(uint16_t ep, uint16_t cluster, uint16_t attr, int val) {
     if (!s_zbee_learn.active) return;
+    /* Скользящее окно: любая активность устройства продлевает сессию.
+       Для пульта со 100 кнопками лимитом является пауза между нажатиями,
+       а не общее время обучения (пожилой пользователь, темп нажатий). */
+    s_zbee_learn.started_at = HAL_GetTick();
 
     for (int i = 0; i < ZBEE_LEARN_MAX_OBS; i++) {
         ZigbeeLearnObs *o = &s_zbee_learn.obs[i];
@@ -5119,6 +5132,9 @@ static void zbee_learn_observe(uint16_t ep, uint16_t cluster, uint16_t attr, int
 
 static void zbee_learn_observe_trigger(const char *payload) {
     if (!s_zbee_learn.active) return;
+    /* Скользящее окно: повторное нажатие тоже продлевает сессию
+       (пользователь проверяет уже обученные кнопки) */
+    s_zbee_learn.started_at = HAL_GetTick();
 
     for (int i = 0; i < ZBEE_LEARN_MAX_OBS; i++) {
         ZigbeeLearnObs *o = &s_zbee_learn.obs[i];
@@ -5141,11 +5157,49 @@ static void zbee_learn_observe_trigger(const char *payload) {
     }
 }
 
+/* Отписаться от учебных топиков. Нужны только на время сессии:
+ * штатная работа устройства обеспечивается подписками, которые net.c
+ * восстанавливает при каждом MG_EV_MQTT_OPEN по cluster_flags/role,
+ * а глобальный wildcard {rxzbtop}/# подписан всегда и доставляет
+ * все data/trigger топики и между коннектами. */
+static void zbee_learn_unsub(void) {
+    extern struct mg_connection * volatile s_conn;
+    extern int s_qos;
+    if (!s_conn || s_conn->is_closing) return;
+
+    struct mg_mqtt_opts opts;
+    char subt[80];
+
+    memset(&opts, 0, sizeof(opts));
+    snprintf(subt, sizeof(subt), "%s/data/%s/#", get_rxzbtop(), s_zbee_learn.ieee);
+    opts.topic = mg_str(subt);
+    opts.qos = s_qos;
+    mg_mqtt_unsub(s_conn, &opts);
+
+    memset(&opts, 0, sizeof(opts));
+    snprintf(subt, sizeof(subt), "%s/trigger/%s", get_rxzbtop(), s_zbee_learn.ieee);
+    opts.topic = mg_str(subt);
+    opts.qos = s_qos;
+    mg_mqtt_unsub(s_conn, &opts);
+}
+
+static void zbee_learn_finish(uint8_t reason) {
+    if (!s_zbee_learn.active) return;
+    s_zbee_learn.active = 0;
+    s_zbee_learn.end_reason = reason;
+    LOG_Z2M("zbee: LEARNING_MODE END ieee=%s reason=%s\r\n",
+            s_zbee_learn.ieee, k_learn_end_reason[reason]);
+    zbee_learn_unsub();
+}
+
 void zbee_learn_check_timeout(void) {
     if (!s_zbee_learn.active) return;
-    if (HAL_GetTick() - s_zbee_learn.started_at > ZBEE_LEARN_TIMEOUT_MS) {
-        s_zbee_learn.active = 0;
-        LOG_Z2M("zbee: LEARNING_MODE DONE ieee=%s\r\n", s_zbee_learn.ieee);
+    uint32_t now = HAL_GetTick();
+    if (now - s_zbee_learn.total_started_at > ZBEE_LEARN_TOTAL_MAX_MS ||
+        now - s_zbee_learn.started_at > ZBEE_LEARN_TIMEOUT_MS) {
+        zbee_learn_finish(ZBEE_END_TIMEOUT);
+    } else if (now - s_zbee_learn.last_poll_tick > ZBEE_LEARN_HEARTBEAT_MS) {
+        zbee_learn_finish(ZBEE_END_HEARTBEAT);
     }
 }
 
@@ -5154,21 +5208,29 @@ void zbee_learn_check_timeout(void) {
 void handle_zigbee_learn_status(struct mg_connection *c, struct mg_http_message *hm) {
     uint32_t remaining = 0;
     if (s_zbee_learn.active) {
+        s_zbee_learn.last_poll_tick = HAL_GetTick();  /* пульс браузера */
         uint32_t elapsed = HAL_GetTick() - s_zbee_learn.started_at;
         remaining = (elapsed < ZBEE_LEARN_TIMEOUT_MS)
                   ? (ZBEE_LEARN_TIMEOUT_MS - elapsed) : 0;
     }
+    /* ieee отдаётся и после завершения сессии: интерфейс сравнивает его со своим
+       ieee и по end_reason атрибутирует причину завершения правильной сессии */
     mg_http_reply(c, 200, "Content-Type: application/json\r\n",
-                  "{\"active\":%s,\"ieee\":\"%s\",\"remaining_ms\":%lu}",
+                  "{\"active\":%s,\"ieee\":\"%s\",\"remaining_ms\":%lu,"
+                  "\"timeout_ms\":%lu,\"end_reason\":\"%s\"}",
                   s_zbee_learn.active ? "true" : "false",
-                  s_zbee_learn.active ? s_zbee_learn.ieee : "",
-                  (unsigned long)remaining);
+                  s_zbee_learn.ieee,
+                  (unsigned long)remaining,
+                  (unsigned long)ZBEE_LEARN_TIMEOUT_MS,
+                  k_learn_end_reason[s_zbee_learn.end_reason]);
 }
 
 void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm) {
     char *body = (char *)dtcm_zbee_body;
     int off = 0;
     int safe_limit = (int)DTCM_BUF_ZBEE_BODY - 128;
+
+    if (s_zbee_learn.active) s_zbee_learn.last_poll_tick = HAL_GetTick();
 
     char ieee_copy[18] = {0};
     uint8_t active_copy;
@@ -6084,8 +6146,11 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
         ZigbeeConf[zbi].zbee_role = new_role;
         if (ZigbeeConf[zbi].ep == 0) ZigbeeConf[zbi].ep = 1;
     }
+    s_zbee_learn.end_reason = ZBEE_END_SAVED;
     s_zbee_learn.active = 0;
     taskEXIT_CRITICAL();
+
+    zbee_learn_unsub();  /* учебные подписки больше не нужны: устройство настроено */
 
     extern volatile uint32_t g_ver_zigbee;
     mark_slice_dirty(&g_ver_zigbee);
@@ -6130,6 +6195,23 @@ void handle_zigbee_learn_start(struct mg_connection *c, struct mg_http_message *
 
     mg_http_reply(c, 200, "Content-Type: application/json\r\n",
                   "{\"status\":true,\"message\":\"Learning mode started\"}");
+}
+
+/* Явная остановка сессии при закрытии окна обучения. Идемпотентный: всегда 200,
+   чужую сессию не трогает (сравнение ieee). Дубликат stop не вреден. */
+void handle_zigbee_learn_stop(struct mg_connection *c, struct mg_http_message *hm) {
+    char body[128];
+    snprintf(body, sizeof(body), "%.*s", (int)hm->body.len, hm->body.buf);
+    struct mg_str json = mg_str(body);
+
+    char *ieee = mg_json_get_str(json, "$.ieee");
+    if (s_zbee_learn.active && ieee && strcmp(ieee, s_zbee_learn.ieee) == 0) {
+        zbee_learn_finish(ZBEE_END_STOPPED);
+    }
+    if (ieee) mg_free(ieee);
+
+    mg_http_reply(c, 200, "Content-Type: application/json\r\n",
+                  "{\"status\":true}");
 }
 
 void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
@@ -10026,7 +10108,7 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
         if (ieee_changed && ZigbeeConf[id].zbee_ieee[0] != '\0') {
             /* Новый/изменённый IEEE — сбрасываем флаги и запускаем зонд */
             ZigbeeConf[id].cluster_flags = 0;
-            SendZigbeeReadProbeInteractive(ZigbeeConf[id].zbee_ieee);
+            SendZigbeeReadProbeAllEndpoints(ZigbeeConf[id].zbee_ieee);
         }
       }
       mg_free(ieee);
@@ -10243,12 +10325,13 @@ void handle_zigbee_rescan(struct mg_connection *c, struct mg_http_message *hm) {
     return;
   }
 
-  /* Сбрасываем флаги и запускаем зонд */
+  /* Сбрасываем флаги и запускаем зонд; режим обучения стартует ТОЛЬКО из
+   * открытого окна обучения (handle_zigbee_learn_start) */
   taskENTER_CRITICAL();
   ZigbeeConf[id].cluster_flags = 0;
-  s_zbee_learn.active = 0;  /* сброс предыдущей сессии обучения */
   taskEXIT_CRITICAL();
-  SendZigbeeReadProbeInteractive(ZigbeeConf[id].zbee_ieee);
+  zbee_learn_finish(ZBEE_END_STOPPED);  /* гасим активную сессию (+отписка от учебных топиков) */
+  SendZigbeeReadProbeAllEndpoints(ZigbeeConf[id].zbee_ieee);
 
   LOG_Z2M("zbee: RESCAN triggered for id=%d ieee='%s'\r\n", id, ZigbeeConf[id].zbee_ieee);
 
