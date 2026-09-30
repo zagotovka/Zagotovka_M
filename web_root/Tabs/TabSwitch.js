@@ -440,11 +440,11 @@ function TabSwitch({ }) {
         </div>
         <div>
           <h2 class="text-xl font-bold mb-2">Сколько устройств можно подключить (Device connection)</h2>
-          <p class="mb-2">Представьте, что в системе есть <b>1024 «места» для подключений</b>. Они <b>общие</b> для всех выключателей, энкодеров и кнопок (у кнопок это ссылка Connection на странице Button pin). Каждое устройство (пин или Zigbee), которое вы подключаете к любому выключателю, занимает одно такое место.</p>
+          <p class="mb-2">Представьте, что в системе есть <b>1024 «места» для подключений</b>. Каждое устройство (пин или Zigbee), которое вы подключаете к любому выключателю, занимает одно такое место.</p>
           <p class="mb-2"><b>Ограничения на один выключатель нет.</b> К выключателю с id = 27 можно подключить и 1, и 4, и 50 устройств — главное, чтобы во всей системе в сумме не набралось больше 1024.</p>
-          <p class="mb-2"><b>Пример:</b> если на странице «Switch(es) pin(s)» вы подключили в общей сумме 57 устройств, то для энкодеров и для кнопок (ссылка Connection на странице Button pin) остаётся только <b>967 свободных мест</b> (1024 − 57 = 967).</p>
+          <p class="mb-2"><b>Пример:</b> если на странице «Switch(es) pin(s)» вы подключили в общей сумме 57 устройств, то остаётся <b>967 свободных мест</b> (1024 − 57 = 967).</p>
           <div class="mt-2 text-sm text-slate-500">
-            Примечания: (1) Нажатие на красное <b>[x]</b> удаляет подключение и освобождает место. (2) Когда все 1024 места заняты, новое подключение не добавится (приложение вернёт ошибку) — сначала удалите ненужные. (3) Поля Action на странице Button pin (строки вида ID:Action) в этот лимит не входят — считаются только подключения через ссылку Connection. (4) После перезагрузки устройство само восстанавливает все сохранённые подключения — новых мест они не занимают.
+            Примечания: (1) Нажатие на красное <b>[x]</b> удаляет подключение и освобождает место. (2) Когда все 1024 места заняты, новое подключение не добавится (приложение вернёт ошибку) — сначала удалите ненужные. (3) Эти же 1024 места использует поле PWM connection на странице Encoder pin. (4) После перезагрузки устройство само восстанавливает все сохранённые подключения — новых мест они не занимают.
           </div>
         </div>
       </div>
@@ -573,11 +573,11 @@ function TabSwitch({ }) {
         </div>
         <div>
           <h2 class="text-xl font-bold mb-2">How many devices can be connected (Device connection)</h2>
-          <p class="mb-2">Think of it as <b>1024 "slots" for connections</b> in the whole system. They are <b>shared</b> by all switches, encoders and buttons (for buttons, it is the Connection link on the Button pin page). Every device (pin or Zigbee) you connect to any switch takes one slot.</p>
+          <p class="mb-2">Think of it as <b>1024 "slots" for connections</b> in the whole system. Every device (pin or Zigbee) you connect to any switch takes one slot.</p>
           <p class="mb-2"><b>There is no limit per switch.</b> The switch with id = 27 can have 1, 4 or 50 devices connected — as long as the total across the whole system does not exceed 1024.</p>
-          <p class="mb-2"><b>Example:</b> if you have connected 57 devices in total on the "Switch(es) pin(s)" page, only <b>967 free slots</b> are left for encoders and for buttons (the Connection link on the Button pin page) (1024 − 57 = 967).</p>
+          <p class="mb-2"><b>Example:</b> if you have connected 57 devices in total on the "Switch(es) pin(s)" page, <b>967 free slots</b> are left (1024 − 57 = 967).</p>
           <div class="mt-2 text-sm text-slate-500">
-            Notes: (1) Clicking the red <b>[x]</b> removes a connection and frees a slot. (2) When all 1024 slots are used, a new connection will not be added (the device returns an error) — remove unused ones first. (3) The Action fields on the Button pin page (ID:Action strings) do not count towards this limit — only connections made via the Connection link do. (4) After a reboot the device restores all saved connections by itself — they do not take any extra slots.
+            Notes: (1) Clicking the red <b>[x]</b> removes a connection and frees a slot. (2) When all 1024 slots are used, a new connection will not be added (the device returns an error) — remove unused ones first. (3) The PWM connection field on the Encoder pin page uses the same 1024 slots. (4) After a reboot the device restores all saved connections by itself — they do not take any extra slots.
           </div>
         </div>
       </div>

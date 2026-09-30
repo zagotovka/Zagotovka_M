@@ -20,10 +20,6 @@ const ModalButton = ({
   const [sclick, setSclick] = useState(selectedButton?.sclick || selectedButton?.action || '');
   const [dclick, setDclick] = useState(selectedButton?.dclick || '');
   const [lpress, setLpress] = useState(selectedButton?.lpress || '');
-  const [pinOptions, setPinOptions] = useState([]);
-  const [selectedConnection, setSelectedConnection] = useState(
-    selectedButton?.setrpins || ''
-  );
   const [errors, setErrors] = useState({
     sclick: null,
     dclick: null,
@@ -59,62 +55,8 @@ const ModalButton = ({
     }
   };
 
-  useEffect(() => {
-    // limit=100 обязателен: без него бэкенд отдаёт только пины с ID 0-29
-    // (дефолт offset=0, limit=30 в handle_select_get), из-за чего пины
-    // с ID >= 30 не попадали в pinOptions и связи для них могли тихо сбрасываться.
-    fetch('/api/select/get?limit=100')
-      .then((response) => response.json())
-      .then((response) => {
-        const data = response.data || response;
-        if (Array.isArray(data)) {
-          setPinOptions(data.filter((pin) => pin.topin === 2 || pin.topin === 11));
-        } else {
-          setPinOptions([]);
-        }
-      })
-      .catch((error) => {
-        console.error('Error fetching pin config:', error);
-        setPinOptions([]);
-      });
-  }, []);
-
   const handleSubmit = (e) => {
     e.preventDefault();
-
-    // ── Connection: раньше это поле вообще не отправлялось на STM32 ──
-    // (onChange только обновлял локальный state и закрывал модалку, а
-    // handleSubmit слал объект без setrpins/pinact). Теперь собираем и
-    // реально сохраняем через /api/button/set.
-    if (modalType === 'connection') {
-      const selectedPin = pinOptions.find(
-        (pin) => pin.pins === selectedConnection || pin.id.toString() === selectedConnection
-      );
-
-      const jsonData = {
-        id: selectedButton.id,
-        pins: selectedButton.pins,
-        setrpins: selectedConnection,
-        pinact: selectedPin ? { [selectedPin.id]: selectedPin.pins } : {}
-      };
-
-      fetch('/api/button/set', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(jsonData)
-      })
-        .then((response) => response.json())
-        .then((data) => {
-          onButtonChange({ ...selectedButton, ...jsonData });
-          hideModal();
-        })
-        .catch((error) => {
-          console.error('Error:', error);
-          setSubmitError('Failed to save changes. Please try again.');
-        });
-
-      return;
-    }
 
     // ── Edit (без изменений) ──
     if (Object.values(errors).some((error) => error !== null)) {
@@ -156,57 +98,6 @@ const ModalButton = ({
     setButtonInfo('');
     setOnOff(0);
     setErrors({ sclick: null, dclick: null, lpress: null });
-  };
-
-  const renderConnectionModal = () => {
-    const displayId = selectedButton.display_id || selectedButton.id;
-
-    return html`
-    <form onSubmit=${handleSubmit}>
-      <div class="modal-body">
-        <table class="table-auto w-full">
-          <tbody>
-            <tr class="bg-gray-200">
-              <td class="p-2 font-bold">ID</td>
-              <td class="p-2">${displayId}</td>
-            </tr>
-            <tr class="bg-white">
-              <td class="p-2 font-bold">Pin</td>
-              <td class="p-2">${selectedButton.pins}</td>
-            </tr>
-            <tr class="bg-gray-200">
-              <td class="p-2 font-bold">Connection</td>
-              <td class="p-2">
-                <select
-                  name="setrpins"
-                  value=${pinOptions.some(opt => opt.pins === selectedConnection || opt.id.toString() === selectedConnection) ? selectedConnection : ''}
-                  onChange=${(e) => setSelectedConnection(e.target.value)}
-                  class="border rounded p-2 w-full"
-                >
-                  <option value="">Select a connection</option>
-                  ${pinOptions.map(
-        (option) => html`
-                      <option value=${option.topin === 11 ? option.id : option.pins}>
-                        ${option.pins || option.zbee_label || 'Pin ' + option.id} (ID: ${option.id})
-                      </option>
-                    `
-      )}
-                </select>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="modal-footer flex justify-end mt-4">
-        <button
-          type="submit"
-          class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Save changes
-        </button>
-      </div>
-    </form>
-  `;
   };
 
   const renderEditModal = () => {
@@ -331,9 +222,7 @@ const ModalButton = ({
             Close
           </button>
         </div>
-        ${page === 'TabButton' && modalType === 'connection'
-      ? renderConnectionModal()
-      : renderEditModal()}
+        ${renderEditModal()}
       </div>
     </div>
   `;

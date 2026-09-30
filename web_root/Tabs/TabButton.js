@@ -86,16 +86,12 @@ function initGlobalTooltip() {
 // ---------------------------------------------------------------------------
 
 const TabButton = () => {
-  const [buttonData, setButtonData] = useState(null);
-  const [pintopin, setPintopin] = useState([]);
   const [varbutton, setButton] = useState(null);
-  const [saveResult, setSaveResult] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState(null);
   const [selectedButton, setSelectedButton] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
   const [language, setLanguage] = useState('ru');
-  const [debugInfo, setDebugInfo] = useState('');
   const isPendingOnOff = useRef(false);
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => { initGlobalTooltip(); }, []);
@@ -259,6 +255,30 @@ const TabButton = () => {
           </table>
           <div class="mt-2 text-sm text-slate-500">
             Примечание: При желании, вы можете использовать цифровые команды (30#3*#, 30#4*#, 30#5*#) в том числе и в SMS-сообщениях.
+          </div>
+        </div>
+        <div>
+          <h2 class="text-xl font-bold mb-2">Сколько устройств можно подключить (SINGLE CLICK)</h2>
+          <p class="mb-2">В поле SINGLE CLICK записывается, что произойдёт при <b>одном нажатии</b> на кнопку. Можно указать сразу несколько устройств через запятую — <b>примерно 25 штук</b>.</p>
+          <p class="mb-2"><b>Пример:</b> запись <b>6:1,7:0,12:2</b> означает: включить устройство №6, выключить №7, переключить №12.</p>
+          <div class="mt-2 text-sm text-slate-500">
+            Примечания: (1) После двоеточия: 0 — выключить, 1 — включить, 2 — переключить на противоположное. (2) Записывать без пробелов. (3) Точный предел — 124 символа: до 31 устройства с однозначными номерами, до 25 с двузначными, до 20 с трёхзначными.
+          </div>
+        </div>
+        <div>
+          <h2 class="text-xl font-bold mb-2">Сколько устройств можно подключить (DOUBLE CLICK)</h2>
+          <p class="mb-2">В поле DOUBLE CLICK записывается, что произойдёт при <b>двух быстрых нажатиях подряд</b>. Можно указать сразу несколько устройств через запятую — <b>примерно 25 штук</b>.</p>
+          <p class="mb-2"><b>Пример:</b> запись <b>6:0,7:0,8:0,9:0</b> означает: выключить устройства №6, №7, №8 и №9.</p>
+          <div class="mt-2 text-sm text-slate-500">
+            Примечания: (1) После двоеточия: 0 — выключить, 1 — включить, 2 — переключить на противоположное. (2) Записывать без пробелов. (3) Точный предел — 124 символа: до 31 устройства с однозначными номерами, до 25 с двузначными, до 20 с трёхзначными.
+          </div>
+        </div>
+        <div>
+          <h2 class="text-xl font-bold mb-2">Сколько устройств можно подключить (LONG PRESS)</h2>
+          <p class="mb-2">В поле LONG PRESS записывается, что произойдёт при <b>удержании</b> кнопки. Можно указать сразу несколько устройств через запятую — <b>примерно 25 штук</b>.</p>
+          <p class="mb-2"><b>Пример:</b> запись <b>6:0,7:0,12:0,15:0</b> означает: «выключить всё»: устройства №6, №7, №12 и №15 выключатся одним долгим нажатием.</p>
+          <div class="mt-2 text-sm text-slate-500">
+            Примечания: (1) После двоеточия: 0 — выключить, 1 — включить, 2 — переключить на противоположное. (2) Записывать без пробелов. (3) Точный предел — 124 символа: до 31 устройства с однозначными номерами, до 25 с двузначными, до 20 с трёхзначными.
           </div>
         </div>
         <div>
@@ -436,6 +456,30 @@ const TabButton = () => {
           </div>
         </div>
         <div>
+          <h2 class="text-xl font-bold mb-2">How many devices can be connected (SINGLE CLICK)</h2>
+          <p class="mb-2">The SINGLE CLICK field defines what happens on <b>one press</b> of the button. You can list several devices at once, separated by commas — <b>about 25</b>.</p>
+          <p class="mb-2"><b>Example:</b> <b>6:1,7:0,12:2</b> means: turn on device #6, turn off #7, toggle #12.</p>
+          <div class="mt-2 text-sm text-slate-500">
+            Notes: (1) After the colon: 0 — turn off, 1 — turn on, 2 — toggle to the opposite state. (2) Write without spaces. (3) The exact limit is 124 characters: up to 31 devices with one-digit numbers, up to 25 with two-digit numbers, up to 20 with three-digit numbers.
+          </div>
+        </div>
+        <div>
+          <h2 class="text-xl font-bold mb-2">How many devices can be connected (DOUBLE CLICK)</h2>
+          <p class="mb-2">The DOUBLE CLICK field defines what happens on <b>two quick presses in a row</b>. You can list several devices at once, separated by commas — <b>about 25</b>.</p>
+          <p class="mb-2"><b>Example:</b> <b>6:0,7:0,8:0,9:0</b> means: turn off devices #6, #7, #8 and #9.</p>
+          <div class="mt-2 text-sm text-slate-500">
+            Notes: (1) After the colon: 0 — turn off, 1 — turn on, 2 — toggle to the opposite state. (2) Write without spaces. (3) The exact limit is 124 characters: up to 31 devices with one-digit numbers, up to 25 with two-digit numbers, up to 20 with three-digit numbers.
+          </div>
+        </div>
+        <div>
+          <h2 class="text-xl font-bold mb-2">How many devices can be connected (LONG PRESS)</h2>
+          <p class="mb-2">The LONG PRESS field defines what happens on <b>holding</b> the button. You can list several devices at once, separated by commas — <b>about 25</b>.</p>
+          <p class="mb-2"><b>Example:</b> <b>6:0,7:0,12:0,15:0</b> means: "turn everything off": devices #6, #7, #12 and #15 turn off with one long press.</p>
+          <div class="mt-2 text-sm text-slate-500">
+            Notes: (1) After the colon: 0 — turn off, 1 — turn on, 2 — toggle to the opposite state. (2) Write without spaces. (3) The exact limit is 124 characters: up to 31 devices with one-digit numbers, up to 25 with two-digit numbers, up to 20 with three-digit numbers.
+          </div>
+        </div>
+        <div>
           <h2 class="text-xl font-bold mb-2">Action Field Format</h2>
           <p class="mb-2">Maximum number of entries in <code>ID:Action</code> format with <code>,</code> separator is limited by string length — <b>124 characters</b>.</p>
           <p class="mb-2">Entry examples: <code>6:1</code> (pin 6 → ON), <code>93:2</code> (pin 93 → TOGGLE), <code>93.1:0</code> (Zigbee slot 93, sub-action 1 → OFF).</p>
@@ -451,22 +495,6 @@ const TabButton = () => {
       </div>
     `,
   };
-
-  const refresh = () =>
-    Promise.all([fetch('/api/button/get').then((r) => r.json())])
-      .then(([buttonData, pintopinData]) => {
-        setLanguage(buttonData.lang);
-        setButton(buttonData.switches);
-        setButtonData(buttonData);
-        setPintopin(pintopinData);
-        setDebugInfo(
-          `Pintopin data: ${JSON.stringify(pintopinData, null, 2)}\n\nButton data: ${JSON.stringify(buttonData.buttons, null, 2)}`
-        );
-      })
-      .catch((error) => {
-        console.error('Error fetching data:', error);
-        setDebugInfo(`Error fetching data: ${error.message}`);
-      });
 
   useEffect(() => {
     let active = true;
@@ -486,27 +514,6 @@ const TabButton = () => {
       unregisterPoll('buttons');
     };
   }, []);
-
-  const getConnectedPins = (buttonId) => {
-    const connectedPins = new Map();
-
-    const buttonItem = varbutton.find((b) => b.id === buttonId);
-    if (buttonItem && buttonItem.pinact) {
-      Object.entries(buttonItem.pinact).forEach(([pin, relayId]) => {
-        connectedPins.set(pin, { pin, relayId });
-      });
-    }
-
-    pintopin.forEach((item) => {
-      if (item.idin === buttonId) {
-        const key = `${item.pins}(${item.idout})`;
-        if (!connectedPins.has(key)) {
-          connectedPins.set(key, { pin: item.pins, relayId: item.idout });
-        }
-      }
-    });
-    return Array.from(connectedPins.values());
-  };
 
   const getLangObject = () => {
     return {
@@ -557,50 +564,6 @@ const TabButton = () => {
     return lines.join('\n');
   };
 
-  const onsave = (id, pinInfo) => {
-    console.log('Удаление соединения:', id, pinInfo);
-
-    const [pinName, idoutStr] = pinInfo.split('(');
-    const idout = idoutStr ? parseInt(idoutStr) : null;
-
-    fetch('/api/connection/del', {
-      method: 'post',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: id, pin: pinName.trim() })
-    })
-      .then((r) => r.json())
-      .then((r) => {
-        setSaveResult(r);
-        setButton((prevButton) =>
-          prevButton.map((b) => {
-            if (b.id === id) {
-              const updatedPinact = { ...b.pinact };
-              delete updatedPinact[pinName.trim()];
-              return { ...b, pinact: updatedPinact };
-            }
-            return b;
-          })
-        );
-        setPintopin((prevPintopin) =>
-          prevPintopin.filter(
-            (item) =>
-              !(
-                item.idin === id &&
-                item.pins === pinName.trim() &&
-                (idout === null || item.idout === idout)
-              )
-          )
-        );
-      })
-      .then(() => {
-        console.log('Соединение удалено успешно');
-        refresh();
-      })
-      .catch((error) => {
-        console.error('Ошибка при удалении соединения:', error);
-      });
-  };
-
   const openModal = (type, buttonData) => {
     setModalType(type);
     setSelectedButton(buttonData);
@@ -647,8 +610,8 @@ const TabButton = () => {
     closeModal();
   };
 
-  // Сохранение из модалок "Edit Button pin" / "Edit Connection": /api/button/set
-  // уже записал info/sclick/связи. /api/onoff/set нужен ТОЛЬКО если On/Off
+  // Сохранение из модалки "Edit Button pin": /api/button/set уже записал
+  // info/sclick/dclick/lpress. /api/onoff/set нужен ТОЛЬКО если On/Off
   // реально переключён в модалке: parse_onoff_json() для Zigbee-кнопки
   // выполняет vbtn_execute() (sclick), т.е. Save "нажимал" кнопку, а для
   // физического — выставлял ШИМ-выходам dvalue. Ползунок в таблице
@@ -682,7 +645,6 @@ const TabButton = () => {
   `;
 
   const ArrayButton = ({ d, index }) => {
-    const connectedPins = getConnectedPins(d.id);
     const displayId = d.display_id || d.id;
 
     return html`
@@ -786,9 +748,7 @@ const TabButton = () => {
           modalType=${modalType}
           page="TabButton"
           hideModal=${closeModal}
-          title=${modalType === 'connection'
-            ? 'Edit Connection'
-            : 'Edit Button pin'}
+          title="Edit Button pin"
           selectedButton=${selectedButton}
           onButtonChange=${handleButtonSaved}
         />

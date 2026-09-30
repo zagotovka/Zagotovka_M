@@ -12,7 +12,6 @@ function ModalCron({
   title,
   selectedCron,
   handleCronChange,
-  connectionOptions,
   modalClass,
   SliderComponent = MyPolzunok
 }) {
@@ -22,9 +21,6 @@ function ModalCron({
   const [activValue, setActivValue] = useState(selectedCron?.activ || '');
   const [cronExpression, setCronExpression] = useState(
     selectedCron?.cron || ''
-  );
-  const [selectedConnection, setSelectedConnection] = useState(
-    selectedCron.setrpins || ''
   );
 
   const handleSubmit = (e) => {
@@ -41,8 +37,6 @@ function ModalCron({
       jsonData.info = cronInfo;
       jsonData.cron = cronExpression;
       jsonData.activ = activValue;
-    } else if (modalType === 'connection') {
-      jsonData.setrpins = selectedConnection;
     }
 
     // Перед отправкой проверим...
@@ -80,7 +74,6 @@ function ModalCron({
   // Добавляем useEffect для обновления состояния при изменении selectedSwitch
   useEffect(() => {
     setCronInfo(selectedCron?.info || '');
-    setSelectedConnection(selectedCron?.setrpins || '');
     setOnOff(selectedCron?.onoff === 1);
   }, [selectedCron]);
 
@@ -194,7 +187,7 @@ function ModalCron({
               class="modal-header flex justify-between items-center border-b pb-4 mb-4"
             >
               <h5 class="text-xl font-bold">
-                ${modalType === 'edit' ? 'Edit Timer' : 'Edit Connection'}
+                Edit Timer
               </h5>
               <button
                 class="close-button text-gray-500 hover:text-gray-700"

@@ -436,20 +436,6 @@ function TabCron({ }) {
       });
   };
 
-  const getCronConnectionOptions = () => {
-    if (Array.isArray(selectedCron)) {
-      return selectedCron.flatMap((b) => {
-        if (b.pinact) {
-          return Object.keys(b.pinact).map((key) => ({ value: key, label: key }));
-        }
-        return [];
-      });
-    } else if (selectedCron && selectedCron.pinact) {
-      return Object.keys(selectedCron.pinact).map((key) => ({ value: key, label: key }));
-    }
-    return [];
-  };
-
   // -------------------------------------------------------------------------
   // Th — заголовок таблицы с tooltip через data-tip (портал в body)
   // -------------------------------------------------------------------------
@@ -615,10 +601,9 @@ const ArrayCron = ({ d, index }) => {
           modalType=${modalType}
           page="TabCron"
           hideModal=${closeModal}
-          title=${modalType === 'edit' ? 'Edit Timer(s)' : 'Edit Connection'}
+          title="Edit Timer(s)"
           selectedCron=${selectedCron}
           handleCronChange=${handleCronChange}
-          connectionOptions=${getCronConnectionOptions()}
           modalClass="mt-24"
         />
       ` : null}

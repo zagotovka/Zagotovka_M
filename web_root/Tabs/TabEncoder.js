@@ -326,6 +326,15 @@ function TabEncoder({ }) {
             </pre>
           </div>
           <div>
+            <h2 class="text-xl font-bold mb-2">Сколько устройств можно подключить (PWM connection)</h2>
+            <p class="mb-2">Поле PWM connection — это лампа или диммер, яркостью которой управляет энкодер («крутилка»). <b>Один энкодер управляет одним устройством.</b> Каждое такое подключение занимает одно из <b>1024 «мест»</b>, тех же, что и на странице «Switch(es) pin(s)».</p>
+            <p class="mb-2"><b>Ограничения на количество энкодеров нет</b> — главное, чтобы во всей системе в сумме не набралось больше 1024 подключений.</p>
+            <p class="mb-2"><b>Пример:</b> если на странице «Switch(es) pin(s)» уже подключено 57 устройств, то для энкодеров остаётся только <b>967 свободных мест</b> (1024 − 57 = 967).</p>
+            <div class="mt-2 text-sm text-slate-500">
+              Примечания: (1) Когда все 1024 места заняты, новое подключение не добавится (приложение вернёт ошибку) — сначала удалите ненужные. (2) После перезагрузки устройство само восстанавливает все сохранённые подключения — новых мест они не занимают.
+            </div>
+          </div>
+          <div>
             <h2 class="text-xl font-bold mb-2">Примеры API</h2>
             <table class="w-full">
               <thead>
@@ -452,6 +461,15 @@ function TabEncoder({ }) {
             <pre class="text-red-500 font-bold">
               Do not expose your APIs to the internet - it's not secure!
             </pre>
+          </div>
+          <div>
+            <h2 class="text-xl font-bold mb-2">How many devices can be connected (PWM connection)</h2>
+            <p class="mb-2">The PWM connection field is the lamp or dimmer whose brightness the encoder (the "knob") controls. <b>One encoder controls one device.</b> Every such connection takes one of the <b>1024 "slots"</b> — the same slots used on the "Switch(es) pin(s)" page.</p>
+            <p class="mb-2"><b>There is no limit on the number of encoders</b> — as long as the total across the whole system does not exceed 1024 connections.</p>
+            <p class="mb-2"><b>Example:</b> if 57 devices are already connected on the "Switch(es) pin(s)" page, only <b>967 free slots</b> are left for encoders (1024 − 57 = 967).</p>
+            <div class="mt-2 text-sm text-slate-500">
+              Notes: (1) When all 1024 slots are used, a new connection will not be added (the device returns an error) — remove unused ones first. (2) After a reboot the device restores all saved connections by itself — they do not take any extra slots.
+            </div>
           </div>
           <div>
             <h2 class="text-xl font-bold mb-2">API Examples</h2>
