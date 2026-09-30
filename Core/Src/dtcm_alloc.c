@@ -128,6 +128,10 @@ __attribute__((section(".itcm"))) void *dtcm_malloc(size_t size)
 
     void *p = dtcm_next;
     dtcm_next += size;
+    /* Пул лежит в .dtcm_pool (NOLOAD) — стартап его не обнуляет, а буферы
+     * https-настроек читаются как C-строки до первой записи во Flash.
+     * Выдаём только обнулённую память. */
+    memset(p, 0, size);
     return p;
 }
 

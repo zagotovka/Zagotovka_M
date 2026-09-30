@@ -2145,17 +2145,22 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
   xQueueSend(usbQueueHandle, &usbnum, 0);
 }
 
-/* ──── emit_escaped_blob: ключ + строка с JSON-экранированием ──── */
+/* ──── emit_escaped_blob: ключ + строка с JSON-экранированием ────
+ * src_max — размер буфера источника: сканирование ограничено им, поэтому
+ * битая (не завершённая нулём) строка не приведёт к чтению за пределами
+ * буфера. */
 static void emit_escaped_blob(struct mg_connection *c,
                               const char *name,
-                              const char *src,
+                              const char *src, size_t src_max,
                               char *out, int out_sz) {
   int pos;
   pos = snprintf(out, out_sz, "\"%s\":\"", name);
   mg_http_write_chunk(c, out, (size_t)pos);
 
+  const char *nul = (const char *)memchr(src, '\0', src_max);
+  const char *end = nul ? nul : src + src_max;
   pos = 0;
-  while (*src) {
+  while (src < end) {
     if (pos > out_sz - 8) {
       mg_http_write_chunk(c, out, (size_t)pos);
       pos = 0;
@@ -2187,28 +2192,28 @@ static void emit_escaped_blob(struct mg_connection *c,
 
 static void emit_system_basic(struct mg_connection *c,
                               const struct dbSettings *s, char *buf) {
-  emit_escaped_blob(c, "lang", s->lang, buf, 512);
+  emit_escaped_blob(c, "lang", s->lang, sizeof(s->lang), buf, 512);
   char s_ln[16]; fmt_float(s_ln, sizeof(s_ln), s->lon_de, 6);
   char s_lt[16]; fmt_float(s_lt, sizeof(s_lt), s->lat_de, 6);
   int len = snprintf(buf, 512, "\"lon_de\":%s,\"lat_de\":%s,", s_ln, s_lt);
   mg_http_write_chunk(c, buf, (size_t)len);
-  emit_escaped_blob(c, "sunrise", s->sunrise, buf, 512);
+  emit_escaped_blob(c, "sunrise", s->sunrise, sizeof(s->sunrise), buf, 512);
   len = snprintf(buf, 512, "\"onsunrise\":%d,", s->onsunrise);
   mg_http_write_chunk(c, buf, (size_t)len);
-  emit_escaped_blob(c, "sunset", s->sunset, buf, 512);
+  emit_escaped_blob(c, "sunset", s->sunset, sizeof(s->sunset), buf, 512);
   len = snprintf(buf, 512, "\"onsunset\":%d,", s->onsunset);
   mg_http_write_chunk(c, buf, (size_t)len);
-  emit_escaped_blob(c, "dlength", s->dlength, buf, 512);
+  emit_escaped_blob(c, "dlength", s->dlength, sizeof(s->dlength), buf, 512);
 }
 
 static void emit_sunrise_pins(struct mg_connection *c,
                               const struct dbSettings *s, char *buf) {
-  emit_escaped_blob(c, "sunrise_pins", s->srise_pins, buf, 512);
+  emit_escaped_blob(c, "sunrise_pins", s->srise_pins, sizeof(s->srise_pins), buf, 512);
 }
 
 static void emit_sunset_pins(struct mg_connection *c,
                              const struct dbSettings *s, char *buf) {
-  emit_escaped_blob(c, "sunset_pins", s->sset_pins, buf, 512);
+  emit_escaped_blob(c, "sunset_pins", s->sset_pins, sizeof(s->sset_pins), buf, 512);
 }
 
 static void emit_mqtt(struct mg_connection *c,
@@ -2217,13 +2222,13 @@ static void emit_mqtt(struct mg_connection *c,
       "\"check_mqtt\":%d,\"mqtt_prt\":%d,",
       s->check_mqtt, s->mqtt_prt);
   mg_http_write_chunk(c, buf, (size_t)len);
-  emit_escaped_blob(c, "mqtt_clt", s->mqtt_clt, buf, 512);
-  emit_escaped_blob(c, "mqtt_usr", s->mqtt_usr, buf, 512);
-  emit_escaped_blob(c, "mqtt_pswd", s->mqtt_pswd, buf, 512);
-  emit_escaped_blob(c, "txmqttop", s->txmqttop, buf, 512);
-  emit_escaped_blob(c, "rxmqttop", s->rxmqttop, buf, 512);
-  emit_escaped_blob(c, "rxzbtop", s->rxzbtop, buf, 512);
-  emit_escaped_blob(c, "mqtt_hst", s->mqtt_hst, buf, 512);
+  emit_escaped_blob(c, "mqtt_clt", s->mqtt_clt, sizeof(s->mqtt_clt), buf, 512);
+  emit_escaped_blob(c, "mqtt_usr", s->mqtt_usr, sizeof(s->mqtt_usr), buf, 512);
+  emit_escaped_blob(c, "mqtt_pswd", s->mqtt_pswd, sizeof(s->mqtt_pswd), buf, 512);
+  emit_escaped_blob(c, "txmqttop", s->txmqttop, sizeof(s->txmqttop), buf, 512);
+  emit_escaped_blob(c, "rxmqttop", s->rxmqttop, sizeof(s->rxmqttop), buf, 512);
+  emit_escaped_blob(c, "rxzbtop", s->rxzbtop, sizeof(s->rxzbtop), buf, 512);
+  emit_escaped_blob(c, "mqtt_hst", s->mqtt_hst, sizeof(s->mqtt_hst), buf, 512);
 }
 
 static void emit_mqtt_server(struct mg_connection *c,
@@ -2232,9 +2237,9 @@ static void emit_mqtt_server(struct mg_connection *c,
       "\"check_mqtt_srv\":%d,\"mqtt_srv_prt\":%d,\"mqtt_srv_maxcli\":%d,",
       s->check_mqtt_srv, s->mqtt_srv_prt, s->mqtt_srv_maxcli);
   mg_http_write_chunk(c, buf, (size_t)len);
-  emit_escaped_blob(c, "mqtt_srv_usr",  s->mqtt_srv_usr,  buf, 512);
-  emit_escaped_blob(c, "mqtt_srv_pswd", s->mqtt_srv_pswd, buf, 512);
-  emit_escaped_blob(c, "slzb_host",     s->slzb_host,     buf, 512);
+  emit_escaped_blob(c, "mqtt_srv_usr",  s->mqtt_srv_usr,  sizeof(s->mqtt_srv_usr), buf, 512);
+  emit_escaped_blob(c, "mqtt_srv_pswd", s->mqtt_srv_pswd, sizeof(s->mqtt_srv_pswd), buf, 512);
+  emit_escaped_blob(c, "slzb_host",     s->slzb_host,     sizeof(s->slzb_host), buf, 512);
 }
 
 __attribute__((section(".itcm"))) static void emit_ip(struct mg_connection *c,
@@ -2256,12 +2261,12 @@ static void emit_admin(struct mg_connection *c,
   char s_tz[16]; fmt_float(s_tz, sizeof(s_tz), s->timezone, 0);
   int len = snprintf(buf, 512, "\"macaddr\":\"00-00-00-00-00-00\",");
   mg_http_write_chunk(c, buf, (size_t)len);
-  emit_escaped_blob(c, "adm_name", s->adm_name, buf, 512);
-  emit_escaped_blob(c, "adm_pswd", s->adm_pswd, buf, 512);
-  emit_escaped_blob(c, "token", s->token, buf, 512);
+  emit_escaped_blob(c, "adm_name", s->adm_name, sizeof(s->adm_name), buf, 512);
+  emit_escaped_blob(c, "adm_pswd", s->adm_pswd, sizeof(s->adm_pswd), buf, 512);
+  emit_escaped_blob(c, "token", s->token, sizeof(s->token), buf, 512);
   len = snprintf(buf, 512, "\"timezone\":%s,", s_tz);
   mg_http_write_chunk(c, buf, (size_t)len);
-  emit_escaped_blob(c, "fullmoon", s->fullmoon, buf, 512);
+  emit_escaped_blob(c, "fullmoon", s->fullmoon, sizeof(s->fullmoon), buf, 512);
 }
 
 static void emit_offldt(struct mg_connection *c,
@@ -2313,11 +2318,20 @@ void zagotovka_dtcm_init(void) {
 void mysett_cache_reload(void) {
     if (s_mysett_mutexHandle)
         osMutexAcquire(s_mysett_mutexHandle, osWaitForever);
-    https_get_tls_cert(s_tls_cert, DTCM_BUF_TLS_CERT);
-    https_get_tls_key(s_tls_key, DTCM_BUF_TLS_KEY);
-    https_get_tls_ca(s_cached_tls_ca, DTCM_BUF_CACHE_TLS_CA);
-    https_get_domain(s_cached_domain, DTCM_BUF_CACHE_DOMAIN);
-    https_get_telegram_token(s_cached_tg_token, DTCM_BUF_CACHE_TG_TOKEN);
+    /* Геттеры возвращают false, если валидной записи во Flash нет, и тогда
+     * НЕ трогают буфер. Буферы лежат в NOLOAD-части DTCM-пула, поэтому после
+     * неудачного геттера там может остаться мусор — очищаем принудительно,
+     * иначе в /api/mysett/get уйдут сырые байты и JSON сломается. */
+    if (!https_get_tls_cert(s_tls_cert, DTCM_BUF_TLS_CERT))
+        s_tls_cert[0] = '\0';
+    if (!https_get_tls_key(s_tls_key, DTCM_BUF_TLS_KEY))
+        s_tls_key[0] = '\0';
+    if (!https_get_tls_ca(s_cached_tls_ca, DTCM_BUF_CACHE_TLS_CA))
+        s_cached_tls_ca[0] = '\0';
+    if (!https_get_domain(s_cached_domain, DTCM_BUF_CACHE_DOMAIN))
+        s_cached_domain[0] = '\0';
+    if (!https_get_telegram_token(s_cached_tg_token, DTCM_BUF_CACHE_TG_TOKEN))
+        s_cached_tg_token[0] = '\0';
     s_mysett_cache_valid = true;
     if (s_mysett_mutexHandle)
         osMutexRelease(s_mysett_mutexHandle);
@@ -2360,7 +2374,8 @@ static void stream_mysett_json(struct mg_connection *c,
   }
 
   if (s_tls_cert[0] != '\0')
-    emit_escaped_blob(c, "tls_cert", s_tls_cert, buf, sizeof(buf));
+    emit_escaped_blob(c, "tls_cert", s_tls_cert, DTCM_BUF_TLS_CERT,
+                      buf, sizeof(buf));
   else {
     const char str[] = "\"tls_cert\":\"\",";
     mg_http_write_chunk(c, str, sizeof(str) - 1);
@@ -2374,18 +2389,17 @@ static void stream_mysett_json(struct mg_connection *c,
     mg_http_write_chunk(c, str, sizeof(str) - 1);
   }
 
+  /* domain печатается с JSON-экранированием: сырые управляющие байты
+   * (мусор из незаписанной Flash-записи) ломали JSON.parse на клиенте */
+  emit_escaped_blob(c, "domain", s_cached_domain, DTCM_BUF_CACHE_DOMAIN,
+                    buf, sizeof(buf));
+
   if (s_tls_key[0] != '\0') {
-    const char str[] = "\"tls_key\":\"[PRIVATE KEY CONFIGURED]\",";
+    const char str[] = "\"tls_key\":\"[PRIVATE KEY CONFIGURED]\"";
     mg_http_write_chunk(c, str, sizeof(str) - 1);
   } else {
-    const char str[] = "\"tls_key\":\"\",";
+    const char str[] = "\"tls_key\":\"\"";
     mg_http_write_chunk(c, str, sizeof(str) - 1);
-  }
-
-  {
-    const char *d = s_cached_domain[0] ? s_cached_domain : "";
-    int len = snprintf(buf, sizeof(buf), "\"domain\":\"%s\"", d);
-    mg_http_write_chunk(c, buf, (size_t)len);
   }
 
   mg_http_write_chunk(c, "}", 1);
@@ -2930,6 +2944,21 @@ static bool write_flash_data(uint32_t address, const uint8_t *data,
 
   return true;
 }
+/* Все строковые поля записи должны быть завершены нулём: геттеры копируют
+ * их strncpy'ем и полагаются на '\0'. Незавершённое поле означает мусор
+ * (стерто/чужая версия структуры/битая запись) — такая запись невалидна. */
+static bool settings_strings_terminated(const HTTPSsettings *s) {
+  return memchr(s->domain, '\0', sizeof(s->domain)) != NULL &&
+         memchr(s->tls_key, '\0', sizeof(s->tls_key)) != NULL &&
+         memchr(s->tls_cert, '\0', sizeof(s->tls_cert)) != NULL &&
+         memchr(s->tls_ca, '\0', sizeof(s->tls_ca)) != NULL &&
+         memchr(s->telegram_token, '\0', sizeof(s->telegram_token)) != NULL &&
+         memchr(s->ota_bank_a_version, '\0',
+                sizeof(s->ota_bank_a_version)) != NULL &&
+         memchr(s->ota_bank_b_version, '\0',
+                sizeof(s->ota_bank_b_version)) != NULL;
+}
+
 // Функция получения указателя на действительные настройки
 const HTTPSsettings *get_valid_settings(void) {
   const HTTPSsettings *valid_settings = NULL;
@@ -2943,7 +2972,8 @@ const HTTPSsettings *get_valid_settings(void) {
     // Проверяем валидность текущих настроек
     if (current->magic == SETTINGS_MAGIC_VALUE) {
       uint32_t calculated_crc = calculate_crc(current);
-      if (calculated_crc == current->crc) {
+      if (calculated_crc == current->crc &&
+          settings_strings_terminated(current)) {
         // Проверяем версию (с учетом цикличности)
         if (!found_valid || ((uint8_t)(current->version - max_version)) < 128) {
           valid_settings = current;
@@ -8362,9 +8392,9 @@ bool is_settings_valid(const HTTPSsettings *settings) {
     return false;
   }
 
-  // Проверяем контрольную сумму
+  // Проверяем контрольную сумму и целостность строковых полей
   uint32_t calculated_crc = calculate_crc(settings);
-  return (calculated_crc == settings->crc);
+  return (calculated_crc == settings->crc) && settings_strings_terminated(settings);
 }
 
 // Инициализация настроек HTTPS

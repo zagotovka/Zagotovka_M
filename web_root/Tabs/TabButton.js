@@ -85,6 +85,101 @@ function initGlobalTooltip() {
 }
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Чистые функции и компоненты вынесены ЗА пределы TabButton, чтобы React не
+// пересоздавал DOM всей таблицы при каждом обновлении состояния (опросе).
+// ---------------------------------------------------------------------------
+const formatText = (text, maxLength = 100) => {
+  if (!text || typeof text !== 'string') return '';
+
+  const lines = [];
+  let currentLine = '';
+
+  const paragraphs = text.split('\n');
+
+  paragraphs.forEach((paragraph, paragraphIndex) => {
+    const words = paragraph.split(' ').filter((word) => word.length > 0);
+
+    words.forEach((word) => {
+      const wordWithSpace = currentLine.length === 0 ? word : ' ' + word;
+      const potentialLength = currentLine.length + wordWithSpace.length;
+
+      if (potentialLength <= maxLength) {
+        currentLine += wordWithSpace;
+      } else {
+        if (currentLine.length > 0) lines.push(currentLine);
+        currentLine = word;
+      }
+    });
+
+    if (currentLine.length > 0) {
+      lines.push(currentLine);
+      currentLine = '';
+    }
+
+    if (paragraphIndex < paragraphs.length - 1) lines.push('');
+  });
+
+  if (currentLine.length > 0) lines.push(currentLine);
+
+  return lines.join('\n');
+};
+
+const getTooltipText = (language, index) => {
+  const langbutton = language === 'ru' ? rulangbutton : enlangbutton;
+  const tooltipText = langbutton && langbutton[index] ? langbutton[index] : '';
+  return formatText(tooltipText);
+};
+
+// Заголовок таблицы с tooltip через data-tip (портал в body)
+const Th = ({ title, tooltipIndex, language }) => html`
+  <th
+    class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
+    data-tip=${getTooltipText(language, tooltipIndex)}
+  >
+    ${title}
+  </th>
+`;
+
+const ArrayButton = ({ d, index, onToggle, onEdit }) => {
+  const displayId = d.display_id || d.id;
+
+  return html`
+    <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
+      <td class="px-6 py-2 text-sm text-slate-800">${displayId}</td>
+      <td class="px-6 py-2 text-sm text-slate-800 font-medium">${d.pins}</td>
+      <td class="px-6 py-2 text-sm text-slate-700">
+        ${['None', 'GPIO_PULLUP', 'GPIO_PULLDOWN'][d.ptype]}
+      </td>
+      <td class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis">
+        ${formatText(d.sclick)}
+      </td>
+      <td class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis">
+        ${formatText(d.dclick)}
+      </td>
+      <td class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis">
+        ${formatText(d.lpress)}
+      </td>
+      <td class="px-6 py-2 text-sm text-slate-600">${d.info}</td>
+      <td class="px-6 py-2">
+        <${MyPolzunok}
+          value=${d.onoff}
+          onChange=${(value) => onToggle({ ...d, onoff: value })}
+        />
+      </td>
+      <td class="px-6 py-2 text-sm">
+        <button
+          onClick=${() => onEdit('edit', d)}
+          class="text-blue-600 hover:text-blue-800 font-semibold transition-colors ml-2"
+        >
+          Edit
+        </button>
+      </td>
+    </tr>
+  `;
+};
+// ---------------------------------------------------------------------------
+
 const TabButton = () => {
   const [varbutton, setButton] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -99,6 +194,61 @@ const TabButton = () => {
   const helpContent = {
     ru: html`
       <div class="mytext space-y-6">
+        <div class="p-5 rounded-2xl bg-teal-50 border border-teal-300">
+          <h2 class="text-xl font-bold mb-3">Как подключить кнопку (пошагово)</h2>
+          <ol class="list-decimal ml-6 space-y-3">
+            <li>
+              <b>Выберите пин.</b> Откройте страницу <b>"Select pin(s)"</b>, найдите нужный пин
+              (например, <b>PA15</b>), выберите для него режим <b>"BUTTON"</b> и нажмите <b>"Submit"</b>. После этого пин сам появится в таблице на этой странице.
+            </li>
+            <li>
+              <b>Выберите подтяжку</b> (столбец "Pullup type"), нажав <b>Edit</b>:
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>GPIO_PULLUP</b> — если при нажатии кнопка соединяет пин с <b>землёй (GND)</b>. Это самый частый вариант.</li>
+                <li><b>GPIO_PULLDOWN</b> — если при нажатии кнопка соединяет пин с <b>плюсом питания (3.3V)</b>.</li>
+              </ul>
+              Не уверены — начните с GPIO_PULLUP. Если кнопка срабатывает сама или не срабатывает вообще, попробуйте другой вариант.
+            </li>
+            <li>
+              <b>Скажите, что делать.</b> В полях <b>SINGLE CLICK</b> (одно нажатие), <b>DOUBLE CLICK</b>
+              (два быстрых нажатия) и <b>LONG PRESS</b> (удержание) впишите, каким устройством управлять.
+              Пишется так: <b>ID устройства, двоеточие, команда</b>. Без пробелов!
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>1</b> — включить</li>
+                <li><b>0</b> — выключить</li>
+                <li><b>2</b> — переключить (было выключено — включится, было включено — выключится; это TOGGLE)</li>
+              </ul>
+            </li>
+            <li>
+              <b>Включите ползунок On/Off</b> в строке кнопки. Если он выключен, кнопка будет проигнорирована.
+            </li>
+            <li>
+              <b>Проверьте:</b> нажмите физическую кнопку — устройство должно сработать.
+            </li>
+          </ol>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-teal-200">
+            <b>Важно:</b> в полях действий пишется <b>ID устройства, которым вы хотите управлять</b>
+            (светодиод, реле, Zigbee-устройство), а <b>не</b> ID самой кнопки.
+          </div>
+
+          <div class="mt-4">
+            <b>Пример.</b> Кнопка подключена к пину <b>PA15</b>. На плате есть светодиоды:
+            <ul class="list-disc ml-6 mt-1">
+              <li><b>ID = 6</b> — зелёный светодиод</li>
+              <li><b>ID = 12</b> — синий светодиод</li>
+              <li><b>ID = 18</b> — красный светодиод</li>
+            </ul>
+            <div class="mt-2">Хотим, чтобы:</div>
+            <ul class="list-disc ml-6 mt-1">
+              <li>одно нажатие — переключало зелёный светодиод: в SINGLE CLICK пишем <code>6:2</code></li>
+              <li>двойное нажатие — включало синий светодиод: в DOUBLE CLICK пишем <code>12:1</code></li>
+              <li>долгое нажатие — выключало все три светодиода: в LONG PRESS пишем <code>6:0,12:0,18:0</code></li>
+            </ul>
+            Чтобы управлять несколькими устройствами сразу, перечислите их через запятую:
+            <code>6:1,12:1,18:0</code> (включить зелёный и синий, выключить красный).
+          </div>
+        </div>
         <div>
           <pre class="mb-4">
             Данный API позволяет дистанционно управлять кнопкой, просто выполнив команду в браузере любого устройства в вашей локальной сети.
@@ -234,22 +384,22 @@ const TabButton = () => {
               <tr>
                 <td class="border px-4 py-2">DTMF (Звонок)</td>
                 <td class="border px-4 py-2">30#4*#</td>
-                <td class="border px-4 py-2">Аналог 30#DC*. Выполняет DOUBLE CLICK.</td>
+                <td class="border px-4 py-2">Аналог 30#DC*#. Выполняет DOUBLE CLICK.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">DTMF (Звонок)</td>
                 <td class="border px-4 py-2">30#5*#</td>
-                <td class="border px-4 py-2">Аналог 30#LP*. Выполняет LONG PRESS.</td>
+                <td class="border px-4 py-2">Аналог 30#LP*#. Выполняет LONG PRESS.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">SMS</td>
-                <td class="border px-4 py-2">30#SL*31#DC*#</td>
+                <td class="border px-4 py-2">30#SC*31#DC*#</td>
                 <td class="border px-4 py-2">Можно группировать несколько команд в одну! В конце строки обязательно нужно добавить символ <b>#</b>, чтобы закрыть команду.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">Ответ</td>
                 <td class="border px-4 py-2">DISABLED</td>
-                <td class="border px-4 py-2">Если Главный рубильник (On/Off) на этой странице выключен, то команда будет проигнорирована, а в ответном SMS придет сообщение<b>30:DISABLED</b>, а не дефолтное действие.</td>
+                <td class="border px-4 py-2">Если Главный рубильник (On/Off) на этой странице выключен, то команда будет проигнорирована, а в ответном SMS придет сообщение <b>30:DISABLED</b>, а не дефолтное действие.</td>
               </tr>
             </tbody>
           </table>
@@ -289,7 +439,7 @@ const TabButton = () => {
             <thead><tr><th class="border px-3 py-1">Длина ID</th><th class="border px-3 py-1">Пример</th><th class="border px-3 py-1">Байт на запись</th><th class="border px-3 py-1">Записей в строке</th></tr></thead>
             <tbody>
               <tr><td class="border px-3 py-1">1 знак</td><td class="border px-3 py-1"><code>5:1</code></td><td class="border px-3 py-1">3 + запятая = 4</td><td class="border px-3 py-1">до 31</td></tr>
-              <tr><td class="border px-3 py-1">2 знака</td><td class="border px-3 py-1"><code>15:1</code></td><td class="border px-3 py-1">4 + запятая = 5</td><td class="border px-3 py-1">до 24</td></tr>
+              <tr><td class="border px-3 py-1">2 знака</td><td class="border px-3 py-1"><code>15:1</code></td><td class="border px-3 py-1">4 + запятая = 5</td><td class="border px-3 py-1">до 25</td></tr>
               <tr><td class="border px-3 py-1">3 знака</td><td class="border px-3 py-1"><code>155:1</code></td><td class="border px-3 py-1">5 + запятая = 6</td><td class="border px-3 py-1">до 20</td></tr>
             </tbody>
           </table>
@@ -298,6 +448,61 @@ const TabButton = () => {
     `,
     en: html`
       <div class="mytext space-y-6">
+        <div class="p-5 rounded-2xl bg-teal-50 border border-teal-300">
+          <h2 class="text-xl font-bold mb-3">How to connect a button (step by step)</h2>
+          <ol class="list-decimal ml-6 space-y-3">
+            <li>
+              <b>Choose a pin.</b> Open the <b>"Select pin(s)"</b> page, find the pin you need
+              (for example, <b>PA15</b>), set its mode to <b>"BUTTON"</b> and press <b>"Submit"</b>. After that the pin appears in the table on this page by itself.
+            </li>
+            <li>
+              <b>Choose the pull type</b> ("Pullup type" column) by pressing <b>Edit</b>:
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>GPIO_PULLUP</b> — if pressing the button connects the pin to <b>ground (GND)</b>. This is the most common case.</li>
+                <li><b>GPIO_PULLDOWN</b> — if pressing the button connects the pin to <b>the supply voltage (3.3V)</b>.</li>
+              </ul>
+              Not sure? Start with GPIO_PULLUP. If the button triggers by itself or does not trigger at all, try the other option.
+            </li>
+            <li>
+              <b>Tell it what to do.</b> In the <b>SINGLE CLICK</b> (one press), <b>DOUBLE CLICK</b>
+              (two quick presses) and <b>LONG PRESS</b> (hold) fields, write which device to control.
+              Format: <b>device ID, colon, command</b>. No spaces!
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>1</b> — turn on</li>
+                <li><b>0</b> — turn off</li>
+                <li><b>2</b> — toggle (if it was off it turns on, if it was on it turns off; this is TOGGLE)</li>
+              </ul>
+            </li>
+            <li>
+              <b>Turn on the On/Off slider</b> in the button's row. If it is off, the button is ignored.
+            </li>
+            <li>
+              <b>Test it:</b> press the physical button — the device should react.
+            </li>
+          </ol>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-teal-200">
+            <b>Important:</b> the action fields take the <b>ID of the device you want to control</b>
+            (LED, relay, Zigbee device), <b>not</b> the ID of the button itself.
+          </div>
+
+          <div class="mt-4">
+            <b>Example.</b> A button is connected to pin <b>PA15</b>. The board has these LEDs:
+            <ul class="list-disc ml-6 mt-1">
+              <li><b>ID = 6</b> — green LED</li>
+              <li><b>ID = 12</b> — blue LED</li>
+              <li><b>ID = 18</b> — red LED</li>
+            </ul>
+            <div class="mt-2">We want:</div>
+            <ul class="list-disc ml-6 mt-1">
+              <li>one press to toggle the green LED: in SINGLE CLICK write <code>6:2</code></li>
+              <li>a double press to turn the blue LED on: in DOUBLE CLICK write <code>12:1</code></li>
+              <li>a long press to turn all three LEDs off: in LONG PRESS write <code>6:0,12:0,18:0</code></li>
+            </ul>
+            To control several devices at once, list them separated by commas:
+            <code>6:1,12:1,18:0</code> (turn on green and blue, turn off red).
+          </div>
+        </div>
         <div>
           <pre class="mb-4">
             This API allows you to remotely control a switch by simply executing a command in the browser of any device on your local network.
@@ -441,13 +646,13 @@ const TabButton = () => {
               </tr>
               <tr>
                 <td class="border px-4 py-2">SMS</td>
-                <td class="border px-4 py-2">30#SL*31#DC*#</td>
+                <td class="border px-4 py-2">30#SC*31#DC*#</td>
                 <td class="border px-4 py-2">You can chain multiple commands! You must append the <b>#</b> symbol at the very end of the string.</td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">Response</td>
                 <td class="border px-4 py-2">DISABLED</td>
-                <td class="border px-4 py-2">If (On/Off) in any row of the table, the command will be ignored for this row, and a similar message <b>30:DISABLED</b> in the SMS.</td>
+                <td class="border px-4 py-2">If the master On/Off switch on this page is off, the command is ignored and the reply SMS says <b>30:DISABLED</b> instead of the default action.</td>
               </tr>
             </tbody>
           </table>
@@ -487,7 +692,7 @@ const TabButton = () => {
             <thead><tr><th class="border px-3 py-1">ID Length</th><th class="border px-3 py-1">Example</th><th class="border px-3 py-1">Bytes per entry</th><th class="border px-3 py-1">Entries in string</th></tr></thead>
             <tbody>
               <tr><td class="border px-3 py-1">1 digit</td><td class="border px-3 py-1"><code>5:1</code></td><td class="border px-3 py-1">3 + comma = 4</td><td class="border px-3 py-1">up to 31</td></tr>
-              <tr><td class="border px-3 py-1">2 digits</td><td class="border px-3 py-1"><code>15:1</code></td><td class="border px-3 py-1">4 + comma = 5</td><td class="border px-3 py-1">up to 24</td></tr>
+              <tr><td class="border px-3 py-1">2 digits</td><td class="border px-3 py-1"><code>15:1</code></td><td class="border px-3 py-1">4 + comma = 5</td><td class="border px-3 py-1">up to 25</td></tr>
               <tr><td class="border px-3 py-1">3 digits</td><td class="border px-3 py-1"><code>155:1</code></td><td class="border px-3 py-1">5 + comma = 6</td><td class="border px-3 py-1">up to 20</td></tr>
             </tbody>
           </table>
@@ -514,55 +719,6 @@ const TabButton = () => {
       unregisterPoll('buttons');
     };
   }, []);
-
-  const getLangObject = () => {
-    return {
-      langbutton: language === 'ru' ? rulangbutton : enlangbutton
-    };
-  };
-
-  const getTooltipText = (key, index) => {
-    const langObject = getLangObject();
-    const tooltipText =
-      langObject[key] && langObject[key][index] ? langObject[key][index] : '';
-    return formatText(tooltipText);
-  };
-
-  const formatText = (text, maxLength = 100) => {
-    if (!text || typeof text !== 'string') return '';
-
-    const lines = [];
-    let currentLine = '';
-
-    const paragraphs = text.split('\n');
-
-    paragraphs.forEach((paragraph, paragraphIndex) => {
-      const words = paragraph.split(' ').filter((word) => word.length > 0);
-
-      words.forEach((word) => {
-        const wordWithSpace = currentLine.length === 0 ? word : ' ' + word;
-        const potentialLength = currentLine.length + wordWithSpace.length;
-
-        if (potentialLength <= maxLength) {
-          currentLine += wordWithSpace;
-        } else {
-          if (currentLine.length > 0) lines.push(currentLine);
-          currentLine = word;
-        }
-      });
-
-      if (currentLine.length > 0) {
-        lines.push(currentLine);
-        currentLine = '';
-      }
-
-      if (paragraphIndex < paragraphs.length - 1) lines.push('');
-    });
-
-    if (currentLine.length > 0) lines.push(currentLine);
-
-    return lines.join('\n');
-  };
 
   const openModal = (type, buttonData) => {
     setModalType(type);
@@ -632,56 +788,6 @@ const TabButton = () => {
     }
   };
 
-  // -------------------------------------------------------------------------
-  // Th — заголовок таблицы с tooltip через data-tip (портал в body)
-  // -------------------------------------------------------------------------
-  const Th = (props) => html`
-    <th
-      class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
-      data-tip=${getTooltipText('langbutton', props.tooltipIndex)}
-    >
-      ${props.title}
-    </th>
-  `;
-
-  const ArrayButton = ({ d, index }) => {
-    const displayId = d.display_id || d.id;
-
-    return html`
-      <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
-        <td class="px-6 py-2 text-sm text-slate-800">${displayId}</td>
-        <td class="px-6 py-2 text-sm text-slate-800 font-medium">${d.pins}</td>
-        <td class="px-6 py-2 text-sm text-slate-700">
-          ${['None', 'GPIO_PULLUP', 'GPIO_PULLDOWN'][d.ptype]}
-        </td>
-        <td class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis">
-          ${formatText(d.sclick)}
-        </td>
-        <td class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis">
-          ${formatText(d.dclick)}
-        </td>
-        <td class="px-6 py-2 text-sm text-slate-700 font-mono max-w-[250px] whitespace-pre-wrap break-words overflow-hidden text-ellipsis">
-          ${formatText(d.lpress)}
-        </td>
-        <td class="px-6 py-2 text-sm text-slate-600">${d.info}</td>
-        <td class="px-6 py-2">
-          <${MyPolzunok}
-            value=${d.onoff}
-            onChange=${(value) => handleButtonChange({ ...d, onoff: value })}
-          />
-        </td>
-        <td class="px-6 py-2 text-sm">
-          <button
-            onClick=${() => openModal('edit', d)}
-            class="text-blue-600 hover:text-blue-800 font-semibold transition-colors ml-2"
-          >
-            Edit
-          </button>
-        </td>
-      </tr>
-    `;
-  };
-
   if (!varbutton) return '';
 
   return html`
@@ -702,20 +808,26 @@ const TabButton = () => {
                 <table class="w-full text-left border-collapse whitespace-nowrap">
                   <thead>
                     <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                      <${Th} title="ID" tooltipIndex=${1} />
-                      <${Th} title="Pin" tooltipIndex=${2} />
-                      <${Th} title="Pullup type" tooltipIndex=${3} />
-                      <${Th} title="SINGLE CLICK" tooltipIndex=${4} />
-                      <${Th} title="DOUBLE CLICK" tooltipIndex=${5} />
-                      <${Th} title="LONG PRESS" tooltipIndex=${6} />
-                      <${Th} title="INFO" tooltipIndex=${7} />
-                      <${Th} title="On/Off" tooltipIndex=${8} />
-                      <${Th} title="Action" tooltipIndex=${9} />
+                      <${Th} title="ID" tooltipIndex=${1} language=${language} />
+                      <${Th} title="Pin" tooltipIndex=${2} language=${language} />
+                      <${Th} title="Pullup type" tooltipIndex=${3} language=${language} />
+                      <${Th} title="SINGLE CLICK" tooltipIndex=${4} language=${language} />
+                      <${Th} title="DOUBLE CLICK" tooltipIndex=${5} language=${language} />
+                      <${Th} title="LONG PRESS" tooltipIndex=${6} language=${language} />
+                      <${Th} title="INFO" tooltipIndex=${7} language=${language} />
+                      <${Th} title="On/Off" tooltipIndex=${8} language=${language} />
+                      <${Th} title="Action" tooltipIndex=${9} language=${language} />
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-white/40">
                     ${varbutton.map(
-                      (d, index) => html`<${ArrayButton} d=${d} index=${index} key=${d.id} />`
+                      (d, index) => html`<${ArrayButton}
+                        d=${d}
+                        index=${index}
+                        key=${d.id}
+                        onToggle=${handleButtonChange}
+                        onEdit=${openModal}
+                      />`
                     )}
                   </tbody>
                 </table>

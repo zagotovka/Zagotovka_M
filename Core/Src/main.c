@@ -1980,12 +1980,20 @@ void StartWebServerTask(void *argument)
     onlineFlg = 1;
   }
 
-  /* Инициализация настроек HTTPS */
-  if (SetSettings.usehttps == 1) {
-    if (!initialize_https_settings()) {
+  /* Инициализация настроек HTTPS — независимо от usehttps: при usehttps=0
+   * во Flash иначе никогда не появится валидная запись, геттеры https_get_*
+   * вечно будут возвращать false, а поля настроек в UI останутся пустыми.
+   * При usehttps=0 ошибка записи не фатальна — HTTP работает и без TLS. */
+  if (!initialize_https_settings()) {
+    printf("initialize_https_settings failed\r\n");
+    if (SetSettings.usehttps == 1) {
       Error_Handler();
     }
   }
+  /* Обновляем кэш настроек: mysett_cache_reload() в StartConfigTask мог
+   * отработать до появления валидной записи во Flash и закэшировать
+   * пустые поля. */
+  mysett_cache_reload();
 
   // Инициализация TLS параметров
   struct mg_tcpip_if mif = {.mac = GENERATE_LOCALLY_ADMINISTERED_MAC(),

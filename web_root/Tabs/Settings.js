@@ -270,6 +270,58 @@ function Settings({ }) {
     return pattern.test(timeStr);
   };
 
+  // Sunrise / Sunset: формат "смещение/действия", например "0/6:1,12:1,18:0".
+  //   смещение - целое число секунд относительно времени восхода/заката
+  //              (отрицательное - раньше, положительное - позже);
+  //   действия - список "пин:действие" через запятую, действие: 0 - выкл,
+  //              1 - вкл, 2 - переключить; для Zigbee-триггеров допустим
+  //              суффикс ".1" или ".2" после номера пина (например 93.1:2).
+  // Прошивка режет часть действий до 127 байт (stack-буфер в action_handler).
+  const SUN_ACTIONS_MAX_LEN = 127;
+  const SUN_OFFSET_MAX = 86399;
+
+  const sanitizeSunInput = (value) => {
+    if (typeof value !== 'string') return '';
+    return value.replace(/[^0-9:,./+-]/g, '');
+  };
+
+  const validateSunActions = (value, required, isRu) => {
+    const v = (value === undefined || value === null) ? '' : String(value);
+    if (v === '') {
+      return required
+        ? (isRu ? 'Поле обязательно: переключатель включен. Пример: 0/6:1,12:0'
+                : 'Required: the switch is on. Example: 0/6:1,12:0')
+        : null;
+    }
+    const slashCount = (v.match(/\//g) || []).length;
+    if (slashCount !== 1) {
+      return isRu ? 'Нужен ровно один символ "/" между смещением и действиями. Пример: 0/6:1,12:0'
+                  : 'Exactly one "/" is required between offset and actions. Example: 0/6:1,12:0';
+    }
+    const [offsetPart, actionsPart] = v.split('/');
+    if (!/^[+-]?\d{1,5}$/.test(offsetPart) || Math.abs(parseInt(offsetPart, 10)) > SUN_OFFSET_MAX) {
+      return isRu ? 'Смещение до "/" - целое число секунд от -86399 до 86399 (например 0 или -600)'
+                  : 'Offset before "/" must be an integer number of seconds from -86399 to 86399 (e.g. 0 or -600)';
+    }
+    if (actionsPart === '') {
+      return isRu ? 'После "/" укажите действия. Пример: 0/6:1,12:0'
+                  : 'Specify actions after "/". Example: 0/6:1,12:0';
+    }
+    if (actionsPart.length > SUN_ACTIONS_MAX_LEN) {
+      return isRu ? 'Часть с действиями длиннее ' + SUN_ACTIONS_MAX_LEN + ' символов'
+                  : 'Actions part is longer than ' + SUN_ACTIONS_MAX_LEN + ' characters';
+    }
+    const tokens = actionsPart.split(',');
+    for (const tok of tokens) {
+      const m = /^(\d{1,3})(?:\.([12]))?:([0-2])$/.exec(tok);
+      if (!m || parseInt(m[1], 10) > 255) {
+        return isRu ? 'Неверное действие "' + tok + '". Ожидается пин:действие, действие 0, 1 или 2 (например 6:1)'
+                    : 'Invalid action "' + tok + '". Expected pin:action, action is 0, 1 or 2 (e.g. 6:1)';
+      }
+    }
+    return null;
+  };
+
   // SLZB IP (watchdog шлюза SLZB-06p7U): поле опциональное (пусто = watchdog выключен),
   // но если пользователь что-то ввёл — это должен быть строго IPv4-адрес.
   // Мусор в этом поле нельзя: прошивка по нему шлёт шлюзу HTTP-reboot.
@@ -329,6 +381,12 @@ function Settings({ }) {
       case 'offtime':
         if (!validateTimeFormat(value)) error = 'Неверный формат времени (чч:мм:сс)';
         break;
+      case 'sunrise_pins':
+        error = validateSunActions(value, false, (settings.lang || 'ru') === 'ru');
+        break;
+      case 'sunset_pins':
+        error = validateSunActions(value, false, (settings.lang || 'ru') === 'ru');
+        break;
       case 'domain':
         if (value.length > 50) {
           error = 'Домен не должен превышать 50 символов';
@@ -383,6 +441,16 @@ function Settings({ }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    {
+      const isRuSun = (settings.lang || 'ru') === 'ru';
+      const sunriseError = validateSunActions(settings.sunrise_pins, !!settings.onsunrise, isRuSun);
+      const sunsetError = validateSunActions(settings.sunset_pins, !!settings.onsunset, isRuSun);
+      if (sunriseError || sunsetError) {
+        setErrors(prev => ({ ...prev, sunrise_pins: sunriseError, sunset_pins: sunsetError }));
+        showToast(isRuSun ? 'Неверный формат полей Sunrise/Sunset' : 'Invalid Sunrise/Sunset format', 'error');
+        return;
+      }
+    }
     const formData = new FormData(formRef.current);
     let jsonData = { ...settings };
     for (const [key, value] of formData.entries()) {
@@ -437,6 +505,10 @@ function Settings({ }) {
       // Чистим мусор ДО записи в state: буквы/пробелы/лишние точки просто
       // не попадут в поле, а не появятся с красной рамкой
       value = sanitizeIpInput(value);
+      error = validateInput(key, value);
+    } else if (key === 'sunrise_pins' || key === 'sunset_pins') {
+      // Только цифры и символы формата: пробелы и буквы не попадут в поле
+      value = sanitizeSunInput(value);
       error = validateInput(key, value);
     } else if (key === 'offdate') {
       error = validateDateFormat(value) ? null : 'Неверный формат даты (д.м.гг)';
@@ -535,11 +607,21 @@ function Settings({ }) {
   if (isLoading) return html`<div>Loading...</div>`;
   if (!settings) return '';
 
+  // Проверка полей Sunrise/Sunset на каждом рендере: ошибка видна и для значения,
+  // пришедшего из прошивки, а не только после ручного редактирования
+  const isRuSun = (settings.lang || 'ru') === 'ru';
+  const sunErr_sunrise_pins = validateSunActions(settings.sunrise_pins, !!settings.onsunrise, isRuSun);
+  const sunErr_sunset_pins = validateSunActions(settings.sunset_pins, !!settings.onsunset, isRuSun);
+  const sunHasError = !!(sunErr_sunrise_pins || sunErr_sunset_pins);
+  const sunHint = isRuSun
+    ? 'Формат: смещение/пин:действие,пин:действие. Смещение - секунды относительно времени восхода/заката (отрицательное - раньше). Действие: 0 - выкл, 1 - вкл, 2 - переключить. Пример: 0/6:1,12:0 или -600/6:1'
+    : 'Format: offset/pin:action,pin:action. Offset is in seconds relative to sunrise/sunset (negative = earlier). Action: 0 - off, 1 - on, 2 - toggle. Example: 0/6:1,12:0 or -600/6:1';
+
   const saveBtn = (extraClass = '') => html`
     <button
       type="submit"
-      class=${`relative inline-flex items-center justify-center px-8 py-3 overflow-hidden font-bold text-white transition-all duration-300 rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_25px_rgba(20,184,166,0.5)] hover:-translate-y-0.5 active:translate-y-0 ${submitButtonDisabled ? 'opacity-50 cursor-not-allowed bg-slate-400' : 'bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-400 hover:to-cyan-500'} ${extraClass}`}
-      disabled=${submitButtonDisabled}
+      class=${`relative inline-flex items-center justify-center px-8 py-3 overflow-hidden font-bold text-white transition-all duration-300 rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_25px_rgba(20,184,166,0.5)] hover:-translate-y-0.5 active:translate-y-0 ${(submitButtonDisabled || sunHasError) ? 'opacity-50 cursor-not-allowed bg-slate-400' : 'bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-400 hover:to-cyan-500'} ${extraClass}`}
+      disabled=${submitButtonDisabled || sunHasError}
     >
       <span class="relative flex items-center gap-2 text-lg tracking-wide drop-shadow-md">Save changes</span>
     </button>
@@ -1036,9 +1118,11 @@ function Settings({ }) {
                   <div class="flex items-center gap-4">
                     <${MyPolzunok} value=${settings.onsunrise} onChange=${(v) => handleChange('onsunrise', v)} />
                     <input type="text" value=${settings.sunrise_pins || ''} onInput=${(e) => handleChange('sunrise_pins', e.target.value)}
-                      maxlength="20" placeholder="Action for sunrise"
-                      class="flex-grow w-full px-3 py-2 bg-white/50 border border-white/50 rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                      maxlength="135" placeholder="0/6:1,12:0"
+                      class=${`flex-grow w-full px-3 py-2 bg-white/50 border ${sunErr_sunrise_pins ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`} />
                   </div>
+                  ${sunErr_sunrise_pins ? html`<p class="mt-1 text-sm text-red-600">${sunErr_sunrise_pins}</p>` : null}
+                  <p class="mt-1 text-xs text-slate-600">${sunHint}</p>
                 </td>
               </tr>
 
@@ -1054,9 +1138,11 @@ function Settings({ }) {
                   <div class="flex items-center gap-4">
                     <${MyPolzunok} value=${settings.onsunset} onChange=${(v) => handleChange('onsunset', v)} />
                     <input type="text" value=${settings.sunset_pins || ''} onInput=${(e) => handleChange('sunset_pins', e.target.value)}
-                      maxlength="20" placeholder="Action for sunset"
-                      class="flex-grow w-full px-3 py-2 bg-white/50 border border-white/50 rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                      maxlength="135" placeholder="0/6:1,12:0"
+                      class=${`flex-grow w-full px-3 py-2 bg-white/50 border ${sunErr_sunset_pins ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`} />
                   </div>
+                  ${sunErr_sunset_pins ? html`<p class="mt-1 text-sm text-red-600">${sunErr_sunset_pins}</p>` : null}
+                  <p class="mt-1 text-xs text-slate-600">${sunHint}</p>
                 </td>
               </tr>
 
