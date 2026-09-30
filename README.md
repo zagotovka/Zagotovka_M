@@ -157,3 +157,4 @@ This project uses semantic versioning. The version number follows the MAJOR.MINO
 | 2.8.0 | 14-09-2026 | Added live SYSTEM LOG tail to the Dashboard; embedded firmware version in release .bin file names.|
 | 2.9.0 | 28-09-2026 | Raised the pin-to-pin link limit from 100 to 1024; fixed Zigbee ID truncation (IDs above 255) and out-of-bounds reads; links API now streamed in chunks; moved link storage from the DTCM pool to .bss.|
 | 2.9.1 | 29-09-2026 | Fixed: empty INFO field could not be cleared; "Save changes" in Edit switch/Connection (also buttons, encoders) no longer turns on linked outputs.|
+| 2.9.2 | 30-09-2026 | Improved button timing: immediate single-click handling without double-click support, configurable double-click interval via `dcinter`, and more deterministic 5 ms button polling. |

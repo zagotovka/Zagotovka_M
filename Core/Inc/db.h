@@ -80,7 +80,7 @@ struct dbPinsConf {     // Создали структуру с необходи
 	uint8_t hinter;	// Hold interval
 	uint8_t repeat;	// Repeat
 	uint8_t rinter;	// Repeat interval
-	uint8_t dcinter;	// Double-click interval
+	uint16_t dcinter;	// Double-click interval (ms)
 	uint8_t pclick;	// Prevent Click
 	char info[30];	    // Info
 	uint8_t onoff;		// On | Off

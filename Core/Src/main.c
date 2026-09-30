@@ -2630,19 +2630,18 @@ void StartInputTask(void *argument)
   uint32_t pinTimes[NUMPIN] = {0};
   uint32_t millis;
   uint8_t pinLevel[NUMPIN] = {0};
+  TickType_t xLastWake;
   //    char mqtt_payload[20] = {0};
   //    char mqtt_topic[20] = {0};
   osDelay(1000);
   InitMultibutton();
   /* Infinite loop */
+  xLastWake = xTaskGetTickCount();
   for (;;) {
     millis = HAL_GetTick();
     for (uint8_t i = 0; i < NUMPIN; i++) {
       if (PinsConf[i].topin == 1 && PinsConf[i].act == 1) { // BUTTON
-        if ((millis - pinTimes[i]) >= 5) {
-          pinTimes[i] = millis;
-          button_ticks(&button[i]);
-        }
+        button_ticks(&button[i]);
       }
       /*
       // INPUT Button GPIO_PULLDOWN
@@ -2722,7 +2721,7 @@ void StartInputTask(void *argument)
     /* Process Zigbee virtual buttons (RAW mode state machine) */
     zbee_vbtn_tick();
 
-    osDelay(10);
+    vTaskDelayUntil(&xLastWake, pdMS_TO_TICKS(5));
   }
   /* USER CODE END StartInputTask */
 }

@@ -1834,6 +1834,9 @@ void InitMultibutton(void) {
 
     uint8_t active_level = (PinsConf[i].ptype == 2) ? 1 : 0;
     button_init(&button[i], read_button_level, active_level, i);
+    button[i].short_ticks = (uint16_t)(PinsConf[i].dcinter
+                                           ? PinsConf[i].dcinter / TICKS_INTERVAL
+                                           : SHORT_TICKS);
 
     button_attach(&button[i], PRESS_DOWN, (BtnCallback)button_event_handler);
     button_attach(&button[i], PRESS_UP, (BtnCallback)button_event_handler);

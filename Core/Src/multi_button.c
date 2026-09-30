@@ -32,6 +32,7 @@ void button_init(struct Button* handle, uint8_t(*pin_level)(uint8_t), uint8_t ac
 	handle->button_level = handle->hal_button_Level(button_id);
 	handle->active_level = active_level;
 	handle->button_id = button_id;
+	handle->short_ticks = (uint16_t)SHORT_TICKS;
 }
 
 /**
@@ -98,7 +99,14 @@ static void button_handler(struct Button* handle)
 			handle->event = (uint8_t)PRESS_UP;
 			EVENT_CB(PRESS_UP);
 			handle->ticks = 0;
-			handle->state = 2;
+			if(handle->cb[DOUBLE_CLICK] == NULL) {
+				/* Двойной клик не настроен — отдаём клик мгновенно, без окна ожидания */
+				handle->event = (uint8_t)SINGLE_CLICK;
+				EVENT_CB(SINGLE_CLICK);
+				handle->state = 0;
+			} else {
+				handle->state = 2;
+			}
 		} else if(handle->ticks > LONG_TICKS) {
 			handle->event = (uint8_t)LONG_PRESS_START;
 			EVENT_CB(LONG_PRESS_START);
@@ -116,7 +124,7 @@ static void button_handler(struct Button* handle)
 			EVENT_CB(PRESS_REPEAT); // repeat hit
 			handle->ticks = 0;
 			handle->state = 3;
-		} else if(handle->ticks > SHORT_TICKS) { //released timeout
+		} else if(handle->ticks > handle->short_ticks) { //released timeout
 			if(handle->repeat == 1) {
 				handle->event = (uint8_t)SINGLE_CLICK;
 				EVENT_CB(SINGLE_CLICK);
@@ -132,13 +140,13 @@ static void button_handler(struct Button* handle)
 		if(handle->button_level != handle->active_level) { //released press up
 			handle->event = (uint8_t)PRESS_UP;
 			EVENT_CB(PRESS_UP);
-			if(handle->ticks < SHORT_TICKS) {
+			if(handle->ticks < handle->short_ticks) {
 				handle->ticks = 0;
 				handle->state = 2; //repeat press
 			} else {
 				handle->state = 0;
 			}
-		} else if(handle->ticks > SHORT_TICKS) { // SHORT_TICKS < press down hold time < LONG_TICKS
+		} else if(handle->ticks > handle->short_ticks) { // SHORT_TICKS < press down hold time < LONG_TICKS
 			handle->state = 1;
 		}
 		break;

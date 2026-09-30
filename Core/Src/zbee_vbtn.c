@@ -150,7 +150,7 @@ static void vbtn_execute_payload(int slot, const char *payload) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  zbee_vbtn_tick() — called every ~10ms from InputTask
+ *  zbee_vbtn_tick() — called every ~5ms from InputTask (timing is ms-based, period-independent)
  * ═══════════════════════════════════════════════════════════════════════════ */
 void zbee_vbtn_tick(void) {
     uint32_t now = HAL_GetTick();
