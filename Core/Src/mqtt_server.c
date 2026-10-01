@@ -1,6 +1,6 @@
 /**
  * @file mqtt_server.c
- * @brief Экспериментальный встроенный MQTT-брокер (QoS 0, MQTT 3.1.1).
+ * @brief Встроенный MQTT-брокер (QoS 0, MQTT 3.1.1, wildcard + и #, retained, fan-out).
  *
  * Архитектура: свой listener (mg_mqtt_listen) в общем mgr WebServerTask.
  * Mongoose парсит входящие MQTT-пакеты (pfn = mqtt_cb из mongoose.c) и
@@ -100,6 +100,24 @@ static uint32_t s_stat_rx_msgs    = 0;  /* принятых PUBLISH от кли�
                                                  разрыв TCP). Метрика стабильности связи,
                                                  инкремент в MG_EV_CLOSE. */
   static uint32_t s_last_heartbeat_ms = 0;
+static uint32_t s_stat_fwd_msgs   = 0;  /* доставок PUBLISH от клиента другим подписчикам (fan-out) */
+static uint32_t s_stat_ret_stored = 0;  /* сохранений retained-сообщений */
+static uint32_t s_stat_ret_sent   = 0;  /* отправок retained новому подписчику */
+
+/* ---------- Retained-хранилище (маленькое, в DTCM) ----------
+ * Нужно, чтобы клиент, подписавшийся ПОСЛЕ публикации (MQTTX, Home Assistant),
+ * сразу получал последнее состояние, например <rxzbtop>/system_info/status
+ * от SLZB. Если DTCM-аллокация не удалась, retained просто отключается,
+ * остальной брокер работает. */
+typedef struct {
+    uint8_t used;
+    uint8_t plen;
+    char    topic[MQTT_SRV_RETAIN_TOPIC_LEN];
+    char    payload[MQTT_SRV_RETAIN_PAYLOAD_LEN];
+} MqttSrvRetained_t;
+
+static MqttSrvRetained_t *s_ret = NULL;
+static uint8_t s_ret_next = 0;   /* round-robin вытеснение при переполнении */
 
 /* ---------- мелкие парсеры ---------- */
 static uint16_t srv_be16(const uint8_t *p) {
@@ -115,14 +133,26 @@ static size_t srv_varint_end(const uint8_t *d, size_t pos, size_t len) {
   return 0;
 }
 
-/* ---------- Wildcard-матчинг: точное совпадение или "prefix/#" ---------- */
+/* ---------- Wildcard-матчинг: полная семантика MQTT 3.1.1 ----------
+ * '+' заменяет ровно один уровень, '#' (только в конце) - любой хвост,
+ * включая пустой ("a/#" совпадает и с "a"). Топики, начинающиеся с '$',
+ * не совпадают с фильтрами, начинающимися с '+' или '#'. */
 static bool srv_topic_match(const char *filter, const char *topic) {
-  size_t flen = strlen(filter);
-  if (flen == 1 && filter[0] == '#') return true;   // вся маска топиков
-  if (flen >= 2 && filter[flen - 1] == '#' && filter[flen - 2] == '/') {
-    return strncmp(filter, topic, flen - 1) == 0;   // префиксное совпадение
+  const char *f = filter, *t = topic;
+  if (topic[0] == '$' && (filter[0] == '+' || filter[0] == '#')) return false;
+  while (*f) {
+    if (*f == '#') return true;
+    if (f[0] == '/' && f[1] == '#' && f[2] == '\0' && *t == '\0') return true;
+    if (*f == '+') {
+      f++;
+      while (*t != '\0' && *t != '/') t++;
+      continue;
+    }
+    if (*f != *t) return false;
+    f++;
+    t++;
   }
-  return strcmp(filter, topic) == 0;                // точное совпадение
+  return *t == '\0';
 }
 
 static bool srv_match_any(const MqttSrvClient_t *cl, const char *topic) {
@@ -133,17 +163,18 @@ static bool srv_match_any(const MqttSrvClient_t *cl, const char *topic) {
 }
 
 /* ---------- Валидация фильтра подписки ----------
- * Поддерживаем только точное имя и "#" в конце ("/..."#").
- * "+" в середине отклоняем (0x80) — по плану первой версии. */
+ * Поддерживаются точное имя, '+' (целый уровень) и '#' (последний символ,
+ * после '/' или единственный). Остальное отклоняется кодом 0x80. */
 static uint8_t srv_filter_rc(const char *topic, size_t len) {
-  if (topic[0] == '\0') return 0x80;
+  if (len == 0 || topic[0] == '\0') return 0x80;
   if (len > MQTT_SRV_TOPIC_LEN - 1) return 0x80;
   for (size_t i = 0; i < len; i++) {
-    if (topic[i] == '+') return 0x80;               // wildcard + не поддержан
-    if (topic[i] == '#') {
+    if (topic[i] == '+') {
+      if (i > 0 && topic[i - 1] != '/') return 0x80;
+      if (i + 1 < len && topic[i + 1] != '/') return 0x80;
+    } else if (topic[i] == '#') {
       if (i != len - 1) return 0x80;                // '#' не в конце
       if (i > 0 && topic[i - 1] != '/') return 0x80;
-      if (i == 0) return 0x00;                      // голый "#" — ok
     }
   }
   return 0x00;
@@ -193,6 +224,94 @@ static void srv_send_unsuback(struct mg_connection *c, uint16_t pktid) {
   mg_send(c, body, sizeof(body));
 }
 
+/* ---------- Retained: хранение и повторная отправка ---------- */
+static void srv_retain_store(const struct mg_mqtt_message *msg) {
+  size_t tlen = msg->topic.len, dlen = msg->data.len;
+  int idx = -1, i;
+  if (s_ret == NULL) return;
+  if (tlen == 0 || tlen >= MQTT_SRV_RETAIN_TOPIC_LEN) return;
+
+  for (i = 0; i < MQTT_SRV_RETAIN_SLOTS; i++) {
+    if (s_ret[i].used && strlen(s_ret[i].topic) == tlen &&
+        memcmp(s_ret[i].topic, msg->topic.buf, tlen) == 0) {
+      idx = i;
+      break;
+    }
+  }
+  if (dlen == 0) {                                  // пустой retained = удалить
+    if (idx >= 0) memset(&s_ret[idx], 0, sizeof(s_ret[idx]));
+    return;
+  }
+  if (dlen > MQTT_SRV_RETAIN_PAYLOAD_LEN) {         // не влезает - убираем устаревшее
+    if (idx >= 0) memset(&s_ret[idx], 0, sizeof(s_ret[idx]));
+    return;
+  }
+  if (idx < 0) {
+    for (i = 0; i < MQTT_SRV_RETAIN_SLOTS; i++) {
+      if (!s_ret[i].used) { idx = i; break; }
+    }
+  }
+  if (idx < 0) {                                    // все заняты - вытесняем по кругу
+    idx = s_ret_next;
+    s_ret_next = (uint8_t) ((s_ret_next + 1) % MQTT_SRV_RETAIN_SLOTS);
+  }
+  memset(&s_ret[idx], 0, sizeof(s_ret[idx]));
+  memcpy(s_ret[idx].topic, msg->topic.buf, tlen);
+  memcpy(s_ret[idx].payload, msg->data.buf, dlen);
+  s_ret[idx].plen = (uint8_t) dlen;
+  s_ret[idx].used = 1;
+  s_stat_ret_stored++;
+}
+
+/* Отправить клиенту все retained, подходящие под фильтр (после SUBACK) */
+static void srv_retain_replay(MqttSrvClient_t *cl, const char *filter) {
+  struct mg_mqtt_opts o;
+  if (s_ret == NULL || cl == NULL || cl->conn == NULL) return;
+  for (int i = 0; i < MQTT_SRV_RETAIN_SLOTS; i++) {
+    if (!s_ret[i].used) continue;
+    if (!srv_topic_match(filter, s_ret[i].topic)) continue;
+    if (cl->conn->is_closing || cl->conn->is_draining) return;
+    if (cl->conn->send.len > MQTT_SRV_SEND_LIMIT) return;
+    memset(&o, 0, sizeof(o));
+    o.topic = mg_str(s_ret[i].topic);
+    o.message = mg_str_n(s_ret[i].payload, s_ret[i].plen);
+    o.qos = 0;
+    o.retain = true;                                // для нового подписчика флаг retain = 1
+    mg_mqtt_pub(cl->conn, &o);
+    s_stat_ret_sent++;
+  }
+}
+
+/* ---------- Fan-out PUBLISH, принятого от клиента, остальным подписчикам ----------
+ * Раньше PUBLISH от клиента (в т.ч. от SLZB) уходил только во внутреннюю
+ * очередь прошивки и НЕ пересылался другим клиентам брокера, поэтому MQTTX
+ * не видел ни данных датчиков, ни статуса шлюза, ни собственного эха.
+ * Горячий путь: никаких printf, только инкремент счётчика. */
+static void srv_forward_publish(const struct mg_mqtt_message *msg) {
+  struct mg_mqtt_opts o;
+  char tbuf[MQTT_SRV_FWD_TOPIC_MAX + 1];
+  size_t tlen = msg->topic.len;
+
+  if (tlen == 0 || tlen > MQTT_SRV_FWD_TOPIC_MAX) return;
+  memcpy(tbuf, msg->topic.buf, tlen);
+  tbuf[tlen] = '\0';
+
+  for (int i = 0; i < MQTT_SRV_MAX_CLIENTS_HARDCAP; i++) {
+    MqttSrvClient_t *cl = &s_cli[i];
+    if (cl->conn == NULL || !cl->authenticated) continue;
+    if (cl->conn->is_closing || cl->conn->is_draining) continue;
+    if (cl->conn->send.len > MQTT_SRV_SEND_LIMIT) continue;   // backpressure
+    if (!srv_match_any(cl, tbuf)) continue;
+    memset(&o, 0, sizeof(o));
+    o.topic = msg->topic;
+    o.message = msg->data;
+    o.qos = 0;
+    o.retain = false;                               // живая доставка: retain = 0
+    mg_mqtt_pub(cl->conn, &o);
+    s_stat_fwd_msgs++;
+  }
+}
+
 /* ---------- CONNECT: разбор и авторизация (только MQTT 3.1.1) ---------- */
 static void srv_handle_connect(struct mg_connection *c,
                                const struct mg_mqtt_message *mm) {
@@ -200,8 +319,11 @@ static void srv_handle_connect(struct mg_connection *c,
   const uint8_t *d = (const uint8_t *) mm->dgram.buf;
   size_t len = mm->dgram.len, off, plen;
   uint8_t level, flags;
+  char peer[48];                    /* ip:port подключившегося (диагностика "кто это") */
+  char cid[32] = {0};               /* client-id из CONNECT */
 
   if (cl == NULL) return;
+  mg_snprintf(peer, sizeof(peer), "%M", mg_print_ip_port, &c->rem);
   if (len < 12) {                                   // мусор вместо CONNECT
     SRV_LOG("[server] reject: CONNECT too short (%u B)\r\n", (unsigned) len);
     s_stat_rejected++;
@@ -235,8 +357,8 @@ static void srv_handle_connect(struct mg_connection *c,
   flags = d[off++];
 
   if (level != 4 && level != 3) {                   // v3.1.1 / v3.1 only
-    SRV_LOG("[server] reject: unsupported protocol level=%u (клиент шлёт MQTT5?)\r\n",
-            (unsigned) level);
+    SRV_LOG("[server] reject: unsupported protocol level=%u (клиент шлёт MQTT5?) peer=%s\r\n",
+            (unsigned) level, peer);
     s_stat_rejected++;
     srv_send_connack(c, 0x01);                      // unacceptable protocol
     c->is_closing = 1;
@@ -256,6 +378,17 @@ static void srv_handle_connect(struct mg_connection *c,
     if (off + clen > len) {
       SRV_LOG("[server] reject: CONNECT truncated (client-id body)\r\n");
       s_stat_rejected++; c->is_closing = 1; return;
+    }
+    /* client-id не секрет; печатаем в лог, чтобы отличать SLZB от MQTTX
+     * и видеть, кто именно подключился (обрезаем до 31, чистим не-печатаемые) */
+    {
+      size_t n = clen < sizeof(cid) - 1 ? clen : sizeof(cid) - 1;
+      size_t k;
+      memcpy(cid, d + off, n);
+      cid[n] = '\0';
+      for (k = 0; k < n; k++) {
+        if (cid[k] < 32 || cid[k] > 126) cid[k] = '?';
+      }
     }
     off += clen;
   }
@@ -292,8 +425,8 @@ static void srv_handle_connect(struct mg_connection *c,
      * логин), без утечки credentials в UART-лог. */
     if (s_usr[0] != '\0') {
       if (ul != strlen(s_usr) || memcmp(d + off, s_usr, ul) != 0) {
-        SRV_LOG("[server] reject: bad username (got %u B, expected %u B)\r\n",
-                (unsigned) ul, (unsigned) strlen(s_usr));
+        SRV_LOG("[server] reject: bad username (got %u B, expected %u B) peer=%s\r\n",
+                (unsigned) ul, (unsigned) strlen(s_usr), peer);
         s_stat_rejected++;
         srv_send_connack(c, 0x04);
         c->is_closing = 1;
@@ -302,7 +435,8 @@ static void srv_handle_connect(struct mg_connection *c,
     }
     off += ul;
   } else if (s_usr[0] != '\0') {
-    SRV_LOG("[server] reject: username required, но клиент не выставил флаг USERNAME\r\n");
+    SRV_LOG("[server] reject: username required, но клиент не выставил флаг USERNAME (peer=%s)\r\n",
+            peer);
     s_stat_rejected++;
     srv_send_connack(c, 0x05);                      // not authorized
     c->is_closing = 1;
@@ -321,8 +455,8 @@ static void srv_handle_connect(struct mg_connection *c,
     }
     if (s_pswd[0] != '\0') {
       if (pw != strlen(s_pswd) || memcmp(d + off, s_pswd, pw) != 0) {
-        SRV_LOG("[server] reject: bad password (got %u B, expected %u B)\r\n",
-                (unsigned) pw, (unsigned) strlen(s_pswd));
+        SRV_LOG("[server] reject: bad password (got %u B, expected %u B) peer=%s\r\n",
+                (unsigned) pw, (unsigned) strlen(s_pswd), peer);
         s_stat_rejected++;
         srv_send_connack(c, 0x04);
         c->is_closing = 1;
@@ -330,7 +464,8 @@ static void srv_handle_connect(struct mg_connection *c,
       }
     }
   } else if (s_pswd[0] != '\0') {
-    SRV_LOG("[server] reject: password required, но клиент не выставил флаг PASSWORD\r\n");
+    SRV_LOG("[server] reject: password required, но клиент не выставил флаг PASSWORD (peer=%s)\r\n",
+            peer);
     s_stat_rejected++;
     srv_send_connack(c, 0x05);
     c->is_closing = 1;
@@ -338,15 +473,16 @@ static void srv_handle_connect(struct mg_connection *c,
   }
 
   if (cl->authenticated) {                                // второй CONNECT
-    SRV_LOG("[server] reject: duplicate CONNECT on already-authenticated conn\r\n");
+    SRV_LOG("[server] reject: duplicate CONNECT on already-authenticated conn (peer=%s)\r\n",
+            peer);
     s_stat_rejected++;
     c->is_closing = 1; return;
   }
   cl->authenticated = 1;
   srv_send_connack(c, 0x00);
   s_stat_accepted++;
-  SRV_LOG("[server] client accepted (%d/%d), keepalive=%us\r\n",
-         s_cli_count, MQTT_SRV_MAX_CLIENTS_HARDCAP, cl->keepalive_s);
+  SRV_LOG("[server] client accepted (%d/%d) peer=%s id='%s', keepalive=%us\r\n",
+         s_cli_count, MQTT_SRV_MAX_CLIENTS_HARDCAP, peer, cid, cl->keepalive_s);
 }
 
 /* ---------- SUBSCRIBE / UNSUBSCRIBE ---------- */
@@ -357,6 +493,8 @@ static void srv_handle_subscribe(struct mg_connection *c,
   size_t len = mm->dgram.len, off;
   uint8_t codes[16];                                // максимум топиков в пакете
   uint8_t nsubs = 0;
+  uint8_t replay_idx[16];                           // индексы фильтров для retained-replay
+  uint8_t nreplay = 0;
 
   if (cl == NULL) return;
   {
@@ -378,35 +516,51 @@ static void srv_handle_subscribe(struct mg_connection *c,
     uint16_t tlen = srv_be16(d + off);
     const char *topic = (const char *) d + off + 2;
     uint8_t rc = 0x00;
+    int dup = -1;
     if (off + 2 + tlen + 1 > len) break;            // битый пакет
     off += 2 + tlen + 1;                            // topic + qos
 
-    if (cl->num_subs >= MQTT_SRV_MAX_SUBS_PER_CLIENT) {
-      rc = 0x80;
-    } else {
-      rc = srv_filter_rc(topic, tlen);
+    rc = srv_filter_rc(topic, tlen);
+    if (rc == 0x00) {
+      /* Повторная подписка на тот же фильтр: не дублируем слот и принимаем
+       * ЕЩЁ И при заполненном лимите (дубликат не занимает новый слот, как
+       * и требует спецификация), но retained отправляем заново. */
+      for (uint8_t k = 0; k < cl->num_subs; k++) {
+        if (strlen(cl->subs[k]) == tlen && memcmp(cl->subs[k], topic, tlen) == 0) {
+          dup = (int) k;
+          break;
+        }
+      }
+      if (dup < 0 && cl->num_subs >= MQTT_SRV_MAX_SUBS_PER_CLIENT) {
+        rc = 0x80;                                  // новый фильтр, слотов нет
+      }
     }
     if (rc == 0x00) {
-      /* topic[0] != '\0' гарантирован srv_filter_rc */
-      memcpy(cl->subs[cl->num_subs], topic, tlen);
-      cl->subs[cl->num_subs][tlen] = '\0';
-      cl->num_subs++;
-      SRV_LOG("[server] sub '%.*s' (%d/%d)\r\n", (int) tlen, topic,
-             cl->num_subs, MQTT_SRV_MAX_SUBS_PER_CLIENT);
+      if (dup >= 0) {
+        if (nreplay < sizeof(replay_idx)) replay_idx[nreplay++] = (uint8_t) dup;
+      } else {
+        /* topic[0] != '\0' гарантирован srv_filter_rc */
+        memcpy(cl->subs[cl->num_subs], topic, tlen);
+        cl->subs[cl->num_subs][tlen] = '\0';
+        if (nreplay < sizeof(replay_idx)) replay_idx[nreplay++] = cl->num_subs;
+        cl->num_subs++;
+        SRV_LOG("[server] sub '%.*s' (%d/%d)\r\n", (int) tlen, topic,
+               cl->num_subs, MQTT_SRV_MAX_SUBS_PER_CLIENT);
 
-      /* Фингерпринт SLZB-06p7U: единственный клиент, который подписывается
-       * на <rxzbtop>/system_control/... (Android-приложения и прочие
-       * MQTT-клиенты на этот топик не подписываются). Сравнение по префиксу:
-       * SLZB может добавить свой client-id в конец топика. */
-      if (!cl->is_slzb) {
-        char pattern[MQTT_SRV_TOPIC_LEN];
-        const char *zbtop = (SetSettings.rxzbtop[0] != '\0')
-                                ? SetSettings.rxzbtop : "zigbee2mqtt";
-        int plen = snprintf(pattern, sizeof(pattern), "%s/system_control/", zbtop);
-        if (plen > 0 && (size_t) plen <= tlen &&
-            memcmp(topic, pattern, (size_t) plen) == 0) {
-          cl->is_slzb = 1;
-          SRV_LOG("[server] slot identified as SLZB (system_control sub)\r\n");
+        /* Фингерпринт SLZB-06p7U: единственный клиент, который подписывается
+         * на <rxzbtop>/system_control/... (Android-приложения и прочие
+         * MQTT-клиенты на этот топик не подписываются). Сравнение по префиксу:
+         * SLZB может добавить свой client-id в конец топика. */
+        if (!cl->is_slzb) {
+          char pattern[MQTT_SRV_TOPIC_LEN];
+          const char *zbtop = (SetSettings.rxzbtop[0] != '\0')
+                                  ? SetSettings.rxzbtop : "zigbee2mqtt";
+          int plen = snprintf(pattern, sizeof(pattern), "%s/system_control/", zbtop);
+          if (plen > 0 && (size_t) plen <= tlen &&
+              memcmp(topic, pattern, (size_t) plen) == 0) {
+            cl->is_slzb = 1;
+            SRV_LOG("[server] slot identified as SLZB (system_control sub)\r\n");
+          }
         }
       }
     } else {
@@ -425,6 +579,10 @@ static void srv_handle_subscribe(struct mg_connection *c,
     c->is_closing = 1; return;
   }
   srv_send_suback(c, mm->id, codes, nsubs);
+  /* Retained-сообщения уходят строго ПОСЛЕ SUBACK */
+  for (uint8_t r = 0; r < nreplay; r++) {
+    srv_retain_replay(cl, cl->subs[replay_idx[r]]);
+  }
 }
 
 static void srv_handle_unsubscribe(struct mg_connection *c,
@@ -483,8 +641,10 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
       {
         int slot = srv_slot_alloc(c);
         if (slot < 0) {
-          SRV_LOG("[server] REFUSED: client limit (%d) reached\r\n",
-                 MQTT_SRV_MAX_CLIENTS_HARDCAP);
+          char peer[48];
+          mg_snprintf(peer, sizeof(peer), "%M", mg_print_ip_port, &c->rem);
+          SRV_LOG("[server] REFUSED: client limit (%d) reached, peer=%s\r\n",
+                 MQTT_SRV_MAX_CLIENTS_HARDCAP, peer);
           c->is_closing = 1;
           return;
         }
@@ -556,6 +716,12 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
       if (xQueueSend(mqttRxQueueHandle, &rx, 0) != pdPASS) {
         SRV_LOG("[server] RX queue full, message dropped!\r\n");
       }
+      /* Retained (бит 0 фиксированного заголовка PUBLISH) и рассылка
+       * остальным подписчикам: именно это раньше отсутствовало. */
+      if (msg->dgram.len > 0 && (((const uint8_t *) msg->dgram.buf)[0] & 0x01)) {
+        srv_retain_store(msg);
+      }
+      srv_forward_publish(msg);
       break;
     }
 
@@ -611,6 +777,14 @@ void mqtt_server_init(struct mg_mgr *mgr, uint16_t port) {
   }
   memset(s_cli, 0, tbl_sz);
 
+  /* Retained-хранилище: необязательное, при нехватке DTCM просто отключается */
+  s_ret = (MqttSrvRetained_t *) dtcm_malloc(sizeof(MqttSrvRetained_t) * MQTT_SRV_RETAIN_SLOTS);
+  s_ret_next = 0;
+  if (s_ret == NULL) {
+    SRV_LOG("[server] WARN: no DTCM for retained store (%u B), retained disabled\r\n",
+            (unsigned) (sizeof(MqttSrvRetained_t) * MQTT_SRV_RETAIN_SLOTS));
+  }
+
   /* Снимок кредов на момент старта (изменение настроек требует reboot) */
   strncpy(s_usr, SetSettings.mqtt_srv_usr, 31);
   strncpy(s_pswd, SetSettings.mqtt_srv_pswd, 31);
@@ -631,10 +805,12 @@ void mqtt_server_init(struct mg_mgr *mgr, uint16_t port) {
   s_last_heartbeat_ms = mg_millis();
   s_stat_accepted = s_stat_rejected = s_stat_rx_msgs = s_stat_tx_msgs = 0;
   s_stat_slzb_reconnects = 0;
+  s_stat_fwd_msgs = s_stat_ret_stored = s_stat_ret_sent = 0;
   SRV_LOG("[server] MQTT 3.1.1 broker started on port %u (max %d clients, "
-         "QoS 0, subs/client %d)\r\n",
+         "QoS 0, subs/client %d, retained slots %d)\r\n",
          (unsigned) port, MQTT_SRV_MAX_CLIENTS_HARDCAP,
-         MQTT_SRV_MAX_SUBS_PER_CLIENT);
+         MQTT_SRV_MAX_SUBS_PER_CLIENT,
+         (s_ret != NULL) ? MQTT_SRV_RETAIN_SLOTS : 0);
 }
 
 void mqtt_server_poll(void) {
@@ -654,12 +830,15 @@ void mqtt_server_poll(void) {
     if (now - s_last_heartbeat_ms >= MQTT_SRV_HEARTBEAT_MS) {
       s_last_heartbeat_ms = now;
       SRV_LOG("[server] heartbeat: clients=%u accepted=%lu rejected=%lu "
-              "rx=%lu tx=%lu SLZB=%lu\r\n",
+              "rx=%lu tx=%lu fwd=%lu ret=%lu/%lu SLZB=%lu\r\n",
               (unsigned) s_cli_count,
               (unsigned long) s_stat_accepted,
               (unsigned long) s_stat_rejected,
               (unsigned long) s_stat_rx_msgs,
               (unsigned long) s_stat_tx_msgs,
+              (unsigned long) s_stat_fwd_msgs,
+              (unsigned long) s_stat_ret_stored,
+              (unsigned long) s_stat_ret_sent,
               (unsigned long) s_stat_slzb_reconnects);
     }
   }
@@ -732,3 +911,4 @@ uint8_t mqtt_server_slzb_connected(void) {
   }
   return 0;
 }
+

@@ -1,11 +1,13 @@
 /**
  * @file mqtt_server.h
- * @brief Экспериментальный встроенный MQTT-брокер (QoS 0, без retained/LWT/TLS).
+ * @brief Встроенный MQTT-брокер (QoS 0, retained, wildcard + и #, без LWT/TLS).
  *
  * Ограничения первой версии (см. MQTT_Server_Implementation_Plan.md):
  *  - максимум клиентов: MQTT_SRV_MAX_CLIENTS_HARDCAP (clamp, не обходится через UI);
- *  - только QoS 0;
- *  - wildcard: только "#" в конце фильтра и точное совпадение;
+ *  - только QoS 0 (входящие QoS 1/2 подтверждаются Mongoose, рассылка идёт как QoS 0);
+ *  - wildcard: '+' (целый уровень), '#' (в конце) и точное совпадение;
+ *  - PUBLISH от любого клиента пересылается всем подходящим подписчикам;
+ *  - retained: MQTT_SRV_RETAIN_SLOTS последних сообщений (topic/payload ограничены);
  *  - MQTT 3.1.1 клиенты (v5 CONNECT отклоняется с rc 0x01);
  *  - таблица клиентов в DTCM (bump-allocator), .bss не расходуется.
  *
@@ -24,6 +26,12 @@
 #define MQTT_SRV_TOPIC_LEN           64
 /* Backpressure: не паблишим клиенту, чей send-буфер больше этого (байт) */
 #define MQTT_SRV_SEND_LIMIT          4096
+/* Retained-хранилище (DTCM): слотов * (topic + payload + 2 байта) */
+#define MQTT_SRV_RETAIN_SLOTS        8
+#define MQTT_SRV_RETAIN_TOPIC_LEN    64
+#define MQTT_SRV_RETAIN_PAYLOAD_LEN  128
+/* Максимальная длина топика входящего PUBLISH, который пересылается подписчикам */
+#define MQTT_SRV_FWD_TOPIC_MAX       127
 /* Таймаут ожидания CONNECT после accept (мс) */
 #define MQTT_SRV_CONNECT_TIMEOUT_MS  30000
 
