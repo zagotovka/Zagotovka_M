@@ -9,7 +9,7 @@ const ROLE_OPTIONS = [
   { value: 'color',       label: { ru: 'Цвет',         en: 'Color' } },
   { value: 'temperature', label: { ru: 'Температура',   en: 'Temperature' } },
   { value: 'humidity',    label: { ru: 'Влажность',     en: 'Humidity' } },
-  { value: 'occupancy',   label: { ru: 'Присутствие',   en: 'Occupancy' } },
+  { value: 'occupancy',   label: { ru: 'Дтчк. движения (PIR)', en: 'Motion snsr (PIR)' } },
   { value: 'button',      label: { ru: 'Кнопка',        en: 'Button' } },
   { value: 'ep',          label: { ru: 'EP',             en: 'EP' } },
 ];
@@ -25,7 +25,7 @@ function obsKey(o) {
   return `${o.ep}_${o.cluster}_${o.attr}`;
 }
 
-export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }) {
+export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, existingLabels }) {
   const lang = language || 'ru';
   const [status, setStatus] = useState(null);
   const [observations, setObservations] = useState([]);
@@ -44,6 +44,28 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
   const lastTickRef = useRef({});      // obsKey -> последний известный last_seen_tick
   const [flashKeys, setFlashKeys] = useState({}); // obsKey -> true, пока горит подсветка
 
+  /* Текущие имена устройства (Info из Zigbee Devices / Select pin):
+     map: ep -> имя; single — имя, если у устройства оно ровно одно.
+     Нужно для предзаполнения колонки «Название». */
+  const existingRef = useRef({ map: {}, single: null });
+  const prefillDoneRef = useRef(new Set());  // obsKey, для которых предзаполнение уже применялось
+
+  useEffect(() => {
+    const list = Array.isArray(existingLabels) ? existingLabels : [];
+    const map = {};
+    let count = 0;
+    let single = null;
+    for (const it of list) {
+      const info = (it && it.info ? String(it.info) : '').trim();
+      if (!info) continue;
+      const ep = parseInt(it && it.ep, 10) || 0;
+      if (!(ep in map)) map[ep] = info;
+      count++;
+      single = info;
+    }
+    existingRef.current = { map, single: count === 1 ? single : null };
+  }, [existingLabels]);
+
   useEffect(() => {
     mergedRef.current = {};
     setObservations([]);
@@ -53,6 +75,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
     setClickTypes({});
     setSavedType(null);
     setError(null);
+    prefillDoneRef.current.clear();
     // --- сброс подсветки повторов ---
     Object.values(flashRef.current).forEach(clearTimeout);
     flashRef.current = {};
@@ -63,6 +86,32 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin }
   useEffect(() => {
     return () => { Object.values(flashRef.current).forEach(clearTimeout); };
   }, []);
+
+  /* Предзаполнение «Название» текущими именами устройства (один раз на
+     строку наблюдения). Для trigger-строк — только если у устройства ровно
+     одно имя (иначе непонятно, какой строке оно соответствует); для строк
+     данных — по ep (для Tuya 0xEF00 ep = DP id). */
+  useEffect(() => {
+    if (!observations.length) return;
+    const { map, single } = existingRef.current;
+    const add = {};
+    for (const o of observations) {
+      const k = obsKey(o);
+      if (prefillDoneRef.current.has(k)) continue;
+      prefillDoneRef.current.add(k);
+      let pre = null;
+      if (o.source === 'trigger') {
+        pre = single;
+      } else {
+        const epKey = o.cluster === '0xEF00' ? parseInt(o.attr, 16) : o.ep;
+        pre = map[epKey] ?? map[o.ep] ?? null;
+      }
+      if (pre) add[k] = pre;
+    }
+    if (Object.keys(add).length) {
+      setNames(prev => ({ ...add, ...prev }));
+    }
+  }, [observations]);
 
   /* Остановка сессии обучения на контроллере при закрытии модального окна
      (крестик, Отмена, клик по фону, успешное сохранение, смена устройства).

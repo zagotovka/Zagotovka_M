@@ -192,6 +192,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
 void handle_zigbee_learn_start(struct mg_connection *c, struct mg_http_message *hm);
 void handle_zigbee_learn_stop(struct mg_connection *c, struct mg_http_message *hm);
 bool zbee_is_valid_ieee(const char *s);
+void zbee_validate_ieee(char *ieee);
 
 void calc_display_id(int parent_id, int zbee_slot, int trigger_index,
                      char *out, size_t out_size);

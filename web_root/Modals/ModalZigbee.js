@@ -64,12 +64,18 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
 
   /* Для одиночного устройства */
   const effectiveOverride = overrideType;
-  const hasDimmer = effectiveOverride === 0 
-    ? (device.clusters || []).includes(8) 
+  const hasDimmer = effectiveOverride === 0
+    ? (device.clusters || []).includes(8)
     : (effectiveOverride === 2 || effectiveOverride === 3 || effectiveOverride === 4);
-  const hasColor = effectiveOverride === 0 
-    ? (device.clusters || []).includes(768) 
+  const hasColor = effectiveOverride === 0
+    ? (device.clusters || []).includes(768)
     : (effectiveOverride === 4);
+
+  /* Иконка и подзаголовок по типу (PIR = override 7) */
+  const typeIcon = isTrigger ? '🔘' : isSwitch ? '🔀' : effectiveOverride === 7 ? '🚶' : hasColor ? '💡' : hasDimmer ? '🔆' : '🔌';
+  const typeSubtitle = isTrigger ? 'Button' : isSwitch ? 'Switch' : effectiveOverride === 7
+    ? (lang === 'ru' ? 'PIR (датчик движения)' : 'PIR (motion sensor)')
+    : hasColor ? 'Лампа (яркость + цвет)' : hasDimmer ? 'Лампа (яркость)' : 'Розетка (On/Off)';
 
   /* Калибровка диапазона: для ZCL Level Control (cluster 8) спека фиксирует 1-254.
      Для Tuya DP dimmer_min/dimmer_max приходят с бэкенда после Learning Mode. */
@@ -199,14 +205,14 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
             <div>
               <h2 class="text-xl font-bold text-slate-800">
                 ${isMultiDp ? html`✱ ${device.zbee_label || 'Smart Device'}` : html`
-                  ${isTrigger ? '🔘' : (isSwitch ? '🔀' : (hasColor ? '💡' : (hasDimmer ? '🔆' : '🔌')))}
+                  ${typeIcon}
                   ${device.zbee_label || 'Device ' + device.id}
                 `}
               </h2>
               <p class="text-sm text-slate-500 mt-1">
                 ID: ${device.displayId || device.id} · ${isMultiDp
                   ? `Multi-EP (${dpSlots.length} EP)`
-                  : (isTrigger ? 'Button' : (isSwitch ? 'Switch' : (hasColor ? 'Лампа (яркость + цвет)' : (hasDimmer ? 'Лампа (яркость)' : 'Розетка (On/Off)'))))}
+                  : typeSubtitle}
               </p>
             </div>
             <button
@@ -235,6 +241,7 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
                 <option value="4">${lang === 'ru' ? 'Лампа (яркость + цвет)' : 'Lamp (brightness + color)'}</option>
                 <option value="5">${lang === 'ru' ? 'Выключатель (Switch)' : 'Switch'}</option>
                 <option value="6">${lang === 'ru' ? 'Кнопка (Button)' : 'Button'}</option>
+                <option value="7">${lang === 'ru' ? 'PIR (датчик движения)' : 'PIR (motion sensor)'}</option>
               </select>
             </div>
 

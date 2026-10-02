@@ -106,7 +106,10 @@ void vbtn_execute(int slot, int event_type) {
         const char *event_name[] = {"[SINGLE CLICK]", "[DOUBLE CLICK]", "[LONG PRESS]"};
         LOG_SYSTEM("%s Zigbee Button %d: %s", event_name[event_type], btn_id, action_str);
         action_handler(btn_id, action_str, press_type);
-        mqtt_queue_send_safe((uint8_t)(3 + event_type), btn_id, (uint8_t)(1 + event_type), 0);
+        /* cmd в MQTT-очереди: 3=LONG_PRESS, 4=SINGLE_CLICK, 5=DOUBLE_CLICK
+         * (см. main.c). event_type: 0=sclick -> 4, 1=dclick -> 5, 2=lpress -> 3 */
+        uint8_t mqtt_cmd = (event_type == 2) ? 3 : (uint8_t)(4 + event_type);
+        mqtt_queue_send_safe(mqtt_cmd, btn_id, (uint8_t)(1 + event_type), 0);
     }
 }
 

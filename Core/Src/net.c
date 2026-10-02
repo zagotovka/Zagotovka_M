@@ -2536,6 +2536,40 @@ static void handle_security(struct mg_connection *c) {
         first = false;
     }
 
+    /* ── Виртуальные пины (Zigbee-PIR): id = NUMPIN + индекс слота ── */
+    for (int i = 0; i < NUMZBEE; i++) {
+        if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
+        if (!zbee_is_pir(&ZigbeeConf[i])) continue;
+
+        int remaining = (int)G_BODY_SIZE - pos;
+        if (remaining < 220) {
+            MG_ERROR(("security: OVERFLOW at zigbee slot %d, pos=%d remaining=%d",
+                      i, pos, remaining));
+            break;
+        }
+
+        const char *zact = zbee_action_sclick(i);
+        const char *action   = (zact[0] != '\0' && strcmp(zact, "None") != 0) ? zact : "None";
+        const char *send_sms = ZigbeeConf[i].sec_send_sms ? "YES" : "NO";
+
+        char esc_zinfo[64];
+        char esc_zpins[24];
+        char esc_zaction[64], esc_zsms[16];
+        json_escape_str(esc_zinfo, ZigbeeConf[i].zbee_label, sizeof(esc_zinfo));
+        json_escape_str(esc_zpins, ZigbeeConf[i].zbee_ieee, sizeof(esc_zpins));
+        json_escape_str(esc_zaction, action, sizeof(esc_zaction));
+        json_escape_str(esc_zsms, send_sms, sizeof(esc_zsms));
+
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+            "%s{\"topin\":11,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,\"zbee\":1,"
+            "\"action\":\"%s\",\"send_sms\":\"%s\","
+            "\"info\":\"%s\",\"onoff\":%d}",
+            first ? "" : ",", NUMPIN + i, esc_zpins,
+            esc_zaction, esc_zsms, esc_zinfo, ZigbeeConf[i].onoff);
+
+        first = false;
+    }
+
     /* ── Закрываем JSON ── */
     pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
 

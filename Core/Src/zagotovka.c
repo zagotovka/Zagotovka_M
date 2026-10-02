@@ -776,6 +776,13 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
           ieee_changed = (strcmp(ZigbeeConf[zbi].zbee_ieee, ieee) != 0);
           strncpy(ZigbeeConf[zbi].zbee_ieee, ieee, sizeof(ZigbeeConf[zbi].zbee_ieee) - 1);
           ZigbeeConf[zbi].zbee_ieee[sizeof(ZigbeeConf[zbi].zbee_ieee) - 1] = '\0';
+          /* Нормализуем: padding невалидных символов + lowercase — иначе
+           * слот не совпадёт с lowercase-IEEE из MQTT-топиков */
+          zbee_validate_ieee(ZigbeeConf[zbi].zbee_ieee);
+          for (int k = 0; k < 16; k++) {
+            if (ZigbeeConf[zbi].zbee_ieee[k] >= 'A' && ZigbeeConf[zbi].zbee_ieee[k] <= 'F')
+              ZigbeeConf[zbi].zbee_ieee[k] += 32;
+          }
           mg_free(ieee);
         }
         char *label = mg_json_get_str(elem, "$.zbee_label");
@@ -881,8 +888,11 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
                          zbee_action_sclick(zbi)[0] != '\0');
 
         if (!is_button) {
-          /* Обычное устройство: ON/OFF */
-          if (ZigbeeConf[zbi].onoff) {
+          /* Обычное устройство: ON/OFF. Для PIR-слота On/Off — локальный
+           * флаг охраны со страницы Security: датчику движения кластер 6
+           * отправлять нельзя (у него нет OnOff, а зонд иногда ставит
+           * флаг ZBEE_CL_ONOFF по умолчанию). */
+          if (ZigbeeConf[zbi].onoff && !zbee_is_pir(&ZigbeeConf[zbi])) {
             const char *cmd = (onoff != 0) ? "ON" : "OFF";
             uint8_t flags = ZigbeeConf[zbi].cluster_flags;
             if (flags & ZBEE_CL_ONOFF) {
@@ -906,6 +916,9 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
     extern osMessageQueueId_t usbQueueHandle;
     uint32_t usbnum = 7;
     if (usbQueueHandle) xQueueSend(usbQueueHandle, &usbnum, 0);
+
+    /* OnOff Zigbee-PIR меняет строку на странице Security — обновляем её ETag */
+    if (zbee_is_pir(&ZigbeeConf[zbi])) mark_slice_dirty(&g_ver_security);
 
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
@@ -1114,7 +1127,7 @@ void gen_switch_json(const struct dbPinsInfo *pins_info,
           ZigbeeConf[i].pt_single[0] != '\0') {
         snprintf(esc_pins, sizeof(esc_pins), "%s", ZigbeeConf[i].pt_single);
       } else {
-        snprintf(esc_pins, sizeof(esc_pins), "ZB_%s", ZigbeeConf[i].zbee_ieee);
+    	  snprintf(esc_pins, sizeof(esc_pins), "ZB_%.16s", ZigbeeConf[i].zbee_ieee);
       }
       
       offset +=
@@ -4711,11 +4724,36 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
 
     char ieee[18] = {0};
     int ep = 0, cluster = 0, attr = 0;
-    if (sscanf(pfx, "%17[^/]/%d/%x/%x", ieee, &ep, &cluster, &attr) != 4) return;
+    if (sscanf(pfx, "%17[^/]/%d/%x/%x", ieee, &ep, &cluster, &attr) != 4) {
+        /* {rxzbtop}/data/{ieee}/lqi — штатный периодический топик координатора,
+         * не содержит endpoint/кластер; в лог не сыпем */
+        size_t tl = strlen(topic);
+        if (tl < 4 || strcmp(topic + tl - 4, "/lqi") != 0) {
+            LOG_Z2M("zbee: RX topic parse FAIL topic='%s'\r\n", topic);
+        }
+        return;
+    }
     /* Нормализуем IEEE из MQTT к lowercase */
     for (int k = 0; k < 16; k++) {
         if (ieee[k] >= 'A' && ieee[k] <= 'F') ieee[k] += 32;
         if (ieee[k] == '\0') ieee[k] = '0';
+    }
+
+    /* Диагностика PIR: сообщения о движении редкие — логируем каждое, чтобы
+     * сразу было видно, дошло ли оно и нашёлся ли слот по IEEE. Если строка
+     * "RX PIR" есть, а "SENSOR" нет — IEEE в слотах не совпадает (см.
+     * slot_found=0) либо EP не совпал (см. "EP MISMATCH"). */
+    if (cluster == ZBEE_CLUSTER_OCCUPANCY) {
+        int ieee_found = 0;
+        for (int k = 0; k < NUMZBEE; k++) {
+            if (ZigbeeConf[k].zbee_ieee[0] != '\0' &&
+                strcmp(ZigbeeConf[k].zbee_ieee, ieee) == 0) {
+                ieee_found = 1;
+                break;
+            }
+        }
+        LOG_Z2M("zbee: RX PIR ieee=%s ep=%d cl=%04X attr=%04X slot_found=%d\r\n",
+                ieee, ep, cluster, attr, ieee_found);
     }
 
     /* Наблюдения во время LEARNING_MODE */
@@ -4747,7 +4785,25 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
         if (cluster == ZBEE_CLUSTER_MFR) {
             if (ZigbeeConf[i].ep != (uint16_t)attr) continue;
         } else {
-            if (ZigbeeConf[i].zbee_endpoint != (uint8_t)ep) continue;
+            if (ZigbeeConf[i].zbee_endpoint != (uint8_t)ep) {
+                if (cluster == ZBEE_CLUSTER_OCCUPANCY &&
+                    ZigbeeConf[i].zbee_endpoint == 0) {
+                    /* Слот PIR с неинициализированным endpoint (0 — наследие
+                     * старой прошивки/обучения): реальный EP берём из топика и
+                     * сохраняем в zigbee.ini, чтобы авто-фикс не повторялся */
+                    ZigbeeConf[i].zbee_endpoint = (uint8_t)ep;
+                    LOG_Z2M("zbee: PIR slot=%d endpoint 0 -> %d (auto-fix)\r\n", i, ep);
+                    extern osMessageQueueId_t usbQueueHandle;
+                    uint32_t usbnum = 7; /* zigbee.ini */
+                    if (usbQueueHandle) xQueueSend(usbQueueHandle, &usbnum, 0);
+                } else {
+                    if (cluster == ZBEE_CLUSTER_OCCUPANCY) {
+                        LOG_Z2M("zbee: PIR slot=%d ieee match, EP MISMATCH slot_ep=%d msg_ep=%d\r\n",
+                                i, ZigbeeConf[i].zbee_endpoint, ep);
+                    }
+                    continue;
+                }
+            }
         }
 
         /* Пассивные кластеры: SENSOR */
@@ -4768,9 +4824,42 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                         ? raw_len : (int)sizeof(numbuf) - 1;
             memcpy(numbuf, raw, copylen);
             numbuf[copylen] = '\0';
+            int val = atoi(numbuf);
             ZigbeeConf[i].zbee_role       = ZBEE_ROLE_SENSOR;
             ZigbeeConf[i].sensor_cluster  = (uint16_t)cluster;
-            ZigbeeConf[i].sensor_last_val = atoi(numbuf);
+            ZigbeeConf[i].sensor_last_val = val;
+            LOG_Z2M("zbee: SENSOR ieee=%s ep=%d cl=%04X val=%d onoff=%d act='%s'\r\n",
+                    ieee, ep, cluster, val, ZigbeeConf[i].onoff, zbee_action_sclick(i));
+
+            /* Security: PIR — срабатывание на движение (val != 0). Многие
+             * датчики (напр. Xiaomi RTCGQ01LM) присылают только "движение есть"
+             * и никогда val=0, поэтому проверка перехода 0->1 не сработала бы
+             * повторно. Ограничение 1 раз/сек ниже (sec_last_trg), действие и
+             * MQTT-событие только при onoff и заданном action. */
+            if (cluster == ZBEE_CLUSTER_OCCUPANCY) {
+                if (val == 0) {
+                    LOG_Z2M("zbee: PIR slot=%d val=0 ignored\r\n", i);
+                } else {
+                    uint32_t now = HAL_GetTick();
+                    const char *act = zbee_action_sclick(i);
+                    if ((now - ZigbeeConf[i].sec_last_trg) < 1000) {
+                        LOG_Z2M("zbee: PIR slot=%d throttled (1/sec)\r\n", i);
+                    } else {
+                        ZigbeeConf[i].sec_last_trg = now;
+                        if (!ZigbeeConf[i].onoff) {
+                            LOG_Z2M("zbee: PIR slot=%d SKIP onoff=0\r\n", i);
+                        } else if (act[0] == '\0' || strcmp(act, "None") == 0) {
+                            LOG_Z2M("zbee: PIR slot=%d SKIP action empty pool_idx=%u\r\n",
+                                    i, (unsigned)ZigbeeConf[i].action_pool_idx);
+                        } else {
+                            LOG_Z2M("zbee: PIR slot=%d FIRE act='%s'\r\n", i, act);
+                            action_handler((uint8_t)(NUMPIN + i), act, "Security action");
+                            /* cmd 11 = ZBEE_SECURITY, deviceId = индекс слота */
+                            mqtt_queue_send_safe(11, (uint8_t)i, 1, 0);
+                        }
+                    }
+                }
+            }
             continue;
         }
 
@@ -5347,6 +5436,69 @@ static int alloc_zbee_slot(void) {
     return -1;
 }
 
+/* ── Сохранение старых имён (Info) при повторном обучении ──
+ * Шаг 0.5 (удаление дублей) и memset слотов в Шагах 2/3 уничтожают
+ * zbee_label вместе с остальными полями. Чтобы пустое поле "Название"
+ * в окне обучения не стирало прежнее имя (видимое в Zigbee Devices
+ * и Select pin), перед любой очисткой снимаем копию имён всех слотов
+ * этого IEEE — по ключу ep (номер gang-канала или DP для multi-EP) —
+ * плюс отдельно имя головного слота (у него ep может быть 0 до
+ * первого обучения). */
+#define ZBEE_LEARN_OLD_MAX 24
+typedef struct {
+    uint16_t ep;
+    char     label[30];   /* = sizeof(zbee_label) */
+} ZbeeLearnOldLabel;
+static ZbeeLearnOldLabel s_learn_old_labels[ZBEE_LEARN_OLD_MAX];
+static int               s_learn_old_count = 0;
+static char              s_learn_head_label[30];
+
+static void learn_snapshot_labels(const char *ieee_padded, int head_idx) {
+    s_learn_old_count = 0;
+    s_learn_head_label[0] = '\0';
+    for (int i = 0; i < NUMZBEE; i++) {
+        if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
+        int match = 1;
+        for (int k = 0; k < 16; k++) {
+            char a = ZigbeeConf[i].zbee_ieee[k];
+            char b = ieee_padded[k];
+            if (a >= 'A' && a <= 'F') a += 32;
+            if (b >= 'A' && b <= 'F') b += 32;
+            if (a == '\0') a = '0';
+            if (b == '\0') b = '0';
+            if (a != b) { match = 0; break; }
+        }
+        if (!match) continue;
+        if (i == head_idx) {
+            strncpy(s_learn_head_label, ZigbeeConf[i].zbee_label,
+                    sizeof(s_learn_head_label) - 1);
+            s_learn_head_label[sizeof(s_learn_head_label) - 1] = '\0';
+        }
+        if (!ZigbeeConf[i].zbee_label[0]) continue;
+        if (s_learn_old_count >= ZBEE_LEARN_OLD_MAX) continue;
+        int dup = 0;
+        for (int j = 0; j < s_learn_old_count; j++) {
+            if (s_learn_old_labels[j].ep == ZigbeeConf[i].ep) { dup = 1; break; }
+        }
+        if (dup) continue;
+        s_learn_old_labels[s_learn_old_count].ep = ZigbeeConf[i].ep;
+        strncpy(s_learn_old_labels[s_learn_old_count].label,
+                ZigbeeConf[i].zbee_label,
+                sizeof(s_learn_old_labels[s_learn_old_count].label) - 1);
+        s_learn_old_labels[s_learn_old_count].label[
+                sizeof(s_learn_old_labels[s_learn_old_count].label) - 1] = '\0';
+        s_learn_old_count++;
+    }
+}
+
+/* Прежнее имя слота с данным ep (NULL — имени не было) */
+static const char *learn_old_label(uint16_t ep) {
+    for (int j = 0; j < s_learn_old_count; j++) {
+        if (s_learn_old_labels[j].ep == ep) return s_learn_old_labels[j].label;
+    }
+    return NULL;
+}
+
 void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *hm) {
     char *raw_body = (char *)dtcm_zbee_raw;
     snprintf(raw_body, DTCM_BUF_ZBEE_RAW, "%.*s", (int)hm->body.len, hm->body.buf);
@@ -5453,6 +5605,10 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
     /* Всегда устанавливаем topin=11 для Zigbee устройства */
     ZigbeeConf[zbi].topin = 11;
 
+    /* Снимок старых имён ДО удаления дублей и memset слотов: пустое поле
+     * "Название" не должно затирать прежние подписи (Info) */
+    learn_snapshot_labels(learn_ieee_lower, zbi);
+
     /* ── Шаг 0.5: Удалить ВСЕ старые дубли с тем же IEEE, кроме головного ── */
     for (int i = 0; i < NUMZBEE; i++) {
         if (i == zbi) continue;
@@ -5486,6 +5642,8 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
     int has_sensor = 0, has_trigger = 0, has_ep = 0;
     int has_cover = 0, has_thermo = 0, has_lock = 0;
     int has_switch = 0;
+    int has_pir = 0;
+    int pir_changed = 0;
 
     char trigger_payloads[16][32];
     char trigger_names[16][30];
@@ -5562,6 +5720,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                    strcmp(role_str, "humidity") == 0 ||
                    strcmp(role_str, "occupancy") == 0) {
             has_sensor = 1;
+            if (strcmp(role_str, "occupancy") == 0) has_pir = 1;
         } else if (strcmp(role_str, "button") == 0) {
             has_trigger = 1;
             char *tp = mg_json_get_str(json, path_tp);
@@ -5611,8 +5770,15 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             has_ep = 1;
         }
 
-        /* Собираем EP entries для мульти-EP слотов */
-        if (ep > 0 && strcmp(role_str, "ignore") != 0 && ep_count < 8) {
+        /* Собираем EP entries для мульти-EP слотов.
+         * Роли сенсоров (temperature/humidity/occupancy) в EP-слоты не собираем:
+         * они настраивают головной слот (SENSOR + PIR override=7). Иначе датчик
+         * с ep>0 уходил бы в multi-EP ветку и PIR-тип не применялся. */
+        int is_sensor_role = (strcmp(role_str, "temperature") == 0 ||
+                              strcmp(role_str, "humidity") == 0 ||
+                              strcmp(role_str, "occupancy") == 0);
+        if (ep > 0 && strcmp(role_str, "ignore") != 0 && !is_sensor_role &&
+            ep_count < 8) {
             ep_entries[ep_count].dp = ep;
             /* Для "button" используем ZBEE_CL_ONOFF как базовый флаг */
             ep_entries[ep_count].role_flag = role_flag ? role_flag : ZBEE_CL_ONOFF;
@@ -5627,7 +5793,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
 
         /* Обычные (не multi-EP) labels: имя в головной слот */
         if (label_str && label_str[0] &&
-            ep == 0 &&
+        	(ep == 0 || is_sensor_role) &&
             strcmp(role_str, "button") != 0 &&
             strcmp(role_str, "switch") != 0 &&
             strcmp(role_str, "ignore") != 0) {
@@ -5708,11 +5874,14 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
 
     /* ── Шаг 2: Кнопки → сохраняем прямо в ZigbeeConf[zbi] ── */
 
-    /* Очищаем старый action pool */
-    if (ZigbeeConf[zbi].action_pool_idx < NUMACTIONPOOL) {
-      zbee_action_free(ZigbeeConf[zbi].action_pool_idx);
+    /* Очищаем старый action pool. Для PIR действие Security лежит в этом же
+     * пуле (ZigbeeActionPoolArr[..].sclick), поэтому его не трогаем. */
+    if (!has_pir) {
+      if (ZigbeeConf[zbi].action_pool_idx < NUMACTIONPOOL) {
+        zbee_action_free(ZigbeeConf[zbi].action_pool_idx);
+      }
+      ZigbeeConf[zbi].action_pool_idx = ACTION_POOL_IDX_NONE;
     }
-    ZigbeeConf[zbi].action_pool_idx = ACTION_POOL_IDX_NONE;
     ZigbeeConf[zbi].pt_single[0] = '\0';
     ZigbeeConf[zbi].pt_double[0] = '\0';
     ZigbeeConf[zbi].pt_long[0] = '\0';
@@ -5793,9 +5962,17 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                         ZigbeeConf[target_zbi].switch_payload_off[0] = '\0';
                     }
 
-                    const char *nm = trigger_names[on_idx][0] ? trigger_names[on_idx] : trigger_payloads[on_idx];
+                    /* Имя: введённое > прежнее имя слота > payload */
+                    const char *nm = trigger_names[on_idx][0] ? trigger_names[on_idx] : NULL;
+                    if (!nm && target_zbi == zbi && ZigbeeConf[zbi].zbee_label[0]) {
+                        nm = ZigbeeConf[zbi].zbee_label;      /* головной слот */
+                    } else if (!nm) {
+                        nm = learn_old_label((uint16_t)gang_num);  /* sub-slot по ep */
+                    }
+                    if (!nm) nm = trigger_payloads[on_idx];
                     strncpy(ZigbeeConf[target_zbi].zbee_label, nm,
                             sizeof(ZigbeeConf[target_zbi].zbee_label) - 1);
+                    ZigbeeConf[target_zbi].zbee_label[sizeof(ZigbeeConf[target_zbi].zbee_label) - 1] = '\0';
 
                     if (ZigbeeConf[target_zbi].action_pool_idx == ACTION_POOL_IDX_NONE) {
                         ZigbeeConf[target_zbi].action_pool_idx = zbee_action_alloc();
@@ -5867,14 +6044,21 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                                         sizeof(ZigbeeActionPoolArr[tidx].sclick) - 1);
                             }
 
+                            /* Имя: введённое > прежнее имя слота > payload */
+                            const char *nm = NULL;
                             if (trigger_names[k][0]) {
-                                strncpy(ZigbeeConf[target_zbi].zbee_label, trigger_names[k],
-                                        sizeof(ZigbeeConf[target_zbi].zbee_label) - 1);
+                                nm = trigger_names[k];
+                            } else if (target_zbi == zbi) {
+                                if (ZigbeeConf[zbi].zbee_label[0])
+                                    nm = ZigbeeConf[zbi].zbee_label;  /* головной слот */
                             } else {
-                                strncpy(ZigbeeConf[target_zbi].zbee_label, trigger_payloads[k],
-                                        sizeof(ZigbeeConf[target_zbi].zbee_label) - 1);
+                                nm = learn_old_label((uint16_t)(k + 1));
                             }
-                            ZigbeeConf[target_zbi].zbee_label[sizeof(ZigbeeConf[target_zbi].zbee_label) - 1] = '\0';
+                            if (nm) {
+                                strncpy(ZigbeeConf[target_zbi].zbee_label, nm,
+                                        sizeof(ZigbeeConf[target_zbi].zbee_label) - 1);
+                                ZigbeeConf[target_zbi].zbee_label[sizeof(ZigbeeConf[target_zbi].zbee_label) - 1] = '\0';
+                            }
 
                             LOG_Z2M("zbee: LEARN PASSTHROUGH SWITCH %d '%s' -> slot %d (id=%d)\r\n",
                                     k, trigger_payloads[k], target_zbi, NUMPIN + target_zbi);
@@ -5982,14 +6166,21 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             ZigbeeConf[free_zbi].topin = 11;
             ZigbeeConf[free_zbi].ep = k + 1;
 
+            /* Имя: введённое > прежнее имя слота > payload */
+            const char *nm = NULL;
             if (trigger_names[k][0]) {
-                strncpy(ZigbeeConf[free_zbi].zbee_label, trigger_names[k],
-                        sizeof(ZigbeeConf[free_zbi].zbee_label) - 1);
+                nm = trigger_names[k];
+            } else if (free_zbi == zbi) {
+                if (ZigbeeConf[zbi].zbee_label[0])
+                    nm = ZigbeeConf[zbi].zbee_label;      /* головной слот */
             } else {
-                strncpy(ZigbeeConf[free_zbi].zbee_label, trigger_payloads[k],
-                        sizeof(ZigbeeConf[free_zbi].zbee_label) - 1);
+                nm = learn_old_label((uint16_t)(k + 1));  /* sub-slot по ep */
             }
-            ZigbeeConf[free_zbi].zbee_label[sizeof(ZigbeeConf[free_zbi].zbee_label) - 1] = '\0';
+            if (nm) {
+                strncpy(ZigbeeConf[free_zbi].zbee_label, nm,
+                        sizeof(ZigbeeConf[free_zbi].zbee_label) - 1);
+                ZigbeeConf[free_zbi].zbee_label[sizeof(ZigbeeConf[free_zbi].zbee_label) - 1] = '\0';
+            }
 
             /* sclick = "None" (actions not configured yet) */
             if (ZigbeeConf[free_zbi].action_pool_idx == ACTION_POOL_IDX_NONE) {
@@ -6077,8 +6268,17 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             ZigbeeConf[slot].topin = 11;
             ZigbeeConf[slot].state = 0;
             ZigbeeConf[slot].dvalue = 0;
+            /* Имя: введённое > прежнее имя по ep (DP) > прежнее имя головного слота */
+            const char *nm = NULL;
             if (ep_entries[t].label[0]) {
-                strncpy(ZigbeeConf[slot].zbee_label, ep_entries[t].label,
+                nm = ep_entries[t].label;
+            } else {
+                nm = learn_old_label((uint16_t)dp);
+                if (!nm && slot == zbi && s_learn_head_label[0])
+                    nm = s_learn_head_label;
+            }
+            if (nm) {
+                strncpy(ZigbeeConf[slot].zbee_label, nm,
                         sizeof(ZigbeeConf[slot].zbee_label) - 1);
                 ZigbeeConf[slot].zbee_label[sizeof(ZigbeeConf[slot].zbee_label) - 1] = '\0';
             }
@@ -6145,6 +6345,16 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
         
         ZigbeeConf[zbi].zbee_role = new_role;
         if (ZigbeeConf[zbi].ep == 0) ZigbeeConf[zbi].ep = 1;
+
+        /* PIR-метка (occupancy) фиксируем через override=7 (переживает ребут);
+         * если датчик переквалифицирован — снимаем устаревший PIR-override */
+        if (has_pir) {
+            if (ZigbeeConf[zbi].device_type_override != 7) pir_changed = 1;
+            ZigbeeConf[zbi].device_type_override = 7;
+        } else if (ZigbeeConf[zbi].device_type_override == 7) {
+            ZigbeeConf[zbi].device_type_override = 0;
+            pir_changed = 1;
+        }
     }
     s_zbee_learn.end_reason = ZBEE_END_SAVED;
     s_zbee_learn.active = 0;
@@ -6157,6 +6367,9 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
 
     extern volatile uint32_t g_ver_button;
     mark_slice_dirty(&g_ver_button);
+
+    /* Появление/исчезновение PIR-строки на странице Security */
+    if (pir_changed) mark_slice_dirty(&g_ver_security);
 
     extern osMessageQueueId_t usbQueueHandle;
     if (usbQueueHandle) {
@@ -6878,6 +7091,58 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
     xTaskNotifyGive(my_DgnTaskHandle);
 }
 
+/* ─── POST /api/security/set: monitoring для виртуального пина (Zigbee-PIR) ───
+ * id = NUMPIN + индекс слота. Действие хранится в пуле действий (sclick),
+ * send_sms — флаг в слоте. ptype игнорируется: слот всегда PIR. */
+static void parse_monitoring_json_zbee(const char *json, int zbi) {
+  struct mg_str body = mg_str_n(json, strlen(json));
+
+  ZigbeeConf[zbi].onoff =
+      (uint8_t)mg_json_get_long(body, "$.onoff", ZigbeeConf[zbi].onoff);
+
+  char *action = mg_json_get_str(body, "$.action");
+  if (action) {
+    if (action[0] != '\0' && strcmp(action, "None") != 0) {
+      if (ZigbeeConf[zbi].action_pool_idx >= NUMACTIONPOOL) {
+        ZigbeeConf[zbi].action_pool_idx = zbee_action_alloc();
+      }
+      uint8_t aidx = ZigbeeConf[zbi].action_pool_idx;
+      if (aidx < NUMACTIONPOOL) {
+        strncpy(ZigbeeActionPoolArr[aidx].sclick, action,
+                sizeof(ZigbeeActionPoolArr[aidx].sclick) - 1);
+        ZigbeeActionPoolArr[aidx]
+            .sclick[sizeof(ZigbeeActionPoolArr[aidx].sclick) - 1] = '\0';
+      } else {
+        printf("monitoring zbee: action pool FULL, action dropped\r\n");
+      }
+    } else if (ZigbeeConf[zbi].action_pool_idx < NUMACTIONPOOL) {
+      ZigbeeActionPoolArr[ZigbeeConf[zbi].action_pool_idx].sclick[0] = '\0';
+    }
+    mg_free(action);
+  }
+
+  char *send_sms = mg_json_get_str(body, "$.send_sms");
+  if (send_sms) {
+    ZigbeeConf[zbi].sec_send_sms = (strcmp(send_sms, "YES") == 0) ? 1 : 0;
+    mg_free(send_sms);
+  }
+
+  char *info = json_get_str_allow_empty(body, "$.info");
+  if (info) {
+    strncpy(ZigbeeConf[zbi].zbee_label, info,
+            sizeof(ZigbeeConf[zbi].zbee_label) - 1);
+    ZigbeeConf[zbi].zbee_label[sizeof(ZigbeeConf[zbi].zbee_label) - 1] = '\0';
+    mg_free(info);
+  }
+
+  uint32_t usbnum = 7; /* zigbee.ini */
+  xQueueSend(usbQueueHandle, &usbnum, 0);
+  mark_slice_dirty(&g_ver_security);
+
+  if (my_DgnTaskHandle)
+    xTaskNotifyGive(my_DgnTaskHandle);
+}
+
 /* ─── POST /api/security/set ─── */
 void handle_security_set(struct mg_connection *c, struct mg_http_message *hm) {
   size_t len = hm->body.len;
@@ -6903,7 +7168,12 @@ void handle_security_set(struct mg_connection *c, struct mg_http_message *hm) {
     if (strcmp(type, "sim800l") == 0) {
       parse_sim800l_json(g_body);
     } else if (strcmp(type, "monitoring") == 0) {
-      parse_monitoring_json(g_body, PinsConf, PinsInfo, NUMPIN);
+      int mid = (int)mg_json_get_long(body, "$.id", -1);
+      if (mid >= NUMPIN && mid < NUMPIN + NUMZBEE) {
+        parse_monitoring_json_zbee(g_body, mid - NUMPIN);
+      } else {
+        parse_monitoring_json(g_body, PinsConf, PinsInfo, NUMPIN);
+      }
     }
     mg_free(type);
   }
@@ -8069,8 +8339,8 @@ void mqtt_queue_send_safe(uint8_t command, uint8_t deviceId,
   if (s_mqtt_rate_count >= MQTT_QUEUE_MAX_PER_SEC) {
     /* Критичные события всегда проходят (они редкие по природе):
      * 1=Device, 2=Switch, 3=LongPress, 4=SingleClick,
-     * 5=DoubleClick, 6=Security, 8=OnOff */
-    bool is_critical = (command <= 6 || command == 8);
+     * 5=DoubleClick, 6=Security, 8=OnOff, 11=ZBEE_SECURITY */
+    bool is_critical = (command <= 6 || command == 8 || command == 11);
     if (!is_critical) return;  /* 7=Timer, 9=PWM_TIMER — заменены на batch, сюда не попадают */
   }
 
@@ -10046,6 +10316,8 @@ void handle_zigbee_get(struct mg_connection *c, long offset_req, long limit_req)
     if (ZigbeeConf[i].zbee_ieee[0] != '\0') {
       if (zbee_probe_active_for(ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint)) {
         type = "detecting"; icon = "*";
+      } else if (zbee_is_pir(&ZigbeeConf[i])) {
+        type = "pir"; icon = "P";
       } else if (ZigbeeConf[i].device_type_override == 1) {
         type = "socket"; icon = "!";
       } else if (ZigbeeConf[i].device_type_override == 2) {
@@ -10060,6 +10332,9 @@ void handle_zigbee_get(struct mg_connection *c, long offset_req, long limit_req)
         type = "dimmer"; icon = "%";
       } else if (ZigbeeConf[i].cluster_flags & ZBEE_CL_ONOFF) {
         type = "socket"; icon = "!";
+      } else if (ZigbeeConf[i].zbee_role == ZBEE_ROLE_SENSOR) {
+        /* Сенсор без override: температура/влажность и т.п. */
+        type = "sensor"; icon = "S";
       }
     }
 
@@ -10104,6 +10379,13 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
         if (ieee_changed) config_changed = true;
         strncpy(ZigbeeConf[id].zbee_ieee, ieee, sizeof(ZigbeeConf[id].zbee_ieee) - 1);
         ZigbeeConf[id].zbee_ieee[sizeof(ZigbeeConf[id].zbee_ieee) - 1] = '\0';
+        /* Нормализуем: padding + lowercase — иначе слот не совпадёт
+         * с lowercase-IEEE из MQTT-топиков */
+        zbee_validate_ieee(ZigbeeConf[id].zbee_ieee);
+        for (int k = 0; k < 16; k++) {
+          if (ZigbeeConf[id].zbee_ieee[k] >= 'A' && ZigbeeConf[id].zbee_ieee[k] <= 'F')
+            ZigbeeConf[id].zbee_ieee[k] += 32;
+        }
 
         if (ieee_changed && ZigbeeConf[id].zbee_ieee[0] != '\0') {
             /* Новый/изменённый IEEE — сбрасываем флаги и запускаем зонд */
@@ -10135,6 +10417,9 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
     if (new_override >= 0) {
         if (ZigbeeConf[id].device_type_override != (uint8_t)new_override) {
             config_changed = true;
+            /* Появление/исчезновение PIR-строки на странице Security */
+            if (new_override == 7 || ZigbeeConf[id].device_type_override == 7)
+                mark_slice_dirty(&g_ver_security);
             ZigbeeConf[id].device_type_override = (uint8_t)new_override;
         }
     }

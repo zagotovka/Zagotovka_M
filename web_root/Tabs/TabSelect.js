@@ -134,7 +134,7 @@ const ArraySelect = ({ d, selectedValues, isRowDisabled, handleRadioChange, hand
         : 'bg-sky-200/40'
     } hover:bg-slate-200/80 transition-colors">
     <td class="px-6 py-2 text-sm text-slate-800">${d.id}</td>
-    <td class="px-6 py-2 text-sm text-slate-800 font-medium">${d.pins}</td>
+    <td class="px-6 py-2 text-sm text-slate-800 font-medium">${isZigbeePin ? 'Z2M' : d.pins}</td>
     <td class="px-2 py-2">
       <div class="flex flex-wrap items-center justify-center gap-x-1 gap-y-1">
         ${isPhysicalPin ? html`

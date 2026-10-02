@@ -115,7 +115,7 @@ const ModalButton = ({
             </tr>
             <tr class="bg-white">
               <td class="p-2 font-bold">Pin</td>
-              <td class="p-2">${selectedButton.pins}</td>
+              <td class="p-2">${isZigbee ? 'Z2M' : selectedButton.pins}</td>
             </tr>
             <tr class="bg-gray-200">
               <td class="p-2 font-bold">Ptype</td>

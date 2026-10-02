@@ -26,7 +26,7 @@ const ModalSecurity = ({
   });
   const [submitError, setSubmitError] = useState(null);
 
-  const mecurityRegex = /^(None|\d{1,2}:[012])(,\d{1,2}:[012])*$/;
+  const mecurityRegex = /^(None|\d{1,3}:[012])(,\d{1,3}:[012])*$/;
 
   const validateInput = (key, value) => {
     if (!value || value.trim() === '' || value.toLowerCase() === 'none') {
@@ -121,11 +121,12 @@ const ModalSecurity = ({
             </tr>
             <tr class="bg-white">
               <td class="p-2 font-bold">Pin</td>
-              <td class="p-2">${selectedSecurity.pins}</td>
+              <td class="p-2">${selectedSecurity?.zbee ? 'Z2M' : selectedSecurity.pins}</td>
             </tr>
             <tr class="bg-gray-200">
               <td class="p-2 font-bold">Type of sensor</td>
               <td class="p-2">
+                ${selectedSecurity?.zbee ? html`PIR` : html`
                 <select
                   name="ptype"
                   value=${ptype}
@@ -135,7 +136,7 @@ const ModalSecurity = ({
                   <option value="0">PIR</option>
                   <option value="1">Normal open</option>
                   <option value="2">Normal close</option>
-                </select>
+                </select>`}
               </td>
             </tr>
 

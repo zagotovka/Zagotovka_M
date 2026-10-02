@@ -2244,7 +2244,12 @@ void StartWebServerTask(void *argument)
     if (status == pdPASS) {
 			// printf("[MQTT_Q] cmd=%d dev=%d state=%d\r\n", rxMsg.command,rxMsg.deviceId, rxMsg.state);
       /* Защита от повреждённых сообщений в очереди */
-      if (rxMsg.deviceId >= NUMPIN && rxMsg.command != 1) {
+      /* cmd 11 (ZIGBEE SECURITY) несёт индекс слота ZigbeeConf, а не id пина.
+       * cmd 3/4/5 валидны и для Zigbee-кнопок (id = NUMPIN + индекс слота). */
+      bool zbee_btn_ev = (rxMsg.deviceId >= NUMPIN && rxMsg.deviceId < NUMPIN + NUMZBEE &&
+                          (rxMsg.command == 3 || rxMsg.command == 4 || rxMsg.command == 5));
+      if (rxMsg.deviceId >= NUMPIN && rxMsg.command != 1 && rxMsg.command != 11 &&
+          !zbee_btn_ev) {
         printf("MQTT queue: invalid deviceId=%d, cmd=%d — skipped\r\n", rxMsg.deviceId, rxMsg.command);
       } else {
       switch (rxMsg.command) {
@@ -2277,10 +2282,22 @@ void StartWebServerTask(void *argument)
           memset(mqtt_topic, 0, sizeof(mqtt_topic));
           memset(mqtt_payload, 0, sizeof(mqtt_payload));
           snprintf(mqtt_topic, sizeof(mqtt_topic), "/button/");
-          switch (rxMsg.command) {
-          case 3: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].lpress); break;
-          case 4: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick); break;
-          case 5: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].dclick); break;
+          if (rxMsg.deviceId >= NUMPIN) {
+            /* Zigbee-кнопка: действия в пуле, а не в PinsConf (иначе OOB) */
+            int zbi = rxMsg.deviceId - NUMPIN;
+            const char *zact = (rxMsg.command == 3) ? zbee_action_lpress(zbi)
+                             : (rxMsg.command == 4) ? zbee_action_sclick(zbi)
+                             : zbee_action_dclick(zbi);
+            const char *zname = (rxMsg.command == 3) ? "LONG_PRESS"
+                              : (rxMsg.command == 4) ? "SINGLE_CLICK" : "DOUBLE_CLICK";
+            snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/%s/%s",
+                     rxMsg.deviceId, zname, zact);
+          } else {
+            switch (rxMsg.command) {
+            case 3: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].lpress); break;
+            case 4: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick); break;
+            case 5: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].dclick); break;
+            }
           }
           send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
@@ -2293,6 +2310,20 @@ void StartWebServerTask(void *argument)
           memset(mqtt_payload, 0, sizeof(mqtt_payload));
           snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
           snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick, PinsConf[rxMsg.deviceId].info);
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 11: // ZIGBEE SECURITY (deviceId = индекс слота ZigbeeConf)
+        if (rxMsg.deviceId < NUMZBEE &&
+            SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
+          snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s",
+                   NUMPIN + rxMsg.deviceId, zbee_action_sclick(rxMsg.deviceId),
+                   ZigbeeConf[rxMsg.deviceId].zbee_label);
           send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");

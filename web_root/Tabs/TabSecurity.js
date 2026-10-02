@@ -413,7 +413,7 @@ const TabSecurity = () => {
               <tbody class="divide-y divide-white/40">
                 ${varmonitoring.length > 0 ? varmonitoring.map((d, i) => html`
                   <tr class="${i % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
-                    <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.id}</td><td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.pins}</td>
+                    <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.id}</td><td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.zbee ? 'Z2M' : d.pins}</td>
                     <td class="px-6 py-4 text-sm text-slate-800 font-medium">${['PIR', 'Normal open', 'Normal close'][d.ptype]}</td>
                     <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.action}</td><td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.send_sms}</td>
                     <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.info}</td>

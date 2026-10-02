@@ -317,7 +317,9 @@ typedef struct {
     uint16_t ep_brightness; // EP-номер для яркости
     uint16_t ep_color;      // EP-номер для цвета
     uint16_t ep;            // EP-номер этого слота (0 = не sub-slot)
-    uint8_t  device_type_override; // 0=Auto, 1=Socket, 2=Dimmer, 3=Color Lamp
+    uint8_t  device_type_override; // 0=Auto, 1=Socket, 2=Dimmer, 3=Color Lamp, 7=PIR
+    uint8_t  sec_send_sms;       // Security: 1=отправлять SMS (столбец Send SMS)
+    uint32_t sec_last_trg;       // Security: время последнего срабатывания (ограничение 1/сек, runtime)
 
     /* ── Button action pool index (when zbee_role == ZBEE_ROLE_TRIGGER) ── */
     uint8_t  action_pool_idx;     // Index into ZigbeeActionPool[] (0xFF = no actions)
@@ -385,6 +387,13 @@ void zbee_action_clear(uint8_t idx);
 /* ── Addressing: unified ID space ── */
 static inline bool IsZigbeePin(int id) { return id >= NUMPIN && id < NUMPIN + NUMZBEE; }
 static inline int  ZbeeIdx(int id)     { return id - NUMPIN; }
+
+/* PIR-слот: ручной override=7 либо автоопределение (SENSOR + Occupancy) */
+static inline bool zbee_is_pir(const ZigbeeVirtualPin *z) {
+    return z->device_type_override == 7 ||
+           (z->zbee_role == ZBEE_ROLE_SENSOR &&
+            z->sensor_cluster == ZBEE_CLUSTER_OCCUPANCY);
+}
 
 /* ── Virtual button functions ── */
 void zbee_vbtn_tick(void);

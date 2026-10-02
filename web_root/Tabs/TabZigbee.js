@@ -16,7 +16,7 @@ const HELP_CONTENT = {
         <p style="font-weight:700; margin-bottom:6px;">Колонки таблицы:</p>
         <span style="display:block;"><b>ID</b> — внутренний идентификатор устройства в контроллере</span>
         <span style="display:block;"><b>IEEE Address</b> — уникальный 64-битный адрес Zigbee-устройства</span>
-        <span style="display:block;"><b>Type</b> — тип устройства (Socket, Lamp, Dimmer, Button, Switch)</span>
+        <span style="display:block;"><b>Type</b> — тип устройства (Socket, Lamp, Dimmer, Button, Switch, PIR)</span>
         <span style="display:block;"><b>Info</b> — подпись / название устройства (например, «Лампа кухня»)</span>
         <span style="display:block;"><b>On/Off</b> — переключатель состояния устройства</span>
       </div>
@@ -64,7 +64,7 @@ const HELP_CONTENT = {
         <p style="font-weight:700; margin-bottom:6px;">Table columns:</p>
         <span style="display:block;"><b>ID</b> — internal device identifier in the controller</span>
         <span style="display:block;"><b>IEEE Address</b> — unique 64-bit address of the Zigbee device</span>
-        <span style="display:block;"><b>Type</b> — device type (Socket, Lamp, Dimmer, Button, Switch)</span>
+        <span style="display:block;"><b>Type</b> — device type (Socket, Lamp, Dimmer, Button, Switch, PIR)</span>
         <span style="display:block;"><b>Info</b> — device label / name (e.g. "Kitchen lamp")</span>
         <span style="display:block;"><b>On/Off</b> — device state toggle</span>
       </div>
@@ -120,6 +120,7 @@ export function TabZigbee({}) {
   const modalOpenRef = useRef(false);
 
   const clusterToDeviceType = (clusters, override) => {
+    if (override === 7) return 'pir';
     if (override === 1) return 'socket';
     if (override === 2) return 'dimmer';
     if (override === 3) return 'dimmer';
@@ -145,7 +146,9 @@ export function TabZigbee({}) {
     zbee_ieee: (d.ieee || '').toLowerCase().trim(),
     zbee_endpoint: d.ep || 1,
     clusters: d.clusters || [6],
-    zbee_device_type: d.role === 3 ? 'trigger' : (d.role === 5 ? 'switch' : clusterToDeviceType(d.clusters, d.override)),
+    zbee_device_type: d.type === 'pir' ? 'pir'
+      : d.type === 'sensor' ? 'sensor'
+      : (d.role === 3 ? 'trigger' : (d.role === 5 ? 'switch' : clusterToDeviceType(d.clusters, d.override))),
     zbee_label: d.info || '',
     onoff: d.onoff || 0,
     brightness: d.brightness || 254,
@@ -324,6 +327,8 @@ export function TabZigbee({}) {
       case 'dimmer': return 'Лампа (яркость)';
       case 'trigger': return 'Button';
       case 'switch': return 'Switch';
+      case 'pir': return 'PIR';
+      case 'sensor': return 'Sensor';
       default: return 'Socket';
     }
   };
@@ -442,7 +447,9 @@ export function TabZigbee({}) {
                         /* Sub-строки для мульти-EP */
                         if (hasMultiDp && isExpanded) {
                           group.slice(1).forEach((d, idx) => {
-                            const subType = d.zbee_device_type === 'trigger' ? 'Button'
+                            const subType = d.zbee_device_type === 'pir' ? 'PIR'
+                                          : d.zbee_device_type === 'sensor' ? 'Sensor'
+                                          : d.zbee_device_type === 'trigger' ? 'Button'
                                           : d.zbee_device_type === 'switch' ? 'Switch'
                                           : (d.clusters || []).includes(768) ? 'Color'
                                           : (d.clusters || []).includes(8) ? 'Dimmer'
@@ -491,6 +498,9 @@ export function TabZigbee({}) {
         <${ModalLearn}
           ieee=${learnIeee}
           language=${language}
+          existingLabels=${devices
+            .filter(d => (d.zbee_ieee || '').toLowerCase() === (learnIeee || '').toLowerCase())
+            .map(d => ({ ep: d.ep, info: d.zbee_label }))}
           onClose=${() => setLearnIeee(null)}
           onSaved=${() => {
             setLearnIeee(null);
