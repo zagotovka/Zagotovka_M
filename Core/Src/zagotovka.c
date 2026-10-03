@@ -4846,6 +4846,9 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                         LOG_Z2M("zbee: PIR slot=%d throttled (1/sec)\r\n", i);
                     } else {
                         ZigbeeConf[i].sec_last_trg = now;
+                        if (ZigbeeConf[i].onoff && ZigbeeConf[i].sec_send_sms) {
+                            sms_alarm_request(NUMPIN + i);
+                        }
                         if (!ZigbeeConf[i].onoff) {
                             LOG_Z2M("zbee: PIR slot=%d SKIP onoff=0\r\n", i);
                         } else if (act[0] == '\0' || strcmp(act, "None") == 0) {
@@ -6764,6 +6767,13 @@ void action_handler(uint8_t button_id, const char *action_str,
         if (id >= NUMPIN && id < NUMPIN + NUMZBEE) {
           int zbi = id - NUMPIN;
 
+          /* SMS/DTMF-команда для Zigbee PIR меняет только On/Off охраны
+           * (делается в execute_commands), на устройство ничего не шлём */
+          if (zbee_is_pir(&ZigbeeConf[zbi]) && press_type &&
+              strcmp(press_type, "CMD") == 0) {
+            break;
+          }
+
           /* Sub-index: execute specific action (sclick=0, dclick=1, lpress=2) */
           if (sub_idx > 0 && sub_idx <= 2) {
             if (press_type && strcmp(press_type, "trigger") == 0) {
@@ -6898,6 +6908,12 @@ void action_handler(uint8_t button_id, const char *action_str,
           }
         } else {
           /* Обычное прямое управление для не-Switch пинов */
+          /* SECURITY-пин (датчик) - вход: команда CMD меняет только On/Off
+           * (выполнено в execute_commands), на GPIO ничего не пишем */
+          if (PinsConf[id].topin == 10 && press_type &&
+              strcmp(press_type, "CMD") == 0) {
+            break;
+          }
           /* Блокируем выполнение, если устройство отключено (onoff == 0),
              НО только если команда пришла извне (CMD), и это не PWM (у ШИМ onoff хранит текущее состояние) */
           if (PinsConf[id].topin != 5 && PinsConf[id].onoff == 0) {
@@ -8098,6 +8114,187 @@ void checkPortClockStatus(GPIO_TypeDef *GPIO_Port) {
   }
 }
 
+/* Очередь SMS-тревог: битовая маска по единому пространству ID
+ * (0..NUMPIN-1 физические пины, NUMPIN..NUMPIN+NUMZBEE-1 Zigbee-слоты).
+ * Датчики только выставляют бит, а отправляет SMS задача SIM800L
+ * (sms_alarm_poll), чтобы не блокировать SecurityTask / MQTT-обработчик
+ * и не писать в UART модема из двух задач одновременно. */
+static volatile uint8_t s_sms_alarm_mask[(NUMPIN + NUMZBEE + 7) / 8];
+
+void sms_alarm_request(int id) {
+  if (id < 0 || id >= NUMPIN + NUMZBEE) return;
+  taskENTER_CRITICAL();
+  s_sms_alarm_mask[id / 8] |= (uint8_t)(1u << (id % 8));
+  taskEXIT_CRITICAL();
+}
+
+void sms_alarm_poll(void) {
+  for (int id = 0; id < NUMPIN + NUMZBEE; id++) {
+    uint8_t pending;
+    taskENTER_CRITICAL();
+    pending = s_sms_alarm_mask[id / 8] & (uint8_t)(1u << (id % 8));
+    s_sms_alarm_mask[id / 8] &= (uint8_t)~(1u << (id % 8));
+    taskEXIT_CRITICAL();
+    if (pending) {
+      send_sms(id);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------
+ * Удалённый "рубильник" On/Off (SMS / DTMF). Единый формат: ID#КОД*
+ *   КОД 00 / 11 - пины (Button, Switch, Encoder, OneWire, Security,
+ *                 SIM800L, Zigbee): выключить / включить
+ *   КОД 33 / 44 - строки Cron
+ *   КОД 55 / 66 - слоты PID
+ * sub > 0 - дочерняя строка Zigbee вида "93.1" (ищется по display id).
+ * Делает то же, что ползунок на сайте (parse_onoff_json и т.д.), плюс
+ * обновляет ETag страницы и ставит сохранение конфига в очередь USB.
+ * Возвращает 1 при успехе (label = "Pin5=OFF"), 0 при ошибке.
+ * ------------------------------------------------------------------ */
+static void remote_onoff_save(uint8_t usbnum_val) {
+  if (usbQueueHandle) {
+    xQueueSend(usbQueueHandle, &usbnum_val, 0);
+  }
+}
+
+static int remote_onoff_pin(int id, int sub, uint8_t onoff, char *label,
+                            size_t label_sz) {
+  const int label_id = id;
+  const int label_sub = sub;
+
+  /* ID 0 - не строка таблицы (нумерация пинов начинается с 1) */
+  if (id < 1 || id > 999) return 0;
+
+  if (sub > 0) {
+    /* Дочерняя строка Zigbee: "N.M" - ищем слот по display id */
+    char want[24];
+    int found = -1;
+    snprintf(want, sizeof(want), "%d.%d", id, sub);
+    for (int i = 0; i < NUMZBEE; i++) {
+      char disp[24];
+      if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
+      calc_zigbee_display_id(i, disp, sizeof(disp));
+      if (strcmp(disp, want) == 0) {
+        found = i;
+        break;
+      }
+    }
+    if (found < 0) return 0;
+    id = NUMPIN + found;
+  } else if (id >= NUMPIN) {
+    int zi = id - NUMPIN;
+    if (zi >= NUMZBEE || ZigbeeConf[zi].zbee_ieee[0] == '\0') return 0;
+  } else {
+    /* Физический пин: только типы, у которых есть колонка On/Off.
+     * Пин 1 - общий ползунок SIM800L (страница Security). */
+    uint8_t t = PinsConf[id].topin;
+    if (id != 1 && t != 1 && t != 3 && t != 4 && t != 8 && t != 9 && t != 10)
+      return 0;
+  }
+
+  if (id < NUMPIN && PinsConf[id].topin == 4) {
+    /* OneWire: On/Off хранится в записи сенсора (DS18B20 / DHT22) */
+    int done = 0;
+    taskENTER_CRITICAL();
+    for (int j = 0; j < MAX_DS18B20_P && !done; j++) {
+      if (ds18b20[j].typsensr == 1 && ds18b20[j].id == id) {
+        ds18b20[j].onoff = onoff;
+        done = 1;
+      }
+    }
+    for (int j = 0; j < MAX_DHT22_P && !done; j++) {
+      if (dht22[j].typsensr == 2 && dht22[j].id == id) {
+        dht22[j].onoff = onoff;
+        done = 1;
+      }
+    }
+    taskEXIT_CRITICAL();
+    if (!done) return 0;
+    remote_onoff_save(5); /* onewire.ini */
+    mark_slice_dirty(&g_ver_onewire);
+    mark_slice_dirty(&g_ver_sensors);
+    mark_slice_dirty(&g_ver_pins);
+    if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  } else {
+    /* Остальное - тот же путь, что у /api/onoff/set */
+    char json[48];
+    snprintf(json, sizeof(json), "{\"id\":%d,\"onoff\":%d}", id, (int)onoff);
+    parse_onoff_json(json, PinsConf, NUMPIN);
+
+    if (id < NUMPIN) {
+      switch (PinsConf[id].topin) {
+        case 1:  mark_slice_dirty(&g_ver_button);   break;
+        case 3:  mark_slice_dirty(&g_ver_switch);   break;
+        case 8:
+        case 9:  mark_slice_dirty(&g_ver_encoder);  break;
+        case 10: mark_slice_dirty(&g_ver_security); break;
+        default: break;
+      }
+      if (id == 1 && PinsConf[id].topin != 10) mark_slice_dirty(&g_ver_security);
+      mark_slice_dirty(&g_ver_pins);
+      /* parse_onoff_json сохраняет не чаще раза в 5 с - сохраняем явно */
+      remote_onoff_save(1); /* pins.ini */
+    } else {
+      /* Zigbee: parse_onoff_json уже поставил сохранение zigbee.ini */
+      mark_slice_dirty(&g_ver_zigbee);
+      mark_slice_dirty(&g_ver_switch);
+      mark_slice_dirty(&g_ver_button);
+    }
+  }
+
+  if (label_sub > 0) {
+    snprintf(label, label_sz, "Pin%d.%d=%s", label_id, label_sub,
+             onoff ? "ON" : "OFF");
+  } else {
+    snprintf(label, label_sz, "Pin%d=%s", label_id, onoff ? "ON" : "OFF");
+  }
+  return 1;
+}
+
+static int remote_onoff_cron(int id, uint8_t onoff, char *label,
+                             size_t label_sz) {
+  /* Номера строк Cron в колонке ID начинаются с 0; доступны только
+   * строки, видимые на странице (в пределах заданного числа строк) */
+  if (id < 0 || id >= NUMTASK || id >= (int)SetSettings.numline) return 0;
+  taskENTER_CRITICAL();
+  dbCrontxt[id].onoff = onoff;
+  taskEXIT_CRITICAL();
+  remote_onoff_save(3); /* cron.ini */
+  if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  snprintf(label, label_sz, "Cron%d=%s", id, onoff ? "ON" : "OFF");
+  return 1;
+}
+
+static int remote_onoff_pid(int id, uint8_t onoff, char *label,
+                            size_t label_sz) {
+  /* Номера PID в колонке ID начинаются с 1 */
+  int slot = id - 1;
+  if (PidConf == NULL) return 0;
+  if (slot < 0 || slot >= PID_MAX_SLOTS || slot >= (int)SetSettings.pidline)
+    return 0;
+  PidConf[slot].onoff = onoff;
+  mark_slice_dirty(&g_ver_pid);
+  remote_onoff_save(6); /* pid.ini */
+  if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  snprintf(label, label_sz, "PID%d=%s", id, onoff ? "ON" : "OFF");
+  return 1;
+}
+
+int remote_onoff_set(int code, int id, int sub, char *label, size_t label_sz) {
+  if (label == NULL || label_sz == 0) return 0;
+  label[0] = '\0';
+  switch (code) {
+    case 0:  return remote_onoff_pin(id, sub, 0, label, label_sz);
+    case 11: return remote_onoff_pin(id, sub, 1, label, label_sz);
+    case 33: return sub > 0 ? 0 : remote_onoff_cron(id, 0, label, label_sz);
+    case 44: return sub > 0 ? 0 : remote_onoff_cron(id, 1, label, label_sz);
+    case 55: return sub > 0 ? 0 : remote_onoff_pid(id, 0, label, label_sz);
+    case 66: return sub > 0 ? 0 : remote_onoff_pid(id, 1, label, label_sz);
+    default: return 0;
+  }
+}
+
 void send_sms(int index) {
   char index_str[4];
   snprintf(index_str, sizeof(index_str), "%03d", index);
@@ -8138,6 +8335,35 @@ void send_sms(int index) {
     HAL_UART_Transmit(GSM, &ctrlZ, 1, 1000);
     return;
   }
+
+  /* Zigbee PIR: флаг Send SMS хранится в ZigbeeConf[].sec_send_sms */
+  if (index >= NUMPIN && index < NUMPIN + NUMZBEE) {
+    int zbi = index - NUMPIN;
+    if (PinsConf[1].onoff != 1 || !ZigbeeConf[zbi].sec_send_sms ||
+        !ZigbeeConf[zbi].onoff || SetSettings.tel[0] == '\0') {
+      return;
+    }
+    osDelay(1000);
+    HAL_UART_Transmit(GSM, (uint8_t *)"AT+CSCS=\"GSM\"\r\n",
+                      strlen("AT+CSCS=\"GSM\"\r\n"), 1000);
+    osDelay(100);
+    HAL_UART_Transmit(GSM, (uint8_t *)"AT+CMGF=1\r\n", strlen("AT+CMGF=1\r\n"),
+                      1000);
+    osDelay(100);
+    char zstr[GSM_RX_BUFFER_SIZE];
+    snprintf(zstr, GSM_RX_BUFFER_SIZE, "AT+CMGS=\"%s\"\r\n", SetSettings.tel);
+    HAL_UART_Transmit(GSM, (uint8_t *)zstr, strlen(zstr), 1000);
+    osDelay(100);
+    char zmsg[GSM_RX_BUFFER_SIZE];
+    snprintf(zmsg, GSM_RX_BUFFER_SIZE, "ALARM:ID=%d:%s", index,
+             ZigbeeConf[zbi].zbee_label);
+    HAL_UART_Transmit(GSM, (uint8_t *)zmsg, strlen(zmsg), 1000);
+    osDelay(100);
+    uint8_t zctrlZ = 26;
+    HAL_UART_Transmit(GSM, &zctrlZ, 1, 1000);
+    return;
+  }
+  if (index < 0 || index >= NUMPIN) return;
 
   // Regular SMS handling
   if (PinsConf[1].onoff == 1 && strcmp(PinsConf[index].send_sms, "YES") == 0) {

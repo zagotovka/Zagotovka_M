@@ -630,6 +630,23 @@ function PidHelp({ lang }) {
     <div class="mytext" style="display:flex;flex-direction:column;gap:14px;font-size:15px;color:#334155;">
 
       ${sec(
+        L === 'ru' ? 'Рубильник On/Off по SMS и DTMF' : 'On/Off switch by SMS and DTMF',
+        true,
+        html`
+          <p style=${S.p}>${L === 'ru'
+            ? 'Ползунок On/Off любого PID-канала можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды: ID#КОД*, где ID - число из колонки ID нужной строки (нумерация с 1). Отключить: КОД = 55. Включить: КОД = 66.'
+            : 'The On/Off slider of any PID channel can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). Command format: ID#CODE*, where ID is the number from the ID column of the needed row (numbered from 1). Turn off: CODE = 55. Turn on: CODE = 66.'}</p>
+          <ul style=${UL}>
+            <li style="margin-bottom:4px;">${L === 'ru' ? 'Отключить PID 2: SMS 2#55*, звонок 2#55*#' : 'Turn PID 2 off: SMS 2#55*, call 2#55*#'}</li>
+            <li style="margin-bottom:4px;">${L === 'ru' ? 'Включить PID 2: SMS 2#66*, звонок 2#66*#' : 'Turn PID 2 on: SMS 2#66*, call 2#66*#'}</li>
+            <li style="margin-bottom:4px;">${L === 'ru' ? 'Несколько команд: SMS 2#55*3#66*, звонок 2#55*3#66*#. Ввод во время звонка всегда завершается символами *#.' : 'Several commands: SMS 2#55*3#66*, call 2#55*3#66*#. Input during a call always ends with *#.'}</li>
+            <li style="margin-bottom:4px;">${L === 'ru' ? 'Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - 00 (выкл) и 11 (вкл); Cron - 33 и 44; PID - 55 и 66.' : 'Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - 00 (off) and 11 (on); Cron - 33 and 44; PID - 55 and 66.'}</li>
+            <li style="margin-bottom:4px;">${L === 'ru' ? 'В ответ приходит SMS-отчёт, например OnOff: PID2=OFF (только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.' : 'An SMS report is sent back, for example OnOff: PID2=OFF (only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.'}</li>
+          </ul>
+        `
+      )}
+
+      ${sec(
         X.whatTitle,
         true,
         html`${X.what.map((t) => html`<p style=${S.p}>${t}</p>`)}`

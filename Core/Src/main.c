@@ -3353,6 +3353,7 @@ void StartSIM800LTask(void *argument)
     if (gsm_available()) { // если модуль что-то прислал
       process_sim800l_data();
     }
+    sms_alarm_poll(); // SMS-тревоги от датчиков Security (Send SMS = YES)
     osDelay(1);
   }
   /* USER CODE END StartSIM800LTask */
@@ -3416,6 +3417,11 @@ void StartSecurityTask(void *argument)
                 action_handler(i, PinsConf[i].sclick, "Security action");
 
                 mqtt_queue_send_safe(6, i, current_state, 0);
+              }
+              /* Send SMS не зависит от поля Action: SMS уходит, даже если
+               * Action = None. Отправляет задача SIM800L (sms_alarm_poll). */
+              if (PinsConf[i].onoff && strcmp(PinsConf[i].send_sms, "YES") == 0) {
+                sms_alarm_request(i);
               }
 
               sec_lasttrg[i] = currtime;

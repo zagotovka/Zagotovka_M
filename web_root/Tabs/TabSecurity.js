@@ -148,7 +148,7 @@ const TabSecurity = () => {
     ru: html`
       <div class="mytext space-y-6">
         <div>
-          <h2 class="text-xl font-bold mb-4 text-blue-600">Подключение датчиков 🔌</h2>
+          <h2 class="text-xl font-bold mb-4 text-blue-600">Подключение датчиков</h2>
           <div class="bg-blue-50 p-4 rounded-lg mb-6">
             <h3 class="font-bold mb-3">Нормально открытый геркон <span class="text-blue-500 font-bold">(Normal open)</span></h3>
             <ul class="space-y-2">
@@ -174,7 +174,7 @@ const TabSecurity = () => {
           </div>
         </div>
         <div>
-          <h2 class="text-xl font-bold mb-4 text-blue-600">Настройка SMS-уведомлений 📱</h2>
+          <h2 class="text-xl font-bold mb-4 text-blue-600">Настройка SMS-уведомлений</h2>
           <div class="space-y-4">
             <div class="p-3 bg-green-50 rounded">
               <p class="font-bold">Значение <span class="text-blue-500 font-bold">'YES'</span> в столбце "Send SMS":</p>
@@ -189,8 +189,10 @@ const TabSecurity = () => {
             <h3 class="font-bold mb-2">Примечание:</h3>
             <ul class="space-y-2">
               <li>• Действия в столбце 'Action' зависят от ползунка 'OnOff' выбранного пина.</li>
+              <li>• SMS-уведомление отправляется, только если включены ползунок 'OnOFF' выбранного пина и ползунок 'OnOFF' модуля SIM800L.</li>
             </ul>
           </div>
+          <div class="mt-4"><div class="p-4 rounded-2xl bg-sky-50 border border-sky-300 text-sm"><h3 class="font-bold mb-2">Рубильник On/Off по SMS и DTMF</h3><p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки.</p><table class="w-full text-sm border-collapse my-2"><thead><tr><th class="border px-3 py-1 text-left">Действие</th><th class="border px-3 py-1 text-left">SMS</th><th class="border px-3 py-1 text-left">DTMF (во время звонка)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Отключить строку (ползунок Off)</td><td class="border px-3 py-1"><code>12#00*</code></td><td class="border px-3 py-1"><code>12#00*#</code></td></tr><tr><td class="border px-3 py-1">Включить строку (ползунок On)</td><td class="border px-3 py-1"><code>12#11*</code></td><td class="border px-3 py-1"><code>12#11*#</code></td></tr></tbody></table><p class="mb-2">В таблице ID = 12 - это пример, подставьте ID своей строки.</p><p class="mb-2">Несколько команд подряд: <code>12#00*7#11*</code> (SMS) и <code>12#00*7#11*#</code> (звонок). Ввод во время звонка всегда завершается символами <code>*#</code>: последняя команда уже заканчивается на <code>*</code>, поэтому в конце добавляется только <code>#</code>.</p><p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p><p class="mb-2">В ответ приходит SMS-отчёт, например <code>OnOff: Pin12=OFF</code> (отчёт отправляется, только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.</p><p class="mb-2">Те же команды работают для строки SIM800L (общий ползунок SMS-уведомлений) и для Zigbee-датчиков движения в таблице Z2M (их ID начинаются с 89). Для строки SIM800L ID = 1.</p></div></div>
         </div>
         <div>
           <h2 class="text-xl font-bold mb-2 mt-6">Отслеживание изменений</h2>
@@ -222,7 +224,7 @@ const TabSecurity = () => {
     en: html`
       <div class="mytext space-y-6">
         <div>
-          <h2 class="text-xl font-bold mb-4 text-blue-600">Sensor Connection 🔌</h2>
+          <h2 class="text-xl font-bold mb-4 text-blue-600">Sensor Connection</h2>
           <div class="bg-blue-50 p-4 rounded-lg mb-6">
             <h3 class="font-bold mb-3">Normally Open Reed Switch <span class="text-blue-500 font-bold">(Normal open)</span></h3>
             <ul class="space-y-2">
@@ -248,7 +250,7 @@ const TabSecurity = () => {
           </div>
         </div>
         <div>
-          <h2 class="text-xl font-bold mb-4 text-blue-600">SMS Notification Settings 📱</h2>
+          <h2 class="text-xl font-bold mb-4 text-blue-600">SMS Notification Settings</h2>
           <div class="space-y-4">
             <div class="p-3 bg-green-50 rounded">
               <p class="font-bold">Value <span class="text-blue-500 font-bold">'YES'</span> in "Send SMS" column:</p>
@@ -263,9 +265,11 @@ const TabSecurity = () => {
             <h3 class="font-bold mb-2">Note:</h3>
             <ul class="space-y-2">
               <li>• Actions in the 'Action' column depend on the 'OnOff' slider of the selected pin.</li>
+              <li>• An SMS is sent only when both the pin 'OnOFF' slider and the SIM800L module 'OnOFF' slider are ON.</li>
               <li>• This page sends changes via MQTT to topic: <span class="text-blue-500 font-bold">Swarm/security/</span></li>
             </ul>
           </div>
+          <div class="mt-4"><div class="p-4 rounded-2xl bg-sky-50 border border-sky-300 text-sm"><h3 class="font-bold mb-2">On/Off switch by SMS and DTMF</h3><p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row.</p><table class="w-full text-sm border-collapse my-2"><thead><tr><th class="border px-3 py-1 text-left">Action</th><th class="border px-3 py-1 text-left">SMS</th><th class="border px-3 py-1 text-left">DTMF (during a call)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Turn the row off (slider Off)</td><td class="border px-3 py-1"><code>12#00*</code></td><td class="border px-3 py-1"><code>12#00*#</code></td></tr><tr><td class="border px-3 py-1">Turn the row on (slider On)</td><td class="border px-3 py-1"><code>12#11*</code></td><td class="border px-3 py-1"><code>12#11*#</code></td></tr></tbody></table><p class="mb-2">In the table ID = 12 is an example, use the ID of your own row.</p><p class="mb-2">Several commands in a row: <code>12#00*7#11*</code> (SMS) and <code>12#00*7#11*#</code> (call). Input during a call always ends with <code>*#</code>: the last command already ends with <code>*</code>, so only <code>#</code> is added at the end.</p><p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p><p class="mb-2">An SMS report is sent back, for example <code>OnOff: Pin12=OFF</code> (the report is sent only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.</p><p class="mb-2">The same commands work for the SIM800L row (common SMS alerts slider) and for the Zigbee motion sensors in the Z2M table (their IDs start from 89). For the SIM800L row ID = 1.</p></div></div>
         </div>
         <div>
           <h2 class="text-xl font-bold mb-2 mt-6">Tracking Changes</h2>

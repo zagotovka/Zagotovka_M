@@ -73,31 +73,33 @@ if [ -f "$WEB_ROOT/history.min.js" ]; then
     cp "$WEB_ROOT/history.min.js" "$PACK_DIR/web_root/"
 fi
 
-# 3. Генерация .gz и замена
+# 3. Генерация .gz и замена (Zopfli: тот же формат gzip/DEFLATE, просто меньше)
 echo "[3/4] Generating gzip and packing..."
+ZOPFLI="$PROJECT_DIR/scripts/zopfli_gzip.py"
 
-# gzip для JS
+compress_gz() {
+    local f="$1"
+    [ -n "$f" ] && [ -f "$f" ] || return 0
+    if python3 "$ZOPFLI" "$f" 2>/dev/null; then
+        :
+    else
+        echo "  ⚠ zopfli недоступен, fallback на gzip -9" >&2
+        gzip -9 -k -f "$f"
+    fi
+    cp "$f" "${f}.orig"
+    cp "${f}.gz" "$f"
+}
+
+# JS
 JS_ORIG=$(ls "$PACK_DIR/web_root/assets/index-"*.js 2>/dev/null | grep -v '\.gz' | grep -v '\.orig' | head -1)
-if [ -n "$JS_ORIG" ]; then
-    gzip -k -f "$JS_ORIG"
-    cp "$JS_ORIG" "${JS_ORIG}.orig"
-    cp "${JS_ORIG}.gz" "$JS_ORIG"
-fi
+compress_gz "$JS_ORIG"
 
-# gzip для CSS
+# CSS
 CSS_ORIG=$(ls "$PACK_DIR/web_root/assets/index-"*.css 2>/dev/null | grep -v '\.gz' | grep -v '\.orig' | head -1)
-if [ -n "$CSS_ORIG" ]; then
-    gzip -k -f "$CSS_ORIG"
-    cp "$CSS_ORIG" "${CSS_ORIG}.orig"
-    cp "${CSS_ORIG}.gz" "$CSS_ORIG"
-fi
+compress_gz "$CSS_ORIG"
 
-# gzip для history.min.js
-if [ -f "$PACK_DIR/web_root/history.min.js" ]; then
-    gzip -k -f "$PACK_DIR/web_root/history.min.js"
-    cp "$PACK_DIR/web_root/history.min.js" "$PACK_DIR/web_root/history.min.js.orig"
-    cp "$PACK_DIR/web_root/history.min.js.gz" "$PACK_DIR/web_root/history.min.js"
-fi
+# history.min.js
+compress_gz "$PACK_DIR/web_root/history.min.js"
 
 # Упаковка через pack tool с strip prefix
 cd "$PACK_DIR"

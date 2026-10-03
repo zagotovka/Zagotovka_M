@@ -334,6 +334,9 @@ void calculateMoonPhase(DateTime current, DateTime *next);
 void checkPortClockStatus(GPIO_TypeDef* GPIO_Port);
 
 void send_sms(int index);
+void sms_alarm_request(int id);
+void sms_alarm_poll(void);
+int remote_onoff_set(int code, int id, int sub, char *label, size_t label_sz);
 
 void publish_ds18b20_changes(struct mg_connection *conn);
 void publish_dht22_changes(struct mg_connection *conn);

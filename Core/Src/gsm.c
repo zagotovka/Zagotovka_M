@@ -305,7 +305,7 @@ void sanitize_cmd_str(char *s) {
     char *r = s, *w = s;
     while (*r) {
         char c = toupper((unsigned char)*r);
-        if ((c >= '0' && c <= '9') || c == '#' || c == '*' ||
+        if ((c >= '0' && c <= '9') || c == '#' || c == '*' || c == '.' ||
             c == 'S' || c == 'C' || c == 'D' || c == 'L' || c == 'P') {
             *w++ = *r;
         }
@@ -314,8 +314,25 @@ void sanitize_cmd_str(char *s) {
     *w = '\0';
 }
 
+static char s_onoff_rep[96]; /* отчёт по командам-рубильникам ID#КОД* */
+
+static void onoff_rep_add(const char *label) {
+  size_t cur = strlen(s_onoff_rep);
+  size_t need = strlen(label) + (cur > 0 ? 1u : 0u);
+  if (cur + need >= sizeof(s_onoff_rep)) return;
+  if (cur > 0) s_onoff_rep[cur++] = ',';
+  strcpy(s_onoff_rep + cur, label);
+}
+
 void execute_commands(char *cmd_str) {
   if (!cmd_str || *cmd_str == '\0') return;
+
+  s_onoff_rep[0] = '\0';
+
+  bool sec_changed = false;   /* менялся On/Off у SECURITY-пина или Zigbee PIR */
+  int  sec_last_id = -1;
+  bool psec_changed = false;  /* менялся физический SECURITY-пин (pins.ini) */
+  bool zsec_changed = false;  /* менялся Zigbee PIR (zigbee.ini) */
 
   /* Санитизация на входе — убираем мусор до парсинга */
   sanitize_cmd_str(cmd_str);
@@ -329,8 +346,18 @@ void execute_commands(char *cmd_str) {
 
     /* Читаем номер пина */
     while (*cmd >= '0' && *cmd <= '9') {
-      pin = pin * 10 + (*cmd - '0');
+      if (pin < 10000) pin = pin * 10 + (*cmd - '0');
       cmd++;
+    }
+
+    /* Дочерняя строка Zigbee: ID вида 93.1 (точка набирается только в SMS) */
+    int sub = 0;
+    if (*cmd == '.' && *(cmd + 1) >= '0' && *(cmd + 1) <= '9') {
+      cmd++;
+      while (*cmd >= '0' && *cmd <= '9') {
+        if (sub < 1000) sub = sub * 10 + (*cmd - '0');
+        cmd++;
+      }
     }
 
     if (*cmd == '#') {
@@ -338,7 +365,15 @@ void execute_commands(char *cmd_str) {
       char *hash_pos = cmd;
       cmd++; /* пропускаем # */
 
-      if (*cmd >= '0' && *cmd <= '5' && *(cmd + 1) == '*') {
+      int onoff_cmd = 0; /* 1 - команда-рубильник On/Off (ID#КОД*) */
+      if (*cmd >= '0' && *cmd <= '9' && *(cmd + 1) >= '0' &&
+          *(cmd + 1) <= '9' && *(cmd + 2) == '*') {
+        /* Две цифры и *: 00/11 - пины, 33/44 - Cron, 55/66 - PID */
+        value = (*cmd - '0') * 10 + (*(cmd + 1) - '0');
+        cmd += 3; /* пропускаем две цифры и * */
+        onoff_cmd = 1;
+        valid_format = 1;
+      } else if (*cmd >= '0' && *cmd <= '5' && *(cmd + 1) == '*') {
         value = *cmd - '0';
         cmd += 2; /* пропускаем значение и * */
         valid_format = 1;
@@ -359,13 +394,72 @@ void execute_commands(char *cmd_str) {
       }
 
       if (valid_format) {
-        if (pin >= 0 && pin < NUMPIN) {
+        if (onoff_cmd) {
+          char olabel[24];
+          if (remote_onoff_set(value, pin, sub, olabel, sizeof(olabel))) {
+            onoff_rep_add(olabel);
+            validcnt++;
+          } else {
+            char inv_str[40];
+            if (sub > 0)
+              snprintf(inv_str, sizeof(inv_str), "%s%d.%d#%02d*",
+                       invldcnt > 0 ? "," : "", pin, sub, value);
+            else
+              snprintf(inv_str, sizeof(inv_str), "%s%d#%02d*",
+                       invldcnt > 0 ? "," : "", pin, value);
+            if (strlen(invpins) + strlen(inv_str) < DTCM_BUF_GSM_INVPINS) {
+              strcat(invpins, inv_str);
+              invldcnt++;
+            }
+          }
+        } else if (sub > 0) {
+          /* Суффикс .N допустим только в командах-рубильниках */
+          char inv_str[40];
+          snprintf(inv_str, sizeof(inv_str), "%s%d.%d#%d*",
+                   invldcnt > 0 ? "," : "", pin, sub, value);
+          if (strlen(invpins) + strlen(inv_str) < DTCM_BUF_GSM_INVPINS) {
+            strcat(invpins, inv_str);
+            invldcnt++;
+          }
+        } else if (pin >= NUMPIN && pin < NUMPIN + NUMZBEE) {
+          /* Zigbee-слоты: поддерживается только On/Off охранного PIR */
+          int zbi = pin - NUMPIN;
+          if (zbee_is_pir(&ZigbeeConf[zbi]) && ZigbeeConf[zbi].zbee_ieee[0] != '\0' &&
+              value >= 0 && value <= 2) {
+            if (value == 1) ZigbeeConf[zbi].onoff = 1;
+            else if (value == 0) ZigbeeConf[zbi].onoff = 0;
+            else ZigbeeConf[zbi].onoff = !ZigbeeConf[zbi].onoff;
+            sec_changed = true;
+            zsec_changed = true;
+            sec_last_id = pin;
+
+            char zcmd[16];
+            int zlen = snprintf(zcmd, sizeof(zcmd), "%s%d:%d",
+                                validcnt > 0 ? "," : "", pin, value);
+            if (zlen > 0 && zlen < (int)sizeof(zcmd) &&
+                strlen(vldpins) + (size_t)zlen < DTCM_BUF_GSM_VLDPINS) {
+              strcat(vldpins, zcmd);
+              validcnt++;
+            }
+          } else {
+            char inv_str[32];
+            snprintf(inv_str, sizeof(inv_str), "%s%d#%d*",
+                     invldcnt > 0 ? "," : "", pin, value);
+            if (strlen(invpins) + strlen(inv_str) < DTCM_BUF_GSM_INVPINS) {
+              strcat(invpins, inv_str);
+              invldcnt++;
+            }
+          }
+        } else if (pin >= 0 && pin < NUMPIN) {
           if ((PinsConf[pin].topin == 2 || PinsConf[pin].topin == 10 || PinsConf[pin].topin == 3) && (value >= 0 && value <= 2)) {
             /* Для типа SECURITY (topin==10) управляем onoff */
             if (PinsConf[pin].topin == 10) {
               if (value == 1) PinsConf[pin].onoff = 1;
               else if (value == 0) PinsConf[pin].onoff = 0;
               else if (value == 2) PinsConf[pin].onoff = !PinsConf[pin].onoff;
+              sec_changed = true;
+              psec_changed = true;
+              sec_last_id = pin;
             }
 
             /* Формируем строку "pin:value" и добавляем в vldpins */
@@ -483,6 +577,28 @@ void execute_commands(char *cmd_str) {
   /* Выполняем валидные действия */
   action_handler(0, vldpins, "CMD");
 
+  /* On/Off охранного пина изменён по SMS/DTMF: делаем то же, что делает
+   * веб-путь (handle_onoff_set): обновляем ETag страниц, чтобы ползунок
+   * сменился в браузере, сохраняем конфиг и шлём MQTT-уведомление. */
+  if (sec_changed) {
+    mark_slice_dirty(&g_ver_security);
+    mark_slice_dirty(&g_ver_pins);
+    if (usbQueueHandle) {
+      uint8_t usbnum;
+      if (psec_changed) {
+        usbnum = 1; /* pins.ini */
+        xQueueSend(usbQueueHandle, &usbnum, 0);
+      }
+      if (zsec_changed) {
+        usbnum = 7; /* zigbee.ini */
+        xQueueSend(usbQueueHandle, &usbnum, 0);
+      }
+    }
+    if (sec_last_id >= 0 && sec_last_id < NUMPIN) {
+      mqtt_queue_send_safe(8, (uint8_t)sec_last_id, 0, 0);
+    }
+  }
+
   /* Отладочный вывод */
   LOG_GSM("Parsed cmds: %.100s\n", vldpins);
   LOG_GSM("Invld pins/cmd: %.100s\n", invpins);
@@ -523,7 +639,22 @@ void send_command_result_sms(void) {
         pin_number[k] = tok[k];
         k++;
       }
-      uint8_t pin_id = atoi(pin_number);
+      int pin_id_full = atoi(pin_number);
+      if (pin_id_full >= NUMPIN) {
+        /* Zigbee PIR (единое пространство ID): отдельная запись в SEC-TY */
+        if (pin_id_full < NUMPIN + NUMZBEE &&
+            zbee_is_pir(&ZigbeeConf[pin_id_full - NUMPIN])) {
+          char zentry[24];
+          snprintf(zentry, sizeof(zentry), "%s%s:%s", sec_cnt > 0 ? "," : "",
+                   pin_number,
+                   ZigbeeConf[pin_id_full - NUMPIN].onoff == 1 ? "ON" : "OFF");
+          strncat(sec_buf, zentry, sizeof(sec_buf) - strlen(sec_buf) - 1);
+          sec_cnt++;
+        }
+        tok = strtok(NULL, ",");
+        continue;
+      }
+      uint8_t pin_id = (uint8_t)pin_id_full;
 
       char *colon = strchr(tok, ':');
       int action_val = -1;
@@ -599,6 +730,13 @@ void send_command_result_sms(void) {
     }
   }
 
+  /* Результаты команд-рубильников On/Off (ID#КОД*) */
+  if (s_onoff_rep[0] != '\0') {
+    size_t mlen = strlen(message);
+    snprintf(message + mlen, sizeof(message) - mlen, "%sOnOff: %s",
+             mlen > 0 ? " " : "", s_onoff_rep);
+  }
+
   if ((has_type_10 && PinsConf[1].onoff == 1 && PinsConf[type_10_pin].onoff == 1) ||
       (validcnt > 0 && PinsConf[1].onoff == 1)) {
 
@@ -626,6 +764,8 @@ void send_command_result_sms(void) {
         }
     }
   }
+
+  s_onoff_rep[0] = '\0';
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -775,6 +915,13 @@ void process_sim800l_data(void) {
                 char c1 = *(q + 1);
                 char c2 = *(q + 2);
                 char c3 = *(q + 3);
+
+                /* Рубильник On/Off: две цифры и звёздочка (00/11/33/44/55/66) */
+                if (c1 >= '0' && c1 <= '9' && c2 >= '0' && c2 <= '9' &&
+                    c3 == '*') {
+                  has_cmd = true;
+                  break;
+                }
 
                 /* Проверяем: цифра 0-5 и звёздочка (поддержка цифровых команд кнопок) */
                 if (c1 >= '0' && c1 <= '5' && c2 == '*') {
