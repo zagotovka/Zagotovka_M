@@ -3,6 +3,7 @@ import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
+import { buildActionRegex, condHint, hasDisabledCond, DISABLED_COND_WARN } from '../condlib.js';
 
 const ModalSecurity = ({
   modalType,
@@ -26,7 +27,7 @@ const ModalSecurity = ({
   });
   const [submitError, setSubmitError] = useState(null);
 
-  const mecurityRegex = /^(None|\d{1,3}:[012])(,\d{1,3}:[012])*$/;
+  const mecurityRegex = buildActionRegex(3); /* + поддержка условия "?R2&RV3>50" */
 
   const validateInput = (key, value) => {
     if (!value || value.trim() === '' || value.toLowerCase() === 'none') {
@@ -36,7 +37,7 @@ const ModalSecurity = ({
     if (key === 'action') {
       return mecurityRegex.test(value)
         ? null
-        : 'Incorrect format. Use "None" or "pin:value" format.';
+        : 'Incorrect format. Use "None", "pin:value" or "pin:value?cond" (e.g. 6:1?R2).';
     }
 
     if (value.length > 100) {
@@ -151,8 +152,11 @@ const ModalSecurity = ({
                   class="border rounded p-2 w-full ${errors.action
       ? 'border-red-500'
       : ''}"
-                  placeholder="None"
+                  placeholder="None, 6:1, 6:1?R6"
                 />
+                <p class="text-gray-500 text-xs mt-1">${condHint((selectedSecurity?.lang || 'ru') === 'ru')}</p>
+                ${hasDisabledCond(action) &&
+      html`<p class="text-amber-600 text-xs mt-1 font-medium">${DISABLED_COND_WARN[(selectedSecurity?.lang || 'ru') === 'ru' ? 'ru' : 'en']}</p>`}
                 ${errors.action &&
     html`<p class="text-red-500 text-sm">${errors.action}</p>`}
               </td>

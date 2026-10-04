@@ -3,6 +3,7 @@ import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
+import { validateActionStr, condHint, hasDisabledCond, DISABLED_COND_WARN } from '../condlib.js';
 
 const ModalButton = ({
   modalType,
@@ -27,15 +28,10 @@ const ModalButton = ({
   });
   const [submitError, setSubmitError] = useState(null);
 
-  const doubleClickLongPressRegex = /^(None|\d{1,4}(\.\d)?:[012])(,\d{1,4}(\.\d)?:[012])*$/;
+  const isRu = (selectedButton?.lang || 'ru') === 'ru';
 
   const validateInput = (value) => {
-    if (!value || value.trim() === '' || value.toLowerCase() === 'none') {
-      return null;
-    }
-    return doubleClickLongPressRegex.test(value)
-      ? null
-      : 'Format: None, 6:1, 93.1:2 (pin:value, 0=OFF 1=ON 2=TOGGLE)';
+    return validateActionStr(value);
   };
 
   const handleInputChange = (key, value) => {
@@ -154,11 +150,16 @@ const ModalButton = ({
                       class="border rounded p-2 w-full ${errors[type]
         ? 'border-red-500'
         : ''}"
-                      placeholder="None, 6:1, 93.1:2"
+                      placeholder="None, 6:1, 93.1:2, 6:1?R2"
                       maxLength="124"
                     />
                     ${errors[type] &&
       html`<p class="text-red-500 text-sm">${errors[type]}</p>`}
+                    <p class="text-gray-500 text-xs mt-1 text-right">${124 - (eval(type) || '').length}/124</p>
+                    ${hasDisabledCond(eval(type)) &&
+      html`<p class="text-amber-600 text-xs mt-1 font-medium">${DISABLED_COND_WARN[(selectedButton?.lang || 'ru') === 'ru' ? 'ru' : 'en']}</p>`}
+                    ${type === 'sclick' &&
+      html`<p class="text-gray-500 text-xs mt-1">${condHint(isRu)}</p>`}
                   </td>
                 </tr>
               `

@@ -282,7 +282,8 @@ function Settings({ }) {
 
   const sanitizeSunInput = (value) => {
     if (typeof value !== 'string') return '';
-    return value.replace(/[^0-9:,./+-]/g, '');
+    // Разрешены цифры/формат и символы условий после '?': R1, !R2, RV1>0, B1, BH1, T5>25.5, Sr, Ss...
+    return value.replace(/[^0-9:,./+-A-Za-z()!&|=<>.?]/g, '');
   };
 
   const validateSunActions = (value, required, isRu) => {
@@ -312,11 +313,13 @@ function Settings({ }) {
                   : 'Actions part is longer than ' + SUN_ACTIONS_MAX_LEN + ' characters';
     }
     const tokens = actionsPart.split(',');
+    const condChars = 'A-Za-z0-9()!&|=<>.';
+    const tokRe = new RegExp('^(\\d{1,3})(?:\\.([12]))?:([0-2])(\\?[' + condChars + ']{1,60})?$');
     for (const tok of tokens) {
-      const m = /^(\d{1,3})(?:\.([12]))?:([0-2])$/.exec(tok);
+      const m = tokRe.exec(tok);
       if (!m || parseInt(m[1], 10) > 255) {
-        return isRu ? 'Неверное действие "' + tok + '". Ожидается пин:действие, действие 0, 1 или 2 (например 6:1)'
-                    : 'Invalid action "' + tok + '". Expected pin:action, action is 0, 1 or 2 (e.g. 6:1)';
+        return isRu ? 'Неверное действие "' + tok + '". Ожидается пин:действие?условие, действие 0, 1 или 2 (например 6:1 или 6:1?R2)'
+                    : 'Invalid action "' + tok + '". Expected pin:action?condition, action is 0, 1 or 2 (e.g. 6:1 or 6:1?R2)';
       }
     }
     return null;
@@ -614,8 +617,21 @@ function Settings({ }) {
   const sunErr_sunset_pins = validateSunActions(settings.sunset_pins, !!settings.onsunset, isRuSun);
   const sunHasError = !!(sunErr_sunrise_pins || sunErr_sunset_pins);
   const sunHint = isRuSun
-    ? 'Формат: смещение/пин:действие,пин:действие. Смещение - секунды относительно времени восхода/заката (отрицательное - раньше). Действие: 0 - выкл, 1 - вкл, 2 - переключить. Пример: 0/6:1,12:0 или -600/6:1'
-    : 'Format: offset/pin:action,pin:action. Offset is in seconds relative to sunrise/sunset (negative = earlier). Action: 0 - off, 1 - on, 2 - toggle. Example: 0/6:1,12:0 or -600/6:1';
+    ? 'Формат: СМЕЩЕНИЕ/действия. Одно смещение (секунды от восхода ИЛИ заката — смотря в какое поле записано; отрицательное — раньше) относится ко всем действиям после "/". У каждого действия может быть условие после "?". Примеры: 0/6:1,12:0 (на восходе: вкл 6, выкл 12), -600/6:1?R2 (за 10 мин до восхода включить 6, если реле 2 включено)'
+    : 'Format: OFFSET/actions. A single offset (seconds from sunrise OR sunset - whichever field it is in; negative = earlier) applies to ALL actions after "/". Each action may carry a condition after "?". Examples: 0/6:1,12:0 (at sunrise: on 6, off 12), -600/6:1?R2 (10 min before sunrise, turn 6 on if relay 2 is on)';
+
+  // Библиотека условий (12 записей): условия выбираются в модалках
+  // Encoder/Switch/PID; инлайн-условия пишутся прямо в действиях "?R2&RV3>50"
+  const handleCondChange = (idx, value) => {
+    setSettings(prev => {
+      const arr = Array.isArray(prev.conds) ? prev.conds.slice() : [];
+      while (arr.length < 12) arr.push('');
+      arr[idx] = value;
+      return { ...prev, conds: arr };
+    });
+    lastInputTime.current = Date.now();
+  };
+  const condsArr = Array.isArray(settings.conds) ? settings.conds : [];
 
   const saveBtn = (extraClass = '') => html`
     <button
@@ -1143,6 +1159,44 @@ function Settings({ }) {
                   </div>
                   ${sunErr_sunset_pins ? html`<p class="mt-1 text-sm text-red-600">${sunErr_sunset_pins}</p>` : null}
                   <p class="mt-1 text-xs text-slate-600">${sunHint}</p>
+                </td>
+              </tr>
+
+              <!-- Библиотека условий (условия для связей Encoder/Switch и PID) -->
+              <tr class="transition-colors border-b border-slate-200 bg-white/80 hover:bg-slate-200/80">
+                <td
+                  class="w-1/3 text-lg font-bold text-slate-700 px-6 border-r border-slate-500 py-4 align-top cursor-help"
+                  data-tip=${isRuSun ? 'Общие условия. Каждая связь Encoder/Switch и PID-слот может ссылаться на условие по номеру. В действиях кнопок/таймеров условие пишется инлайн после "?"' : 'Shared conditions. Each Encoder/Switch link and PID slot can reference a condition by number. For button/timer actions write the condition inline after "?"'}
+                >
+                  Conditions
+                  <div class="text-xs font-normal text-slate-500 mt-2 max-w-[16rem]">1..12 — используются в Encoder, Switch и PID</div>
+                </td>
+                <td class="w-2/3 pl-4 py-4 pr-6">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    ${Array.from({ length: 12 }, (_, i) => html`
+                      <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-slate-500 w-6">#${i + 1}</span>
+                        <input type="text" value=${condsArr[i] || ''}
+                          onInput=${(e) => handleCondChange(i, e.target.value)}
+                          maxlength="46"
+                          placeholder=${i === 0 ? 'R1&!R2 | Ss' : ''}
+                          class="flex-grow w-full px-3 py-2 bg-white/50 border border-white/50 rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-sm" />
+                        ${(() => {
+                          const used = Array.isArray(settings.conds_used) ? (settings.conds_used[i] || 0) : 0;
+                          const cleared = (condsArr[i] || '') === '0';
+                          return html`
+                            ${used > 0 ? html`<span class="text-[10px] font-semibold text-amber-700 bg-amber-100 rounded px-1.5 py-0.5 whitespace-nowrap" title=${isRuSun ? 'Мест использования: связи Encoder/Switch, слоты PID и инлайн-ссылки ?C в действиях. Правка условия меняет их поведение сразу' : 'Usage sites: Encoder/Switch links, PID slots and inline ?C references. Editing this condition affects all of them at once'}>${used}</span>` : null}
+                            ${cleared ? html`<span class="text-[10px] font-semibold text-red-700 bg-red-100 rounded px-1.5 py-0.5 whitespace-nowrap" title=${isRuSun ? 'Условие сброшено в "0" (обычно после удаления устройства). Все ссылки на него теперь блокируют действия' : 'Condition reset to "0" (usually after deleting a device). All references to it now block actions'}>${isRuSun ? 'сброшено' : 'reset'}</span>` : null}
+                          `;
+                        })()}
+                      </div>
+                    `)}
+                  </div>
+                  <p class="mt-2 text-xs text-slate-600">
+                    ${isRuSun
+                      ? 'Синтаксис: R1 - реле 1 вкл, !R2 - выкл, RV1>0 / RV1=255 / RV1g100 / RV1l100 - диммер (для Zigbee - состояние/яркость устройства), B1 - кнопка нажата, BU1 - не нажата, BH1 - удерживается, T5>25.5 - температура (°C), H4>50 - влажность (%), Sr - день, Ss - ночь. Операторы: ! & | ( ) = > < g l. В действиях можно ссылаться сюда: C3 = это условие №3. Мёртвый датчик даёт «неизвестно» — действие блокируется, в т.ч. под отрицанием, но явная истина через | перекрывает: T5<25|R1 сработает при мёртвом T5, если R1 вкл. Вложенность C-ссылок: 2 работают, глубже — блокировка. ВАЖНО: прямое управление (ползунок On/Off, MQTT/API set) условие НЕ проверяет'
+                      : 'Syntax: R1 - relay 1 on, !R2 - off, RV1>0 / RV1=255 / RV1g100 / RV1l100 - dimmer (for Zigbee - device state/level), B1 - button pressed, BU1 - not pressed, BH1 - held, T5>25.5 - temperature, H4>50 - humidity, Sr - daytime, Ss - night. Operators: ! & | ( ) = > < g l. Actions can reference here: C3 = this condition #3. Dead sensor yields "unknown" - blocked even under negation, but explicit truth via | overrides: T5<25|R1 fires with dead T5 if R1 is on. C-chain: 2 nested refs work, deeper is blocked. NOTE: direct control (On/Off toggle, MQTT/API set) does NOT check conditions'}
+                  </p>
                 </td>
               </tr>
 

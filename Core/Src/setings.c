@@ -196,6 +196,11 @@ void SetSettingsConfig() {
   writeField(&USBHFile, buffer, "year", "%d", SetSettings.year);
   writeField(&USBHFile, buffer, "usehttps", "%d", SetSettings.usehttps);
   writeField(&USBHFile, buffer, "log_filter_mask", "%u", SetSettings.log_filter_mask);
+  for (int ci = 0; ci < NUMCOND; ci++) {
+    char cname[8];
+    snprintf(cname, sizeof(cname), "cond%d", ci + 1);
+    writeField(&USBHFile, buffer, cname, "\"%s\"", SetSettings.conds[ci]);
+  }
 
   snprintf(buffer, JSON_BUF_SIZE, "\"tel\":\"%s\"", SetSettings.tel);
   //    printf("+++Real size of SetSettings: %u bytes & SetSettings.usehttps =
@@ -343,7 +348,7 @@ void GetSettingsConfig() {
   FRESULT fresult;
   UINT bytesRead;
   char key[64] = {0};
-  char value[64] = {0};
+  char value[168] = {0}; /* >= длины srise_pins/sset_pins в UI (134) и условий */
   size_t keyPos = 0, valuePos = 0;
   bool inString = false;
   bool isKey = true;
@@ -412,9 +417,9 @@ void GetSettingsConfig() {
         (!inString && !isKey &&
          (isdigit(currentChar) || currentChar == '-' || currentChar == '.'))) {
       if (isKey) {
-        key[keyPos++] = currentChar;
+        if (keyPos < sizeof(key) - 1) key[keyPos++] = currentChar;
       } else {
-        value[valuePos++] = currentChar;
+        if (valuePos < sizeof(value) - 1) value[valuePos++] = currentChar;
       }
     }
     continue;
@@ -694,6 +699,15 @@ void GetSettingsConfig() {
     } else if (strcmp(key, "log_filter_mask") == 0) {
       SetSettings.log_filter_mask = strtoul(value, NULL, 10);
       g_log_filter_from_file = true; // Маска была явно прочитана из файла
+    } else if (strncmp(key, "cond", 4) == 0 && key[4] >= '1' && key[4] <= '9' &&
+               (key[5] == '\0' ||
+                (key[5] >= '0' && key[5] <= '2' && key[6] == '\0'))) {
+      /* Библиотека условий: cond1..cond12 (не более NUMCOND) */
+      int ci = atoi(key + 4) - 1;
+      if (ci >= 0 && ci < NUMCOND) {
+        strncpy(SetSettings.conds[ci], value, sizeof(SetSettings.conds[ci]) - 1);
+        SetSettings.conds[ci][sizeof(SetSettings.conds[ci]) - 1] = '\0';
+      }
     }
     keyPos = 0;
     valuePos = 0;
@@ -901,7 +915,7 @@ static void zbee_sanitize_str(char *s, size_t max_len) {
 void GetPinConfig() {
   UINT bytesRead;
   char key[32] = {0};
-  char value[64] = {0};
+  char value[168] = {0}; /* >= макс. строки действия (125) + запас */
   int keyIndex = 0;
   int valueIndex = 0;
   int currentPin = 0;
@@ -1493,6 +1507,7 @@ void GetPinToPin() {
     long idout = mg_json_get_long(elem, "$.idout", 0);
     PinsLinks[i].idin = (short)idin;
     PinsLinks[i].idout = (short)idout;
+    PinsLinks[i].cond = (uint8_t)mg_json_get_long(elem, "$.cond", 0);
     char *pins = mg_json_get_str(elem, "$.pins");
     if (pins) {
       strncpy(PinsLinks[i].pins, pins, sizeof(PinsLinks[i].pins) - 1);
@@ -1533,8 +1548,9 @@ void SetPinToPin() {
       if (fres != FR_OK) { LOG_SYSTEM("[USB] SetPinToPin write ',' failed"); break; }
     }
     int len = snprintf(buffer, JSON_BUF_SIZE,
-                       "{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
-                       PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins);
+                       "{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\",\"cond\":%d}",
+                       PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins,
+                       PinsLinks[i].cond);
     fres = f_write(&USBHFile, buffer, len, &bytesWritten);
     if (fres != FR_OK || (int)bytesWritten != len) { LOG_SYSTEM("[USB] SetPinToPin write entry[%d] failed", i); break; }
     saved_count++;
@@ -2429,6 +2445,7 @@ void GetPidConfig() {
     }
 
     PidConf[idx].onoff = (uint8_t)mg_json_get_long(elem, "$.onoff", 0);
+    PidConf[idx].cond = (uint8_t)mg_json_get_long(elem, "$.cond", 0);
 
     idx++;
   }
@@ -2476,7 +2493,7 @@ void SetPidConfig() {
         "\"pwm_start\":%d,\"pwm_max\":%d,"
         "\"temp_max\":%.2f,\"temp_min\":%.2f,\"pause_sec\":%d,"
         "\"tau\":%.2f,\"K_gain\":%.4f,"
-        "\"info\":\"%s\",\"onoff\":%d}",
+        "\"info\":\"%s\",\"onoff\":%d,\"cond\":%d}",
         PidConf[i].pwm_pin_id, (int)PidConf[i].selsens, PidConf[i].sensor_pin_id,
         PidConf[i].sernum, PidConf[i].sensor_sub_idx, PidConf[i].preset,
         PidConf[i].tmpset, PidConf[i].Kp, PidConf[i].Ki, PidConf[i].Kd, PidConf[i].bias,
@@ -2484,7 +2501,7 @@ void SetPidConfig() {
         PidConf[i].pwm_start, PidConf[i].pwm_max,
         PidConf[i].temp_max, PidConf[i].temp_min, PidConf[i].pause_sec,
         PidConf[i].tau, PidConf[i].K_gain,
-        PidConf[i].info, PidConf[i].onoff);
+        PidConf[i].info, PidConf[i].onoff, PidConf[i].cond);
     if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_B) continue;
 
     fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);

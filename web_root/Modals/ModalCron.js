@@ -3,6 +3,7 @@ import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
+import { condHint, hasDisabledCond, DISABLED_COND_WARN } from '../condlib.js';
 
 function ModalCron({
   modalType,
@@ -123,7 +124,12 @@ function ModalCron({
                           value=${activValue}
                           onInput=${handleActivChange}
                           class="border rounded p-2 w-full"
+                          placeholder="5:1, pwm:5,60,0,100, p60, 5:1?R2"
                         />
+                        <p class="text-gray-500 text-xs mt-1 text-right">${(activValue || '').length}/255</p>
+                        ${hasDisabledCond(activValue) &&
+      html`<p class="text-amber-600 text-xs mt-1 font-medium">${DISABLED_COND_WARN[(selectedCron?.lang || 'ru') === 'ru' ? 'ru' : 'en']}</p>`}
+                        <p class="text-gray-500 text-xs mt-1">${condHint((selectedCron?.lang || 'ru') === 'ru')}</p>
                       `
             },
             {

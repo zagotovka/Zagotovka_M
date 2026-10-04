@@ -3,6 +3,7 @@ import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
+import { fetchConditions } from '../condlib.js';
 
 // Список пресетов и подсказка приходят из TabPid.js через параметры presetList и PresetHintComponent
 const SENSOR_OPTIONS = [
@@ -34,6 +35,8 @@ function ModalPid({
   const [pwmOptions, setPwmOptions] = useState([]);
   const [selectedPwm, setSelectedPwm] = useState(Object.entries(selectedPid?.pinact || {})[0] || ['', '']
 );
+  const [condsList, setCondsList] = useState([]);
+  const [pidCond, setPidCond] = useState(selectedPid?.cond || 0);
 
   // Обновляем состояние при смене selectedPid
 useEffect(() => {
@@ -45,10 +48,12 @@ useEffect(() => {
   setTmpset(selectedPid?.tmpset || '');
   setTmpcur(selectedPid?.tmpcur || '');
   setSelectedPwm(Object.entries(selectedPid?.pinact || {})[0] || ['', '']);
+  setPidCond(selectedPid?.cond || 0);
 }, [selectedPid]);
 
 
   useEffect(() => {
+  fetchConditions().then(setCondsList);
   fetch('/api/select/get', {
     method: 'GET',
     cache: 'no-store',
@@ -91,6 +96,7 @@ const jsonData = {
   tmpcur: tmpcur,
   info: pidInfo,
   onoff: onoff ? 1 : 0,
+  cond: parseInt(pidCond) || 0,   // условие работы регулятора (0 = нет)
 };
 
     console.log('Data being sent to server:', jsonData);
@@ -249,6 +255,28 @@ const handlePwmChange = (e) => {
                         class="border rounded p-2 w-full bg-gray-100 cursor-not-allowed"
                         placeholder="°C"
                       />
+                    `
+                  },
+                  {
+                    label: 'Condition',
+                    value: html`
+                      <div>
+                        <select
+                          value=${String(pidCond)}
+                          onChange=${(e) => setPidCond(parseInt(e.target.value) || 0)}
+                          class="border rounded p-2 w-full"
+                        >
+                          <option value="0">None</option>
+                          ${condsList.map((c, i) => c ? html`
+                            <option value=${i + 1}>
+                              #${i + 1}: ${c}
+                            </option>
+                          ` : null)}
+                        </select>
+                        <div class="text-xs text-gray-500 mt-1">
+                          Регулятор активен только при истинном условии (иначе выход = 0). Библиотека условий - Global Settings
+                        </div>
+                      </div>
                     `
                   },
                   {

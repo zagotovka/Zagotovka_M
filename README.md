@@ -158,3 +158,4 @@ This project uses semantic versioning. The version number follows the MAJOR.MINO
 | 2.9.0 | 28-09-2026 | Raised the pin-to-pin link limit from 100 to 1024; fixed Zigbee ID truncation (IDs above 255) and out-of-bounds reads; links API now streamed in chunks; moved link storage from the DTCM pool to .bss.|
 | 2.9.1 | 29-09-2026 | Fixed: empty INFO field could not be cleared; "Save changes" in Edit switch/Connection (also buttons, encoders) no longer turns on linked outputs.|
 | 2.9.2 | 30-09-2026 | Improved button timing: immediate single-click handling without double-click support, configurable double-click interval via `dcinter`, and more deterministic 5 ms button polling. |
+| 2.10.0 | 04-10-2026 | Added action conditions (e.g. `6:1?R2&!R3`) with a library of 12 shared conditions; Condition selector for Switch/Encoder links and PID; over-long actions are rejected, not truncated; Bank A now built with -Os. |

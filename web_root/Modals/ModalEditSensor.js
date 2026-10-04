@@ -4,6 +4,8 @@ import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
 
+// Условие после "?" в действиях: R1, !R2, RV1>0, B1, BH1, T5>25.5, H4>50, Sr, Ss
+
 function ModalEditSensor({
   typsensor,
   oneWireId,
@@ -166,8 +168,10 @@ function ModalEditSensor({
                       value=${formData.action_ut}
                       oninput=${handleChange}
                       class="border rounded p-2 w-full"
-                      maxlength="100"
+                      maxlength="29"
+                      placeholder="6:1, 6:1?R2"
                     />
+                    <p class="text-gray-500 text-xs mt-1 text-right">${(formData.action_ut || '').length}/29</p>
                   </td>
                 </tr>
                 <tr class="bg-white">
@@ -179,8 +183,11 @@ function ModalEditSensor({
                       value=${formData.action_lt}
                       oninput=${handleChange}
                       class="border rounded p-2 w-full"
-                      maxlength="100"
+                      maxlength="29"
+                      placeholder="6:0, 6:0?Ss"
                     />
+                    <p class="text-gray-500 text-xs mt-1">Condition after "?": R1, !R2, RV1>0, B1, BH1, C3, T5>25.5, H4>50, Sr, Ss. Ops: ! & | ( ) = > < g l</p>
+                    <p class="text-gray-500 text-xs mt-1 text-right">${(formData.action_lt || '').length}/29</p>
                   </td>
                 </tr>
                 ${sensorType === 2
@@ -220,7 +227,8 @@ function ModalEditSensor({
                             value=${formData.actuphum}
                             oninput=${handleChange}
                             class="border rounded p-2 w-full"
-                            maxlength="100"
+                            maxlength="29"
+                            placeholder="6:1, 6:1?R2"
                           />
                         </td>
                       </tr>
@@ -233,7 +241,8 @@ function ModalEditSensor({
                             value=${formData.actlowhum}
                             oninput=${handleChange}
                             class="border rounded p-2 w-full"
-                            maxlength="100"
+                            maxlength="29"
+                            placeholder="6:0, 6:0?Ss"
                           />
                         </td>
                       </tr>

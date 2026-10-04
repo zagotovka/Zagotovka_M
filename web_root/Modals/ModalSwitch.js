@@ -3,6 +3,7 @@ import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
+import { fetchConditions } from '../condlib.js';
 
 function ModalSwitch({
   modalType,
@@ -22,6 +23,8 @@ function ModalSwitch({
     selectedSwitch?.setrpins || ''
   );
   const [pinOptions, setPinOptions] = useState([]);
+  const [condsList, setCondsList] = useState([]);
+  const [linkCond, setLinkCond] = useState(0);
 
   const fetchWithRetry = async (url, options = {}, retries = 3, delay = 1000) => {
     for (let i = 0; i < retries; i++) {
@@ -65,6 +68,7 @@ function ModalSwitch({
     };
 
     loadData();
+    fetchConditions().then(setCondsList);
     return () => controller.abort();
   }, []);
 
@@ -83,6 +87,8 @@ function ModalSwitch({
       // не строки в кавычках — из-за этого ptype тихо не сохранялся.
       jsonData.ptype = ptype;
     } else if (modalType === 'connection') {
+      // Дополнительное условие срабатывания новой связи (0 = нет, 1..12)
+      jsonData.cond = parseInt(linkCond) || 0;
       // ВАЖНО: берём значение из React-state (selectedConnection), а не из
       // FormData/jsonData.setrpins. Если пин, который был выбран ранее,
       // на момент открытия модалки выпал из pinOptions (например, сменился
@@ -207,6 +213,27 @@ function ModalSwitch({
           }
         )}
                       </select>
+                    </td>
+                  </tr>
+                  <tr class="bg-white">
+                    <td class="p-2 font-bold">Condition</td>
+                    <td class="p-2">
+                      <select
+                        name="linkcond"
+                        value=${String(linkCond)}
+                        onchange=${(e) => setLinkCond(parseInt(e.target.value) || 0)}
+                        class="border rounded p-2 w-full"
+                      >
+                        <option value="0">None</option>
+                        ${condsList.map((c, i) => c ? html`
+                          <option value=${i + 1}>
+                            #${i + 1}: ${c}
+                          </option>
+                        ` : null)}
+                      </select>
+                      <div class="text-xs text-slate-500 mt-1">
+                        Связь сработает только при истинном условии (библиотека - Global Settings)
+                      </div>
                     </td>
                   </tr>
                 </tbody>

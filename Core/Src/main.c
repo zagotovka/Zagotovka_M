@@ -48,6 +48,7 @@
 #include "dtcm_alloc.h"
 #include "mqtt_server.h"
 #include "slzb_watchdog.h"
+#include "cond_eval.h" /* Дополнительные условия срабатывания действий */
 
 #define BLINK_PERIOD_MS 1000 // LED blinking period in millis
 #define DEBOUNCE_DELAY 45    // Encoder (ms)
@@ -1716,6 +1717,21 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
   token = strtok_r(str, delim, &saveptr);
   while (token != NULL) {
     char *end_token;
+    /* Дополнительное условие срабатывания: "5:1?R2" (см. cond_eval.h).
+     * Разбираем до ветвлений pwm:/p: условие не содержит запятых,
+     * но может содержать ':' и '.'. */
+    const char *cond = NULL;
+    {
+      char *qmark = strchr(token, '?');
+      if (qmark != NULL) {
+        *qmark = '\0';
+        cond = qmark + 1;
+      }
+    }
+    if (cond != NULL && !cond_eval(cond)) {
+      token = strtok_r(NULL, delim, &saveptr);
+      continue;
+    }
     //        printf("Debug: Processing token: %s\n", token);
     /* --- PWM Fade: формат "pwm:<id>,<duration_sec>,<start%>,<end%>" --- */
     if (strncmp(token, "pwm:", 4) == 0 && pause == 0) {
@@ -1725,6 +1741,16 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
       char *t3 = strtok_r(NULL, delim, &saveptr);
       char *t4 = strtok_r(NULL, delim, &saveptr);
       if (t1 && t2 && t3 && t4) {
+        /* Условие может стоять и на последнем параметре: pwm:5,60,0,100?R2 */
+        char *q4 = strchr(t4, '?');
+        if (q4 != NULL) {
+          *q4 = '\0';
+          if (!cond_eval(q4 + 1)) {
+            /* Условие ложно - пропускаем запуск fade */
+            token = strtok_r(NULL, delim, &saveptr);
+            continue;
+          }
+        }
         pwm_id = atoi(t1);
         dur = atoi(t2);
         sduty = atoi(t3);
@@ -2817,6 +2843,10 @@ void StartEncoderTask(void *argument)
 	                           /* Обновляем dvalue для всех связанных PWM, даже если onoff=0 */
 	                           for (int a = 0; a < NUMPINLINKS; a++) {
 	                               if (PinsLinks[a].idin == id) {
+	                                   /* Условие на связь (библиотека условий) */
+	                                   if (!cond_eval_ref(PinsLinks[a].cond)) {
+	                                       continue;
+	                                   }
 	                                   int idpwm = PinsLinks[a].idout;
 	                                   if (idpwm < 0 || idpwm >= NUMPIN) continue; /* Zigbee/мусор — не PWM */
 	                                   if (PinsConf[idpwm].topin == 5) {
@@ -3495,6 +3525,19 @@ void StartPIDTask(void *argument)
 
       /* Если PID выключен - глушим ШИМ и интегратор, но переходим к следующему слоту */
       if (!PidConf[i].onoff) {
+          if (PidConf[i].pwm_out > 0 || PidConf[i].integral != 0.0f) {
+              taskENTER_CRITICAL();
+              PidConf[i].pwm_out = 0;
+              PidConf[i].integral = 0.0f;
+              taskEXIT_CRITICAL();
+              pid_set_pwm(i, 0);
+          }
+          continue;
+      }
+
+      /* Дополнительное условие работы регулятора (библиотека условий):
+       * ложно - глушим ШИМ и интегратор (безопасное обнуление) */
+      if (!cond_eval_ref(PidConf[i].cond)) {
           if (PidConf[i].pwm_out > 0 || PidConf[i].integral != 0.0f) {
               taskENTER_CRITICAL();
               PidConf[i].pwm_out = 0;

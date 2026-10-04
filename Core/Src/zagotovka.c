@@ -23,6 +23,7 @@
 #include <strings.h>  /* strncasecmp */
 #include "dtcm_alloc.h"
 #include "mqtt_server.h"
+#include "cond_eval.h" /* Дополнительные условия срабатывания действий */
 /*********************** Moon *****************************/
 #include "net.h"
 #include <math.h>
@@ -620,11 +621,16 @@ static void cascade_delete_pin_id(int deleted_id) {
     if (strip_id_from_action(PinsConf[i].sclick, deleted_id) > 0) changed_pins = true;
     if (strip_id_from_action(PinsConf[i].dclick, deleted_id) > 0) changed_pins = true;
     if (strip_id_from_action(PinsConf[i].lpress, deleted_id) > 0) changed_pins = true;
+    /* Инлайн-условия, ссылающиеся на удалённый ID, снимаем */
+    if (cond_strip_id(PinsConf[i].sclick, deleted_id) > 0) changed_pins = true;
+    if (cond_strip_id(PinsConf[i].dclick, deleted_id) > 0) changed_pins = true;
+    if (cond_strip_id(PinsConf[i].lpress, deleted_id) > 0) changed_pins = true;
   }
 
   // 5. Timer/Cron — очистить activ
   for (int i = 0; i < NUMTASK; i++) {
     if (strip_id_from_action(dbCrontxt[i].activ, deleted_id) > 0) changed_cron = true;
+    if (cond_strip_id(dbCrontxt[i].activ, deleted_id) > 0) changed_cron = true;
   }
 
   // 6. OneWire DS18B20 — очистить actup/actlow
@@ -632,6 +638,8 @@ static void cascade_delete_pin_id(int deleted_id) {
     for (int j = 0; j < ds18b20[i].numsens; j++) {
       if (strip_id_from_action(ds18b20[i].sensors[j].actup, deleted_id) > 0) changed_onewire = true;
       if (strip_id_from_action(ds18b20[i].sensors[j].actlow, deleted_id) > 0) changed_onewire = true;
+      if (cond_strip_id(ds18b20[i].sensors[j].actup, deleted_id) > 0) changed_onewire = true;
+      if (cond_strip_id(ds18b20[i].sensors[j].actlow, deleted_id) > 0) changed_onewire = true;
     }
   }
 
@@ -641,6 +649,10 @@ static void cascade_delete_pin_id(int deleted_id) {
     if (strip_id_from_action(dht22[i].actlow, deleted_id) > 0) changed_onewire = true;
     if (strip_id_from_action(dht22[i].actuh, deleted_id) > 0) changed_onewire = true;
     if (strip_id_from_action(dht22[i].actlh, deleted_id) > 0) changed_onewire = true;
+    if (cond_strip_id(dht22[i].actup, deleted_id) > 0) changed_onewire = true;
+    if (cond_strip_id(dht22[i].actlow, deleted_id) > 0) changed_onewire = true;
+    if (cond_strip_id(dht22[i].actuh, deleted_id) > 0) changed_onewire = true;
+    if (cond_strip_id(dht22[i].actlh, deleted_id) > 0) changed_onewire = true;
   }
 
   // 8. Zigbee Virtual Buttons — очистить action pool
@@ -650,6 +662,9 @@ static void cascade_delete_pin_id(int deleted_id) {
       if (strip_id_from_action(ZigbeeActionPoolArr[idx].sclick, deleted_id) > 0) changed_zigbee = true;
       if (strip_id_from_action(ZigbeeActionPoolArr[idx].dclick, deleted_id) > 0) changed_zigbee = true;
       if (strip_id_from_action(ZigbeeActionPoolArr[idx].lpress, deleted_id) > 0) changed_zigbee = true;
+      if (cond_strip_id(ZigbeeActionPoolArr[idx].sclick, deleted_id) > 0) changed_zigbee = true;
+      if (cond_strip_id(ZigbeeActionPoolArr[idx].dclick, deleted_id) > 0) changed_zigbee = true;
+      if (cond_strip_id(ZigbeeActionPoolArr[idx].lpress, deleted_id) > 0) changed_zigbee = true;
       if (ZigbeeActionPoolArr[idx].sclick[0] == '\0' &&
           ZigbeeActionPoolArr[idx].dclick[0] == '\0' &&
           ZigbeeActionPoolArr[idx].lpress[0] == '\0') {
@@ -662,6 +677,11 @@ static void cascade_delete_pin_id(int deleted_id) {
   // 9. Sunrise/Sunset — очистить srise_pins/sset_pins
   if (strip_id_from_sunrise_sunset(SetSettings.srise_pins, deleted_id) > 0) changed_settings = true;
   if (strip_id_from_sunrise_sunset(SetSettings.sset_pins, deleted_id) > 0) changed_settings = true;
+  if (cond_strip_id(SetSettings.srise_pins, deleted_id) > 0) changed_settings = true;
+  if (cond_strip_id(SetSettings.sset_pins, deleted_id) > 0) changed_settings = true;
+
+  // 9c. Библиотека условий — снять условия, ссылающиеся на удалённый ID
+  if (cond_lib_neutralize_id(deleted_id)) changed_settings = true;
 
   // 9b. PID — слоты, привязанные к удаляемому пину
   bool changed_pid = false;
@@ -1027,7 +1047,7 @@ void handle_pintopin_get(struct mg_connection *c) {
       continue;
 
     /* Флашим буфер, если очередная запись может не поместиться */
-    if (sizeof(buf) - n < 64) {
+    if (sizeof(buf) - n < 96) {
       mg_http_write_chunk(c, buf, n);
       n = 0;
     }
@@ -1036,8 +1056,9 @@ void handle_pintopin_get(struct mg_connection *c) {
     json_escape_str(esc_pp_pins, link.pins, sizeof(esc_pp_pins));
 
     int w = snprintf(buf + n, sizeof(buf) - n,
-                     "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\"}",
-                     first ? "" : ",", link.idin, link.idout, esc_pp_pins);
+                     "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\",\"cond\":%d}",
+                     first ? "" : ",", link.idin, link.idout, esc_pp_pins,
+                     link.cond);
     if (w < 0 || (size_t)w >= sizeof(buf) - n)
       break; /* не должно происходить: флаш при остатке < 64 */
     n += (size_t)w;
@@ -1174,6 +1195,11 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
     return;
   }
 
+  /* Условие для создаваемой связи (библиотека условий, 0 = нет). */
+  long cond_val = mg_json_get_long(body, "$.cond", -1);
+  if (cond_val > NUMCOND) cond_val = NUMCOND;
+  if (cond_val < 0) cond_val = 0;
+
   /* ── Zigbee выключатель (id >= NUMPIN) ── */
   if (id_val >= NUMPIN) {
     int zbi = id_val - NUMPIN;
@@ -1241,6 +1267,8 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
                   memcpy(PinsLinks[findex].pins, "ZBEE", 4);
                 }
                 PinsLinks[findex].pins[sizeof(PinsLinks[findex].pins) - 1] = '\0';
+                /* Zigbee-связи пересоздаются целиком - условие ко всем */
+                PinsLinks[findex].cond = (uint8_t)cond_val;
               } else {
                 g_pintopin_overflow = true;
                 printf("No free space in PinsLinks (idin=%ld)!\r\n", id_val);
@@ -1339,6 +1367,11 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
               memcpy(PinsLinks[indextu].pins, "ZBEE", 4);
             }
             PinsLinks[indextu].pins[sizeof(PinsLinks[indextu].pins) - 1] = '\0';
+            /* Условие применяется только к НОВОЙ связи, чтобы полный
+             * pinact из модалки не перетирал условия существующих связей */
+            if (eindex == -1) {
+              PinsLinks[indextu].cond = (uint8_t)cond_val;
+            }
           } else {
             g_pintopin_overflow = true;
             printf("No free space in PinsLinks array. Last checked: findex=%d, "
@@ -1361,6 +1394,34 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
 void handle_button_get(struct mg_connection *c, struct mg_http_message *hm) {
   handle_buttons(c, hm);
 }
+/* ── Проверка длины строковых полей JSON: отказывать, а не обрезать ──
+ * Обрезанное действие может тихо ослабить условие блокировки
+ * ("6:1?R2&R3" -> "6:1?R2"), поэтому переполнение = ответ 400 без сохранения.
+ * Возвращает true, если ответ 400 уже отправлен. */
+static bool reply_if_str_too_long(struct mg_connection *c, struct mg_str body,
+                                  const char *const *paths, const int *limits,
+                                  int count) {
+  for (int i = 0; i < count; i++) {
+    char *v = mg_json_get_str(body, paths[i]);
+    if (!v) continue;
+    int len = (int)strlen(v);
+    mg_free(v);
+    if (len >= limits[i]) {
+      char msg[128];
+      snprintf(msg, sizeof(msg),
+               "{\"status\":false,\"message\":\"Field %s too long: %d chars, "
+               "max %d - refused (not truncated)\"}",
+               paths[i], len, limits[i] - 1);
+      printf("[set] REJECT %s: %d chars (max %d)\r\n", paths[i], len,
+             limits[i] - 1);
+      mg_http_reply(c, 400, s_json_header, "%s", msg);
+      if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+      return true;
+    }
+  }
+  return false;
+}
+
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
@@ -1368,6 +1429,13 @@ void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
   if (hm->body.len > 0) {
     struct mg_str body = mg_str_n(hm->body.buf, hm->body.len);
     long id_val = mg_json_get_long(body, "$.id", -1);
+
+    {
+      /* Строки действий (с условиями) не должны обрезаться: отказ целиком */
+      const char *const act_paths[] = {"$.sclick", "$.dclick", "$.lpress"};
+      const int act_limits[] = {125, 125, 125};
+      if (reply_if_str_too_long(c, body, act_paths, act_limits, 3)) return;
+    }
 
     if (id_val >= NUMPIN && id_val < NUMPIN + NUMZBEE) {
       int zbi = (int)id_val - NUMPIN;
@@ -1687,6 +1755,7 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
       int pwm_dvalue = 0;
       int pwm_freq = 0;
       int pwm_max = 0;
+      int enc_cond = 0; /* условие на связи энкодера (первая найденная) */
       bool found_pwm = false;
       for (uint8_t j = 0; j < num_pins; j++) {
         if (pins_conf[j].topin == 5) { // Проверяем, что это 'PWM'
@@ -1695,6 +1764,7 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
               pwm_dvalue = pins_conf[j].dvalue;
               pwm_freq = pins_conf[j].pwm;
               pwm_max = pins_conf[j].pwmmax;
+              if (!found_pwm) enc_cond = PinsLinks[k].cond;
               found_pwm = true;
               break;
             }
@@ -1718,10 +1788,12 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
                          "      \"pwm\": %d,\n"
                          "      \"pwmmax\": %d,\n"
                          "      \"ponr\": %d,\n"
-                         "      \"zbee_bind\": %d,\n",
+                         "      \"zbee_bind\": %d,\n"
+                         "      \"cond\": %d,\n",
                          pins_conf[i].topin, i, pins_info[i].pins, encoderb_id,
                          encb_pin_name, pwm_dvalue, pwm_freq, pwm_max,
-                         pins_conf[i].ponr, pins_conf[i].zbee_bind_id);
+                         pins_conf[i].ponr, pins_conf[i].zbee_bind_id,
+                         enc_cond);
       // Обработка pinact
       offset += snprintf(buffer + offset, buffer_size - offset,
                          "      \"pinact\": {");
@@ -1787,6 +1859,14 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
+
+  /* Условие на связь энкодера (библиотека условий, 0 = нет).
+   * Применяется только если ключ "cond" присутствует в запросе. */
+  bool has_cond = mg_json_get(body, "$.cond", NULL) >= 0;
+  long cond_val = mg_json_get_long(body, "$.cond", 0);
+  if (cond_val > NUMCOND) cond_val = NUMCOND;
+  if (cond_val < 0) cond_val = 0;
+  if (!has_cond) cond_val = -1; /* маркер "не менять" */
 
   bool has_topin = mg_json_get(body, "$.topin", NULL) >= 0;
   bool has_dvalue = mg_json_get(body, "$.dvalue", NULL) >= 0;
@@ -1917,6 +1997,9 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
             if (PinsLinks[i].idin == id && PinsLinks[i].idout == value) {
               strncpy(PinsLinks[i].pins, keybuf, sizeof(PinsLinks[i].pins) - 1);
               PinsLinks[i].pins[sizeof(PinsLinks[i].pins) - 1] = '\0';
+              /* У энкодера одна связь - условие можно менять при пересохранении
+               * (только если ключ "cond" присутствует в запросе) */
+              if (cond_val >= 0) PinsLinks[i].cond = (uint8_t)cond_val;
               found = true;
               printf("Updated PinsLinks: idin=%d, idout=%d, pins=%s\r\n",
                      PinsLinks[i].idin, PinsLinks[i].idout, PinsLinks[i].pins);
@@ -1937,6 +2020,7 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
               strncpy(PinsLinks[free_i].pins, keybuf,
                       sizeof(PinsLinks[free_i].pins) - 1);
               PinsLinks[free_i].pins[sizeof(PinsLinks[free_i].pins) - 1] = '\0';
+              PinsLinks[free_i].cond = (uint8_t)(cond_val >= 0 ? cond_val : 0);
               printf("Added PinsLinks: idin=%d, idout=%d, pins=%s\r\n",
                      PinsLinks[free_i].idin, PinsLinks[free_i].idout,
                      PinsLinks[free_i].pins);
@@ -2003,6 +2087,11 @@ void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm) {
 
   if (hm->body.len > 0) {
     char response[256];
+    /* Скрипт таймера (с условиями) не должен обрезаться */
+    struct mg_str tbody = mg_str_n(hm->body.buf, hm->body.len);
+    const char *const act_paths[] = {"$.activ"};
+    const int act_limits[] = {255};
+    if (reply_if_str_too_long(c, tbody, act_paths, act_limits, 1)) return;
     parse_timers_json(hm->body.buf, dbCrontxt, NUMTASK);
     snprintf(
         response, sizeof(response),
@@ -2299,6 +2388,77 @@ static void emit_usehttps_logmask(struct mg_connection *c,
   mg_http_write_chunk(c, buf, (size_t)len);
 }
 
+/* Библиотека условий (12 записей) для Encoder/Switch/PID */
+static void emit_conds(struct mg_connection *c, const struct dbSettings *s,
+                       char *buf) {
+  int len = snprintf(buf, 512, "\"conds\":[");
+  mg_http_write_chunk(c, buf, (size_t)len);
+  for (int i = 0; i < NUMCOND; i++) {
+    char esc_cond[128];
+    json_escape_str(esc_cond, s->conds[i], sizeof(esc_cond));
+    len = snprintf(buf, 512, "%s\"%s\"", i ? "," : "", esc_cond);
+    mg_http_write_chunk(c, buf, (size_t)len);
+  }
+  len = snprintf(buf, 512, "],");
+  mg_http_write_chunk(c, buf, (size_t)len);
+
+  /* Сколько мест используют каждое условие: связи Encoder/Switch, слоты PID
+   * И инлайн-ссылки "?C<n>" в строках действий (кнопки, cron, датчики,
+   * Zigbee-пул, sunrise/sunset). Иначе перезапись общего условия неожиданно
+   * меняет поведение "невидимых" мест. */
+  int used[NUMCOND] = {0};
+  if (PinsLinks) {
+    for (int i = 0; i < NUMPINLINKS; i++) {
+      uint8_t cd = PinsLinks[i].cond;
+      if (cd >= 1 && cd <= NUMCOND) used[cd - 1]++;
+    }
+  }
+  if (PidConf) {
+    for (int i = 0; i < PID_MAX_SLOTS; i++) {
+      uint8_t cd = PidConf[i].cond;
+      if (cd >= 1 && cd <= NUMCOND) used[cd - 1]++;
+    }
+  }
+  for (int i = 0; i < NUMPIN; i++) {
+    cond_count_crefs(PinsConf[i].sclick, used);
+    cond_count_crefs(PinsConf[i].dclick, used);
+    cond_count_crefs(PinsConf[i].lpress, used);
+  }
+  for (int i = 0; i < NUMTASK; i++) {
+    cond_count_crefs(dbCrontxt[i].activ, used);
+  }
+  for (int i = 0; i < MAX_DS18B20_P; i++) {
+    for (int j = 0; j < ds18b20[i].numsens; j++) {
+      cond_count_crefs(ds18b20[i].sensors[j].actup, used);
+      cond_count_crefs(ds18b20[i].sensors[j].actlow, used);
+    }
+  }
+  if (dht22) {
+    for (int i = 0; i < MAX_DHT22_P; i++) {
+      cond_count_crefs(dht22[i].actup, used);
+      cond_count_crefs(dht22[i].actlow, used);
+      cond_count_crefs(dht22[i].actuh, used);
+      cond_count_crefs(dht22[i].actlh, used);
+    }
+  }
+  for (int i = 0; i < NUMACTIONPOOL; i++) {
+    cond_count_crefs(ZigbeeActionPoolArr[i].sclick, used);
+    cond_count_crefs(ZigbeeActionPoolArr[i].dclick, used);
+    cond_count_crefs(ZigbeeActionPoolArr[i].lpress, used);
+  }
+  cond_count_crefs(SetSettings.srise_pins, used);
+  cond_count_crefs(SetSettings.sset_pins, used);
+
+  len = snprintf(buf, 512, "\"conds_used\":[");
+  mg_http_write_chunk(c, buf, (size_t)len);
+  for (int i = 0; i < NUMCOND; i++) {
+    len = snprintf(buf, 512, "%s%d", i ? "," : "", used[i]);
+    mg_http_write_chunk(c, buf, (size_t)len);
+  }
+  len = snprintf(buf, 512, "],");
+  mg_http_write_chunk(c, buf, (size_t)len);
+}
+
 /* ──── Кэш файловых настроек для устранения starvation в mg_mgr_poll ──── */
 char *s_cached_tls_ca   = NULL;
 char *s_cached_domain   = NULL;
@@ -2377,6 +2537,7 @@ static void stream_mysett_json(struct mg_connection *c,
   emit_admin(c, s, buf);
   emit_offldt(c, s, buf);
   emit_usehttps_logmask(c, s, buf);
+  emit_conds(c, s, buf);
 
   if (s_cached_tg_token[0] != '\0') {
     const char str[] = "\"telegram_token\":\"[TELEGRAM TOKEN CONFIGURED]\",";
@@ -2442,6 +2603,43 @@ void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm) {
       "Connection: close\r\nContent-Type: application/json\r\n";
 
   if (hm->body.len > 0) {
+    /* Строки не должны обрезаться; условия дополнительно проверяем синтаксисом */
+    struct mg_str tbody = mg_str_n(hm->body.buf, hm->body.len);
+    {
+      const char *const set_paths[] = {"$.sunrise_pins", "$.sunset_pins"};
+      const int set_limits[] = {250, 250};
+      if (reply_if_str_too_long(c, tbody, set_paths, set_limits, 2)) return;
+    }
+    for (int ci = 0; ci < NUMCOND; ci++) {
+      char path[24];
+      snprintf(path, sizeof(path), "$.conds[%d]", ci);
+      char *v = mg_json_get_str(tbody, path);
+      if (!v) continue;
+      int len = (int)strlen(v);
+      if (len >= (int)sizeof(SetSettings.conds[ci])) {
+        char msg[128];
+        snprintf(msg, sizeof(msg),
+                 "{\"status\":false,\"message\":\"conds[%d] too long: %d chars, "
+                 "max %d\"}", ci, len, (int)sizeof(SetSettings.conds[ci]) - 1);
+        mg_free(v);
+        mg_http_reply(c, 400, s_json_header, "%s", msg);
+        if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+        return;
+      }
+      if (len > 0 && !cond_valid(v)) {
+        char msg[160];
+        snprintf(msg, sizeof(msg),
+                 "{\"status\":false,\"message\":\"conds[%d]: invalid condition "
+                 "syntax (refused)\"}", ci);
+        mg_free(v);
+        mg_http_reply(c, 400, s_json_header, "%s", msg);
+        printf("[set] REJECT conds[%d]: invalid syntax\r\n", ci);
+        if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+        return;
+      }
+      mg_free(v);
+    }
+
     parse_mysett_json(hm->body.buf, &SetSettings);
     s_mysett_cache_valid = false;
     mysett_cache_reload();
@@ -2682,6 +2880,16 @@ void gen_mysett_json(const struct dbSettings *settings, char *buffer,
                      "\"sunrise_pins\":\"%s\",\n", settings->srise_pins);
   offset += snprintf(buffer + offset, buffer_size - offset,
                      "\"sunset_pins\":\"%s\",\n", settings->sset_pins);
+
+  /* Библиотека условий (условия для связей и PID) */
+  offset += snprintf(buffer + offset, buffer_size - offset, "\"conds\":[");
+  for (int ci = 0; ci < NUMCOND; ci++) {
+    char esc_cond[128];
+    json_escape_str(esc_cond, settings->conds[ci], sizeof(esc_cond));
+    offset += snprintf(buffer + offset, buffer_size - offset,
+                       "%s\"%s\"", ci ? "," : "", esc_cond);
+  }
+  offset += snprintf(buffer + offset, buffer_size - offset, "],\n");
 
   // MQTT настройки
   offset += snprintf(buffer + offset, buffer_size - offset,
@@ -3160,6 +3368,18 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
   { char *_v = mg_json_get_str(body, "$.sunset_pins");
     if (_v) { strncpy(settings->sset_pins, _v, sizeof(settings->sset_pins) - 1);
     settings->sset_pins[sizeof(settings->sset_pins) - 1] = '\0'; mg_free(_v); } }
+
+  /* Библиотека условий: conds[0..NUMCOND-1]; пустые строки допустимы */
+  for (int ci = 0; ci < NUMCOND; ci++) {
+    char path[24];
+    snprintf(path, sizeof(path), "$.conds[%d]", ci);
+    char *_v = json_get_str_allow_empty(body, path);
+    if (_v) {
+      strncpy(settings->conds[ci], _v, sizeof(settings->conds[ci]) - 1);
+      settings->conds[ci][sizeof(settings->conds[ci]) - 1] = '\0';
+      mg_free(_v);
+    }
+  }
 
   settings->check_ip = (short)mg_json_get_long(body, "$.check_ip", settings->check_ip);
   settings->check_mqtt = (short)mg_json_get_long(body, "$.check_mqtt", settings->check_mqtt);
@@ -4088,6 +4308,12 @@ void handle_sensor_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   if (hm->body.len > 0) {
+    /* Действия датчиков (act* поля, 29 симв. + '\0') не должны обрезаться */
+    struct mg_str tbody = mg_str_n(hm->body.buf, hm->body.len);
+    const char *const act_paths[] = {"$.action_ut", "$.actup", "$.action_lt",
+                                     "$.actlow", "$.actuphum", "$.actlowhum"};
+    const int act_limits[] = {30, 30, 30, 30, 30, 30};
+    if (reply_if_str_too_long(c, tbody, act_paths, act_limits, 6)) return;
     parse_sensor_json(hm->body.buf);
     char response[256];
     snprintf(
@@ -6728,6 +6954,21 @@ void action_handler(uint8_t button_id, const char *action_str,
   char *saveptr = NULL;
   char *token = strtok_r(str, ",", &saveptr);
   while (token != NULL) {
+    /* Дополнительное условие срабатывания: "5:1?R2&RV3>50".
+     * Разбираем ДО поиска '.', т.к. условие может содержать точку (T5.2). */
+    const char *cond = NULL;
+    {
+      char *qmark = strchr(token, '?');
+      if (qmark != NULL) {
+        *qmark = '\0';
+        cond = qmark + 1;
+      }
+    }
+    if (cond != NULL && !cond_eval(cond)) {
+      /* Условие ложно - пропускаем это действие */
+      token = strtok_r(NULL, ",", &saveptr);
+      continue;
+    }
     int id = 0;
     int action = 0;
     int sub_idx = 0;
@@ -7056,6 +7297,10 @@ void processPins(uint16_t i, uint8_t action) {
   }
   for (int a = 0; a < NUMPINLINKS; a++) {
     if (PinsLinks[a].idin == i) {
+      /* Условие на связь (библиотека условий): пропускаем ложные */
+      if (!cond_eval_ref(PinsLinks[a].cond)) {
+        continue;
+      }
       data_pin_t data_pin = {0};
       data_pin.id = PinsLinks[a].idout;
       data_pin.action = action;
@@ -7184,6 +7429,13 @@ void handle_security_set(struct mg_connection *c, struct mg_http_message *hm) {
     if (strcmp(type, "sim800l") == 0) {
       parse_sim800l_json(g_body);
     } else if (strcmp(type, "monitoring") == 0) {
+      /* Строка действия датчика не должна обрезаться */
+      const char *const act_paths[] = {"$.action"};
+      const int act_limits[] = {125};
+      if (reply_if_str_too_long(c, body, act_paths, act_limits, 1)) {
+        mg_free(type);
+        return;
+      }
       int mid = (int)mg_json_get_long(body, "$.id", -1);
       if (mid >= NUMPIN && mid < NUMPIN + NUMZBEE) {
         parse_monitoring_json_zbee(g_body, mid - NUMPIN);
@@ -9481,10 +9733,12 @@ void gen_pid_json(char *buffer, int buffer_size) {
                     ",\"selsens\":\"%d\",\"sernum\":\"%s\",\"presets\":\"%d\""
                     ",\"tmpset\":\"%s\",\"tmpcur\":\"%s\""
                     ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d"
+                    ",\"cond\":%d"
                     ",\"tune_state\":%d,\"tune_progress\":%d}",
                     (int)PidConf[i].selsens, PidConf[i].sernum,
                     PidConf[i].preset, s_ts, s_tc,
                     current_duty, PidConf[i].info, PidConf[i].onoff,
+                    PidConf[i].cond,
                     (int)PidConf[i].tune_state, (int)PidConf[i].tune_progress);
   }
   pos += snprintf(buffer + pos, buffer_size - pos, "]}");
@@ -9572,6 +9826,14 @@ void parse_pid_json(const char *json) {
 
   if (mg_json_get(body, "$.onoff", NULL) >= 0) {
     PidConf[id].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", 0);
+  }
+
+  /* Дополнительное условие работы регулятора (библиотека условий) */
+  if (mg_json_get(body, "$.cond", NULL) >= 0) {
+    long cv = mg_json_get_long(body, "$.cond", 0);
+    if (cv < 0) cv = 0;
+    if (cv > NUMCOND) cv = NUMCOND;
+    PidConf[id].cond = (uint8_t)cv;
   }
 
   if (PidConf[id].selsens == PID_SENS_DS18B20 &&
@@ -9665,10 +9927,12 @@ void handle_pid_get(struct mg_connection *c) {
                    ",\"selsens\":\"%d\",\"sernum\":\"%s\",\"presets\":\"%d\""
                    ",\"tmpset\":\"%s\",\"tmpcur\":\"%s\""
                    ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d"
+                   ",\"cond\":%d"
                    ",\"tune_state\":%d,\"tune_progress\":%d}",
                    (int)pid.selsens, pid.sernum,
                    pid.preset, s_ts, s_tc,
                    current_duty, pid.info, pid.onoff,
+                   pid.cond,
                    (int)pid.tune_state, (int)pid.tune_progress); }
     mg_http_write_chunk(c, buf, (size_t)len);
   }

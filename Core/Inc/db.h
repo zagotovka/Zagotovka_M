@@ -13,6 +13,12 @@
 #define NUMPINLINKS 1024 // количество pin to pin (связь = 10 байт в DTCM)
 #define NUMTASK 50 // кол-во CRON task
 
+/* Библиотека условий: общие выражения, на которые ссылаются связи
+ * (Encoder/Switch) и PID-слоты. Инлайн-условия действий хранятся прямо
+ * в строках действий после '?' (см. cond_eval.h). */
+#define NUMCOND 12   // количество условий в библиотеке
+#define COND_LEN 47  // длина условия (46 символов + '\0')
+
 /* Zigbee cluster bitflags */
 #define ZBEE_CL_ONOFF   0x01  // 0x0006
 #define ZBEE_CL_DIMMER  0x02  // 0x0008
@@ -188,6 +194,7 @@ typedef struct {
     /* ── Мета ── */
     char     info[30];             // описание
     uint8_t  onoff;                // 1=вкл, 0=выкл
+    uint8_t  cond;                 // № условия из библиотеки (1..NUMCOND, 0 - без условия)
 } dbPidConf;
 
 
@@ -210,6 +217,7 @@ struct dbPinToPin { // Привязка кнопок/выключателей/pw
 	short idin; // Encoder A
 	short idout;// idPWM
 	char pins[5];// PWM
+	uint8_t cond;   // № условия из библиотеки (1..NUMCOND, 0 - без условия)
 };
 
 struct dbSettings {	// Cтруктура для setting
@@ -291,6 +299,7 @@ struct dbSettings {	// Cтруктура для setting
 	short usehttps;     // enable/disable HTTPS
 	uint8_t pidline;    // Количество видимых PID-строк
 	uint32_t log_filter_mask; // Маска фильтра логов
+	char conds[NUMCOND][COND_LEN]; // Библиотека условий (cond1..cond12)
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
