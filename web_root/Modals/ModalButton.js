@@ -1,3 +1,4 @@
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -150,7 +151,7 @@ const ModalButton = ({
                       class="border rounded p-2 w-full ${errors[type]
         ? 'border-red-500'
         : ''}"
-                      placeholder="None, 6:1, 93.1:2, 6:1?R2"
+                      placeholder="None, 6:1, 93.1:2, 6:1?D2"
                       maxLength="124"
                     />
                     ${errors[type] &&

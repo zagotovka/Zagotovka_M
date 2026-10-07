@@ -15,6 +15,7 @@
 #include "multi_button.h"
 #include "usb_host.h"
 #include "zagotovka.h"
+#include "cond_eval.h" /* пул встроенных выражений условий */
 #include <stdio.h>
 #include <string.h>
 #include "dtcm_alloc.h"
@@ -2354,6 +2355,116 @@ cleanup:
   mark_slice_dirty(&g_ver_onewire);
   mark_slice_dirty(&g_ver_pins);
 }
+/***********************************************************************************************/
+
+/************ Встроенный пул выражений условий (cond.ini) ************/
+
+/* Слоты пула восстанавливаются в cond_pool через cond_intern(): дедупликация
+ * та же, что и при записи из веба, поэтому повторная загрузка не размножает
+ * одинаковые выражения. */
+void GetCondPool() {
+  FILINFO finfo;
+  FRESULT fresult;
+
+  cond_pool_clear();
+  /* Ссылки из pintopin.ini/pid.ini ещё не загружены — GC обязан молчать,
+   * иначе только что прочитанные выражения выглядели бы неиспользуемыми. */
+  cond_pool_freeze(true);
+
+  fresult = f_stat("cond.ini", &finfo);
+  if (fresult != FR_OK) {
+    LOG_SYSTEM("[USB] cond.ini not found");
+    return;
+  }
+  if (finfo.fsize == 0) {
+    LOG_SYSTEM("[USB] cond.ini is empty");
+    return;
+  }
+  if (f_open(&USBHFile, "cond.ini", FA_READ) != FR_OK) {
+    LOG_SYSTEM("[USB] Cannot open cond.ini");
+    return;
+  }
+
+  char *buf = pvPortMalloc(finfo.fsize + 1);
+  if (!buf) {
+    LOG_SYSTEM("[USB] Out of memory reading cond.ini");
+    f_close(&USBHFile);
+    return;
+  }
+
+  UINT bytesRead;
+  fresult = f_read(&USBHFile, buf, finfo.fsize, &bytesRead);
+  f_close(&USBHFile);
+  if (fresult != FR_OK || bytesRead == 0) {
+    vPortFree(buf);
+    return;
+  }
+  buf[bytesRead] = '\0';
+
+  struct mg_str body = mg_str_n(buf, strlen(buf));
+  int loaded = 0;
+  int skipped = 0;
+  size_t pos = 0;
+  struct mg_str key, elem;
+  while ((pos = mg_json_next(body, pos, &key, &elem)) > 0) {
+    char *expr = mg_json_get_str(elem, "$.e");
+    if (!expr) continue;
+    uint8_t idx = cond_intern(expr);
+    mg_free(expr);
+    if (idx == COND_IDX_INVALID) {
+      skipped++;
+      continue;
+    }
+    loaded++;
+  }
+  vPortFree(buf);
+  cond_pool_freeze(false);
+  LOG_SYSTEM("[USB] GetCondPool: loaded %d expressions (%d slots of %d, %d "
+            "skipped)", loaded, cond_pool_used(), cond_pool_capacity(), skipped);
+  if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+}
+
+void SetCondPool() {
+  UINT byteswritten;
+  FRESULT fres;
+  char buffer[JSON_BUF_SIZE];
+  int saved = 0;
+
+  if (f_open(&USBHFile, (const TCHAR *)"cond.ini",
+             FA_CREATE_ALWAYS | FA_WRITE) != FR_OK) {
+    LOG_SYSTEM("[USB] SetCondPool open failed");
+    return;
+  }
+  fres = f_write(&USBHFile, "[", 1, &byteswritten);
+  if (fres != FR_OK || byteswritten != 1) {
+    LOG_SYSTEM("[USB] SetCondPool write '[' failed");
+    f_close(&USBHFile);
+    return;
+  }
+
+  for (int i = 1; i <= COND_POOL_TOTAL; i++) {
+    const char *e = cond_text((uint8_t)i);
+    if (e[0] == '\0') continue;
+    char esc[2 * COND_LEN + 8];
+    json_escape_str(esc, e, sizeof(esc));
+    int len = snprintf(buffer, JSON_BUF_SIZE, "%s{\"i\":%d,\"e\":\"%s\"}",
+                       saved ? "," : "", i, esc);
+    if (len <= 0 || len >= JSON_BUF_SIZE) continue;
+    fres = f_write(&USBHFile, buffer, (UINT)len, &byteswritten);
+    if (fres != FR_OK || (int)byteswritten != len) {
+      LOG_SYSTEM("[USB] SetCondPool write entry[%d] failed", i);
+      break;
+    }
+    saved++;
+  }
+  fres = f_write(&USBHFile, "]", 1, &byteswritten);
+  if (fres != FR_OK) LOG_SYSTEM("[USB] SetCondPool write ']' failed");
+
+  f_sync(&USBHFile);
+  f_close(&USBHFile);
+  LOG_SYSTEM("[USB] SetCondPool: saved %d expressions", saved);
+}
+
 /***********************************************************************************************/
 
 /************************** PID Config *********************************/

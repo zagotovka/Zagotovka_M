@@ -190,14 +190,26 @@ function Header({ logout, user, setShowSidebar, showSidebar, sessionExpired }) {
   `;
 }
 
+// Colour of the icon tile by menu group (full class names so Tailwind can find them)
+const NAV_TONES = {
+  io: 'bg-teal-100 text-teal-700',
+  logic: 'bg-violet-100 text-violet-700',
+  link: 'bg-sky-100 text-sky-700',
+  sys: 'bg-slate-100 text-slate-600'
+};
+
 function Sidebar({ url, show }) {
-  const NavLink = ({ title, icon, href, url }) => html`
+  const NavLink = ({ title, icon, href, url, tone }) => html`
   <div>
     <a href="#${href}" class="${href == url
       ? 'bg-gradient-to-r from-teal-400 to-cyan-500 text-white shadow-md group'
       : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-800 group'
-    } flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold">
-      <${icon} class="w-6 h-6"/>
+    } flex items-center gap-x-3 rounded-md px-2 py-1 text-sm leading-6 font-semibold">
+      <span
+        class="${href == url ? 'bg-white/25 text-white' : NAV_TONES[tone] || NAV_TONES.sys} flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+      >
+        <${icon} />
+      </span>
       ${title}
     <///>
   <//>`;
@@ -216,70 +228,70 @@ function Sidebar({ url, show }) {
         <${Logo} class="h-full" /> Zagotovka <span class="text-xs text-slate-400 font-normal ml-1">${typeof __FW_VERSION__ !== 'undefined' ? __FW_VERSION__ : 'dev'}</span>
       <//>
       <div class="flex flex-1 flex-col">
-        <${NavLink} title="Logger" icon=${Icons.doc} href="/" url=${url} />
+        <${NavLink} title="Logger" tone="sys" icon=${Icons.navLogger} href="/" url=${url} />
         <${NavLink}
-          title="Select pin"
-          icon=${Icons.bars4}
+          title="Select pin" tone="io"
+          icon=${Icons.navSelect}
           href="/selects"
           url=${url}
         />
         <${NavLink}
-          title="Switch pin"
-          icon=${Icons.switchIcon}
+          title="Switch pin" tone="io"
+          icon=${Icons.navSwitch}
           href="/switch"
           url=${url}
         />
         <${NavLink}
-          title="Button pin "
-          icon=${Icons.buttonIcon}
+          title="Button pin" tone="io"
+          icon=${Icons.navButton}
           href="/button"
           url=${url}
         />
         <${NavLink}
-          title="Encoder pin"
-          icon=${Icons.encoderIcon}
+          title="Encoder pin" tone="io"
+          icon=${Icons.navEncoder}
           href="/encoder"
           url=${url}
         />
          <${NavLink}
-          title="PID controller"
-          icon=${Icons.cog}
+          title="PID controller" tone="logic"
+          icon=${Icons.navPid}
           href="/pid"
           url=${url}
         />
         <${NavLink}
-          title="Timers (cron)"
-          icon=${Icons.timerIcon}
+          title="Timers (cron)" tone="logic"
+          icon=${Icons.navTimer}
           href="/cron"
           url=${url}
         />
         <${NavLink}
-          title="OneWire pin"
-          icon=${Icons.owIcon}
+          title="OneWire pin" tone="io"
+          icon=${Icons.navOneWire}
           href="/1wire"
           url=${url}
         />
         <${NavLink}
-          title="SIM800L/Security"
-          icon=${Icons.cog}
+          title="SIM800L/Security" tone="link"
+          icon=${Icons.navSecurity}
           href="/Security"
           url=${url}
         />
         <${NavLink}
-          title="Zigbee"
-          icon=${Icons.cog}
+          title="Zigbee" tone="link"
+          icon=${Icons.navZigbee}
           href="/zigbee"
           url=${url}
         />
         <${NavLink}
-          title="Settings"
-          icon=${Icons.cog}
+          title="Settings" tone="sys"
+          icon=${Icons.navSettings}
           href="/settings"
           url=${url}
         />
         <${NavLink}
-          title="Firmware Update"
-          icon=${Icons.download}
+          title="Firmware Update" tone="sys"
+          icon=${Icons.navFirmware}
           href="/update"
           url=${url}
         />

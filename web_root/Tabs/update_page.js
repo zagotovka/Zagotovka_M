@@ -1,8 +1,119 @@
+import { lockToggle } from '../helpLock.js';
+
 import { h, useState, useEffect, useRef, html } from '../bundle.js';
 import { pauseAll, resumeAll } from '../pollQueue.js';
 import { Icons, Button } from '../components.js';
 
 const FIRMWARE_UPLOAD_CHUNK_SIZE = 4096; // байт на POST; лимит тела запроса для /api/firmware/upload на устройстве не действует
+
+const helpContent = {
+  ru: html`
+    <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">О проекте</h2>
+          <p>Zagotovka_M - полностью open-source проект. Используйте его как есть на своём устройстве или сделайте форк и адаптируйте под своё оборудование, датчики и задачи: именно для этого он и создан.</p>
+          <p>Есть идея, исправление бага или новая функция? Pull request-ы очень приветствуются!</p>
+          <p><a class="inline-flex items-center gap-1.5 font-semibold text-cyan-700 hover:text-cyan-800 underline underline-offset-2" href="https://github.com/zagotovka/Zagotovka_M" target="_blank" rel="noopener noreferrer"><${Icons.link} class="w-5 h-5" />github.com/zagotovka/Zagotovka_M</a></p>
+        </section>
+        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Как загрузить новую прошивку</h2>
+          <ol class="list-decimal ml-6 space-y-3">
+            <li>Убедитесь, что файл <code>.bin</code> собран именно для этой платы (Zagotovka_M / STM32F767ZI). Загрузка неверного образа автоматически не отслеживается.</li>
+            <li>Нажмите <b>«Загрузить новую прошивку (.bin)»</b> выше и выберите файл.</li>
+            <li>Не закрывайте вкладку и не выключайте питание устройства, пока движется полоса загрузки: файл передаётся частями напрямую во flash-память.</li>
+            <li>Когда появится сообщение <b>«Прошивка успешно загружена»</b>, устройство само переключит образы и перезагрузится.</li>
+            <li>После перезагрузки откройте эту страницу снова и убедитесь, что новая прошивка работает как ожидается.</li>
+            <li>Если всё в порядке, нажмите <b>«Подтвердить эту прошивку»</b>, чтобы подтвердить обновление.</li>
+          </ol>
+        </section>
+        <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Обновление по HTTP и HTTPS</h2>
+          <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">Обновление по HTTP идёт без шифрования.</p>
+          <p>Для большинства случаев HTTP подходит: например, если устройство находится в вашей домашней или локальной сети за роутером и снаружи не доступно. HTTP-режим не требует настройки домена и сертификатов и работает «из коробки».</p>
+          <p>Но если устройство доступно из недоверенной сети (публичный Wi-Fi, проброс порта в интернет), файл прошивки и админ-сессию теоретически можно перехватить или подменить на лету. Для такого сценария в <b>Settings</b> можно настроить HTTPS (домен и сертификат).</p>
+        </section>
+        <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Банки Bank A и Bank B</h2>
+          <div>
+            <h3 class="text-lg font-bold text-black mb-2">Файлы для банков</h3>
+            <p class="mb-2">Файл <code>.bin</code>, который сейчас лежит в Bank A, и файл, который лежит в Bank B, - это две разные сборки, слинкованные под разные адреса flash. Артефакты сборки различаются по имени: <code>Zagotovka_Bank_A.bin</code> и <code>Zagotovka_Bank_B.bin</code>.</p>
+            <ul class="list-disc ml-6 mt-1">
+              <li>Обновлять можно только неактивный банк: нужен файл для банка, противоположного активному.</li>
+              <li>Каждая сборка несёт внутри образа метку своего банка. Устройство сверяет её в начале загрузки и отклоняет образ не для того банка ещё до записи во flash.</li>
+              <li>Интерфейс не начнёт загрузку, если в имени файла указан не тот банк.</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-black mb-2">Кнопки управления банками</h3>
+            <p class="mb-2">Цвет кнопки подсказывает риск. <b>Зелёная</b> кнопка безопасна. <b>Красная</b> (переключение банка) и <b>янтарная</b> (перезагрузка) сразу перезагружают устройство и всегда просят подтверждение. Переключение банка находится в карточке «Текущий образ прошивки», перезагрузка - в карточке «Обновление устройства».</p>
+          <table class="w-full bg-white/70"><thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Кнопка</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Что делает</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Когда доступна</th></tr></thead><tbody><tr><td class="border px-4 py-2"><b>Подтвердить эту прошивку</b></td><td class="border px-4 py-2">Закрепляет только что залитый и уже загрузившийся образ как рабочий, чтобы устройство не откатилось на предыдущий банк при следующей перезагрузке.</td><td class="border px-4 py-2">Только пока есть неподтверждённый кандидат.</td></tr><tr><td class="border px-4 py-2"><b>Переключиться на Bank X</b></td><td class="border px-4 py-2">Мгновенно переключает на уже подтверждённый ранее образ в другом банке. Ничего нового не заливается, пробного цикла нет: устройство перезагрузится сразу, поэтому нужно подтверждение.</td><td class="border px-4 py-2">Только если в другом банке есть рабочий образ и идёт не загрузка файла.</td></tr><tr><td class="border px-4 py-2"><b>Перезагрузить устройство</b></td><td class="border px-4 py-2">Перезагружает устройство. Требует подтверждения, чтобы не нажать случайно.</td><td class="border px-4 py-2">Всегда, кроме времени загрузки файла.</td></tr></tbody></table>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Как устройство «обкатывает» новую прошивку</h2>
+          <p>Представьте, что вы купили новую обувь и меряете её три раза, прежде чем решить, подходит она или нет. Так же устройство «обкатывает» новую прошивку.</p>
+          <ul class="list-disc ml-6 mt-1">
+            <li>После заливки устройство даёт себе <b>3 пробные попытки</b> включиться с новой прошивкой. В статусе при этом написано «N-я тестовая загрузка из 3».</li>
+            <li>Если на третьей попытке прошивка проработала спокойно <b>целую минуту</b> без перезагрузок, устройство само подтверждает обновление, как будто вы нажали «Подтвердить эту прошивку».</li>
+            <li>Если вы (или сбой питания) перезагрузите устройство ещё раз, не дав ему этой минуты, оно решит, что новой прошивке доверять нельзя, и <b>само вернётся</b> на прежнюю рабочую версию. В статусе появится «Выполнен автоматический откат на предыдущую версию прошивки.», чтобы это не путалось с вашим подтверждением.</li>
+          </ul>
+        </section>
+    </div>
+  `,
+  en: html`
+    <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">About the project</h2>
+          <p>Zagotovka_M is a fully open-source project. Take it as-is and run it on your device, or fork it and adapt it to your own hardware, sensors and needs: that is exactly what it is here for.</p>
+          <p>Got an idea, a bugfix, or a new feature? Pull requests are very welcome!</p>
+          <p><a class="inline-flex items-center gap-1.5 font-semibold text-cyan-700 hover:text-cyan-800 underline underline-offset-2" href="https://github.com/zagotovka/Zagotovka_M" target="_blank" rel="noopener noreferrer"><${Icons.link} class="w-5 h-5" />github.com/zagotovka/Zagotovka_M</a></p>
+        </section>
+        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">How to upload a new firmware</h2>
+          <ol class="list-decimal ml-6 space-y-3">
+            <li>Make sure the <code>.bin</code> file was built for this exact board (Zagotovka_M / STM32F767ZI). Uploading a wrong image will not be caught automatically.</li>
+            <li>Click <b>"Upload new firmware (.bin)"</b> above and select the file.</li>
+            <li>Keep the tab open and do not power off the device while the progress bar is moving: the file is streamed chunk by chunk directly into flash.</li>
+            <li>When you see <b>"Firmware uploaded successfully"</b>, the device swaps images and reboots by itself automatically.</li>
+            <li>After it comes back, open this page again and check that the new firmware works as expected.</li>
+            <li>If everything is fine, press <b>"Commit this firmware"</b> to confirm the update.</li>
+          </ol>
+        </section>
+        <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Updating over HTTP and HTTPS</h2>
+          <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">Updating over HTTP is unencrypted.</p>
+          <p>HTTP is fine for most setups: for example, when the device is on your home or local network behind a router and not exposed externally. HTTP mode works out of the box, with no domain or certificate setup needed.</p>
+          <p>However, if the device is reachable from an untrusted network (public Wi-Fi, port-forwarded to the internet), the firmware file and admin session could in theory be intercepted or tampered with in transit. For that scenario you can configure HTTPS (domain and certificate) in <b>Settings</b>.</p>
+        </section>
+        <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Bank A and Bank B</h2>
+          <div>
+            <h3 class="text-lg font-bold text-black mb-2">Files for the banks</h3>
+            <p class="mb-2">The <code>.bin</code> file currently in Bank A and the one in Bank B are two different builds, linked for different flash addresses. The build artifacts are named differently: <code>Zagotovka_Bank_A.bin</code> and <code>Zagotovka_Bank_B.bin</code>.</p>
+            <ul class="list-disc ml-6 mt-1">
+              <li>Only the inactive bank can be updated: you need the file for the bank opposite to the active one.</li>
+              <li>Each build carries its bank label inside the image. The device verifies it at the start of the upload and rejects an image built for the other bank before anything is written to flash.</li>
+              <li>The interface does not start the upload if the file name points to the wrong bank.</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-black mb-2">Bank buttons</h3>
+            <p class="mb-2">The button color hints at the risk. The <b>green</b> button is safe. The <b>red</b> one (bank switch) and the <b>amber</b> one (reboot) reboot the device right away and always ask for confirmation. Bank switching is in the "Current firmware image" card, rebooting is in the "Device update" card.</p>
+          <table class="w-full bg-white/70"><thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Button</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">What it does</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">When it is available</th></tr></thead><tbody><tr><td class="border px-4 py-2"><b>Commit this firmware</b></td><td class="border px-4 py-2">Locks in the image that was just uploaded and has already booted, so the device will not roll back to the other bank on the next reboot.</td><td class="border px-4 py-2">Only while there is an uncommitted candidate.</td></tr><tr><td class="border px-4 py-2"><b>Switch to Bank X</b></td><td class="border px-4 py-2">Immediately switches to a previously committed image in the other bank. Nothing new is uploaded and there is no trial cycle: the device reboots right away, which is why it asks for confirmation.</td><td class="border px-4 py-2">Only if the other bank has a working image and no upload is running.</td></tr><tr><td class="border px-4 py-2"><b>Reboot device</b></td><td class="border px-4 py-2">Reboots the device. It asks for confirmation so it cannot be pressed by accident.</td><td class="border px-4 py-2">Always, except while a file is being uploaded.</td></tr></tbody></table>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">How the device test-drives a new firmware</h2>
+          <p>Think of trying on a new pair of shoes three times before deciding whether to keep them. The device "test-drives" a new firmware the same way.</p>
+          <ul class="list-disc ml-6 mt-1">
+            <li>After the upload, the device gives itself <b>3 trial attempts</b> to boot with the new firmware. The status then reads "Trial boot N of 3".</li>
+            <li>If on the third attempt the firmware runs quietly for a <b>full minute</b> without rebooting, the device confirms the update on its own, as if you had pressed "Commit this firmware".</li>
+            <li>If you (or a power glitch) reboot it again before that minute passes, the device decides the new firmware cannot be trusted and <b>switches back</b> to the previous working version by itself. The status then shows "Automatic rollback to the previous firmware version was performed.", so it is never confused with you confirming the update.</li>
+          </ul>
+        </section>
+    </div>
+  `
+};
 
 export function FirmwareUpdate({ }) {
   // /api/firmware/status возвращает ОБЪЕКТ: { firmwares: [current, previous],
@@ -17,6 +128,7 @@ export function FirmwareUpdate({ }) {
   });
   const [language, setLanguage] = useState('ru');
   const [alert, setAlert] = useState(null);
+  const [showHelp, setShowHelp] = useState(false);
   const [progress, setProgress] = useState(null); // null = нет активной загрузки, 0..100 = процент
   const [uploading, setUploading] = useState(false); // блокирует повторный/параллельный запуск onupload
   const uploadingRef = useRef(false);
@@ -56,7 +168,7 @@ export function FirmwareUpdate({ }) {
   const statusText = (fw) => {
     const s = fw?.status;
     if (s === 1) {
-      const n = fw.retries ?? '?';
+      const n = fw.retries == null ? '?' : Math.max(1, fw.retries);
       const max = fw.max_retries ?? 3;
       return language === 'ru'
         ? `${n}-я тестовая загрузка из ${max}`
@@ -144,7 +256,16 @@ export function FirmwareUpdate({ }) {
       body: JSON.stringify({})
     })
       .then((r) => r.json())
-      .then(refresh);
+      .then(refresh)
+      .catch(() =>
+        setAlert({
+          type: 'red',
+          message:
+            language === 'ru'
+              ? 'Ошибка: не удалось подтвердить прошивку.'
+              : 'Error: could not commit the firmware.'
+        })
+      );
 
   // Переключение активного банка (Bank A <-> Bank B) без заливки нового
   // образа: mg_ota_switch_bank() проверяет валидность образа в целевом
@@ -176,38 +297,85 @@ export function FirmwareUpdate({ }) {
                 : `Error: Bank ${targetBank} has no valid firmware image.`
           });
         }
-      });
+      })
+      .catch(() =>
+        setAlert({
+          type: 'red',
+          message:
+            language === 'ru'
+              ? 'Ошибка: не удалось переключить банк.'
+              : 'Error: could not switch the bank.'
+        })
+      );
 
   // Переключение банка — мгновенный ребут без trial-цикла, поэтому
   // требует подтверждения по той же логике, что и onrebootConfirm ниже:
-  // случайный клик не должен сразу перезагружать устройство.
+  // случайный клик не должен сразу перезагружать устройство. Текст диалога
+  // прямо называет действие, чтобы красный цвет кнопки подкреплялся словами.
   const onswitchbankConfirm = (ev) => {
     const confirmMsg =
       language === 'ru'
-        ? `Переключиться на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}? Устройство перезагрузится немедленно.`
-        : `Switch to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}? The device will reboot immediately.`;
+        ? `Переключиться на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} и перезагрузить устройство? Перезагрузка произойдёт немедленно, пробного цикла не будет.`
+        : `Switch to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} and reboot the device? The reboot happens immediately, there is no trial cycle.`;
     if (!window.confirm(confirmMsg)) {
       return Promise.resolve();
     }
     return onswitchbank(ev);
   };
 
-  const onreboot = (ev) =>
-    fetch('api/device/reset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reboot: 1 })
-    })
-      .then((r) => r.json())
-      .then(
-        (r) =>
-          new Promise((resolve) =>
-            setTimeout(() => {
-              refresh();
-              resolve();
-            }, 5000)
-          )
-      );
+  // Ожидание возвращения устройства после перезагрузки: опрашиваем
+  // api/firmware/status раз в секунду (до 60 раз) и перезагружаем страницу,
+  // как только устройство ответило. Общая функция для загрузки прошивки
+  // и для кнопки перезагрузки.
+  const waitForDevice = (firstDelayMs) => {
+    let retryCount = 0;
+    const checkStatus = async () => {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 2000); // не ждать вечно (защита от мёртвых keep-alive сокетов / NAT / Wi-Fi)
+        const res = await fetch('api/firmware/status', { signal: ctrl.signal, cache: 'no-store' });
+        clearTimeout(t);
+        if (res.ok) {
+          window.location.reload();
+          return;
+        }
+      } catch (e) {
+        // Сеть недоступна / таймаут — ожидаемо во время перезагрузки
+      }
+
+      retryCount++;
+      if (retryCount < 60) {
+        setTimeout(checkStatus, 1000);
+      } else {
+        setAlert({
+          type: 'red',
+          message: language === 'ru' ? 'Таймаут перезагрузки устройства' : 'Device reboot timeout'
+        });
+      }
+    };
+
+    setTimeout(checkStatus, firstDelayMs);
+  };
+
+  const onreboot = async (ev) => {
+    try {
+      await fetch('api/device/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reboot: 1 })
+      });
+    } catch (e) {
+      // Устройство может оборвать соединение, не успев ответить, - это нормально
+    }
+    setAlert({
+      type: 'green',
+      message:
+        language === 'ru'
+          ? 'Перезагрузка устройства... Ожидание ответа...'
+          : 'Rebooting the device... Waiting for it to come back...'
+    });
+    waitForDevice(5000);
+  };
 
   // Перезагрузка спрятана отдельно от Upload и требует подтверждения,
   // чтобы её нельзя было случайно нажать вместо "Upload new firmware".
@@ -331,33 +499,7 @@ export function FirmwareUpdate({ }) {
             : 'Firmware uploaded successfully! Waiting for device to reboot...'
       });
 
-      let retryCount = 0;
-      const checkStatus = async () => {
-        try {
-          const ctrl = new AbortController();
-          const t = setTimeout(() => ctrl.abort(), 2000); // не ждать вечно (защита от мёртвых keep-alive сокетов / NAT / Wi-Fi)
-          const res = await fetch('api/firmware/status', { signal: ctrl.signal, cache: 'no-store' });
-          clearTimeout(t);
-          if (res.ok) {
-            window.location.reload();
-            return;
-          }
-        } catch (e) {
-          // Сеть недоступна / таймаут — ожидаемо во время перезагрузки
-        }
-
-        retryCount++;
-        if (retryCount < 60) {
-          setTimeout(checkStatus, 1000);
-        } else {
-          setAlert({
-            type: 'red',
-            message: language === 'ru' ? 'Таймаут перезагрузки устройства' : 'Device reboot timeout'
-          });
-        }
-      };
-
-      setTimeout(checkStatus, 3000);
+      waitForDevice(3000);
     } catch (error) {
       setAlert({
         type: 'yellow',
@@ -427,7 +569,7 @@ export function FirmwareUpdate({ }) {
     ${alert &&
     html`<${AlertComponent} type=${alert.type} message=${alert.message} />`}
 
-    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-center items-center">
+    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-start items-center" style="overflow-anchor:none;">
       <!-- декоративные размытые круги — как на Zigbee Devices -->
       <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
@@ -482,29 +624,71 @@ export function FirmwareUpdate({ }) {
             <div class="text-slate-700 text-sm mb-2">
               Bank B: ${bankLabel(bankBVersion, bankBValid, activeBank === 1)}
             </div>
-            <!-- Пока не подтверждено (canCommit=true) — обычная кликабельная кнопка.
-                 Как только firmware закоммичена, подтверждать больше нечего, поэтому
-                 кнопка не просто затемняется, а полностью меняет вид (серая, без
-                 градиента, с другой подписью) — чтобы не создавалось
-                 ощущение "нужно нажать ещё раз". -->
-            <button
-              onclick=${oncommit}
-              disabled=${!canCommit}
-              title=${canCommit
-                ? (language === 'ru'
+            <!-- Цвета кнопок страницы (чтобы их нельзя было перепутать):
+                 бирюзовый градиент - только основное действие (загрузка прошивки);
+                 зелёная - безопасное подтверждение; красная контурная - откат/
+                 переключение банка (самое рискованное); янтарная контурная -
+                 перезагрузка. Когда подтверждать нечего, вместо кнопки
+                 показывается бейдж-статус, а не серая кнопка. -->
+            ${canCommit
+              ? html`
+                <button
+                  onclick=${oncommit}
+                  title=${language === 'ru'
                     ? 'Подтверждает текущую прошивку, чтобы устройство не откатилось на предыдущую после перезагрузки'
-                    : 'Confirms the current firmware so the device won\'t roll back to the previous one after reboot')
-                : (language === 'ru'
-                    ? 'Эта прошивка уже подтверждена, повторное подтверждение не требуется'
-                    : 'This firmware is already committed, no further action needed')}
-              class=${canCommit
-                ? "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold text-white shadow-md transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95"
-                : "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-slate-200 text-slate-400 shadow-inner cursor-not-allowed"}
-            >
-              ${canCommit
-                ? (language === 'ru' ? 'Подтвердить эту прошивку' : 'Commit this firmware')
-                : (language === 'ru' ? 'Прошивка подтверждена' : 'Firmware committed')}
-            </button>
+                    : 'Confirms the current firmware so the device won\'t roll back to the previous one after reboot'}
+                  class="w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold text-white shadow-md transition-all duration-300 transform bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 hover:scale-105 active:scale-95"
+                >
+                  <${Icons.ok} class="w-4" />
+                  ${language === 'ru' ? 'Подтвердить эту прошивку' : 'Commit this firmware'}
+                </button>
+              `
+              : (firmwares[0].status === 3
+                ? html`
+                  <div
+                    role="status"
+                    title=${language === 'ru'
+                      ? 'Эта прошивка уже подтверждена, повторное подтверждение не требуется'
+                      : 'This firmware is already committed, no further action needed'}
+                    class="w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-green-50 text-green-700 border border-green-300"
+                  >
+                    <${Icons.ok} class="w-4" />
+                    ${language === 'ru' ? 'Прошивка подтверждена' : 'Firmware committed'}
+                  </div>
+                `
+                : html`
+                  <div
+                    role="status"
+                    class="w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-slate-100 text-slate-500 border border-slate-300"
+                  >
+                    ${language === 'ru' ? 'Подтверждать нечего' : 'Nothing to commit'}
+                  </div>
+                `)}
+
+            <div class="mt-auto pt-4 border-t border-slate-300/60 flex flex-col gap-3">
+              <div class="text-xs font-bold uppercase tracking-wide text-rose-700/80">
+                ${language === 'ru' ? 'Управление банками' : 'Bank control'}
+              </div>
+              <button
+                onclick=${onswitchbankConfirm}
+                disabled=${bankSwitchDisabled}
+                title=${!targetValid
+                  ? (language === 'ru'
+                      ? `В Bank ${targetBank} нет прошивки - переключаться не на что`
+                      : `Bank ${targetBank} has no firmware - nothing to switch to`)
+                  : (language === 'ru'
+                      ? `Переключает активный банк на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} без заливки нового образа и перезагружает устройство`
+                      : `Switches the active bank to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} without uploading a new image, then reboots`)}
+                class=${bankSwitchDisabled
+                  ? "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-slate-200 text-slate-400 shadow-inner cursor-not-allowed"
+                  : "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-white text-rose-700 border-2 border-rose-400 shadow-sm transition-all duration-300 hover:bg-rose-600 hover:text-white hover:border-rose-600 active:scale-95"}
+              >
+                <${Icons.backward} class="w-4" />
+                ${language === 'ru'
+                  ? `Переключиться на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}`
+                  : `Switch to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}`}
+              </button>
+            </div>
           </div>
 
           <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner p-6 flex flex-col gap-4">
@@ -524,154 +708,44 @@ export function FirmwareUpdate({ }) {
               icon=${Icons.doc}
               cls="w-full hidden"
             />
-          </div>
-        </div>
 
-        <!-- Developer notes -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full mb-6">
-          <div class="rounded-2xl bg-white/70 backdrop-blur-md border border-white/60 shadow-inner p-6">
-            <div class="flex items-center gap-2 mb-3">
-              <${Icons.info} class="w-5 h-5 text-green-600" />
-              <div class="font-semibold text-slate-700">Developer Note</div>
-            </div>
-            <div class="text-sm text-slate-600 space-y-2 leading-relaxed">
-              <p>
-                ${language === 'ru'
-      ? 'Zagotovka_M — полностью open-source проект. Используйте его как есть на своём устройстве или сделайте форк и адаптируйте под своё оборудование, датчики и задачи — именно для этого он и создан.'
-      : "Zagotovka_M is a fully open-source project. Take it as-is and run it on your device, or fork it and adapt it to your own hardware, sensors and needs — that's exactly what it's here for."}
-              </p>
-              <p>
-                ${language === 'ru'
-      ? 'Есть идея, исправление бага или новая функция? Pull request-ы очень приветствуются!'
-      : 'Got an idea, a bugfix, or a new feature? Pull requests are very welcome!'}
-              </p>
-              <a
-                class="inline-flex items-center gap-1.5 font-semibold text-cyan-700 hover:text-cyan-800 underline underline-offset-2"
-                href="https://github.com/zagotovka/Zagotovka_M"
-                target="_blank"
-                rel="noopener noreferrer"
+            <div class="mt-auto pt-4 border-t border-slate-300/60 flex flex-col gap-3">
+              <div class="text-xs font-bold uppercase tracking-wide text-amber-700/80">
+                ${language === 'ru' ? 'Перезагрузка' : 'Reboot'}
+              </div>
+              <button
+                onclick=${onrebootConfirm}
+                disabled=${uploading}
+                title=${uploading
+                  ? (language === 'ru' ? 'Недоступно во время загрузки прошивки' : 'Unavailable while a firmware upload is running')
+                  : (language === 'ru' ? 'Перезагрузить устройство (требуется подтверждение)' : 'Reboot device (requires confirmation)')}
+                class=${uploading
+                  ? "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-slate-200 text-slate-400 shadow-inner cursor-not-allowed"
+                  : "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-white text-amber-700 border-2 border-amber-400 shadow-sm transition-all duration-300 hover:bg-amber-500 hover:text-white hover:border-amber-500 active:scale-95"}
               >
-                <${Icons.link} class="w-4 h-4" />
-                github.com/zagotovka/Zagotovka_M
-              </a>
-            </div>
-          </div>
-
-          <div class="rounded-2xl bg-white/70 backdrop-blur-md border border-white/60 shadow-inner p-6">
-            <div class="flex items-center gap-2 mb-3">
-              <${Icons.info} class="w-5 h-5 text-green-600" />
-              <div class="font-semibold text-slate-700">Developer Note</div>
-            </div>
-            <div class="text-sm text-slate-600 leading-relaxed">
-              <p class="mb-2">
-                ${language === 'ru'
-      ? 'Как загрузить новый образ прошивки:'
-      : 'How to upload a new firmware image:'}
-              </p>
-
-              <!-- Предупреждение про HTTP/HTTPS -->
-              <div class="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 font-semibold">
-                ⚠️
-                ${language === 'ru'
-      ? ' Обновление по HTTP подходит для большинства случаев — например, если устройство находится в вашей домашней/локальной сети за роутером и снаружи не доступно. HTTP-режим не требует настройки домена и сертификатов и работает "из коробки". Но передача идёт без шифрования: если устройство доступно из недоверенной сети (публичный Wi-Fi, проброшено в интернет), файл прошивки и админ-сессию теоретически можно перехватить или подменить на лету. Для такого сценария в Settings можно настроить HTTPS (домен + сертификат).'
-      : ' Updating over HTTP is fine for most setups — for example, when the device is on your home/local network behind a router and not exposed externally. HTTP mode works out of the box, with no domain or certificate setup needed. However the transfer is unencrypted: if the device is reachable from an untrusted network (public Wi-Fi, port-forwarded to the internet), the firmware file and admin session could in theory be intercepted or tampered with in transit. For that scenario you can configure HTTPS (domain + certificate) in Settings.'}
-              </div>
-
-              <!-- Предупреждение: образы собираются под конкретный банк -->
-              <div class="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 font-semibold">
-                ℹ️
-                ${language === 'ru'
-      ? html` Файл <code class="bg-amber-100 px-1 rounded">.bin</code>, который сейчас лежит в Bank A, и файл, который лежит в Bank B, — это две РАЗНЫЕ сборки, слинкованные под разные адреса flash. Перепутать банки невозможно: каждая сборка несёт внутри образа метку своего банка, и устройство в начале загрузки сверяет её и отклоняет образ не для того банка ещё до записи во flash. Артефакты сборки различаются по имени — <code class="bg-amber-100 px-1 rounded">Zagotovka_Bank_A.bin</code> / <code class="bg-amber-100 px-1 rounded">Zagotovka_Bank_B.bin</code>, а интерфейс не даст начать загрузку, если имя файла не соответствует банку назначения.`
-      : html` The <code class="bg-amber-100 px-1 rounded">.bin</code> file currently in Bank A and the one in Bank B are two DIFFERENT builds, linked for different flash addresses. Mixing up the banks is not possible: each build carries its bank label inside the image, and at the start of the upload the device verifies it and rejects an image built for the other bank BEFORE anything is written to flash. The build artifacts are also named differently — <code class="bg-amber-100 px-1 rounded">Zagotovka_Bank_A.bin</code> / <code class="bg-amber-100 px-1 rounded">Zagotovka_Bank_B.bin</code> — and the UI refuses to start the upload if the file name does not match the destination bank.`}
-              </div>
-
-              <!-- Пояснение логики кнопок commit / switch-bank -->
-              <div class="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600">
-                ${language === 'ru'
-      ? html`<b>Подтвердить эту прошивку</b> и <b>Вернуться на Bank X</b> — это разные действия. «Подтвердить» закрепляет только что залитый и уже загрузившийся образ как рабочий, чтобы устройство не откатилось на предыдущий банк при следующей перезагрузке; кнопка активна только пока есть неподтверждённый кандидат. «Вернуться на Bank X» — мгновенное переключение на уже подтверждённый ранее образ в другом банке БЕЗ заливки чего-либо нового и без пробного (trial) цикла — устройство перезагрузится сразу, поэтому действие требует подтверждения.`
-      : html`<b>Commit this firmware</b> and <b>Switch to Bank X</b> are different actions. "Commit" locks in the image that was just uploaded and has already booted, so the device won't roll back to the other bank on the next reboot; it's only enabled while there is an uncommitted candidate. "Switch to Bank X" is an immediate switch to a previously committed image in the other bank WITHOUT uploading anything new and without a trial cycle — the device reboots right away, which is why it asks for confirmation.`}
-              </div>
-
-              <!-- Пояснение "обкатки" новой прошивки простым языком -->
-              <div class="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600">
-                ${language === 'ru'
-      ? html`<b>Как устройство «обкатывает» новую прошивку.</b> Представьте, что вы купили новую обувь и меряете её три раза перед тем, как окончательно решить, подходит она или нет. Так же и тут: после заливки новой прошивки устройство даёт себе <b>3 пробные попытки</b> включиться с ней. Если на третьей попытке прошивка проработала спокойно <b>целую минуту</b> без перезагрузок — устройство решает, что всё в порядке, и <b>само подтверждает</b> обновление, как будто вы нажали кнопку «Подтвердить эту прошивку». Но если вы (или сбой питания) перезагрузите устройство ещё раз, не дав ему той самой минуты — оно решит, что новой прошивке доверять нельзя, и <b>само вернётся</b> на прежнюю, ранее рабочую версию. В этом случае в статусе появится «Автоматически откачено», чтобы не перепутать это с тем, что вы сами подтвердили обновление.`
-      : html`<b>How the device "test-drives" a new firmware.</b> Think of trying on a new pair of shoes three times before deciding whether to keep them. Same idea here: after a new firmware is uploaded, the device gives itself <b>3 trial attempts</b> to boot with it. If on the third attempt it runs quietly for a full minute without rebooting, the device decides it's fine and <b>confirms the update on its own</b>, as if you'd pressed "Commit this firmware". But if you (or a power glitch) reboot it again before that minute passes, it decides the new firmware can't be trusted and <b>switches back</b> to the previous, working version by itself. In that case the status will show "Auto rolled back", so it's never confused with you having confirmed the update yourself.`}
-              </div>
-
-              <ol class="list-decimal pl-5 space-y-1.5">
-                <li>
-                  ${language === 'ru'
-      ? html`Убедитесь, что файл <code class="bg-slate-100 px-1 rounded">.bin</code> собран именно для этой платы (Zagotovka_M / STM32F767ZI). Загрузка неверного образа автоматически не отслеживается.`
-      : html`Make sure the <code class="bg-slate-100 px-1 rounded">.bin</code> file was built for this exact board (Zagotovka_M / STM32F767ZI). Uploading a wrong image will not be caught automatically.`}
-                </li>
-                <li>
-                  ${language === 'ru'
-      ? html`Нажмите <b>«Загрузить новую прошивку (.bin)»</b> выше и выберите файл.`
-      : html`Click <b>"Upload new firmware (.bin)"</b> above and select the file.`}
-                </li>
-                <li>
-                  ${language === 'ru'
-      ? 'Не закрывайте вкладку и не выключайте питание устройства, пока движется полоса загрузки — файл передаётся частями напрямую во flash-память.'
-      : 'Keep the tab open and do not power off the device while the progress bar is moving — the file is streamed chunk by chunk directly into flash.'}
-                </li>
-                <li>
-                  ${language === 'ru'
-      ? html`Когда появится сообщение <b>«Прошивка успешно загружена»</b>, устройство само переключит образы и перезагрузится.`
-      : html`When you see <b>"Firmware uploaded successfully"</b>, the device swaps images and reboots by itself automatically.`}
-                </li>
-                <li>
-                  ${language === 'ru'
-      ? 'После перезагрузки откройте эту страницу снова и убедитесь, что новая прошивка работает как ожидается.'
-      : 'After it comes back, open this page again and check that the new firmware works as expected.'}
-                </li>
-                <li>
-                  ${language === 'ru'
-      ? html`Если всё в порядке, нажмите <b>«Подтвердить эту прошивку»</b>, чтобы подтвердить обновление.`
-      : html`If everything is fine, press <b>"Commit this firmware"</b> to confirm the update.`}
-                </li>
-              </ol>
+                <${Icons.refresh} class="w-4" />
+                ${language === 'ru' ? 'Перезагрузить устройство' : 'Reboot device'}
+              </button>
             </div>
           </div>
         </div>
 
-        <!-- Bank switch и Reboot разнесены по разным краям одной строки (оба
-             ребутят устройство, не должны стоять рядом с Commit или друг
-             с другом). Форма и заливка — те же, что у «Загрузить новую
-             прошивку» (единый стиль по всей странице). Предупреждение о
-             необратимости действия обеспечивается confirm()-диалогом
-             (onswitchbankConfirm / onrebootConfirm), без дополнительной
-             окантовки кнопок. -->
-        <div class="w-full flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+        <div class="flex justify-end mt-2">
           <button
-            onclick=${onswitchbankConfirm}
-            disabled=${bankSwitchDisabled}
-            title=${!targetValid
-              ? (language === 'ru'
-                  ? `В Bank ${targetBank} нет прошивки — переключаться не на что`
-                  : `Bank ${targetBank} has no firmware — nothing to switch to`)
-              : (language === 'ru'
-                  ? `Переключает активный банк на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} без заливки нового образа и перезагружает устройство`
-                  : `Switches the active bank to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} without uploading a new image, then reboots`)}
-            class=${bankSwitchDisabled
-              ? "inline-flex justify-center items-center gap-2 py-3 px-6 rounded-full text-sm font-bold bg-slate-200 text-slate-400 shadow-inner cursor-not-allowed"
-              : "inline-flex justify-center items-center gap-2 py-3 px-6 rounded-full text-sm font-bold text-white shadow-md transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95"}
+            type="button"
+            onclick=${(e) => { lockToggle(e); setShowHelp(!showHelp); }}
+            class="px-8 py-2.5 rounded-full text-sm font-bold text-slate-700 bg-white/70 border border-slate-300 shadow-sm transition-all duration-300 hover:bg-white hover:border-slate-400 active:scale-95"
           >
-            ${!bankSwitchDisabled && html`<${Icons.refresh} class="w-4" />`}
-            ${language === 'ru'
-              ? `Вернуться на Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}`
-              : `Switch to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''}`}
-          </button>
-
-          <button
-            onclick=${onrebootConfirm}
-            class="inline-flex justify-center items-center gap-2 py-3 px-6 rounded-full text-sm font-bold text-white shadow-md transition-all duration-300 transform bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:scale-105 active:scale-95"
-            title=${language === 'ru' ? 'Перезагрузить устройство (требуется подтверждение)' : 'Reboot device (requires confirmation)'}
-          >
-            <${Icons.refresh} class="w-4" />
-            ${language === 'ru' ? 'Перезагрузить устройство' : 'Reboot device'}
+            ${showHelp ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help') : (language === 'ru' ? 'Показать справку' : 'Show Help')}
           </button>
         </div>
+
+        ${showHelp &&
+          html`
+            <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;overflow-y:auto;">
+              ${helpContent[language] || helpContent.en}
+            </div>
+          `}
       </div>
     </div>
   `;

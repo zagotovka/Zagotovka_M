@@ -1,3 +1,6 @@
+import { lockToggle } from '../helpLock.js';
+
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
@@ -184,105 +187,253 @@ const ArraySelect = ({ d, selectedValues, isRowDisabled, handleRadioChange, hand
 // ---------------------------------------------------------------------------
 const HELP_CONTENT = {
   ru: html`
-    <div style="line-height:1.8; font-size:14px; color:#334155;">
-      <p style="margin-bottom:12px; font-weight:700; font-size:15px;">Select pin — справка</p>
-
-      <p style="margin-bottom:10px;">На этой странице вы назначаете роль каждому пину контроллера: физическому или виртуальному Zigbee.</p>
-
-      <div style="margin-bottom:14px; line-height:1.6;">
-        <p style="font-weight:700; margin-bottom:6px;">Типы пинов:</p>
-        <span style="display:block;"><b style="color:#16a34a;">NONE</b> — пин не используется. Все связи этого пина автоматически удаляются!</span>
-        <span style="display:block;"><b>SWITCH</b> — управляемое реле / выключатель</span>
-        <span style="display:block;"><b>BUTTON</b> — физическая кнопка</span>
-        <span style="display:block;"><b>DEVICE</b> — Zigbee-устройство (лампа, реле и т.д.)</span>
-        <span style="display:block;"><b>1-WIRE</b> — температурный датчик DS18B20 или DHT22</span>
-        <span style="display:block;"><b>PWM</b> — ШИМ-выход (яркость, скорость вентилятора)</span>
-        <span style="display:block;"><b>Enc.OutA / Enc.OutB</b> — выход энкодера</span>
-        <span style="display:block;"><b>Security</b> — это пин, к которому подключаются геркон или датчики движения для отслеживания изменения их состояния.</span>
-      </div>
-
-      <div style="margin-bottom:14px; line-height:1.6;">
-        <p style="font-weight:700; margin-bottom:6px;">Как удалить Zigbee-устройство:</p>
-        <ol style="padding-left:20px; margin:0;">
-          <li>Найдите устройство в разделе <b>«Виртуальные пины Zigbee»</b>.</li>
-          <li>Установите тип пина на <b style="color:#16a34a;">NONE</b>.</li>
-          <li>Нажмите <b>Submit</b>.</li>
-          <li>Все связи этого устройства на других страницах (Таймеры, OneWire, Zigbee-кнопки и т.д.) <b>удаляются автоматически</b>.</li>
-        </ol>
-      </div>
-
-      <div style="margin-bottom:14px; line-height:1.6;">
-        <p style="font-weight:700; margin-bottom:6px;">Автоматическая очистка связей:</p>
-        <div class="bg-amber-50 p-4 rounded-lg border border-amber-200 text-sm">
-          <p style="margin-bottom:6px;">При установке любого пина (физического или Zigbee) в <b style="color:#16a34a;">NONE</b>, контроллер автоматически удаляет все ссылки на этот ID:</p>
-          <ul class="list-disc pl-5 space-y-1 text-slate-700">
-            <li>Связи между пинами (PinsLinks)</li>
-            <li>Действия кнопок (single click / double click / long press)</li>
-            <li>Таймеры и крон-задачи</li>
-            <li>Действия датчиков (OneWire DS18B20 / DHT22)</li>
-            <li>Zigbee-кнопки (виртуальные пины)</li>
-            <li>Рассвет / Закат (Sunrise / Sunset)</li>
-            <li>Привязка энкодеров к Zigbee</li>
-          </ul>
-          <p style="margin-top:8px; color:#92400e;">Вам <b>не нужно</b> вручную заходить на каждую страницу и искать, где этот пин используется — всё очищается за одно действие!</p>
+    <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+      <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">Для чего эта страница</h2>
+        <p>Здесь вы назначаете роль каждому пину контроллера: физическому пину STM32 или виртуальному пину Zigbee. Пока пину не назначена роль (тип <b>NONE</b>), он нигде не используется и не появляется на других страницах.</p>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">Как назначить роль пину</h3>
+          <ol class="list-decimal ml-6 space-y-2">
+            <li>Раскройте нужный раздел: <b>«Физические пины STM32»</b> или <b>«Виртуальные пины Zigbee»</b>.</li>
+            <li>В строке нужного пина выберите тип.</li>
+            <li>Нажмите <b>Submit</b> вверху страницы. Настройки записываются на USB-флешку, поэтому кнопка на несколько секунд становится неактивной.</li>
+            <li>Перейдите на страницу, соответствующую выбранному типу, и настройте пин там. Пин сам появится в её таблице.</li>
+          </ol>
         </div>
-      </div>
+      </section>
 
-      <div style="line-height:1.6;">
-        <p style="font-weight:700; margin-bottom:6px;">IEEE Address:</p>
-        <p>Уникальный 64-битный адрес Zigbee-устройства (например, <b>588e81fffe36a343</b>). Найдите его в Zigbee2MQTT или на наклейке устройства.</p>
-      </div>
+      <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">Типы пинов</h2>
+        <table class="w-full bg-white/70">
+          <thead>
+            <tr>
+              <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Тип</th>
+              <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Что это</th>
+              <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Где настраивается</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="border px-4 py-2"><b>NONE</b></td>
+              <td class="border px-4 py-2">Пин не используется. При переводе пина в NONE все его связи удаляются автоматически (см. ниже).</td>
+              <td class="border px-4 py-2">Не требуется</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>SWITCH</b></td>
+              <td class="border px-4 py-2">Вход настенного выключателя.</td>
+              <td class="border px-4 py-2">Страница <b>Switch(es) pin(s)</b>: там задаётся, какие устройства (пины DEVICE или Zigbee) он включает.</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>BUTTON</b></td>
+              <td class="border px-4 py-2">Физическая кнопка.</td>
+              <td class="border px-4 py-2">Страница <b>Button(s) pin(s)</b>: действия на одно нажатие, двойное нажатие и удержание.</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>DEVICE</b></td>
+              <td class="border px-4 py-2">Выход, к которому подключено исполнительное устройство: реле, лампа, мотор и т.п. В условиях на других страницах обозначается буквой <b>D</b>: <b>D6</b> означает, что устройство с ID 6 включено.</td>
+              <td class="border px-4 py-2">Управляется со страниц Button, Switch, Timer(s) и других. Zigbee-устройства добавляются отдельно, в разделе «Виртуальные пины Zigbee».</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>1-WIRE</b></td>
+              <td class="border px-4 py-2">Вход температурного датчика DS18B20 или DHT22.</td>
+              <td class="border px-4 py-2">Страница <b>OneWire(s) pin(s)</b>.</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>PWM</b></td>
+              <td class="border px-4 py-2">ШИМ-выход: яркость лампы, скорость вентилятора.</td>
+              <td class="border px-4 py-2">Страницы Timer(s) и PID Controller(s).</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>Enc.OutA</b>, <b>Enc.OutB</b></td>
+              <td class="border px-4 py-2">Выходы A и B энкодера.</td>
+              <td class="border px-4 py-2">Страница <b>Encoder(s) pin(s)</b>.</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>Security</b></td>
+              <td class="border px-4 py-2">Пин, к которому подключаются геркон или датчик движения для отслеживания изменения их состояния.</td>
+              <td class="border px-4 py-2">Страница <b>Security</b>, блок <b>Security Pins</b>.</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="mt-2 text-slate-700">
+          Если переключатель <b>PWM</b> или <b>Security</b> у пина неактивен, этот пин такую роль выполнять не может.
+        </div>
+      </section>
+
+      <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">Виртуальные пины Zigbee</h2>
+        <p>Каждое Zigbee-устройство занимает один виртуальный пин. У такого пина всего два типа: <b>NONE</b> (свободен) и <b>Zigbee</b> (занят устройством).</p>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">Как добавить устройство</h3>
+          <ol class="list-decimal ml-6 space-y-2">
+            <li>В разделе <b>«Виртуальные пины Zigbee»</b> выберите свободный пин и установите тип <b>Zigbee</b>.</li>
+            <li>В появившейся строке введите <b>IEEE Address</b> устройства и, при желании, название в поле <b>Info</b> (до 29 символов).</li>
+            <li>Нажмите <b>Submit</b>. Дальше устройство настраивается на странице <b>Zigbee Devices</b>.</li>
+          </ol>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">Как удалить устройство</h3>
+          <ol class="list-decimal ml-6 space-y-2">
+            <li>Найдите устройство в разделе <b>«Виртуальные пины Zigbee»</b>.</li>
+            <li>Установите тип пина <b>NONE</b>.</li>
+            <li>Нажмите <b>Submit</b>. Адрес, название и все связи устройства на других страницах удаляются автоматически.</li>
+          </ol>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">IEEE Address</h3>
+          <p>Уникальный 64-битный адрес Zigbee-устройства, 16 шестнадцатеричных символов (например, <b>588e81fffe36a343</b>). Его можно найти в Zigbee2MQTT или на наклейке устройства. Буквы в верхнем регистре устройство само приводит к нижнему.</p>
+        </div>
+      </section>
+
+      <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">Автоматическая очистка связей</h2>
+        <p>Когда любой пин (физический или Zigbee) переводится в <b>NONE</b>, контроллер сам удаляет все ссылки на его ID:</p>
+        <ul class="list-disc ml-6 space-y-1">
+          <li>связи между пинами (Switch);</li>
+          <li>действия кнопок и охранных датчиков (одно нажатие, двойное нажатие, удержание);</li>
+          <li>действия таймеров;</li>
+          <li>действия датчиков 1-Wire (DS18B20 и DHT22);</li>
+          <li>действия Zigbee-кнопок (виртуальные пины);</li>
+          <li>действия Sunrise / Sunset (рассвет и закат);</li>
+          <li>привязку энкодеров к Zigbee;</li>
+          <li>PID-регуляторы, привязанные к этому PWM-пину;</li>
+          <li>условия, в которых встречается этот ID, как в полях действий, так и в библиотеке условий.</li>
+        </ul>
+        <p>Если пин работал как <b>PWM</b> или <b>DEVICE</b>, его выход сразу выключается.</p>
+        <p>Заходить на каждую страницу и искать, где пин использовался, не нужно: всё очищается одним действием.</p>
+        <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">Очистка необратима. После нажатия Submit вернуть удалённые связи можно только вручную.</p>
+      </section>
+
+      <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">Переключатель SIM800L</h2>
+        <p>Переключатель SIM800L вверху страницы включает работу с GSM-модулем. Модуль подключается к пинам UART2, поэтому при включённом переключателе эти два пина (ID 1 и ID 35) блокируются и их тип изменить нельзя.</p>
+        <p>Номер телефона и остальные параметры модуля задаются на странице <b>Security</b>, в блоке <b>SIM800L Settings</b>.</p>
+      </section>
     </div>
   `,
   en: html`
-    <div style="line-height:1.8; font-size:14px; color:#334155;">
-      <p style="margin-bottom:12px; font-weight:700; font-size:15px;">Select pin — Help</p>
-
-      <p style="margin-bottom:10px;">On this page you assign a role to each controller pin — physical or virtual Zigbee.</p>
-
-      <div style="margin-bottom:14px; line-height:1.6;">
-        <p style="font-weight:700; margin-bottom:6px;">Pin types:</p>
-        <span style="display:block;"><b style="color:#16a34a;">NONE</b> — pin is not used. All connections for this pin are automatically deleted!</span>
-        <span style="display:block;"><b>SWITCH</b> — controllable relay / switch</span>
-        <span style="display:block;"><b>BUTTON</b> — physical button</span>
-        <span style="display:block;"><b>DEVICE</b> — Zigbee device (lamp, relay, etc.)</span>
-        <span style="display:block;"><b>1-WIRE</b> — DS18B20 or DHT22 temperature sensor</span>
-        <span style="display:block;"><b>PWM</b> — PWM output (brightness, fan speed)</span>
-        <span style="display:block;"><b>Enc.OutA / Enc.OutB</b> — encoder output</span>
-        <span style="display:block;"><b>Security</b> — a pin for connecting reed switches or motion sensors to monitor their state changes.</span>
-      </div>
-
-      <div style="margin-bottom:14px; line-height:1.6;">
-        <p style="font-weight:700; margin-bottom:6px;">How to delete a Zigbee device:</p>
-        <ol style="padding-left:20px; margin:0;">
-          <li>Find the device in the <b>«Virtual pins of Zigbee»</b> section.</li>
-          <li>Set the pin type to <b style="color:#16a34a;">NONE</b>.</li>
-          <li>Click <b>Submit</b>.</li>
-          <li>All connections for this device on other pages (Timers, OneWire, Zigbee buttons, etc.) are <b>automatically removed</b>.</li>
-        </ol>
-      </div>
-
-      <div style="margin-bottom:14px; line-height:1.6;">
-        <p style="font-weight:700; margin-bottom:6px;">Automatic connection cleanup:</p>
-        <div class="bg-amber-50 p-4 rounded-lg border border-amber-200 text-sm">
-          <p style="margin-bottom:6px;">When any pin (physical or Zigbee) is set to <b style="color:#16a34a;">NONE</b>, the controller automatically removes all references to that ID:</p>
-          <ul class="list-disc pl-5 space-y-1 text-slate-700">
-            <li>Device connections (PinsLinks)</li>
-            <li>Button actions (single click / double click / long press)</li>
-            <li>Timers and cron tasks</li>
-            <li>Sensor actions (OneWire DS18B20 / DHT22)</li>
-            <li>Zigbee virtual buttons</li>
-            <li>Sunrise / Sunset actions</li>
-            <li>Encoder-to-Zigbee bindings</li>
-          </ul>
-          <p style="margin-top:8px; color:#92400e;">You <b>don't need</b> to manually visit each page to find where this pin is used — everything is cleaned up in one action!</p>
+    <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+      <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">What this page is for</h2>
+        <p>Here you assign a role to each controller pin: a physical STM32 pin or a virtual Zigbee pin. While a pin has no role (type <b>NONE</b>), it is not used anywhere and does not appear on other pages.</p>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">How to assign a role to a pin</h3>
+          <ol class="list-decimal ml-6 space-y-2">
+            <li>Expand the section you need: <b>"Physical pins of STM32"</b> or <b>"Virtual pins of Zigbee"</b>.</li>
+            <li>Choose the type in the row of the pin.</li>
+            <li>Click <b>Submit</b> at the top of the page. The settings are written to the USB flash drive, so the button stays inactive for a few seconds.</li>
+            <li>Open the page that matches the chosen type and configure the pin there. The pin appears in its table by itself.</li>
+          </ol>
         </div>
-      </div>
+      </section>
 
-      <div style="line-height:1.6;">
-        <p style="font-weight:700; margin-bottom:6px;">IEEE Address:</p>
-        <p>The unique 64-bit address of a Zigbee device (e.g. <b>588e81fffe36a343</b>). Find it in Zigbee2MQTT or on the device label.</p>
-      </div>
+      <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">Pin types</h2>
+        <table class="w-full bg-white/70">
+          <thead>
+            <tr>
+              <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Type</th>
+              <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">What it is</th>
+              <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Where it is configured</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="border px-4 py-2"><b>NONE</b></td>
+              <td class="border px-4 py-2">The pin is not used. When a pin is set to NONE, all its connections are removed automatically (see below).</td>
+              <td class="border px-4 py-2">Not required</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>SWITCH</b></td>
+              <td class="border px-4 py-2">Input of a wall switch.</td>
+              <td class="border px-4 py-2">The <b>Switch(es) pin(s)</b> page: it sets which devices (DEVICE pins or Zigbee) the switch turns on.</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>BUTTON</b></td>
+              <td class="border px-4 py-2">Physical button.</td>
+              <td class="border px-4 py-2">The <b>Button(s) pin(s)</b> page: actions for a single click, a double click and a long press.</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>DEVICE</b></td>
+              <td class="border px-4 py-2">An output with an actuator connected: a relay, lamp, motor, etc. In conditions on other pages it is written with the letter <b>D</b>: <b>D6</b> means that the device with ID 6 is on.</td>
+              <td class="border px-4 py-2">Controlled from the Button, Switch, Timer(s) and other pages. Zigbee devices are added separately, in the "Virtual pins of Zigbee" section.</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>1-WIRE</b></td>
+              <td class="border px-4 py-2">Input of a DS18B20 or DHT22 temperature sensor.</td>
+              <td class="border px-4 py-2">The <b>OneWire(s) pin(s)</b> page.</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>PWM</b></td>
+              <td class="border px-4 py-2">PWM output: lamp brightness, fan speed.</td>
+              <td class="border px-4 py-2">The Timer(s) and PID Controller(s) pages.</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>Enc.OutA</b>, <b>Enc.OutB</b></td>
+              <td class="border px-4 py-2">Encoder outputs A and B.</td>
+              <td class="border px-4 py-2">The <b>Encoder(s) pin(s)</b> page.</td>
+            </tr>
+            <tr>
+              <td class="border px-4 py-2"><b>Security</b></td>
+              <td class="border px-4 py-2">A pin for connecting a reed switch or a motion sensor to monitor their state changes.</td>
+              <td class="border px-4 py-2">The <b>Security</b> page, the <b>Security Pins</b> block.</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="mt-2 text-slate-700">
+          If the <b>PWM</b> or <b>Security</b> option of a pin is inactive, that pin cannot perform this role.
+        </div>
+      </section>
+
+      <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">Virtual pins of Zigbee</h2>
+        <p>Each Zigbee device takes one virtual pin. Such a pin has only two types: <b>NONE</b> (free) and <b>Zigbee</b> (taken by a device).</p>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">How to add a device</h3>
+          <ol class="list-decimal ml-6 space-y-2">
+            <li>In the <b>"Virtual pins of Zigbee"</b> section choose a free pin and set the type to <b>Zigbee</b>.</li>
+            <li>In the row that appears, enter the device <b>IEEE Address</b> and, if you wish, a name in the <b>Info</b> field (up to 29 characters).</li>
+            <li>Click <b>Submit</b>. After that the device is configured on the <b>Zigbee Devices</b> page.</li>
+          </ol>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">How to delete a device</h3>
+          <ol class="list-decimal ml-6 space-y-2">
+            <li>Find the device in the <b>"Virtual pins of Zigbee"</b> section.</li>
+            <li>Set the pin type to <b>NONE</b>.</li>
+            <li>Click <b>Submit</b>. The address, the name and all connections of this device on other pages are removed automatically.</li>
+          </ol>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">IEEE Address</h3>
+          <p>The unique 64-bit address of a Zigbee device, 16 hexadecimal characters (e.g. <b>588e81fffe36a343</b>). Find it in Zigbee2MQTT or on the device label. Upper-case letters are converted to lower case by the controller.</p>
+        </div>
+      </section>
+
+      <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">Automatic connection cleanup</h2>
+        <p>When any pin (physical or Zigbee) is set to <b>NONE</b>, the controller automatically removes all references to its ID:</p>
+        <ul class="list-disc ml-6 space-y-1">
+          <li>connections between pins (Switch);</li>
+          <li>actions of buttons and security sensors (single click, double click, long press);</li>
+          <li>timer actions;</li>
+          <li>actions of 1-Wire sensors (DS18B20 and DHT22);</li>
+          <li>actions of Zigbee buttons (virtual pins);</li>
+          <li>Sunrise / Sunset actions;</li>
+          <li>encoder-to-Zigbee bindings;</li>
+          <li>PID controllers bound to this PWM pin;</li>
+          <li>conditions that contain this ID, both in action fields and in the conditions library.</li>
+        </ul>
+        <p>If the pin worked as <b>PWM</b> or <b>DEVICE</b>, its output is switched off immediately.</p>
+        <p>You do not need to visit each page to find where the pin was used: everything is cleaned up in one action.</p>
+        <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">The cleanup cannot be undone. After you click Submit, the removed connections can only be restored manually.</p>
+      </section>
+
+      <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">SIM800L switch</h2>
+        <p>The SIM800L switch at the top of the page enables work with the GSM module. The module is connected to the UART2 pins, so while the switch is on these two pins (ID 1 and ID 35) are locked and their type cannot be changed.</p>
+        <p>The phone number and the other module parameters are set on the <b>Security</b> page, in the <b>SIM800L Settings</b> block.</p>
+      </section>
     </div>
   `
 };
@@ -531,7 +682,7 @@ function TabSelect({ }) {
   };
 
   return html`
-    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-center items-center">
+    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-start items-center" style="overflow-anchor:none;">
       <!-- Decorative background glow -->
       <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
@@ -637,14 +788,15 @@ function TabSelect({ }) {
         </form>
 
         <div class="w-full flex justify-between items-center mb-4 mt-2 bg-white/40 backdrop-blur-md border border-white/60 p-4 rounded-2xl">
-          <button class="px-8 py-2.5 rounded-full text-sm font-bold text-white bg-gradient-to-r from-teal-400 to-cyan-500" onclick=${() => setShowHelp(!showHelp)}>
+          <button class="px-8 py-2.5 rounded-full text-sm font-bold text-white bg-gradient-to-r from-teal-400 to-cyan-500" onclick=${(e) => { lockToggle(e); setShowHelp(!showHelp); }}>
             ${showHelp ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help') : (language === 'ru' ? 'Показать справку' : 'Show Help')}
           </button>
         </div>
-        ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
+        ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full" style="max-height:70vh;overflow-y:auto;">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
       </div>
     </div>
   `;
 }
 
 export { TabSelect };
+

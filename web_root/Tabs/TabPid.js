@@ -1,4 +1,9 @@
+import { lockToggle } from '../helpLock.js';
+
+
 import { ModalPid } from '../Modals/ModalPid.js';
+import { condInfo, condBadgeProps, condHelpTitle } from '../condlib.js';
+import { CondLibraryPanel, useCondLibrary } from '../CondLibrary.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
 import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { StateContext } from '../context.js';
@@ -290,16 +295,18 @@ function presetName(lang, id) {
  * Общие стили (inline — чтобы не зависеть от пересборки Tailwind)
  * ------------------------------------------------------------------------- */
 const S = {
-  h3: 'font-size:17px;font-weight:700;color:#0f172a;margin:0 0 8px 0;',
+  h3: 'font-size:18px;font-weight:700;color:#000;margin:0 0 8px 0;',
   p: 'margin:0 0 8px 0;line-height:1.6;',
   card: 'background:rgba(255,255,255,0.75);border:1px solid rgba(13,148,136,0.25);border-radius:12px;padding:14px 16px;',
-  th: 'padding:10px 12px;font-weight:700;color:#334155;text-align:left;white-space:nowrap;border-bottom:1px solid rgba(13,148,136,0.25);',
+  th: 'padding:10px 12px;font-weight:700;color:#000;text-align:left;white-space:nowrap;border-bottom:1px solid rgba(13,148,136,0.25);',
   td: 'padding:9px 12px;vertical-align:top;border-bottom:1px solid rgba(148,163,184,0.25);',
   pillHeat: 'display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#ffedd5;color:#9a3412;',
   pillCool: 'display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#e0f2fe;color:#075985;',
   warn: 'margin-top:8px;padding:8px 10px;border-radius:8px;background:#fee2e2;border:1px solid #fca5a5;color:#7f1d1d;line-height:1.5;',
   info: 'margin-top:8px;padding:8px 10px;border-radius:8px;background:#fef9c3;border:1px solid #fde047;color:#713f12;line-height:1.5;',
   ok: 'margin-top:8px;padding:8px 10px;border-radius:8px;background:#dcfce7;border:1px solid #86efac;color:#14532d;line-height:1.5;',
+  helpNote: 'margin-top:10px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,0.8);border:1px solid rgba(0,0,0,0.15);color:#334155;line-height:1.6;',
+  helpEx: 'margin-top:12px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,0.8);border:1px solid #fcd34d;color:#334155;line-height:1.6;',
 };
 
 const pill = (p, L) =>
@@ -315,7 +322,7 @@ const HINT = {
     sensor: 'Датчик',
     ceiling: 'Аварийный потолок',
     outOfRange: (t, p) =>
-      `Уставка ${t} °C не подходит для этого пресета (допустимо: ${rangeLong(p, 'ru')}). Автонастройка не запустится и покажет ⚠ Error!. Выберите другой пресет или измените температуру.`,
+      `Уставка ${t} °C не подходит для этого пресета (допустимо: ${rangeLong(p, 'ru')}). Автонастройка не запустится и покажет Error!. Выберите другой пресет или измените температуру.`,
     overCap: (p) =>
       `Датчик DS18B20 не измеряет выше +125 °C. Для этого пресета задавайте не больше ${maxSet(p)} °C.`,
     needDs: 'Для этого пресета нужен датчик DS18B20: DHT22 слишком медленный.',
@@ -328,7 +335,7 @@ const HINT = {
     sensor: 'Sensor',
     ceiling: 'Emergency ceiling',
     outOfRange: (t, p) =>
-      `Set point ${t} °C does not fit this preset (allowed: ${rangeLong(p, 'en')}). Auto tune will not start and will show ⚠ Error!. Pick another preset or change the temperature.`,
+      `Set point ${t} °C does not fit this preset (allowed: ${rangeLong(p, 'en')}). Auto tune will not start and will show Error!. Pick another preset or change the temperature.`,
     overCap: (p) =>
       `The DS18B20 sensor cannot measure above +125 °C. For this preset set no more than ${maxSet(p)} °C.`,
     needDs: 'This preset needs a DS18B20 sensor: DHT22 is too slow.',
@@ -405,7 +412,7 @@ const HELP = {
       ['Info', 'Ваше название, например «Тёплый пол в детской».'],
       ['On/Off', 'Включатель регулятора. Пока он выключен, регулятор ничего не греет.'],
       ['Edit', 'Открывает окно настроек этого регулятора.'],
-      ['Run tune', 'Автоподбор: устройство само выясняет, как быстро ваш нагреватель греет, и подстраивается под него. Красная кнопка — подбор ещё не делали, полоса — идёт подбор, зелёная — готово, мигающая «⚠ Error!» — ошибка.'],
+      ['Run tune', 'Автоподбор: устройство само выясняет, как быстро ваш нагреватель греет, и подстраивается под него. Красная кнопка — подбор ещё не делали, полоса — идёт подбор, зелёная — готово, мигающая «Error!» — ошибка.'],
       ['«+» и «−» внизу', 'Добавить регулятор или убрать последний.'],
     ],
 
@@ -450,6 +457,163 @@ const HELP = {
         a: 'Выберите пресет того же типа (нагрев или охлаждение), в диапазон которого попадает ваша температура. Если такого нет, напишите разработчику: пресет можно добавить.',
       },
     ],
+
+    condTitle: condHelpTitle(true),
+    condLead: 'Работай, но только если...',
+    condIntro: [
+        'Условие - это «замок» на регуляторе. Регулятор проверяет его в каждом цикле расчёта (по умолчанию раз в секунду). Если условие верно (ДА) - регулятор работает как обычно. Если неверно (НЕТ) - нагреватель (или вентилятор) выключается: выход становится 0 %, а накопленная поправка регулятора сбрасывается. Когда условие снова станет верным, регулятор запустится заново и плавно выйдет на нужную температуру. Показания датчика («T cur.») при этом продолжают обновляться.',
+        'Если условие не выбрано (None) - регулятор работает всегда.',
+      ],
+    condWhereTitle: 'Условие вводится свободно в строке «Condition»',
+    condWhere: 'У кнопок и таймеров условие пишется прямо в действии: 6:1?D2&!D3. У PID-регулятора строки действия нет, поэтому условие вписывается в поле «Condition» окна Edit - пишется только выражение, без ведущего «пин:действие?»: было 6:1?D2&!D3 - пишем D2&!D3. Пустое поле = условия нет. Если условие нужно менять в одном месте сразу у нескольких устройств, держите его в ячейке: под таблицей есть панель «Библиотека условий (Conditions)» с 12 ячейками C1..C12, их можно править прямо там, а кнопки C1..C12 рядом с полем вставляют ссылку на ячейку. Буквы в условии: D - состояние устройства (выход на пине DEVICE, PWM или Zigbee-устройство), DV - значение диммера, B - кнопка (BU - не нажата, BH - удерживается), T - температурный датчик, H - датчик влажности, Sr / Ss - день / ночь, C - ссылка на ячейку библиотеки. Число после буквы - ID из первой колонки таблицы. Прежние буквы R и RV тоже работают.',
+    condStepsTitle: 'Как настроить: два шага',
+    condSteps: [
+        'На этой странице нажмите «Edit» у нужного регулятора.',
+        'В строке «Condition» впишите условие (например Ss или T5>25.5) и нажмите «Save changes». Чтобы убрать условие, очистите поле. Одинаковые условия хранятся один раз: свободных выражений всего 48 (плюс 12 общих ячеек), поэтому уже существующее условие не занимает новое место. Если свободные выражения закончились, прошивка не сохранит условие (ошибка Condition pool is full): используйте существующее условие или удалите ненужные.',
+      ],
+    condLifeTitle: 'Пример из жизни',
+    condLife: 'Тёплый пол в детской. Хотим, чтобы он грелся только ночью, а днём молчал. В «Edit» регулятора в строке «Condition» вписываем: Ss и сохраняем. Результат: с заката до рассвета регулятор держит заданную температуру, днём нагрев выключен.',
+    condBuildTitle: 'Как составить своё условие: 4 простых шага',
+    condBuild: [
+        'Решите, ЗА ЧЕМ следить. Буква подсказывает: D - устройство (включено или нет), B - кнопка, T - температура, H - влажность, Sr - день, Ss - ночь.',
+        'Допишите номер устройства (его ID) из таблицы на странице этого устройства. Датчик с ID 3 - это T3, устройство с ID 2 - это D2.',
+        'Если нужно «больше» или «меньше», допишите знак и число: T3<10 значит «на датчике 3 меньше 10 градусов». Для устройств и кнопок число не нужно: D2 - устройство включено, !D2 - выключено. Для отрицательной температуры ставьте минус прямо перед цифрой: T3<-5.',
+        'Если условий несколько, соедините их знаками: & значит «И» (нужно всё сразу), | значит «ИЛИ» (хватит одного). Пример: Ss&T3<10 - «ночью И когда на датчике 3 холоднее 10 градусов».',
+      ],
+    condWordsTitle: 'Из чего строится условие (слова)',
+    condWordsNote: 'Число после буквы - это ID устройства из таблицы на соответствующей странице. Датчик температуры в условии может быть любым, в том числе не тем, который слушает сам регулятор (например, уличный).',
+    condColEntry: 'Запись',
+    condColRead: 'Как читать',
+    condWords: [
+        ['D5', 'Устройство (пин DEVICE) с ID 5 сейчас ВКЛючено. Для Zigbee-устройства - оно включено.'],
+        ['!D5', 'Пин с ID 5 сейчас ВЫКЛючен (знак ! означает «НЕ»).'],
+        ['DV3>0', 'Диммер (ШИМ) с ID 3 светит (значение больше нуля). Для Zigbee - яркость устройства.'],
+        ['DV3=100', 'Значение диммера 3 ровно 100. У ШИМ-диммера шкала 0-100 (проценты), поэтому это полная яркость. Для Zigbee - значение, которое отдаёт само устройство.'],
+        ['DV3g50', 'Значение диммера 3 равно 50 или БОЛЬШЕ (буква g - «greater», то же, что >=).'],
+        ['DV3l50', 'Значение диммера 3 равно 50 или МЕНЬШЕ (буква l - «less», то же, что <=).'],
+        ['B1', 'Кнопка с ID 1 сейчас нажата.'],
+        ['BU1', 'Кнопка с ID 1 сейчас НЕ нажата.'],
+        ['BH1', 'Кнопка с ID 1 сейчас удерживается (долгое нажатие).'],
+        ['T5>25.5', 'Температура датчика 5 больше 25.5 градусов.'],
+        ['T5<10', 'Температура датчика 5 меньше 10 градусов.'],
+        ['T3<-5', 'Температура датчика 3 ниже минус 5 градусов (например, мороз на улице). Минус пишется сразу перед цифрой, без пробела, и только справа от знака сравнения.'],
+        ['T5.2>25.5', 'Температура второго датчика на шине DS18B20 пина 5 больше 25.5 градусов (.2 - номер датчика на шине, одна цифра от 1 до 9; без .номер берётся первый исправный).'],
+        ['H4>50', 'Влажность датчика 4 больше 50 процентов.'],
+        ['H4<30', 'Влажность датчика 4 меньше 30 процентов.'],
+        ['Sr', 'День (Sunrise): сейчас время между восходом и закатом. Берётся из времени восхода/заката в «Global Settings».'],
+        ['Ss', 'Ночь (Sunset): сейчас время между закатом и восходом. Если время восхода/заката не настроено, Sr и Ss оба считаются НЕТ.'],
+        ['C3', 'Подставить готовое условие из ячейки C3. Вложенность - не глубже двух уровней.'],
+      ],
+    condSignsTitle: 'Чем соединять слова (знаки)',
+    condColSign: 'Знак',
+    condColMeaning: 'Смысл',
+    condColExample: 'Пример и как читать',
+    condSigns: [
+        ['&', 'И (нужно, чтобы выполнились ОБА)', 'D1&D2', 'устройство 1 включено И устройство 2 включено'],
+        ['|', 'ИЛИ (достаточно ОДНОГО)', 'D1|D2', 'включено устройство 1 ИЛИ устройство 2 (или оба)'],
+        ['!', 'НЕ (наоборот)', '!(D1&D2)', 'неверно, что включены оба сразу (а !D1 - устройство 1 выключено)'],
+        ['( )', 'Скобки - что считать первым', '(D1|D2)&!D3', '(устройство 1 или устройство 2) И устройство 3 выключено'],
+        ['= > < g l', 'Равно, больше, меньше; g - больше или равно, l - меньше или равно (можно писать и >=, <=)', 'T5>25.5, DV3=100, DV3l50', ''],
+      ],
+    condTip: 'Совет: если в одном условии смешиваете & и |, всегда ставьте скобки. Без скобок порядок такой: сначала !, потом &, потом | (то есть D1|D2&D3 читается как D1|(D2&D3)). Числа у температуры и влажности пишутся как обычно: T5>25 и T5>25.0 - одно и то же, после точки допускается одна цифра. Буквы можно писать и большими, и маленькими: r2 и D2 - одно и то же.',
+    condExTitle: 'Готовые примеры - левая колонка вписывается в поле «Condition» регулятора',
+    condExNote: 'Во всех примерах «регулятор» - это ваш PID. В поле «Condition» вписывается только левая колонка (то, что после знака ? в действии).',
+    condColType: 'Что вписать в поле Condition',
+    condColHappens: 'Что произойдёт',
+    condExamples: [
+        ['Устройства и выключатели', [
+          ['D2', 'Регулятор работает, только если устройство 2 включено.'],
+          ['!D2', 'Регулятор работает, только если устройство 2 выключено.'],
+          ['D1&D2', 'Регулятор работает, только если включены и устройство 1, и устройство 2.'],
+          ['D1|D2', 'Регулятор работает, если включено хотя бы одно из устройств 1 и 2.'],
+          ['D1&!D2', 'Регулятор работает, если устройство 1 включено, а устройство 2 выключено.'],
+          ['!D1&!D2', 'Регулятор работает, только если оба устройства выключены.'],
+          ['(D1|D2)&!D3', 'Регулятор работает, если включено устройство 1 или 2 и при этом устройство 3 выключено.'],
+          ['!(D1&D2)', 'Регулятор работает всегда, кроме случая, когда включены оба устройства сразу.'],
+        ]],
+        ['Диммеры (ШИМ) и Zigbee', [
+          ['DV3>0', 'Регулятор работает, только если диммер 3 светит.'],
+          ['DV3g50', 'Регулятор работает, только если значение диммера 3 равно 50 или больше.'],
+          ['D93', 'Регулятор работает, только если Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 89).'],
+          ['DV93g100', 'Регулятор работает, только если значение Zigbee-устройства 93 равно 100 или больше.'],
+        ]],
+        ['Кнопки', [
+          ['B1', 'Регулятор работает, только пока кнопка 1 нажата.'],
+          ['BU1', 'Регулятор работает, только если кнопка 1 не нажата.'],
+          ['BH1', 'Регулятор работает, только пока кнопка 1 удерживается долгим нажатием.'],
+        ]],
+        ['Температура и влажность другого датчика', [
+          ['T3<10', 'Регулятор работает, только если на датчике 3 (например, уличном) холоднее 10 градусов.'],
+          ['T3>25.5', 'Регулятор работает, только если на датчике 3 жарче 25.5 градусов.'],
+          ['T5.2>25.5', 'Регулятор работает, только если второй датчик DS18B20 на пине 5 показывает больше 25.5 градусов.'],
+          ['H4<80', 'Регулятор работает, только если влажность на датчике 4 ниже 80 процентов.'],
+          ['H4>50', 'Регулятор работает, только если влажность на датчике 4 выше 50 процентов.'],
+          ['T3<10&!D7', 'Регулятор работает, если на датчике 3 холодно и устройство 7 (например, окно или другой нагреватель) не включено.'],
+          ['(T3<5|H4>70)&Ss', 'Регулятор работает ночью, если на датчике 3 очень холодно или на датчике 4 очень влажно.'],
+        ]],
+        ['День и ночь', [
+          ['Ss', 'Регулятор работает только ночью.'],
+          ['Sr', 'Регулятор работает только днём.'],
+          ['Ss&D1', 'Регулятор работает ночью и только когда устройство 1 включено.'],
+          ['Ss|D1', 'Регулятор работает ночью ИЛИ когда включено устройство 1.'],
+          ['Sr&T3<20', 'Регулятор работает днём, если на датчике 3 холодно.'],
+        ]],
+        ['Мороз и отрицательные температуры', [
+          ['T3<-5', 'Регулятор работает, только если на датчике 3 (например, уличном) холоднее минус 5 градусов.'],
+          ['T3g-12.3', 'Регулятор работает, если на датчике 3 минус 12.3 градуса или теплее.'],
+          ['T3>-0.5&T3<3', 'Регулятор работает, только если на датчике 3 температура между минус 0.5 и плюс 3 градуса (около нуля).'],
+        ]],
+        ['Диапазон температур и составные условия', [
+          ['T3>10&T3<30', 'Регулятор работает, только если на датчике 3 теплее 10 и холоднее 30 градусов.'],
+          ['T3<15|T3>30', 'Регулятор работает, если на датчике 3 холоднее 15 или жарче 30 градусов.'],
+          ['(Sr|D1)&T3<18', 'Регулятор работает днём или когда включено устройство 1, но только если на датчике 3 холоднее 18 градусов.'],
+          ['r2&!r3', 'То же самое, что D2&!D3: большие и маленькие буквы не различаются.'],
+        ]],
+        ['Готовое условие из другой ячейки', [
+          ['C3', 'Регулятор работает, только если верно условие из ячейки C3.'],
+          ['C3&!D2', 'Условие из ячейки C3 верно И устройство 2 выключено.'],
+        ]],
+        ['Особый случай: неисправный датчик', [
+          ['T3<10|D1', 'Регулятор работает, если на датчике 3 ниже 10 градусов ИЛИ включено устройство 1. Если датчик 3 неисправен, а устройство 1 включено - регулятор всё равно работает.'],
+        ]],
+      ],
+    condMistakesTitle: 'Частые ошибки: так писать нельзя',
+    condMistakesNote: 'Неверно записанное условие либо отклоняется при сохранении, либо всегда считается НЕТ, и регулятор не работает. Слева то, что писать нельзя, справа - почему и как правильно.',
+    condColWrong: 'Так не надо',
+    condColWhy: 'Почему и как правильно',
+    condMistakes: [
+        ['6:1?D2&!D3', 'В поле Condition пишется только часть после знака ?. Пишите D2&!D3.'],
+        ['R 2', 'Между буквой и цифрой пробела быть не должно. Пишите D2.'],
+        ['Р2, Т3, В1', 'Это русские буквы, похожие на латинские (Р, Т, В, Н, С). Устройство их не понимает. Переключите раскладку клавиатуры на английскую и пишите D2, T3, B1.'],
+        ['D2 and D3', 'Слова писать нельзя, только знаки: & («И»), | («ИЛИ»), ! («НЕ»). Пишите D2&D3.'],
+        ['T3>25,5', 'Десятые доли пишутся через точку, а не через запятую. Пишите T3>25.5.'],
+        ['T3>25.55', 'После точки допускается только одна цифра. Пишите T3>25.5.'],
+        ['T3<- 5', 'Минус пишется сразу перед цифрой, без пробела. Пишите T3<-5.'],
+        ['10<T3', 'Число пишется справа от знака сравнения. Пишите T3>10.'],
+        ['T3>T5', 'Сравнивать можно только с числом, а не с другим датчиком. Пишите T3>20.'],
+        ['DV3, T3, H4', 'Без сравнения это просто число, а не «да/нет», и условие работать не будет. Допишите сравнение: DV3>0, T3>20, H4<60.'],
+        ['(D1|D2', 'Каждой открывающей скобке нужна закрывающая. Пишите (D1|D2).'],
+        ['D1&', 'Знак & или | не может стоять в конце без второй половины. Пишите D1&D2.'],
+        ['C13', 'В библиотеке 12 ячеек, номера от 1 до 12. Ссылка на несуществующую ячейку считается НЕТ.'],
+        ['C1 внутри ячейки C1', 'Ячейка не должна ссылаться сама на себя или по кругу на другие ячейки: такое условие всегда НЕТ.'],
+      ],
+    condRulesTitle: 'Важные правила',
+    condRules: [
+        'Проверка идёт в каждом цикле расчёта (по умолчанию раз в секунду), поэтому условие действует сразу, как только изменилось: ничего нажимать не нужно.',
+        'Что происходит при НЕТ: выход регулятора становится 0 %, накопленная поправка (интегратор) обнуляется. Когда условие снова ДА, регулятор стартует с нуля - плавно, без рывка.',
+        'Ползунок On/Off регулятора сильнее любого условия: если он выключен, регулятор не греет, что бы ни говорило условие. Само условие не мешает включать и выключать регулятор ползунком, SMS или API: оно решает только, работать ли регулятору в данный момент.',
+        'Автоподбор (Run tune) условие не проверяет и работает независимо от него. Перед запуском убедитесь, что греть безопасно.',
+        'Условие не отменяет защиты: аварийный потолок температуры и отключение при потере датчика работают как обычно.',
+        'Неисправный или молчащий датчик в условии даёт ответ «неизвестно», и регулятор выключается, даже если перед условием стоит !: !(T3<10) при мёртвом датчике НЕ включит регулятор. Исключение: явная правда через |, например T3<10|D1.',
+        'Пустая ячейка и ячейка со значением 0 выключают регулятор. Если условие регулятора ссылается на ячейку (например C3), а потом ячейку очистили - регулятор перестанет работать (пустая ячейка считается НЕТ, а не «без условия»). Значение 0 появляется, например, после удаления устройства, которое было в условии. Впишите верное условие в ячейку в панели «Библиотека условий» или очистите поле Condition у регулятора. В таблице такая связь подсвечивается красным бейджем «C1: пусто» (или жёлтым, если пустая ячейка стоит внутри составного условия).',
+        'Кнопки B, BU и BH работают только для пина, настроенного как кнопка (и для Zigbee-кнопок). Для любого другого ID условия B и BH дают НЕТ, а BU - ДА.',
+        'Проверяйте ID. Если указать номер, которого нет, то R считается выключенным, а B - не нажатой (поэтому !D99 даст ДА, а D99 - НЕТ), T и H дают «неизвестно», и регулятор выключен.',
+        'Если время восхода/заката не настроено, условия с Sr и Ss всегда НЕТ, и регулятор с таким условием выключен.',
+        'Допустимые символы в условии и в ячейках: латинские буквы, цифры и знаки ( ) ! & | = > <, точка и минус (минус только для отрицательного числа справа от знака сравнения). Пробелы лучше не ставить. Максимум 46 символов. Неверная запись будет отклонена при сохранении; если неверная запись всё же оказалась в ячейке, условие считается НЕТ, и регулятор выключен.',
+        'Если условие длинное, запишите его в одну ячейку панели «Библиотека условий», а в других условиях ссылайтесь на него коротко: C3. Вложенность ссылок - не глубже двух уровней, третий уровень считается НЕТ.',
+        'Одну ячейку можно выбрать во многих местах (у регуляторов, Switch, Encoder). Надпись вида «3 мест» рядом с ячейкой в панели «Библиотека условий» показывает, сколько мест её используют (одинаковые условия в связях хранятся один раз и считаются за одно место). Правка ячейки сразу меняет поведение всех этих мест, поэтому перед сохранением используемой ячейки панель просит подтверждение.',
+        'Если регулятор «не греет»: проверьте по порядку - включён ли ползунок On/Off; верно ли условие прямо сейчас (все ли устройства в нём в нужном состоянии); нет ли опечатки или пустой ячейки; есть ли значение в «T cur.».',
+      ],
 
     numbersTitle: 'Что означают цифры в таблице пресетов',
     numbers: [
@@ -496,7 +660,7 @@ const HELP = {
       ['Info', 'Your own name, for example "Kids room warm floor".'],
       ['On/Off', 'The controller switch. While it is off, the controller heats nothing.'],
       ['Edit', 'Opens the settings window of this controller.'],
-      ['Run tune', 'Auto tuning: the device works out how fast your heater warms things up and adapts to it. Red button — not tuned yet, progress bar — tuning is running, green — done, blinking "⚠ Error!" — an error.'],
+      ['Run tune', 'Auto tuning: the device works out how fast your heater warms things up and adapts to it. Red button — not tuned yet, progress bar — tuning is running, green — done, blinking "Error!" — an error.'],
       ['"+" and "−" at the bottom', 'Add a controller or remove the last one.'],
     ],
 
@@ -542,6 +706,163 @@ const HELP = {
       },
     ],
 
+    condTitle: condHelpTitle(false),
+    condLead: 'Work, but only if...',
+    condIntro: [
+        'A condition is a "lock" on the controller. The controller checks it in every calculation cycle (once per second by default). If the condition is true (YES), the controller works as usual. If it is false (NO), the heater (or fan) is switched off: the output becomes 0 % and the controller accumulated correction is reset. When the condition becomes true again, the controller starts afresh and smoothly returns to the target temperature. The sensor reading ("T cur.") keeps updating meanwhile.',
+        'If no condition is selected (None), the controller always works.',
+      ],
+    condWhereTitle: 'The condition is typed right into the "Condition" field',
+    condWhere: 'For buttons and timers the condition is written right inside the action: 6:1?D2&!D3. A PID controller has no action line, so the condition is typed into the "Condition" field of the Edit window - write only the expression, without the leading "pin:action?": for 6:1?D2&!D3 write D2&!D3. An empty field means no condition. If the same condition has to be changed in one place for several devices, keep it in a cell: under the table there is the "Conditions library" panel with 12 cells C1..C12, editable right there, and the C1..C12 buttons next to the field insert a reference to a cell. Letters in a condition: D - device state (output on a DEVICE pin, PWM or Zigbee device), DV - dimmer value, B - button (BU - not pressed, BH - held), T - temperature sensor, H - humidity sensor, Sr / Ss - day / night, C - reference to a library cell. The number after a letter is the ID from the first table column. The old letters R and RV still work.',
+    condStepsTitle: 'How to set it up: two steps',
+    condSteps: [
+        'On this page press "Edit" on the controller you need.',
+        'In the "Condition" row type the condition (for example Ss or T5>25.5) and press "Save changes". To remove the condition, clear the field. Identical conditions are stored once: there are 48 free expressions in total (plus 12 shared cells), so an existing condition does not take a new slot. When the free expressions run out, the firmware refuses to save the condition (error Condition pool is full): reuse an existing condition or delete unused ones.',
+      ],
+    condLifeTitle: 'Real-life example',
+    condLife: 'Underfloor heating in a nursery. You want it to heat only at night and stay quiet during the day. In the controller "Edit" window type into the "Condition" row: Ss and save. Result: from sunset to sunrise the controller holds the set temperature, during the day heating is off.',
+    condBuildTitle: 'How to write your own condition: 4 simple steps',
+    condBuild: [
+        'Decide WHAT to watch. The letter tells it: D - device (on or off), B - button, T - temperature, H - humidity, Sr - daytime, Ss - night.',
+        'Add the device number (its ID) from the table on that device page. The sensor with ID 3 is T3, the device with ID 2 is D2.',
+        'If you need "more" or "less", add a sign and a number: T3<10 means "sensor 3 is below 10 degrees". Devices and buttons need no number: D2 - device is on, !D2 - device is off. For a negative temperature put the minus right before the digit: T3<-5.',
+        'If there are several conditions, join them with signs: & means AND (all at once), | means OR (one is enough). Example: Ss&T3<10 - "at night AND when sensor 3 is colder than 10 degrees".',
+      ],
+    condWordsTitle: 'What a condition is made of (words)',
+    condWordsNote: 'The number after the letter is the device ID from the table on the corresponding page. The temperature sensor in a condition can be any sensor, including one that is not the controller own sensor (for example an outdoor one).',
+    condColEntry: 'Entry',
+    condColRead: 'How to read it',
+    condWords: [
+        ['D5', 'The device (DEVICE pin) with ID 5 is ON right now. For a Zigbee device - it is on.'],
+        ['!D5', 'The pin with ID 5 is OFF right now (the ! sign means "NOT").'],
+        ['DV3>0', 'Dimmer (PWM) with ID 3 is lit (value greater than zero). For Zigbee - the device brightness.'],
+        ['DV3=100', 'Dimmer 3 value is exactly 100. A PWM dimmer uses a 0-100 scale (percent), so this is full brightness. For Zigbee - the value reported by the device itself.'],
+        ['DV3g50', 'Dimmer 3 value is 50 or GREATER (letter g = "greater", same as >=).'],
+        ['DV3l50', 'Dimmer 3 value is 50 or LESS (letter l = "less", same as <=).'],
+        ['B1', 'Button with ID 1 is pressed right now.'],
+        ['BU1', 'Button with ID 1 is NOT pressed right now.'],
+        ['BH1', 'Button with ID 1 is being held (long press).'],
+        ['T5>25.5', 'Temperature of sensor 5 is above 25.5 degrees.'],
+        ['T5<10', 'Temperature of sensor 5 is below 10 degrees.'],
+        ['T3<-5', 'Temperature of sensor 3 is below minus 5 degrees (for example, frost outside). The minus sign goes right before the digit, without a space, and only to the right of the comparison sign.'],
+        ['T5.2>25.5', 'Temperature of the second DS18B20 sensor on the bus of pin 5 is above 25.5 degrees (.2 is the sensor number on the bus, a single digit from 1 to 9; without .number the first working sensor is used).'],
+        ['H4>50', 'Humidity of sensor 4 is above 50 percent.'],
+        ['H4<30', 'Humidity of sensor 4 is below 30 percent.'],
+        ['Sr', 'Daytime (Sunrise): it is now between sunrise and sunset. The times are taken from the sunrise/sunset values in "Global Settings".'],
+        ['Ss', 'Night (Sunset): it is now between sunset and sunrise. If the sunrise/sunset times are not set, both Sr and Ss count as NO.'],
+        ['C3', 'Insert the ready-made condition from cell C3. Nesting - no deeper than two levels.'],
+      ],
+    condSignsTitle: 'What joins the words (signs)',
+    condColSign: 'Sign',
+    condColMeaning: 'Meaning',
+    condColExample: 'Example and how to read it',
+    condSigns: [
+        ['&', 'AND (BOTH must be true)', 'D1&D2', 'device 1 is on AND device 2 is on'],
+        ['|', 'OR (ONE is enough)', 'D1|D2', 'device 1 is on OR device 2 is on (or both)'],
+        ['!', 'NOT (the opposite)', '!(D1&D2)', 'it is not true that both are on at once (and !D1 - device 1 is off)'],
+        ['( )', 'Brackets - what to calculate first', '(D1|D2)&!D3', '(device 1 or device 2) AND device 3 is off'],
+        ['= > < g l', 'Equal, greater, less; g - greater or equal, l - less or equal (>= and <= also work)', 'T5>25.5, DV3=100, DV3l50', ''],
+      ],
+    condTip: 'Tip: if you mix & and | in one condition, always use brackets. Without brackets the order is: ! first, then &, then | (so D1|D2&D3 reads as D1|(D2&D3)). Numbers for temperature and humidity are written as usual: T5>25 and T5>25.0 are the same, one digit after the dot is allowed. Letters can be uppercase or lowercase: r2 and D2 are the same.',
+    condExTitle: 'Ready-made examples - the left column goes into the controller "Condition" field',
+    condExNote: 'In all examples "the controller" is your PID. Type only the left column into the "Condition" field (the part after the ? sign).',
+    condColType: 'What to type into the Condition field',
+    condColHappens: 'What will happen',
+    condExamples: [
+        ['Devices and switches', [
+          ['D2', 'The controller works only if device 2 is on.'],
+          ['!D2', 'The controller works only if device 2 is off.'],
+          ['D1&D2', 'The controller works only if both device 1 and device 2 are on.'],
+          ['D1|D2', 'The controller works if at least one of devices 1 and 2 is on.'],
+          ['D1&!D2', 'The controller works if device 1 is on and device 2 is off.'],
+          ['!D1&!D2', 'The controller works only if both devices are off.'],
+          ['(D1|D2)&!D3', 'The controller works if device 1 or 2 is on and device 3 is off.'],
+          ['!(D1&D2)', 'The controller always works, except when both devices are on at once.'],
+        ]],
+        ['Dimmers (PWM) and Zigbee', [
+          ['DV3>0', 'The controller works only if dimmer 3 is lit.'],
+          ['DV3g50', 'The controller works only if the dimmer 3 value is 50 or greater.'],
+          ['D93', 'The controller works only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 89).'],
+          ['DV93g100', 'The controller works only if the value of Zigbee device 93 is 100 or greater.'],
+        ]],
+        ['Buttons', [
+          ['B1', 'The controller works only while button 1 is pressed.'],
+          ['BU1', 'The controller works only if button 1 is not pressed.'],
+          ['BH1', 'The controller works only while button 1 is held with a long press.'],
+        ]],
+        ['Temperature and humidity of another sensor', [
+          ['T3<10', 'The controller works only if sensor 3 (for example an outdoor one) is colder than 10 degrees.'],
+          ['T3>25.5', 'The controller works only if sensor 3 is hotter than 25.5 degrees.'],
+          ['T5.2>25.5', 'The controller works only if the second DS18B20 sensor on pin 5 shows more than 25.5 degrees.'],
+          ['H4<80', 'The controller works only if humidity on sensor 4 is below 80 percent.'],
+          ['H4>50', 'The controller works only if humidity on sensor 4 is above 50 percent.'],
+          ['T3<10&!D7', 'The controller works if sensor 3 shows cold and device 7 (for example a window or another heater) is not on.'],
+          ['(T3<5|H4>70)&Ss', 'The controller works at night if sensor 3 is very cold or sensor 4 is very humid.'],
+        ]],
+        ['Day and night', [
+          ['Ss', 'The controller works only at night.'],
+          ['Sr', 'The controller works only in the daytime.'],
+          ['Ss&D1', 'The controller works at night and only when device 1 is on.'],
+          ['Ss|D1', 'The controller works at night OR when device 1 is on.'],
+          ['Sr&T3<20', 'The controller works in the daytime if sensor 3 shows cold.'],
+        ]],
+        ['Frost and negative temperatures', [
+          ['T3<-5', 'The controller works only if sensor 3 (for example an outdoor one) is colder than minus 5 degrees.'],
+          ['T3g-12.3', 'The controller works if sensor 3 shows minus 12.3 degrees or warmer.'],
+          ['T3>-0.5&T3<3', 'The controller works only if sensor 3 is between minus 0.5 and plus 3 degrees (around zero).'],
+        ]],
+        ['Temperature range and combined conditions', [
+          ['T3>10&T3<30', 'The controller works only if sensor 3 is warmer than 10 and colder than 30 degrees.'],
+          ['T3<15|T3>30', 'The controller works if sensor 3 is colder than 15 or hotter than 30 degrees.'],
+          ['(Sr|D1)&T3<18', 'The controller works in the daytime or when device 1 is on, but only if sensor 3 is colder than 18 degrees.'],
+          ['r2&!r3', 'The same as D2&!D3: uppercase and lowercase letters are not distinguished.'],
+        ]],
+        ['A ready-made condition from another cell', [
+          ['C3', 'The controller works only if the condition from cell C3 is true.'],
+          ['C3&!D2', 'The condition from cell C3 is true AND device 2 is off.'],
+        ]],
+        ['Special case: a faulty sensor', [
+          ['T3<10|D1', 'The controller works if sensor 3 is below 10 degrees OR device 1 is on. If sensor 3 is faulty but device 1 is on, the controller still works.'],
+        ]],
+      ],
+    condMistakesTitle: 'Common mistakes: do not write it like this',
+    condMistakesNote: 'A wrongly written condition is either rejected when saving or always counts as NO, so the controller does not work. On the left is what must not be written, on the right is why and how to write it correctly.',
+    condColWrong: 'Not like this',
+    condColWhy: 'Why and how to write it correctly',
+    condMistakes: [
+        ['6:1?D2&!D3', 'Only the part after the ? sign goes into the Condition field. Write D2&!D3.'],
+        ['R 2', 'There must be no space between the letter and the number. Write D2.'],
+        ['Р2, Т3, В1', 'These are Russian letters that look like Latin ones (Р, Т, В, Н, С). The device does not understand them. Switch the keyboard layout to English and write D2, T3, B1.'],
+        ['D2 and D3', 'Words are not allowed, only signs: & (AND), | (OR), ! (NOT). Write D2&D3.'],
+        ['T3>25,5', 'Tenths are written with a dot, not a comma. Write T3>25.5.'],
+        ['T3>25.55', 'Only one digit is allowed after the dot. Write T3>25.5.'],
+        ['T3<- 5', 'The minus sign goes right before the digit, without a space. Write T3<-5.'],
+        ['10<T3', 'The number goes to the right of the comparison sign. Write T3>10.'],
+        ['T3>T5', 'You can compare only with a number, not with another sensor. Write T3>20.'],
+        ['DV3, T3, H4', 'Without a comparison it is just a number, not a yes/no, and the condition will not work. Add a comparison: DV3>0, T3>20, H4<60.'],
+        ['(D1|D2', 'Every opening bracket needs a closing one. Write (D1|D2).'],
+        ['D1&', 'The sign & or | cannot stand at the end without a second half. Write D1&D2.'],
+        ['C13', 'The library has 12 cells, numbered 1 to 12. A reference to a non-existent cell counts as NO.'],
+        ['C1 inside cell C1', 'A cell must not refer to itself or to other cells in a circle: such a condition is always NO.'],
+      ],
+    condRulesTitle: 'Important rules',
+    condRules: [
+        'The check happens in every calculation cycle (once per second by default), so the condition takes effect as soon as it changes: there is nothing to press.',
+        'What happens on NO: the controller output becomes 0 % and the accumulated correction (integral) is reset. When the condition becomes YES again, the controller starts from zero - smoothly, without a jerk.',
+        'The controller On/Off slider is stronger than any condition: if it is off, the controller does not heat, whatever the condition says. The condition itself does not prevent switching the controller on and off by the slider, SMS or API: it only decides whether the controller works at this moment.',
+        'Auto-tune (Run tune) does not check the condition and runs independently of it. Make sure heating is safe before starting it.',
+        'The condition does not cancel protections: the emergency temperature ceiling and the shutdown on sensor loss work as usual.',
+        'A faulty or silent sensor in a condition gives the answer "unknown", and the controller is switched off even if the condition starts with !: !(T3<10) with a dead sensor does NOT switch the controller on. Exception: explicit truth through |, for example T3<10|D1.',
+        'An empty cell and a cell with the value 0 switch the controller off. If the controller condition refers to a cell (for example C3) and the cell is later cleared, the controller stops working (an empty cell counts as NO, not as "no condition"). The value 0 appears, for example, after a device used in the condition is deleted. Type a valid condition into the cell in the Conditions library panel, or clear the Condition field of the controller. In the table such a link is shown with a red badge "C1: empty" (or a yellow one if the empty cell is inside a compound condition).',
+        'Buttons B, BU and BH work only for a pin configured as a button (and for Zigbee buttons). For any other ID the conditions B and BH give NO, and BU gives YES.',
+        'Check the IDs. If you type a number that does not exist, R counts as off and B as not pressed (so !D99 gives YES and D99 gives NO), T and H give "unknown", and the controller is off.',
+        'If the sunrise/sunset times are not set, conditions with Sr and Ss are always NO, and the controller with such a condition is off.',
+        'Allowed characters in a condition and in cells: Latin letters, digits and the signs ( ) ! & | = > <, a dot and a minus sign (the minus only for a negative number to the right of a comparison sign). Better not to use spaces. Maximum 46 characters. An invalid entry is rejected when saving; if an invalid entry still ends up in a cell, the condition counts as NO and the controller is off.',
+        'If a condition is long, write it once into one cell of the Conditions library panel and refer to it briefly from other conditions: C3. References nest no deeper than two levels; the third level counts as NO.',
+        'One cell can be selected in many places (controllers, Switch, Encoder). The label like "3 places" next to a cell in the Conditions library panel shows how many places use it (identical conditions in links are stored once and count as one place). Editing a cell instantly changes the behavior of all those places, so before saving a cell that is in use the panel asks for confirmation.',
+        'If the controller "does not heat": check in order - is the On/Off slider on; is the condition true right now (are all devices in it in the required state); is there a typo or an empty cell; is there a value in "T cur.".',
+      ],
+
     numbersTitle: 'What the numbers in the preset table mean',
     numbers: [
       ['Emergency ceiling', 'If the sensor reads this temperature or higher, the controller switches the output off. The ceiling is built into the preset and cannot be changed in the web interface.'],
@@ -549,7 +870,7 @@ const HELP = {
       ['Power limit', 'Output limit in percent. It protects against overheating: for example, a warm floor never gets more than 70 % power.'],
     ],
 
-    errTitle: 'The button turned red and says "⚠ Error!"',
+    errTitle: 'The button turned red and says "Error!"',
     err: [
       'Most often "T set." is outside your preset range. Fix it or choose another preset.',
       'The temperature reached the emergency ceiling. Check that the sensor is in the right place and the heater is not running with no load.',
@@ -559,17 +880,27 @@ const HELP = {
   },
 };
 
-const SEC_STYLE =
-  'background:rgba(255,255,255,0.55);border:1px solid rgba(13,148,136,0.25);border-radius:14px;padding:14px 18px;';
-const SUM_STYLE = 'font-size:18px;font-weight:700;color:#0f172a;cursor:pointer;';
+const TONES_CSS = {
+  sky: ['#f0f9ff', '#7dd3fc'],
+  indigo: ['#eef2ff', '#a5b4fc'],
+  teal: ['#f0fdfa', '#5eead4'],
+  amber: ['#fffbeb', '#fcd34d'],
+  violet: ['#f5f3ff', '#c4b5fd'],
+  rose: ['#fff1f2', '#fda4af'],
+};
+const SUM_STYLE = 'font-size:20px;font-weight:700;color:#000;cursor:pointer;';
 
-/* Сворачиваемый раздел. Первые разделы открыты, справочные — свёрнуты. */
-const sec = (title, open, body) => html`
-  <details open=${open} style=${SEC_STYLE}>
-    <summary style=${SUM_STYLE}>${title}</summary>
-    <div style="margin-top:12px;">${body}</div>
-  </details>
-`;
+/* Сворачиваемый цветной раздел. Первые разделы открыты, справочные - свёрнуты. */
+const sec = (title, open, body, tone) => {
+  const c = TONES_CSS[tone] || TONES_CSS.teal;
+  const st = 'background:' + c[0] + ';border:2px solid ' + c[1] + ';border-radius:16px;padding:16px 20px;';
+  return html`
+    <details open=${open} style=${st}>
+      <summary style=${SUM_STYLE} onClick=${lockToggle}>${title}</summary>
+      <div style="margin-top:14px;">${body}</div>
+    </details>
+  `;
+};
 
 const OL = 'margin:0;padding-left:1.4rem;list-style:decimal;line-height:1.65;';
 const UL = 'margin:0;padding-left:1.4rem;list-style:disc;line-height:1.65;';
@@ -580,22 +911,82 @@ const glossary = (rows) => html`
     ${rows.map(
       (r) => html`
         <div style="line-height:1.6;">
-          <b style="color:#0f172a;">${r[0]}</b> — ${r[1]}
+          <b style="color:#000;">${r[0]}</b> — ${r[1]}
         </div>
       `
     )}
   </div>
 `;
 
+const CODE_STYLE = 'font-family:inherit;font-weight:600;color:#000;';
+const TBL_WRAP =
+  'overflow-x:auto;border-radius:12px;border:1px solid rgba(0,0,0,0.12);background:rgba(255,255,255,0.7);margin:8px 0 14px 0;';
+
+const codeEl = (t) => html`<code style=${CODE_STYLE}>${t}</code>`;
+
+/* Таблица условий из 2 колонок: [код, пояснение] */
+const condTable2 = (h1, h2, rows) => html`
+  <div style=${TBL_WRAP}>
+    <table style="width:100%;min-width:520px;border-collapse:collapse;font-size:16px;">
+      <thead>
+        <tr style="background:rgba(0,0,0,0.05);">
+          <th style=${S.th}>${h1}</th>
+          <th style=${S.th}>${h2}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(
+          (r) => html`
+            <tr>
+              <td style=${S.td + 'white-space:nowrap;'}>${codeEl(r[0])}</td>
+              <td style=${S.td}>${r[1]}</td>
+            </tr>
+          `
+        )}
+      </tbody>
+    </table>
+  </div>
+`;
+
+/* Таблица знаков из 3 колонок: [знак, смысл, пример-код, пример-текст] */
+const condTable3 = (h1, h2, h3, rows) => html`
+  <div style=${TBL_WRAP}>
+    <table style="width:100%;min-width:520px;border-collapse:collapse;font-size:16px;">
+      <thead>
+        <tr style="background:rgba(0,0,0,0.05);">
+          <th style=${S.th}>${h1}</th>
+          <th style=${S.th}>${h2}</th>
+          <th style=${S.th}>${h3}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(
+          (r) => html`
+            <tr>
+              <td style=${S.td + 'white-space:nowrap;'}>${codeEl(r[0])}</td>
+              <td style=${S.td}>${r[1]}</td>
+              <td style=${S.td}>${codeEl(r[2])}${r[3] ? ' - ' + r[3] : ''}</td>
+            </tr>
+          `
+        )}
+      </tbody>
+    </table>
+  </div>
+`;
+
 function PidHelp({ lang }) {
   const L = langOf(lang);
   const X = HELP[L];
+  /* Цвета разделов по порядку: SMS, что это, что нужно, страница, шаги, пресеты, FAQ, условия, цифры, ошибки */
+  const TONES = ['sky', 'indigo', 'indigo', 'indigo', 'teal', 'teal', 'teal', 'amber', 'violet', 'rose'];
+  let secIdx = 0;
+  const sec2 = (title, open, body) => sec(title, open, body, TONES[secIdx++]);
 
   const presetTable = html`
-    <div style="overflow-x:auto;border-radius:12px;border:1px solid rgba(13,148,136,0.25);background:rgba(255,255,255,0.6);margin-top:12px;">
-      <table style="width:100%;min-width:760px;border-collapse:collapse;font-size:14px;">
+    <div style="overflow-x:auto;border-radius:12px;border:1px solid rgba(0,0,0,0.12);background:rgba(255,255,255,0.7);margin-top:12px;">
+      <table style="width:100%;min-width:760px;border-collapse:collapse;font-size:16px;">
         <thead>
-          <tr style="background:rgba(13,148,136,0.10);">
+          <tr style="background:rgba(0,0,0,0.05);">
             <th style=${S.th}>${X.colUse}</th>
             <th style=${S.th}>${X.colPreset}</th>
             <th style=${S.th}>${X.colRange}</th>
@@ -627,9 +1018,9 @@ function PidHelp({ lang }) {
   `;
 
   return html`
-    <div class="mytext" style="display:flex;flex-direction:column;gap:14px;font-size:15px;color:#334155;">
+    <div class="mytext" style="display:flex;flex-direction:column;gap:14px;font-size:16px;font-family:inherit;line-height:1.6;color:#334155;">
 
-      ${sec(
+      ${sec2(
         L === 'ru' ? 'Рубильник On/Off по SMS и DTMF' : 'On/Off switch by SMS and DTMF',
         true,
         html`
@@ -646,13 +1037,13 @@ function PidHelp({ lang }) {
         `
       )}
 
-      ${sec(
+      ${sec2(
         X.whatTitle,
         true,
         html`${X.what.map((t) => html`<p style=${S.p}>${t}</p>`)}`
       )}
 
-      ${sec(
+      ${sec2(
         X.needTitle,
         true,
         html`
@@ -661,24 +1052,24 @@ function PidHelp({ lang }) {
               (n) => html`<li style="margin-bottom:6px;"><b style="color:#0f172a;">${n[0]}.</b> ${n[1]}</li>`
             )}
           </ol>
-          <div style=${S.info}>${X.needNote}</div>
+          <div style=${S.helpNote}>${X.needNote}</div>
         `
       )}
 
-      ${sec(X.pageTitle, true, glossary(X.page))}
+      ${sec2(X.pageTitle, true, glossary(X.page))}
 
-      ${sec(
+      ${sec2(
         X.stepsTitle,
         true,
         html`
           <ol style=${OL}>
             ${X.steps.map((t) => html`<li style="margin-bottom:8px;">${t}</li>`)}
           </ol>
-          <div style=${S.info}>${X.stepsNote}</div>
+          <div style=${S.helpNote}>${X.stepsNote}</div>
         `
       )}
 
-      ${sec(
+      ${sec2(
         X.chooseTitle,
         true,
         html`
@@ -689,7 +1080,7 @@ function PidHelp({ lang }) {
         `
       )}
 
-      ${sec(
+      ${sec2(
         X.faqTitle,
         true,
         html`
@@ -697,7 +1088,7 @@ function PidHelp({ lang }) {
             ${X.faq.map(
               (f) => html`
                 <div style=${S.card}>
-                  <div style="font-weight:700;color:#0f172a;margin-bottom:4px;">${f.q}</div>
+                  <div style="font-weight:700;color:#000;margin-bottom:4px;">${f.q}</div>
                   <div style="line-height:1.6;">${f.a}</div>
                 </div>
               `
@@ -706,9 +1097,62 @@ function PidHelp({ lang }) {
         `
       )}
 
-      ${sec(X.numbersTitle, false, glossary(X.numbers))}
+      ${sec2(
+        X.condTitle,
+        false,
+        html`
+          <p style="margin:0 0 8px;font-size:16px;font-style:italic;color:#475569;">${X.condLead}</p>
+          ${X.condIntro.map((t) => html`<p style=${S.p}>${t}</p>`)}
+          <div style=${S.helpNote}>
+            <b>${X.condWhereTitle}</b><br />
+            ${X.condWhere}
+          </div>
 
-      ${sec(
+          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.condStepsTitle}</h3>
+          <ol style=${OL}>
+            ${X.condSteps.map((t) => html`<li style="margin-bottom:6px;">${t}</li>`)}
+          </ol>
+          <div style=${S.helpEx}>
+            <b>${X.condLifeTitle}</b><br />
+            ${X.condLife}
+          </div>
+
+          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.condBuildTitle}</h3>
+          <ol style=${OL}>
+            ${X.condBuild.map((t) => html`<li style="margin-bottom:6px;">${t}</li>`)}
+          </ol>
+
+          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.condWordsTitle}</h3>
+          <p style=${S.p}>${X.condWordsNote}</p>
+          ${condTable2(X.condColEntry, X.condColRead, X.condWords)}
+
+          <h3 style=${S.h3}>${X.condSignsTitle}</h3>
+          ${condTable3(X.condColSign, X.condColMeaning, X.condColExample, X.condSigns)}
+          <p style=${S.p}>${X.condTip}</p>
+
+          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.condExTitle}</h3>
+          <p style=${S.p}>${X.condExNote}</p>
+          ${X.condExamples.map(
+            (g) => html`
+              <div style="font-weight:700;color:#000;margin-top:6px;">${g[0]}</div>
+              ${condTable2(X.condColType, X.condColHappens, g[1])}
+            `
+          )}
+
+          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.condMistakesTitle}</h3>
+          <p style=${S.p}>${X.condMistakesNote}</p>
+          ${condTable2(X.condColWrong, X.condColWhy, X.condMistakes)}
+
+          <h3 style=${S.h3}>${X.condRulesTitle}</h3>
+          <ul style=${UL}>
+            ${X.condRules.map((t) => html`<li style="margin-bottom:4px;">${t}</li>`)}
+          </ul>
+        `
+      )}
+
+      ${sec2(X.numbersTitle, false, glossary(X.numbers))}
+
+      ${sec2(
         X.errTitle,
         false,
         html`
@@ -771,6 +1215,8 @@ function TabPid({ }) {
   const [showHelp, setShowHelp] = useState(false);
   const [visiblePids, setVisiblePids] = useState(0);
   const [pidline, setPidline] = useState(0);
+  const condLib = useCondLibrary();
+  const condsList = condLib.loaded ? condLib.conds : [];
 
   const isPendingOnOff = useRef(false);
 
@@ -778,6 +1224,9 @@ function TabPid({ }) {
     initGlobalTooltip();
     initTuneStyles();
   }, []);
+
+  // Библиотека условий (общий стор CondLibrary.js) - для показа текста условия PID-слота
+  
 
   useEffect(() => {
     let active = true;
@@ -880,10 +1329,14 @@ function TabPid({ }) {
 
     isPendingOnOff.current = true;
 
+    // Ползунок On/Off в таблице условие не меняет - не отправляем его,
+    // иначе /api/pid/set перезапишет условие слота на устаревшее.
+    const { cond, cexpr, ...body } = updatedPid;
+
     fetch('/api/pid/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedPid),
+      body: JSON.stringify(body),
     })
       .then(response => response.json())
       .then(data => { console.log('PID job updated successfully:', data); })
@@ -893,6 +1346,24 @@ function TabPid({ }) {
           isPendingOnOff.current = false;
         }, 1500);
       });
+  };
+
+  // Сохранение из модалки "Edit PID": /api/pid/set уже записал поля и условие,
+  // второй POST не нужен - просто подтягиваем реальное состояние слота
+  // (в нём есть cond/cexpr, которых нет в оптимистичном объекте).
+  const reloadPid = () =>
+    fetch('/api/state/pid', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && Array.isArray(data.pid)) {
+          setPid(data.pid);
+          setLanguage(data.lang || 'ru');
+        }
+      })
+      .catch((error) => console.error('Error reloading PID state:', error));
+
+  const handlePidSaved = () => {
+    reloadPid();
   };
 
   // -------------------------------------------------------------------------
@@ -978,7 +1449,7 @@ function TabPid({ }) {
     const btnBaseClass = 'px-3 py-1 rounded-full text-sm font-bold text-white transition-all duration-300 transform hover:scale-105 active:scale-95 whitespace-nowrap';
 
     const btnLabel = isDone ? 'Tuning Done'
-                   : isError ? '⚠ Error!'
+                   : isError ? 'Error!'
                    : 'Run tune';
 
     // Если тюн идёт — показываем прогресс-бар вместо строки
@@ -988,7 +1459,7 @@ function TabPid({ }) {
       const label   = `Auto Tune (${phaseText})… ${tuneProgress}%`;
       return html`
         <tr key=${d.id} class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'}">
-          <td colspan="11" class="px-2 py-2">
+          <td colspan="12" class="px-2 py-2">
             <div style="position:relative;width:100%;height:2.5rem;border-radius:0.75rem;overflow:hidden;background:#d1d5db;box-shadow:inset 0 2px 6px rgba(0,0,0,0.12);">
               <div
                 style="position:absolute;left:0;top:0;bottom:0;width:${pctStr}%;background:linear-gradient(90deg,#22c55e 0%,#16a34a 60%,#4ade80 100%);border-radius:inherit;transition:width 0.3s ease;box-shadow:0 0 14px rgba(34,197,94,0.55);"
@@ -1027,6 +1498,14 @@ function TabPid({ }) {
         <td class="px-4 py-3 text-sm text-slate-700 font-mono">${!hasPin ? 'N/A' : d.tmpset}</td>
         <td class="px-4 py-3 text-sm text-slate-700 font-mono">${!hasPin ? 'N/A' : d.tmpcur}</td>
         <td class="px-4 py-3 text-sm text-slate-800 font-mono ${!d.onoff ? 'text-rose-500 font-bold' : ''}">${!d.onoff ? 'OFF' : (d.duty !== undefined ? d.duty : '—')}</td>
+        <td class="px-4 py-3 text-sm text-slate-700">
+          ${(() => {
+            const cb = condBadgeProps(condInfo(d.cond, condsList, d.cexpr), language === 'ru');
+            return cb
+              ? html`<span style=${cb.style.replace('margin-left:6px;', '')} title=${cb.title}>${cb.label}</span>`
+              : html`<span class="text-slate-400 text-sm">—</span>`;
+          })()}
+        </td>
         <td class="px-4 py-3 text-sm text-slate-600">${d.info}</td>
         <td class="px-4 py-3">
           <${MyPolzunok}
@@ -1052,7 +1531,7 @@ function TabPid({ }) {
   };
 
   return html`
-    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-center items-center">
+    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-start items-center" style="overflow-anchor:none;">
       <!-- Decorative background glow -->
       <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
@@ -1077,6 +1556,7 @@ function TabPid({ }) {
                         <${Th} title="T set." tooltipIndex=${6} />
                         <${Th} title="T cur." tooltipIndex=${7} />
                         <${Th} title="Duty" tooltipIndex=${8} />
+                        <${Th} title="Condition" tooltipIndex=${13} />
                         <${Th} title="Info" tooltipIndex=${9} />
                         <${Th} title="On/Off" tooltipIndex=${10} />
                         <${Th} title="Action" tooltipIndex=${11} />
@@ -1103,10 +1583,11 @@ function TabPid({ }) {
                 : 'Not sure what this is or where to start? Click "How does it work? Help" at the bottom left.'}</div>
             </div>`}
         </div>
+        <${CondLibraryPanel} isRu=${language === 'ru'} />
         <div class="w-full flex justify-between items-center mb-4 mt-2 bg-white/40 backdrop-blur-md border border-white/60 shadow-sm p-4 rounded-2xl">
           <button
             class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
-            onclick=${() => setShowHelp(!showHelp)}
+            onclick=${(e) => { lockToggle(e); setShowHelp(!showHelp); }}
           >
             ${showHelp
             ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help')
@@ -1141,7 +1622,7 @@ function TabPid({ }) {
       </div>
 
       ${showHelp && html`
-        <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700 w-full">
+        <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700 w-full" style="max-height:70vh;overflow-y:auto;">
           <${PidHelp} lang=${language} />
         </div>
       `}
@@ -1153,7 +1634,7 @@ function TabPid({ }) {
           hideModal=${closeModal}
           title="Edit PID"
           selectedPid=${selectedPid}
-          handlePidChange=${handlePidChange}
+          handlePidChange=${handlePidSaved}
           language=${language}
           presetList=${presetOptions(language)}
           PresetHintComponent=${PresetHint}

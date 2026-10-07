@@ -1,3 +1,6 @@
+import { lockToggle } from '../helpLock.js';
+
+
 import { ModalButton } from '../Modals/ModalButton.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
 import { registerPoll, unregisterPoll } from '../pollQueue.js';
@@ -6,6 +9,7 @@ import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
+import { condHelpTitle } from '../condlib.js';
 
 // ---------------------------------------------------------------------------
 // Глобальный tooltip-хелпер (портал в document.body, position:fixed)
@@ -193,172 +197,18 @@ const TabButton = () => {
 
   const helpContent = {
     ru: html`
-      <div class="mytext space-y-6">
-<div class="p-4 rounded-2xl bg-sky-50 border border-sky-300 text-sm"><h3 class="font-bold mb-2">Рубильник On/Off по SMS и DTMF</h3><p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки.</p><table class="w-full text-sm border-collapse my-2"><thead><tr><th class="border px-3 py-1 text-left">Действие</th><th class="border px-3 py-1 text-left">SMS</th><th class="border px-3 py-1 text-left">DTMF (во время звонка)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Отключить строку (ползунок Off)</td><td class="border px-3 py-1"><code>5#00*</code></td><td class="border px-3 py-1"><code>5#00*#</code></td></tr><tr><td class="border px-3 py-1">Включить строку (ползунок On)</td><td class="border px-3 py-1"><code>5#11*</code></td><td class="border px-3 py-1"><code>5#11*#</code></td></tr></tbody></table><p class="mb-2">В таблице ID = 5 - это пример, подставьте ID своей строки.</p><p class="mb-2">Несколько команд подряд: <code>5#00*7#11*</code> (SMS) и <code>5#00*7#11*#</code> (звонок). Ввод во время звонка всегда завершается символами <code>*#</code>: последняя команда уже заканчивается на <code>*</code>, поэтому в конце добавляется только <code>#</code>.</p><p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p><p class="mb-2">В ответ приходит SMS-отчёт, например <code>OnOff: Pin5=OFF</code> (отчёт отправляется, только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.</p><p class="mb-2">Не путайте: <code>ID#SC*</code>, <code>ID#DC*</code> и <code>ID#LP*</code> - это нажатие кнопки (клик, двойной клик, долгое нажатие), а <code>ID#00*</code> и <code>ID#11*</code> - ползунок On/Off. Пока ползунок Off, клики этой кнопки блокируются.</p></div>
-        <div class="p-5 rounded-2xl bg-teal-50 border border-teal-300">
-          <h2 class="text-xl font-bold mb-3">Как подключить кнопку (пошагово)</h2>
-          <ol class="list-decimal ml-6 space-y-3">
-            <li>
-              <b>Выберите пин.</b> Откройте страницу <b>"Select pin(s)"</b>, найдите нужный пин
-              (например, <b>PA15</b>), выберите для него режим <b>"BUTTON"</b> и нажмите <b>"Submit"</b>. После этого пин сам появится в таблице на этой странице.
-            </li>
-            <li>
-              <b>Выберите подтяжку</b> (столбец "Pullup type"), нажав <b>Edit</b>:
-              <ul class="list-disc ml-6 mt-1">
-                <li><b>GPIO_PULLUP</b> — если при нажатии кнопка соединяет пин с <b>землёй (GND)</b>. Это самый частый вариант.</li>
-                <li><b>GPIO_PULLDOWN</b> — если при нажатии кнопка соединяет пин с <b>плюсом питания (3.3V)</b>.</li>
-              </ul>
-              Не уверены — начните с GPIO_PULLUP. Если кнопка срабатывает сама или не срабатывает вообще, попробуйте другой вариант.
-            </li>
-            <li>
-              <b>Скажите, что делать.</b> В полях <b>SINGLE CLICK</b> (одно нажатие), <b>DOUBLE CLICK</b>
-              (два быстрых нажатия) и <b>LONG PRESS</b> (удержание) впишите, каким устройством управлять.
-              Пишется так: <b>ID устройства, двоеточие, команда</b>. Без пробелов!
-              <ul class="list-disc ml-6 mt-1">
-                <li><b>1</b> — включить</li>
-                <li><b>0</b> — выключить</li>
-                <li><b>2</b> — переключить (было выключено — включится, было включено — выключится; это TOGGLE)</li>
-              </ul>
-            </li>
-            <li>
-              <b>Включите ползунок On/Off</b> в строке кнопки. Если он выключен, кнопка будет проигнорирована.
-            </li>
-            <li>
-              <b>Проверьте:</b> нажмите физическую кнопку — устройство должно сработать.
-            </li>
-          </ol>
-
-          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-teal-200">
-            <b>Важно:</b> в полях действий пишется <b>ID устройства, которым вы хотите управлять</b>
-            (светодиод, реле, Zigbee-устройство), а <b>не</b> ID самой кнопки.
-          </div>
-
-          <div class="mt-4">
-            <b>Пример.</b> Кнопка подключена к пину <b>PA15</b>. На плате есть светодиоды:
-            <ul class="list-disc ml-6 mt-1">
-              <li><b>ID = 6</b> — зелёный светодиод</li>
-              <li><b>ID = 12</b> — синий светодиод</li>
-              <li><b>ID = 18</b> — красный светодиод</li>
-            </ul>
-            <div class="mt-2">Хотим, чтобы:</div>
-            <ul class="list-disc ml-6 mt-1">
-              <li>одно нажатие — переключало зелёный светодиод: в SINGLE CLICK пишем <code>6:2</code></li>
-              <li>двойное нажатие — включало синий светодиод: в DOUBLE CLICK пишем <code>12:1</code></li>
-              <li>долгое нажатие — выключало все три светодиода: в LONG PRESS пишем <code>6:0,12:0,18:0</code></li>
-            </ul>
-            Чтобы управлять несколькими устройствами сразу, перечислите их через запятую:
-            <code>6:1,12:1,18:0</code> (включить зелёный и синий, выключить красный).
-          </div>
-        </div>
+      <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Управление по SMS и DTMF</h2>
+<div><h4 class="text-lg font-bold text-black mt-4 mb-2">Рубильник On/Off по SMS и DTMF</h4><p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Действие</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Отключить строку (ползунок Off)</td><td class="border px-3 py-1"><code>5#00*</code></td><td class="border px-3 py-1"><code>5#00*#</code></td></tr><tr><td class="border px-3 py-1">Включить строку (ползунок On)</td><td class="border px-3 py-1"><code>5#11*</code></td><td class="border px-3 py-1"><code>5#11*#</code></td></tr></tbody></table><p class="mb-2">В таблице ID = 5 - это пример, подставьте ID своей строки.</p><p class="mb-2">Несколько команд подряд: <code>5#00*7#11*</code> (SMS) и <code>5#00*7#11*#</code> (звонок). Ввод во время звонка всегда завершается символами <code>*#</code>: последняя команда уже заканчивается на <code>*</code>, поэтому в конце добавляется только <code>#</code>.</p><p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p><p class="mb-2">В ответ приходит SMS-отчёт, например <code>OnOff: Pin5=OFF</code> (отчёт отправляется, только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.</p><p class="mb-2">Не путайте: <code>ID#SC*</code>, <code>ID#DC*</code> и <code>ID#LP*</code> - это нажатие кнопки (клик, двойной клик, долгое нажатие), а <code>ID#00*</code> и <code>ID#11*</code> - ползунок On/Off. Пока ползунок Off, клики этой кнопки блокируются.</p></div>
         <div>
-          <pre class="mb-4">
-            Данный API позволяет дистанционно управлять кнопкой, просто выполнив команду в браузере любого устройства в вашей локальной сети.
-          </pre>
-          <pre class="text-red-500 font-bold">
-            Не открывайте доступ из интернета к вашим API - это небезопасно!
-          </pre>
-        </div>
-        <div>
-          <h2 class="text-xl font-bold mb-2">Примеры API</h2>
-          <table class="w-full">
+          <h3 class="text-lg font-bold text-black mb-2">Примеры SMS и DTMF команд</h3>
+          <table class="w-full bg-white/70">
             <thead>
               <tr>
-                <th class="border px-4 py-2">API</th>
-                <th class="border px-4 py-2">Описание</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="border px-4 py-2">
-                  http://192.168.1.24:8000/api/Zerg/button?id=30&single_click
-                </td>
-                <td class="border px-4 py-2">
-                  Данная API команда выполнит действие, прописанное в 'SINGLE CLICK' c id = 30. Где "Zerg" это Ваш 'Token'.
-                </td>
-              </tr>
-              <tr>
-                <td class="border px-4 py-2">
-                  http://192.168.1.24:8000/api/Zerg/button?id=30&double_click
-                </td>
-                <td class="border px-4 py-2">
-                  Данная API команда выполнит действие, прописанное в 'DOUBLE CLICK' c id = 30. Где "Zerg" это Ваш 'Token'.
-                </td>
-              </tr>
-              <tr>
-                <td class="border px-4 py-2">
-                  http://192.168.1.24:8000/api/Zerg/button?id=30&long_press
-                </td>
-                <td class="border px-4 py-2">
-                  Данная API команда выполнит действие, прописанное в 'LONG PRESS' c id = 30. Где "Zerg" это Ваш 'Token'.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div>
-          <pre class="mb-4">
-            MQTT позволяет дистанционно управлять кнопкой из интернета!
-          </pre>
-        </div>
-        <div>
-          <h2 class="text-xl font-bold mb-2">Примеры команд MQTT</h2>
-          <table class="w-full">
-            <thead>
-              <tr>
-                <th class="border px-4 py-2">Команда</th>
-                <th class="border px-4 py-2">Описание</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="border px-4 py-2">Zagotovka/button/id=30/single_click</td>
-                <td class="border px-4 py-2">
-                  Данная MQTT команда выполнит команду, прописанную в 'SINGLE CLICK' c id = 30. Где "Zagotovka" это Ваш 'RX topic'.
-                </td>
-              </tr>
-              <tr>
-                <td class="border px-4 py-2">Zagotovka/button/id=30/double_click</td>
-                <td class="border px-4 py-2">
-                  Данная MQTT команда выполнит команду, прописанную в 'DOUBLE CLICK' c id = 30. Где "Zagotovka" это Ваш 'RX topic'.
-                </td>
-              </tr>
-              <tr>
-                <td class="border px-4 py-2">Zagotovka/button/id=30/long_press</td>
-                <td class="border px-4 py-2">
-                  Данная MQTT команда выполнит команду, прописанную в 'LONG PRESS' c id = 30. Где "Zagotovka" это Ваш 'RX topic'.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div>
-          <h2 class="text-xl font-bold mb-2">Отслеживание изменений</h2>
-          <table class="w-full">
-            <thead>
-              <tr>
-                <th class="border px-4 py-2">Топик</th>
-                <th class="border px-4 py-2">Описание</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="border px-4 py-2 whitespace-nowrap">Swarm/button/</td>
-                <td class="border px-4 py-2">
-                  Данная страница отслеживает изменения кнопок и автоматически отправляет каждое изменение по MQTT на топик: Swarm/button/.
-                  Где "Swarm" это Ваш 'TX topic'.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div>
-          <h2 class="text-xl font-bold mb-2">Примеры SMS и DTMF команд</h2>
-          <table class="w-full">
-            <thead>
-              <tr>
-                <th class="border px-4 py-2">Источник</th>
-                <th class="border px-4 py-2">Команда</th>
-                <th class="border px-4 py-2">Описание</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Источник</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Команда</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Описание</th>
               </tr>
             </thead>
             <tbody>
@@ -404,122 +254,80 @@ const TabButton = () => {
               </tr>
             </tbody>
           </table>
-          <div class="mt-2 text-sm text-slate-500">
+          <div class="mt-2 text-slate-700">
             Примечание: При желании, вы можете использовать цифровые команды (30#3*#, 30#4*#, 30#5*#) в том числе и в SMS-сообщениях.
           </div>
         </div>
-        <div>
-          <h2 class="text-xl font-bold mb-2">Сколько устройств можно подключить (SINGLE CLICK)</h2>
-          <p class="mb-2">В поле SINGLE CLICK записывается, что произойдёт при <b>одном нажатии</b> на кнопку. Можно указать сразу несколько устройств через запятую — <b>примерно 25 штук</b>.</p>
-          <p class="mb-2"><b>Пример:</b> запись <b>6:1,7:0,12:2</b> означает: включить устройство №6, выключить №7, переключить №12.</p>
-          <div class="mt-2 text-sm text-slate-500">
-            Примечания: (1) После двоеточия: 0 — выключить, 1 — включить, 2 — переключить на противоположное. (2) Записывать без пробелов. (3) Точный предел — 124 символа: до 31 устройства с однозначными номерами, до 25 с двузначными, до 20 с трёхзначными.
-          </div>
-        </div>
-        <div>
-          <h2 class="text-xl font-bold mb-2">Сколько устройств можно подключить (DOUBLE CLICK)</h2>
-          <p class="mb-2">В поле DOUBLE CLICK записывается, что произойдёт при <b>двух быстрых нажатиях подряд</b>. Можно указать сразу несколько устройств через запятую — <b>примерно 25 штук</b>.</p>
-          <p class="mb-2"><b>Пример:</b> запись <b>6:0,7:0,8:0,9:0</b> означает: выключить устройства №6, №7, №8 и №9.</p>
-          <div class="mt-2 text-sm text-slate-500">
-            Примечания: (1) После двоеточия: 0 — выключить, 1 — включить, 2 — переключить на противоположное. (2) Записывать без пробелов. (3) Точный предел — 124 символа: до 31 устройства с однозначными номерами, до 25 с двузначными, до 20 с трёхзначными.
-          </div>
-        </div>
-        <div>
-          <h2 class="text-xl font-bold mb-2">Сколько устройств можно подключить (LONG PRESS)</h2>
-          <p class="mb-2">В поле LONG PRESS записывается, что произойдёт при <b>удержании</b> кнопки. Можно указать сразу несколько устройств через запятую — <b>примерно 25 штук</b>.</p>
-          <p class="mb-2"><b>Пример:</b> запись <b>6:0,7:0,12:0,15:0</b> означает: «выключить всё»: устройства №6, №7, №12 и №15 выключатся одним долгим нажатием.</p>
-          <div class="mt-2 text-sm text-slate-500">
-            Примечания: (1) После двоеточия: 0 — выключить, 1 — включить, 2 — переключить на противоположное. (2) Записывать без пробелов. (3) Точный предел — 124 символа: до 31 устройства с однозначными номерами, до 25 с двузначными, до 20 с трёхзначными.
-          </div>
-        </div>
-        <div>
-          <h2 class="text-xl font-bold mb-2">Формат полей Action</h2>
-          <p class="mb-2">Максимальное количество записей в формате <code>ID:Action</code> с разделителем <code>,</code> ограничено длиной строки — <b>124 символа</b>.</p>
-          <p class="mb-2">Примеры записи: <code>6:1</code> (пин 6 → ON), <code>93:2</code> (пин 93 → TOGGLE), <code>93.1:0</code> (Zigbee слот 93, sub-action 1 → OFF).</p>
-          <table class="w-full text-sm">
-            <thead><tr><th class="border px-3 py-1">Длина ID</th><th class="border px-3 py-1">Пример</th><th class="border px-3 py-1">Байт на запись</th><th class="border px-3 py-1">Записей в строке</th></tr></thead>
-            <tbody>
-              <tr><td class="border px-3 py-1">1 знак</td><td class="border px-3 py-1"><code>5:1</code></td><td class="border px-3 py-1">3 + запятая = 4</td><td class="border px-3 py-1">до 31</td></tr>
-              <tr><td class="border px-3 py-1">2 знака</td><td class="border px-3 py-1"><code>15:1</code></td><td class="border px-3 py-1">4 + запятая = 5</td><td class="border px-3 py-1">до 25</td></tr>
-              <tr><td class="border px-3 py-1">3 знака</td><td class="border px-3 py-1"><code>155:1</code></td><td class="border px-3 py-1">5 + запятая = 6</td><td class="border px-3 py-1">до 20</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `,
-    en: html`
-      <div class="mytext space-y-6">
-<div class="p-4 rounded-2xl bg-sky-50 border border-sky-300 text-sm"><h3 class="font-bold mb-2">On/Off switch by SMS and DTMF</h3><p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row.</p><table class="w-full text-sm border-collapse my-2"><thead><tr><th class="border px-3 py-1 text-left">Action</th><th class="border px-3 py-1 text-left">SMS</th><th class="border px-3 py-1 text-left">DTMF (during a call)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Turn the row off (slider Off)</td><td class="border px-3 py-1"><code>5#00*</code></td><td class="border px-3 py-1"><code>5#00*#</code></td></tr><tr><td class="border px-3 py-1">Turn the row on (slider On)</td><td class="border px-3 py-1"><code>5#11*</code></td><td class="border px-3 py-1"><code>5#11*#</code></td></tr></tbody></table><p class="mb-2">In the table ID = 5 is an example, use the ID of your own row.</p><p class="mb-2">Several commands in a row: <code>5#00*7#11*</code> (SMS) and <code>5#00*7#11*#</code> (call). Input during a call always ends with <code>*#</code>: the last command already ends with <code>*</code>, so only <code>#</code> is added at the end.</p><p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p><p class="mb-2">An SMS report is sent back, for example <code>OnOff: Pin5=OFF</code> (the report is sent only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.</p><p class="mb-2">Do not confuse them: <code>ID#SC*</code>, <code>ID#DC*</code> and <code>ID#LP*</code> press the button (click, double click, long press), while <code>ID#00*</code> and <code>ID#11*</code> change the On/Off slider. While the slider is Off, clicks of this button are blocked.</p></div>
-        <div class="p-5 rounded-2xl bg-teal-50 border border-teal-300">
-          <h2 class="text-xl font-bold mb-3">How to connect a button (step by step)</h2>
+        </section>
+        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Как подключить кнопку (пошагово)</h2>
+
           <ol class="list-decimal ml-6 space-y-3">
             <li>
-              <b>Choose a pin.</b> Open the <b>"Select pin(s)"</b> page, find the pin you need
-              (for example, <b>PA15</b>), set its mode to <b>"BUTTON"</b> and press <b>"Submit"</b>. After that the pin appears in the table on this page by itself.
+              <b>Выберите пин.</b> Откройте страницу <b>"Select pin(s)"</b>, найдите нужный пин
+              (например, <b>PA15</b>), выберите для него режим <b>"BUTTON"</b> и нажмите <b>"Submit"</b>. После этого пин сам появится в таблице на этой странице.
             </li>
             <li>
-              <b>Choose the pull type</b> ("Pullup type" column) by pressing <b>Edit</b>:
+              <b>Выберите подтяжку</b> (столбец "Pullup type"), нажав <b>Edit</b>:
               <ul class="list-disc ml-6 mt-1">
-                <li><b>GPIO_PULLUP</b> — if pressing the button connects the pin to <b>ground (GND)</b>. This is the most common case.</li>
-                <li><b>GPIO_PULLDOWN</b> — if pressing the button connects the pin to <b>the supply voltage (3.3V)</b>.</li>
+                <li><b>GPIO_PULLUP</b> — если при нажатии кнопка соединяет пин с <b>землёй (GND)</b>. Это самый частый вариант.</li>
+                <li><b>GPIO_PULLDOWN</b> — если при нажатии кнопка соединяет пин с <b>плюсом питания (3.3V)</b>.</li>
               </ul>
-              Not sure? Start with GPIO_PULLUP. If the button triggers by itself or does not trigger at all, try the other option.
+              Не уверены — начните с GPIO_PULLUP. Если кнопка срабатывает сама или не срабатывает вообще, попробуйте другой вариант.
             </li>
             <li>
-              <b>Tell it what to do.</b> In the <b>SINGLE CLICK</b> (one press), <b>DOUBLE CLICK</b>
-              (two quick presses) and <b>LONG PRESS</b> (hold) fields, write which device to control.
-              Format: <b>device ID, colon, command</b>. No spaces!
+              <b>Скажите, что делать.</b> В полях <b>SINGLE CLICK</b> (одно нажатие), <b>DOUBLE CLICK</b>
+              (два быстрых нажатия) и <b>LONG PRESS</b> (удержание) впишите, каким устройством управлять.
+              Пишется так: <b>ID устройства, двоеточие, команда</b>. Без пробелов!
               <ul class="list-disc ml-6 mt-1">
-                <li><b>1</b> — turn on</li>
-                <li><b>0</b> — turn off</li>
-                <li><b>2</b> — toggle (if it was off it turns on, if it was on it turns off; this is TOGGLE)</li>
+                <li><b>1</b> — включить</li>
+                <li><b>0</b> — выключить</li>
+                <li><b>2</b> — переключить (было выключено — включится, было включено — выключится; это TOGGLE)</li>
               </ul>
             </li>
             <li>
-              <b>Turn on the On/Off slider</b> in the button's row. If it is off, the button is ignored.
+              <b>Включите ползунок On/Off</b> в строке кнопки. Если он выключен, кнопка будет проигнорирована.
             </li>
             <li>
-              <b>Test it:</b> press the physical button — the device should react.
+              <b>Проверьте:</b> нажмите физическую кнопку — устройство должно сработать.
             </li>
           </ol>
 
-          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-teal-200">
-            <b>Important:</b> the action fields take the <b>ID of the device you want to control</b>
-            (LED, relay, Zigbee device), <b>not</b> the ID of the button itself.
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Важно:</b> в полях действий пишется <b>ID устройства, которым вы хотите управлять</b>
+            (светодиод, реле, Zigbee-устройство), а <b>не</b> ID самой кнопки.
           </div>
 
           <div class="mt-4">
-            <b>Example.</b> A button is connected to pin <b>PA15</b>. The board has these LEDs:
+            <b>Пример.</b> Кнопка подключена к пину <b>PA15</b>. На плате есть светодиоды:
             <ul class="list-disc ml-6 mt-1">
-              <li><b>ID = 6</b> — green LED</li>
-              <li><b>ID = 12</b> — blue LED</li>
-              <li><b>ID = 18</b> — red LED</li>
+              <li><b>ID = 6</b> — зелёный светодиод</li>
+              <li><b>ID = 12</b> — синий светодиод</li>
+              <li><b>ID = 18</b> — красный светодиод</li>
             </ul>
-            <div class="mt-2">We want:</div>
+            <div class="mt-2">Хотим, чтобы:</div>
             <ul class="list-disc ml-6 mt-1">
-              <li>one press to toggle the green LED: in SINGLE CLICK write <code>6:2</code></li>
-              <li>a double press to turn the blue LED on: in DOUBLE CLICK write <code>12:1</code></li>
-              <li>a long press to turn all three LEDs off: in LONG PRESS write <code>6:0,12:0,18:0</code></li>
+              <li>одно нажатие — переключало зелёный светодиод: в SINGLE CLICK пишем <code>6:2</code></li>
+              <li>двойное нажатие — включало синий светодиод: в DOUBLE CLICK пишем <code>12:1</code></li>
+              <li>долгое нажатие — выключало все три светодиода: в LONG PRESS пишем <code>6:0,12:0,18:0</code></li>
             </ul>
-            To control several devices at once, list them separated by commas:
-            <code>6:1,12:1,18:0</code> (turn on green and blue, turn off red).
+            Чтобы управлять несколькими устройствами сразу, перечислите их через запятую:
+            <code>6:1,12:1,18:0</code> (включить зелёный и синий, выключить красный).
           </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Управление по API (локальная сеть)</h2>
+        <div>
+          <p class="mb-1">Данный API позволяет дистанционно управлять кнопкой, просто выполнив команду в браузере любого устройства в вашей локальной сети.</p>
+          <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">Не открывайте доступ из интернета к вашим API - это небезопасно!</p>
         </div>
         <div>
-          <pre class="mb-4">
-            This API allows you to remotely control a switch by simply executing a command in the browser of any device on your local network.
-          </pre>
-          <pre class="text-red-500 font-bold">
-            Do not expose your APIs to the internet - it's not secure!
-          </pre>
-        </div>
-        <div>
-          <h2 class="text-xl font-bold mb-2">API Examples</h2>
-          <table class="w-full">
+          <h3 class="text-lg font-bold text-black mb-2">Примеры API</h3>
+          <table class="w-full bg-white/70">
             <thead>
               <tr>
-                <th class="border px-4 py-2">API</th>
-                <th class="border px-4 py-2">Description</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">API</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Описание</th>
               </tr>
             </thead>
             <tbody>
@@ -528,7 +336,7 @@ const TabButton = () => {
                   http://192.168.1.24:8000/api/Zerg/button?id=30&single_click
                 </td>
                 <td class="border px-4 py-2">
-                  This API command will execute the action specified in 'SINGLE CLICK' with id = 30. Where "Zerg" is your 'Token'.
+                  Данная API команда выполнит действие, прописанное в 'SINGLE CLICK' c id = 30. Где "Zerg" это Ваш 'Token'.
                 </td>
               </tr>
               <tr>
@@ -536,7 +344,7 @@ const TabButton = () => {
                   http://192.168.1.24:8000/api/Zerg/button?id=30&double_click
                 </td>
                 <td class="border px-4 py-2">
-                  This API command will execute the action specified in 'DOUBLE CLICK' with id = 30. Where "Zerg" is your 'Token'.
+                  Данная API команда выполнит действие, прописанное в 'DOUBLE CLICK' c id = 30. Где "Zerg" это Ваш 'Token'.
                 </td>
               </tr>
               <tr>
@@ -544,75 +352,265 @@ const TabButton = () => {
                   http://192.168.1.24:8000/api/Zerg/button?id=30&long_press
                 </td>
                 <td class="border px-4 py-2">
-                  This API command will execute the action specified in 'LONG PRESS' with id = 30. Where "Zerg" is your 'Token'.
+                  Данная API команда выполнит действие, прописанное в 'LONG PRESS' c id = 30. Где "Zerg" это Ваш 'Token'.
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">MQTT: управление и отслеживание</h2>
         <div>
-          <pre class="mb-4">
-            MQTT allows you to remotely control a switch from the internet!
-          </pre>
+          <p class="mb-1">MQTT позволяет дистанционно управлять кнопкой из интернета!</p>
         </div>
         <div>
-          <h2 class="text-xl font-bold mb-2">MQTT Command Examples</h2>
-          <table class="w-full">
+          <h3 class="text-lg font-bold text-black mb-2">Примеры команд MQTT</h3>
+          <table class="w-full bg-white/70">
             <thead>
               <tr>
-                <th class="border px-4 py-2">Command</th>
-                <th class="border px-4 py-2">Description</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Команда</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Описание</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td class="border px-4 py-2">Zagotovka/button/id=30/single_click</td>
                 <td class="border px-4 py-2">
-                  This MQTT command will execute the command specified in 'SINGLE CLICK' with id = 30. Where "Zagotovka" is your 'RX topic'.
+                  Данная MQTT команда выполнит команду, прописанную в 'SINGLE CLICK' c id = 30. Где "Zagotovka" это Ваш 'RX topic'.
                 </td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">Zagotovka/button/id=30/double_click</td>
                 <td class="border px-4 py-2">
-                  This MQTT command will execute the command specified in 'DOUBLE CLICK' with id = 30. Where "Zagotovka" is your 'RX topic'.
+                  Данная MQTT команда выполнит команду, прописанную в 'DOUBLE CLICK' c id = 30. Где "Zagotovka" это Ваш 'RX topic'.
                 </td>
               </tr>
               <tr>
                 <td class="border px-4 py-2">Zagotovka/button/id=30/long_press</td>
                 <td class="border px-4 py-2">
-                  This MQTT command will execute the command specified in 'LONG PRESS' with id = 30. Where "Zagotovka" is your 'RX topic'.
+                  Данная MQTT команда выполнит команду, прописанную в 'LONG PRESS' c id = 30. Где "Zagotovka" это Ваш 'RX topic'.
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
         <div>
-          <h2 class="text-xl font-bold mb-2">Change Tracking</h2>
-          <table class="w-full">
+          <h3 class="text-lg font-bold text-black mb-2">Отслеживание изменений</h3>
+          <table class="w-full bg-white/70">
             <thead>
               <tr>
-                <th class="border px-4 py-2">Topic</th>
-                <th class="border px-4 py-2">Description</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Топик</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Описание</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td class="border px-4 py-2 whitespace-nowrap">Swarm/button/</td>
                 <td class="border px-4 py-2">
-                  This page tracks changes in buttons and automatically sends each change via MQTT to the topic: Swarm/button/. Where "Swarm" is your 'TX topic'.
+                  Данная страница отслеживает изменения кнопок и автоматически отправляет каждое изменение по MQTT на топик: Swarm/button/.
+                  Где "Swarm" это Ваш 'TX topic'.
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Поля действий: SINGLE CLICK, DOUBLE CLICK, LONG PRESS</h2>
         <div>
-          <h2 class="text-xl font-bold mb-2">SMS & DTMF Command Examples</h2>
-          <table class="w-full">
+          <h3 class="text-lg font-bold text-black mb-2">Сколько устройств можно подключить (SINGLE CLICK)</h3>
+          <p class="mb-2">В поле SINGLE CLICK записывается, что произойдёт при <b>одном нажатии</b> на кнопку. Можно указать сразу несколько устройств через запятую — <b>примерно 25 штук</b>.</p>
+          <p class="mb-2"><b>Пример:</b> запись <b>6:1,7:0,12:2</b> означает: включить устройство №6, выключить №7, переключить №12.</p>
+          <div class="mt-2 text-slate-700">
+            Примечания: (1) После двоеточия: 0 — выключить, 1 — включить, 2 — переключить на противоположное. (2) Записывать без пробелов. (3) Точный предел — 124 символа вместе с условиями после знака ? (цифры ниже верны для записей без условий): до 31 устройства с однозначными номерами, до 25 с двузначными, до 20 с трёхзначными.
+          </div>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">Сколько устройств можно подключить (DOUBLE CLICK)</h3>
+          <p class="mb-2">В поле DOUBLE CLICK записывается, что произойдёт при <b>двух быстрых нажатиях подряд</b>. Можно указать сразу несколько устройств через запятую — <b>примерно 25 штук</b>.</p>
+          <p class="mb-2"><b>Пример:</b> запись <b>6:0,7:0,8:0,9:0</b> означает: выключить устройства №6, №7, №8 и №9.</p>
+          <div class="mt-2 text-slate-700">
+            Примечания: (1) После двоеточия: 0 — выключить, 1 — включить, 2 — переключить на противоположное. (2) Записывать без пробелов. (3) Точный предел — 124 символа вместе с условиями после знака ? (цифры ниже верны для записей без условий): до 31 устройства с однозначными номерами, до 25 с двузначными, до 20 с трёхзначными.
+          </div>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">Сколько устройств можно подключить (LONG PRESS)</h3>
+          <p class="mb-2">В поле LONG PRESS записывается, что произойдёт при <b>удержании</b> кнопки. Можно указать сразу несколько устройств через запятую — <b>примерно 25 штук</b>.</p>
+          <p class="mb-2"><b>Пример:</b> запись <b>6:0,7:0,12:0,15:0</b> означает: «выключить всё»: устройства №6, №7, №12 и №15 выключатся одним долгим нажатием.</p>
+          <div class="mt-2 text-slate-700">
+            Примечания: (1) После двоеточия: 0 — выключить, 1 — включить, 2 — переключить на противоположное. (2) Записывать без пробелов. (3) Точный предел — 124 символа вместе с условиями после знака ? (цифры ниже верны для записей без условий): до 31 устройства с однозначными номерами, до 25 с двузначными, до 20 с трёхзначными.
+          </div>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">Формат полей Action</h3>
+          <p class="mb-2">Максимальное количество записей в формате <code>ID:Action</code> с разделителем <code>,</code> ограничено длиной строки — <b>124 символа</b> (вместе с условиями после знака ?).</p>
+          <p class="mb-2">Примеры записи: <code>6:1</code> (пин 6 → ON), <code>93:2</code> (пин 93 → TOGGLE), <code>93.1:0</code> (Zigbee слот 93, sub-action 1 → OFF).</p>
+          <table class="w-full bg-white/70">
+            <thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Длина ID</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Пример</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Байт на запись</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Записей в строке</th></tr></thead>
+            <tbody>
+              <tr><td class="border px-3 py-1">1 знак</td><td class="border px-3 py-1"><code>5:1</code></td><td class="border px-3 py-1">3 + запятая = 4</td><td class="border px-3 py-1">до 31</td></tr>
+              <tr><td class="border px-3 py-1">2 знака</td><td class="border px-3 py-1"><code>15:1</code></td><td class="border px-3 py-1">4 + запятая = 5</td><td class="border px-3 py-1">до 25</td></tr>
+              <tr><td class="border px-3 py-1">3 знака</td><td class="border px-3 py-1"><code>155:1</code></td><td class="border px-3 py-1">5 + запятая = 6</td><td class="border px-3 py-1">до 20</td></tr>
+            </tbody>
+          </table>
+        </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">${condHelpTitle(true)}</h2>
+        <div class="space-y-3">
+          <p class="text-slate-600 italic mb-2">Нажми кнопку, но сделай только если...</p>
+          <p class="mb-2">Условие - это «замок» на одном действии в полях <b>SINGLE CLICK</b>, <b>DOUBLE CLICK</b> и <b>LONG PRESS</b>. Когда вы нажимаете кнопку, прошивка проверяет условие каждого действия отдельно. Если условие верно (ДА) - действие выполняется. Если неверно (НЕТ) - это действие молча пропускается, а остальные действия в той же строке выполняются как обычно. Если условия нет - действие выполняется всегда.</p>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">Как записать условие: три шага</h4>
+          <ol class="list-decimal ml-6 mb-3 space-y-1">
+            <li>Запишите действие как обычно: <code>${'6:1'}</code> (пин 6, включить).</li>
+            <li>Сразу после него, <b>без пробелов</b>, поставьте знак <b>?</b>: <code>${'6:1?'}</code></li>
+            <li>Допишите условие: <code>${'6:1?D2&!D3'}</code>. Читаем так: «включить пин 6, но только если устройство 2 включено и устройство 3 выключено».</li>
+          </ol>
+          <p class="mb-3">Общий вид: <code>${'ID:команда?условие'}</code>. Команда: <b>0</b> - выключить, <b>1</b> - включить, <b>2</b> - переключить на противоположное. Несколько действий пишутся через запятую, и у каждого может быть своё условие или не быть никакого.</p>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
+            <p class="text-lg font-bold text-black mb-1">Пример из жизни</p>
+            <p class="mb-1">Кнопка на стене управляет светом (пин 6) и вентилятором (пин 7, он подключён к устройство 7). Хотим, чтобы одно нажатие включало свет, а вентилятор включало только если он ещё выключен.</p>
+            <p class="mb-1">В поле SINGLE CLICK пишем: <code>${'6:1,7:1?!D7'}</code></p>
+            <p>Результат: свет включается всегда. Вентилятор включается, только если он сейчас выключен (!D7). Если вентилятор уже работает - эта часть просто пропускается.</p>
+          </div>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">Из чего строится условие (слова)</h4>
+          <table class="w-full mb-3 bg-white/70">
             <thead>
               <tr>
-                <th class="border px-4 py-2">Source</th>
-                <th class="border px-4 py-2">Command</th>
-                <th class="border px-4 py-2">Description</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Запись</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Как читать</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'D5'}</code></td><td class="border px-4 py-2">Устройство (пин DEVICE) с ID 5 сейчас ВКЛючено. Для Zigbee-устройства - оно включено.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'!D5'}</code></td><td class="border px-4 py-2">Пин с ID 5 сейчас ВЫКЛючен (знак ! означает «НЕ»).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3>0'}</code></td><td class="border px-4 py-2">Диммер (ШИМ) с ID 3: значение больше нуля, то есть светит. Для Zigbee - яркость устройства.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3=255'}</code></td><td class="border px-4 py-2">Значение диммера 3 ровно 255.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3g100'}</code></td><td class="border px-4 py-2">Значение диммера 3 БОЛЬШЕ ИЛИ РАВНО 100 (буква g - «greater», то же, что ${'>='}).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3l100'}</code></td><td class="border px-4 py-2">Значение диммера 3 МЕНЬШЕ ИЛИ РАВНО 100 (буква l - «less», то же, что ${'<='}).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'B1'}</code></td><td class="border px-4 py-2">Кнопка с ID 1 сейчас нажата.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'BU1'}</code></td><td class="border px-4 py-2">Кнопка с ID 1 сейчас НЕ нажата.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'BH1'}</code></td><td class="border px-4 py-2">Кнопка с ID 1 сейчас удерживается (долгое нажатие).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'T5>25.5'}</code></td><td class="border px-4 py-2">Температура датчика 5 больше 25.5 градусов.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'T5<10'}</code></td><td class="border px-4 py-2">Температура датчика 5 меньше 10 градусов.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'H4>50'}</code></td><td class="border px-4 py-2">Влажность датчика 4 больше 50 процентов.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'H4<30'}</code></td><td class="border px-4 py-2">Влажность датчика 4 меньше 30 процентов.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'Sr'}</code></td><td class="border px-4 py-2">Sunrise (время восхода), ежедневно рассчитывается по координатам на странице «Global Settings».</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'Ss'}</code></td><td class="border px-4 py-2">Sunset (время заката), ежедневно рассчитывается по координатам на странице «Global Settings».</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'C3'}</code></td><td class="border px-4 py-2">Подставить готовое условие из ячейки C3 (ячейки хранятся на странице «Global Settings», строка Conditions). Вложенность - не глубже двух уровней.</td></tr>
+            </tbody>
+          </table>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">Чем соединять слова (знаки)</h4>
+          <table class="w-full mb-3 bg-white/70">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Знак</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Смысл</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Пример и как читать</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'&'}</code></td><td class="border px-4 py-2">И (нужно, чтобы выполнились ОБА)</td><td class="border px-4 py-2"><code>${'D1&D2'}</code> - устройство 1 включено И устройство 2 включено</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'|'}</code></td><td class="border px-4 py-2">ИЛИ (достаточно ОДНОГО)</td><td class="border px-4 py-2"><code>${'D1|D2'}</code> - включено устройство 1 ИЛИ устройство 2 (или оба)</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'!'}</code></td><td class="border px-4 py-2">НЕ (наоборот)</td><td class="border px-4 py-2"><code>${'!D1'}</code> - устройство 1 выключено; <code>${'!(D1&D2)'}</code> - неверно, что включены оба сразу</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'( )'}</code></td><td class="border px-4 py-2">Скобки - что считать первым</td><td class="border px-4 py-2"><code>${'(D1|D2)&!D3'}</code> - (устройство 1 или устройство 2) И устройство 3 выключено</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'= > < g l'}</code></td><td class="border px-4 py-2">Равно, больше, меньше (g = больше или равно, l = меньше или равно, то же, что ${'>='} и ${'<='})</td><td class="border px-4 py-2"><code>${'T5>25.5'}</code>, <code>${'DV3=255'}</code>, <code>${'DV3l100'}</code></td></tr>
+            </tbody>
+          </table>
+          <p class="mb-3 text-slate-700">Совет: если в одном условии смешиваете & и |, всегда ставьте скобки. Так результат будет именно тот, который вы задумали.</p>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">Готовые примеры - просто скопируйте в нужное поле</h4>
+          <table class="w-full mb-3 bg-white/70">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Что вписать в поле</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Что произойдёт</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D2'}</code></td><td class="border px-4 py-2">Включить пин 6, только если устройство 2 включено.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?!D2'}</code></td><td class="border px-4 py-2">Включить пин 6, только если устройство 2 выключено.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:2?D1&D2'}</code></td><td class="border px-4 py-2">Переключить пин 6, только если включены и устройство 1, и устройство 2.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D1|D2'}</code></td><td class="border px-4 py-2">Включить пин 6, если включено хотя бы одно из устройств 1 и 2.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D1&!D2'}</code></td><td class="border px-4 py-2">Включить пин 6, если устройство 1 включено, а устройство 2 выключено.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:0?!D1&!D2'}</code></td><td class="border px-4 py-2">Выключить пин 6, только если оба устройства выключены.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?(D1|D2)&!D3'}</code></td><td class="border px-4 py-2">Включить пин 6, если включено устройство 1 или 2 и при этом устройство 3 выключено.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:2?Ss'}</code></td><td class="border px-4 py-2">Переключить пин 6 по условию заката (Ss).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?Sr'}</code></td><td class="border px-4 py-2">Включить пин 6 по условию восхода (Sr).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?Ss&B1'}</code></td><td class="border px-4 py-2">Включить пин 6, если выполнено условие заката (Ss) и нажата кнопка 1.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?Ss|D1'}</code></td><td class="border px-4 py-2">Включить пин 6, если выполнено условие заката (Ss) ИЛИ включено устройство 1.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?BU1'}</code></td><td class="border px-4 py-2">Включить пин 6, только если кнопка 1 не нажата.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?BH1'}</code></td><td class="border px-4 py-2">Включить пин 6, только если кнопка 1 удерживается.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5>25.5'}</code></td><td class="border px-4 py-2">Включить пин 6, если на датчике 5 жарче 25.5 градусов.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5<18'}</code></td><td class="border px-4 py-2">Включить пин 6, если на датчике 5 холоднее 18 градусов.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?H4>50'}</code></td><td class="border px-4 py-2">Включить пин 6, если влажность на датчике 4 выше 50 процентов.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?H4<30'}</code></td><td class="border px-4 py-2">Включить пин 6, если влажность на датчике 4 ниже 30 процентов.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5>25&H4>60&!D7'}</code></td><td class="border px-4 py-2">Включить пин 6, если жарко, влажно и вентилятор (устройство 7) ещё не включён.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:0?Sr&T5<20'}</code></td><td class="border px-4 py-2">Выключить пин 6, если выполнено условие восхода (Sr) и при этом холодно.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?(T5>28|H4>70)&Sr'}</code></td><td class="border px-4 py-2">Включить пин 6, если выполнено условие восхода (Sr) и при этом жарко или очень влажно.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3>0'}</code></td><td class="border px-4 py-2">Включить пин 6, только если диммер 3 светит (значение больше нуля).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3=255'}</code></td><td class="border px-4 py-2">Включить пин 6, только если диммер 3 ровно на 255.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3g100'}</code></td><td class="border px-4 py-2">Включить пин 6, только если значение диммера 3 больше или равно 100.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3l100'}</code></td><td class="border px-4 py-2">Включить пин 6, только если значение диммера 3 меньше или равно 100.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3>0&Ss'}</code></td><td class="border px-4 py-2">Включить пин 6, если диммер 3 светит и выполнено условие заката (Ss).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Включить пин 6, только если Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 89).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV93g100'}</code></td><td class="border px-4 py-2">Включить пин 6, только если яркость Zigbee-устройства 93 не меньше 100.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'93.1:2?D2'}</code></td><td class="border px-4 py-2">Zigbee: слот 93, sub-action 1, переключить - только если устройство 2 включено.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5<25|D1'}</code></td><td class="border px-4 py-2">Включить пин 6, если на датчике 5 ниже 25 градусов ИЛИ включено устройство 1 (особый случай при неисправном датчике - см. правила ниже).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?C3'}</code></td><td class="border px-4 py-2">Включить пин 6, только если верно готовое условие из ячейки C3.</td></tr>
+            </tbody>
+          </table>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">Несколько действий в одном поле</h4>
+          <table class="w-full mb-3 bg-white/70">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Что вписать в поле</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Что произойдёт</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D2,7:0?!D2'}</code></td><td class="border px-4 py-2">Два действия сразу: пин 6 включить, если устройство 2 включено; пин 7 выключить, если устройство 2 выключено.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1,7:0?D2'}</code></td><td class="border px-4 py-2">Пин 6 включить всегда; пин 7 выключить только если устройство 2 включено.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:2?D1,12:2?!D1,18:0'}</code></td><td class="border px-4 py-2">Три действия: пин 6 переключить, если устройство 1 включено; пин 12 переключить, если устройство 1 выключено; пин 18 выключить всегда.</td></tr>
+            </tbody>
+          </table>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">Важные правила</h4>
+          <ul class="list-disc ml-6 mb-3 space-y-1">
+            <li><b>Условие проверяется в момент нажатия</b> и для каждого поля отдельно (одно нажатие, двойное, долгое). Если в момент нажатия было НЕТ - действие пропущено. Когда условие потом станет ДА, само по себе ничего не произойдёт: нужно нажать кнопку ещё раз.</li>
+            <li><b>Условие работает</b> и при нажатии физической кнопки, и когда «нажатие» приходит по API или MQTT.</li>
+            <li><b>Главный ползунок On/Off в строке кнопки</b> сильнее любого условия: если он выключен, кнопка игнорируется целиком.</li>
+            <li><b>Если в действии указан выключатель</b> (пин со страницы Switch pin), он передаст команду своим устройствам, а условие из его поля Connection в этом случае не проверяется. Пишите условие прямо в действии кнопки, через знак ?.</li>
+            <li><b>Прямое управление устройством</b> (ползунок On/Off у самого реле, команда API или MQTT прямо на реле) условия не проверяет.</li>
+            <li><b>Неисправный датчик</b> даёт ответ «неизвестно», и действие блокируется, даже если перед условием стоит !. Исключение: явная правда через |. Например <code>${'6:1?T5<25|D1'}</code> сработает при неисправном датчике 5, если устройство 1 включено.</li>
+            <li><b>Длина поля - 124 символа вместе с условиями.</b> Чем длиннее условия, тем меньше действий поместится. Если условие длинное и нужно в нескольких местах, запишите его один раз в ячейку на странице «Global Settings» (строка Conditions, 12 ячеек) и пишите в действии коротко: <code>${'6:1?C3'}</code>.</li>
+            <li><b>Допустимые символы в условии:</b> латинские буквы, цифры и знаки ( ) ! & | = ${'>'} ${'<'}, точка и минус (минус только для отрицательного числа справа от знака сравнения). Пробелы не допускаются. Если запись неверна, под полем появится красное сообщение, и сохранить строку не получится.</li>
+            <li><b>Жёлтое предупреждение под полем</b> обычно значит, что действие ссылается на ячейку Conditions, которая была сброшена в 0 (например, после удаления устройства). Такое действие заблокировано, пока в ячейке снова не будет верное условие.</li>
+            <li><b>Одну ячейку можно использовать во многих местах.</b> Число рядом с ячейкой на странице «Global Settings» показывает, сколько мест её используют. Правка ячейки сразу меняет поведение всех этих мест.</li>
+          </ul>
+        </div>
+        </section>
+      </div>
+    `,
+    en: html`
+      <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Control by SMS and DTMF</h2>
+<div><h4 class="text-lg font-bold text-black mt-4 mb-2">On/Off switch by SMS and DTMF</h4><p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Action</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (during a call)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Turn the row off (slider Off)</td><td class="border px-3 py-1"><code>5#00*</code></td><td class="border px-3 py-1"><code>5#00*#</code></td></tr><tr><td class="border px-3 py-1">Turn the row on (slider On)</td><td class="border px-3 py-1"><code>5#11*</code></td><td class="border px-3 py-1"><code>5#11*#</code></td></tr></tbody></table><p class="mb-2">In the table ID = 5 is an example, use the ID of your own row.</p><p class="mb-2">Several commands in a row: <code>5#00*7#11*</code> (SMS) and <code>5#00*7#11*#</code> (call). Input during a call always ends with <code>*#</code>: the last command already ends with <code>*</code>, so only <code>#</code> is added at the end.</p><p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p><p class="mb-2">An SMS report is sent back, for example <code>OnOff: Pin5=OFF</code> (the report is sent only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.</p><p class="mb-2">Do not confuse them: <code>ID#SC*</code>, <code>ID#DC*</code> and <code>ID#LP*</code> press the button (click, double click, long press), while <code>ID#00*</code> and <code>ID#11*</code> change the On/Off slider. While the slider is Off, clicks of this button are blocked.</p></div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">SMS & DTMF Command Examples</h3>
+          <table class="w-full bg-white/70">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Source</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Command</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Description</th>
               </tr>
             </thead>
             <tbody>
@@ -658,40 +656,199 @@ const TabButton = () => {
               </tr>
             </tbody>
           </table>
-          <div class="mt-2 text-sm text-slate-500">
+          <div class="mt-2 text-slate-700">
             Note: You can also use the digital commands (30#3*#, 30#4*#, 30#5*#) natively via SMS.
           </div>
         </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">How to connect a button (step by step)</h2>
+
+          <ol class="list-decimal ml-6 space-y-3">
+            <li>
+              <b>Choose a pin.</b> Open the <b>"Select pin(s)"</b> page, find the pin you need
+              (for example, <b>PA15</b>), set its mode to <b>"BUTTON"</b> and press <b>"Submit"</b>. After that the pin appears in the table on this page by itself.
+            </li>
+            <li>
+              <b>Choose the pull type</b> ("Pullup type" column) by pressing <b>Edit</b>:
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>GPIO_PULLUP</b> — if pressing the button connects the pin to <b>ground (GND)</b>. This is the most common case.</li>
+                <li><b>GPIO_PULLDOWN</b> — if pressing the button connects the pin to <b>the supply voltage (3.3V)</b>.</li>
+              </ul>
+              Not sure? Start with GPIO_PULLUP. If the button triggers by itself or does not trigger at all, try the other option.
+            </li>
+            <li>
+              <b>Tell it what to do.</b> In the <b>SINGLE CLICK</b> (one press), <b>DOUBLE CLICK</b>
+              (two quick presses) and <b>LONG PRESS</b> (hold) fields, write which device to control.
+              Format: <b>device ID, colon, command</b>. No spaces!
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>1</b> — turn on</li>
+                <li><b>0</b> — turn off</li>
+                <li><b>2</b> — toggle (if it was off it turns on, if it was on it turns off; this is TOGGLE)</li>
+              </ul>
+            </li>
+            <li>
+              <b>Turn on the On/Off slider</b> in the button's row. If it is off, the button is ignored.
+            </li>
+            <li>
+              <b>Test it:</b> press the physical button — the device should react.
+            </li>
+          </ol>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Important:</b> the action fields take the <b>ID of the device you want to control</b>
+            (LED, relay, Zigbee device), <b>not</b> the ID of the button itself.
+          </div>
+
+          <div class="mt-4">
+            <b>Example.</b> A button is connected to pin <b>PA15</b>. The board has these LEDs:
+            <ul class="list-disc ml-6 mt-1">
+              <li><b>ID = 6</b> — green LED</li>
+              <li><b>ID = 12</b> — blue LED</li>
+              <li><b>ID = 18</b> — red LED</li>
+            </ul>
+            <div class="mt-2">We want:</div>
+            <ul class="list-disc ml-6 mt-1">
+              <li>one press to toggle the green LED: in SINGLE CLICK write <code>6:2</code></li>
+              <li>a double press to turn the blue LED on: in DOUBLE CLICK write <code>12:1</code></li>
+              <li>a long press to turn all three LEDs off: in LONG PRESS write <code>6:0,12:0,18:0</code></li>
+            </ul>
+            To control several devices at once, list them separated by commas:
+            <code>6:1,12:1,18:0</code> (turn on green and blue, turn off red).
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">API control (local network)</h2>
         <div>
-          <h2 class="text-xl font-bold mb-2">How many devices can be connected (SINGLE CLICK)</h2>
+          <p class="mb-1">This API allows you to remotely control a switch by simply executing a command in the browser of any device on your local network.</p>
+          <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">Do not expose your APIs to the internet - it's not secure!</p>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">API Examples</h3>
+          <table class="w-full bg-white/70">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">API</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="border px-4 py-2">
+                  http://192.168.1.24:8000/api/Zerg/button?id=30&single_click
+                </td>
+                <td class="border px-4 py-2">
+                  This API command will execute the action specified in 'SINGLE CLICK' with id = 30. Where "Zerg" is your 'Token'.
+                </td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">
+                  http://192.168.1.24:8000/api/Zerg/button?id=30&double_click
+                </td>
+                <td class="border px-4 py-2">
+                  This API command will execute the action specified in 'DOUBLE CLICK' with id = 30. Where "Zerg" is your 'Token'.
+                </td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">
+                  http://192.168.1.24:8000/api/Zerg/button?id=30&long_press
+                </td>
+                <td class="border px-4 py-2">
+                  This API command will execute the action specified in 'LONG PRESS' with id = 30. Where "Zerg" is your 'Token'.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">MQTT: control and tracking</h2>
+        <div>
+          <p class="mb-1">MQTT allows you to remotely control a switch from the internet!</p>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">MQTT Command Examples</h3>
+          <table class="w-full bg-white/70">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Command</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="border px-4 py-2">Zagotovka/button/id=30/single_click</td>
+                <td class="border px-4 py-2">
+                  This MQTT command will execute the command specified in 'SINGLE CLICK' with id = 30. Where "Zagotovka" is your 'RX topic'.
+                </td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">Zagotovka/button/id=30/double_click</td>
+                <td class="border px-4 py-2">
+                  This MQTT command will execute the command specified in 'DOUBLE CLICK' with id = 30. Where "Zagotovka" is your 'RX topic'.
+                </td>
+              </tr>
+              <tr>
+                <td class="border px-4 py-2">Zagotovka/button/id=30/long_press</td>
+                <td class="border px-4 py-2">
+                  This MQTT command will execute the command specified in 'LONG PRESS' with id = 30. Where "Zagotovka" is your 'RX topic'.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">Change Tracking</h3>
+          <table class="w-full bg-white/70">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Topic</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="border px-4 py-2 whitespace-nowrap">Swarm/button/</td>
+                <td class="border px-4 py-2">
+                  This page tracks changes in buttons and automatically sends each change via MQTT to the topic: Swarm/button/. Where "Swarm" is your 'TX topic'.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Action fields: SINGLE CLICK, DOUBLE CLICK, LONG PRESS</h2>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">How many devices can be connected (SINGLE CLICK)</h3>
           <p class="mb-2">The SINGLE CLICK field defines what happens on <b>one press</b> of the button. You can list several devices at once, separated by commas — <b>about 25</b>.</p>
           <p class="mb-2"><b>Example:</b> <b>6:1,7:0,12:2</b> means: turn on device #6, turn off #7, toggle #12.</p>
-          <div class="mt-2 text-sm text-slate-500">
-            Notes: (1) After the colon: 0 — turn off, 1 — turn on, 2 — toggle to the opposite state. (2) Write without spaces. (3) The exact limit is 124 characters: up to 31 devices with one-digit numbers, up to 25 with two-digit numbers, up to 20 with three-digit numbers.
+          <div class="mt-2 text-slate-700">
+            Notes: (1) After the colon: 0 — turn off, 1 — turn on, 2 — toggle to the opposite state. (2) Write without spaces. (3) The exact limit is 124 characters including conditions after the ? sign (the numbers below are for entries without conditions): up to 31 devices with one-digit numbers, up to 25 with two-digit numbers, up to 20 with three-digit numbers.
           </div>
         </div>
         <div>
-          <h2 class="text-xl font-bold mb-2">How many devices can be connected (DOUBLE CLICK)</h2>
+          <h3 class="text-lg font-bold text-black mb-2">How many devices can be connected (DOUBLE CLICK)</h3>
           <p class="mb-2">The DOUBLE CLICK field defines what happens on <b>two quick presses in a row</b>. You can list several devices at once, separated by commas — <b>about 25</b>.</p>
           <p class="mb-2"><b>Example:</b> <b>6:0,7:0,8:0,9:0</b> means: turn off devices #6, #7, #8 and #9.</p>
-          <div class="mt-2 text-sm text-slate-500">
-            Notes: (1) After the colon: 0 — turn off, 1 — turn on, 2 — toggle to the opposite state. (2) Write without spaces. (3) The exact limit is 124 characters: up to 31 devices with one-digit numbers, up to 25 with two-digit numbers, up to 20 with three-digit numbers.
+          <div class="mt-2 text-slate-700">
+            Notes: (1) After the colon: 0 — turn off, 1 — turn on, 2 — toggle to the opposite state. (2) Write without spaces. (3) The exact limit is 124 characters including conditions after the ? sign (the numbers below are for entries without conditions): up to 31 devices with one-digit numbers, up to 25 with two-digit numbers, up to 20 with three-digit numbers.
           </div>
         </div>
         <div>
-          <h2 class="text-xl font-bold mb-2">How many devices can be connected (LONG PRESS)</h2>
+          <h3 class="text-lg font-bold text-black mb-2">How many devices can be connected (LONG PRESS)</h3>
           <p class="mb-2">The LONG PRESS field defines what happens on <b>holding</b> the button. You can list several devices at once, separated by commas — <b>about 25</b>.</p>
           <p class="mb-2"><b>Example:</b> <b>6:0,7:0,12:0,15:0</b> means: "turn everything off": devices #6, #7, #12 and #15 turn off with one long press.</p>
-          <div class="mt-2 text-sm text-slate-500">
-            Notes: (1) After the colon: 0 — turn off, 1 — turn on, 2 — toggle to the opposite state. (2) Write without spaces. (3) The exact limit is 124 characters: up to 31 devices with one-digit numbers, up to 25 with two-digit numbers, up to 20 with three-digit numbers.
+          <div class="mt-2 text-slate-700">
+            Notes: (1) After the colon: 0 — turn off, 1 — turn on, 2 — toggle to the opposite state. (2) Write without spaces. (3) The exact limit is 124 characters including conditions after the ? sign (the numbers below are for entries without conditions): up to 31 devices with one-digit numbers, up to 25 with two-digit numbers, up to 20 with three-digit numbers.
           </div>
         </div>
         <div>
-          <h2 class="text-xl font-bold mb-2">Action Field Format</h2>
-          <p class="mb-2">Maximum number of entries in <code>ID:Action</code> format with <code>,</code> separator is limited by string length — <b>124 characters</b>.</p>
+          <h3 class="text-lg font-bold text-black mb-2">Action Field Format</h3>
+          <p class="mb-2">Maximum number of entries in <code>ID:Action</code> format with <code>,</code> separator is limited by string length — <b>124 characters</b> (including conditions after the ? sign).</p>
           <p class="mb-2">Entry examples: <code>6:1</code> (pin 6 → ON), <code>93:2</code> (pin 93 → TOGGLE), <code>93.1:0</code> (Zigbee slot 93, sub-action 1 → OFF).</p>
-          <table class="w-full text-sm">
-            <thead><tr><th class="border px-3 py-1">ID Length</th><th class="border px-3 py-1">Example</th><th class="border px-3 py-1">Bytes per entry</th><th class="border px-3 py-1">Entries in string</th></tr></thead>
+          <table class="w-full bg-white/70">
+            <thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">ID Length</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Example</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Bytes per entry</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Entries in string</th></tr></thead>
             <tbody>
               <tr><td class="border px-3 py-1">1 digit</td><td class="border px-3 py-1"><code>5:1</code></td><td class="border px-3 py-1">3 + comma = 4</td><td class="border px-3 py-1">up to 31</td></tr>
               <tr><td class="border px-3 py-1">2 digits</td><td class="border px-3 py-1"><code>15:1</code></td><td class="border px-3 py-1">4 + comma = 5</td><td class="border px-3 py-1">up to 25</td></tr>
@@ -699,6 +856,147 @@ const TabButton = () => {
             </tbody>
           </table>
         </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">${condHelpTitle(false)}</h2>
+        <div class="space-y-3">
+          <p class="text-slate-600 italic mb-2">Press the button, but act only if...</p>
+          <p class="mb-2">A condition is a "lock" on a single action in the <b>SINGLE CLICK</b>, <b>DOUBLE CLICK</b> and <b>LONG PRESS</b> fields. When you press the button, the firmware checks the condition of each action separately. If the condition is true (YES), the action is executed. If it is false (NO), that action is silently skipped, and the other actions in the same field run as usual. If there is no condition, the action always runs.</p>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">How to write a condition: three steps</h4>
+          <ol class="list-decimal ml-6 mb-3 space-y-1">
+            <li>Write the action as usual: <code>${'6:1'}</code> (pin 6, turn on).</li>
+            <li>Right after it, <b>without spaces</b>, put the <b>?</b> sign: <code>${'6:1?'}</code></li>
+            <li>Add the condition: <code>${'6:1?D2&!D3'}</code>. Read it as: "turn on pin 6, but only if device 2 is on and device 3 is off".</li>
+          </ol>
+          <p class="mb-3">General form: <code>${'ID:command?condition'}</code>. Command: <b>0</b> - turn off, <b>1</b> - turn on, <b>2</b> - toggle to the opposite. Several actions are separated by commas, and each one may have its own condition or none at all.</p>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
+            <p class="text-lg font-bold text-black mb-1">Real-life example</p>
+            <p class="mb-1">A wall button controls a light (pin 6) and a fan (pin 7, connected to device 7). We want one press to turn the light on, and to turn the fan on only if it is still off.</p>
+            <p class="mb-1">In the SINGLE CLICK field type: <code>${'6:1,7:1?!D7'}</code></p>
+            <p>Result: the light always turns on. The fan turns on only if it is off right now (!D7). If the fan is already running, that part is simply skipped.</p>
+          </div>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">Building blocks (words)</h4>
+          <table class="w-full mb-3 bg-white/70">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Entry</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Meaning</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'D5'}</code></td><td class="border px-4 py-2">The device (DEVICE pin) with ID 5 is ON now. For a Zigbee device - it is on.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'!D5'}</code></td><td class="border px-4 py-2">The pin with ID 5 is OFF now (the ! sign means "NOT").</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3>0'}</code></td><td class="border px-4 py-2">Dimmer (PWM) with ID 3: value above zero, that is, it is lit. For Zigbee - device brightness.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3=255'}</code></td><td class="border px-4 py-2">Dimmer 3 value is exactly 255.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3g100'}</code></td><td class="border px-4 py-2">Dimmer 3 value is GREATER THAN OR EQUAL TO 100 (letter g = "greater", same as ${'>='}).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3l100'}</code></td><td class="border px-4 py-2">Dimmer 3 value is LESS THAN OR EQUAL TO 100 (letter l = "less", same as ${'<='}).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'B1'}</code></td><td class="border px-4 py-2">Button with ID 1 is pressed now.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'BU1'}</code></td><td class="border px-4 py-2">Button with ID 1 is NOT pressed now.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'BH1'}</code></td><td class="border px-4 py-2">Button with ID 1 is being held (long press).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'T5>25.5'}</code></td><td class="border px-4 py-2">Temperature of sensor 5 is above 25.5 degrees.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'T5<10'}</code></td><td class="border px-4 py-2">Temperature of sensor 5 is below 10 degrees.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'H4>50'}</code></td><td class="border px-4 py-2">Humidity of sensor 4 is above 50 percent.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'H4<30'}</code></td><td class="border px-4 py-2">Humidity of sensor 4 is below 30 percent.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'Sr'}</code></td><td class="border px-4 py-2">Sunrise (time of sunrise), calculated daily from the coordinates set on the "Global Settings" page.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'Ss'}</code></td><td class="border px-4 py-2">Sunset (time of sunset), calculated daily from the coordinates set on the "Global Settings" page.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'C3'}</code></td><td class="border px-4 py-2">Insert the ready-made condition from cell C3 (cells are stored on the "Global Settings" page, Conditions row). Nesting no deeper than two levels.</td></tr>
+            </tbody>
+          </table>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">How to join the words (signs)</h4>
+          <table class="w-full mb-3 bg-white/70">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Sign</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Meaning</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Example and how to read it</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'&'}</code></td><td class="border px-4 py-2">AND (BOTH must be true)</td><td class="border px-4 py-2"><code>${'D1&D2'}</code> - device 1 is on AND device 2 is on</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'|'}</code></td><td class="border px-4 py-2">OR (ONE is enough)</td><td class="border px-4 py-2"><code>${'D1|D2'}</code> - device 1 OR device 2 is on (or both)</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'!'}</code></td><td class="border px-4 py-2">NOT (the opposite)</td><td class="border px-4 py-2"><code>${'!D1'}</code> - device 1 is off; <code>${'!(D1&D2)'}</code> - it is not true that both are on at once</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'( )'}</code></td><td class="border px-4 py-2">Brackets - what to evaluate first</td><td class="border px-4 py-2"><code>${'(D1|D2)&!D3'}</code> - (device 1 or device 2) AND device 3 is off</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'= > < g l'}</code></td><td class="border px-4 py-2">Equal, greater, less (g = greater or equal, l = less or equal, same as ${'>='} and ${'<='})</td><td class="border px-4 py-2"><code>${'T5>25.5'}</code>, <code>${'DV3=255'}</code>, <code>${'DV3l100'}</code></td></tr>
+            </tbody>
+          </table>
+          <p class="mb-3 text-slate-700">Tip: if you mix & and | in one condition, always use brackets. Then the result is exactly what you meant.</p>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">Ready-made examples - just copy into the needed field</h4>
+          <table class="w-full mb-3 bg-white/70">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">What to type in the field</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">What happens</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D2'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if device 2 is on.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?!D2'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if device 2 is off.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:2?D1&D2'}</code></td><td class="border px-4 py-2">Toggle pin 6 only if both device 1 and device 2 are on.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D1|D2'}</code></td><td class="border px-4 py-2">Turn on pin 6 if at least one of devices 1 and 2 is on.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D1&!D2'}</code></td><td class="border px-4 py-2">Turn on pin 6 if device 1 is on and device 2 is off.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:0?!D1&!D2'}</code></td><td class="border px-4 py-2">Turn off pin 6 only if both devices are off.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?(D1|D2)&!D3'}</code></td><td class="border px-4 py-2">Turn on pin 6 if device 1 or 2 is on and device 3 is off.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:2?Ss'}</code></td><td class="border px-4 py-2">Toggle pin 6 on the sunset condition (Ss).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?Sr'}</code></td><td class="border px-4 py-2">Turn on pin 6 on the sunrise condition (Sr).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?Ss&B1'}</code></td><td class="border px-4 py-2">Turn on pin 6 if the sunset condition (Ss) is met and button 1 is pressed.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?Ss|D1'}</code></td><td class="border px-4 py-2">Turn on pin 6 if the sunset condition (Ss) is met OR device 1 is on.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?BU1'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if button 1 is not pressed.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?BH1'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if button 1 is being held.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5>25.5'}</code></td><td class="border px-4 py-2">Turn on pin 6 if sensor 5 reads above 25.5 degrees.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5<18'}</code></td><td class="border px-4 py-2">Turn on pin 6 if sensor 5 reads below 18 degrees.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?H4>50'}</code></td><td class="border px-4 py-2">Turn on pin 6 if humidity on sensor 4 is above 50 percent.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?H4<30'}</code></td><td class="border px-4 py-2">Turn on pin 6 if humidity on sensor 4 is below 30 percent.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5>25&H4>60&!D7'}</code></td><td class="border px-4 py-2">Turn on pin 6 if it is hot, humid and the fan (device 7) is not on yet.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:0?Sr&T5<20'}</code></td><td class="border px-4 py-2">Turn off pin 6 if the sunrise condition (Sr) is met and it is cold.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?(T5>28|H4>70)&Sr'}</code></td><td class="border px-4 py-2">Turn on pin 6 if the sunrise condition (Sr) is met and it is hot or very humid.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3>0'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if dimmer 3 is lit (value above zero).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3=255'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if dimmer 3 is exactly 255.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3g100'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if dimmer 3 value is greater than or equal to 100.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3l100'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if dimmer 3 value is less than or equal to 100.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3>0&Ss'}</code></td><td class="border px-4 py-2">Turn on pin 6 if dimmer 3 is lit and the sunset condition (Ss) is met.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 89).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV93g100'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if the brightness of Zigbee device 93 is 100 or more.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'93.1:2?D2'}</code></td><td class="border px-4 py-2">Zigbee: slot 93, sub-action 1, toggle - only if device 2 is on.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5<25|D1'}</code></td><td class="border px-4 py-2">Turn on pin 6 if sensor 5 is below 25 degrees OR device 1 is on (special case with a dead sensor - see the rules below).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?C3'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if the ready-made condition from cell C3 is true.</td></tr>
+            </tbody>
+          </table>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">Several actions in one field</h4>
+          <table class="w-full mb-3 bg-white/70">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">What to type in the field</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">What happens</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D2,7:0?!D2'}</code></td><td class="border px-4 py-2">Two actions at once: turn on pin 6 if device 2 is on; turn off pin 7 if device 2 is off.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1,7:0?D2'}</code></td><td class="border px-4 py-2">Turn on pin 6 always; turn off pin 7 only if device 2 is on.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:2?D1,12:2?!D1,18:0'}</code></td><td class="border px-4 py-2">Three actions: toggle pin 6 if device 1 is on; toggle pin 12 if device 1 is off; turn off pin 18 always.</td></tr>
+            </tbody>
+          </table>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">Important rules</h4>
+          <ul class="list-disc ml-6 mb-3 space-y-1">
+            <li><b>The condition is checked at the moment of the press</b>, separately for each field (single click, double click, long press). If it was NO at the moment of the press, the action is skipped. When the condition later becomes YES, nothing happens by itself: press the button again.</li>
+            <li><b>The condition works</b> both for a press of the physical button and when the "press" comes via API or MQTT.</li>
+            <li><b>The master On/Off slider in the button row</b> is stronger than any condition: if it is off, the button is ignored entirely.</li>
+            <li><b>If an action points to a switch</b> (a pin from the Switch pin page), it passes the command to its devices, and the condition from its Connection field is NOT checked in that case. Write the condition right in the button action, with the ? sign.</li>
+            <li><b>Direct control of a device</b> (the On/Off slider of the relay itself, an API or MQTT command sent straight to the relay) does not check conditions.</li>
+            <li><b>A dead sensor</b> gives the answer "unknown", and the action is blocked even if the condition starts with !. Exception: explicit truth through |. For example <code>${'6:1?T5<25|D1'}</code> fires with a dead sensor 5 if device 1 is on.</li>
+            <li><b>The field length is 124 characters including the conditions.</b> The longer the conditions, the fewer actions fit. If a condition is long and needed in several places, write it once into a cell on the "Global Settings" page (Conditions row, 12 cells) and use it in the action in short form: <code>${'6:1?C3'}</code>.</li>
+            <li><b>Allowed characters in a condition:</b> Latin letters, digits and the signs ( ) ! & | = ${'>'} ${'<'}, a dot and a minus sign (the minus only for a negative number to the right of a comparison sign). Spaces are not allowed. If the entry is wrong, a red message appears under the field and the row cannot be saved.</li>
+            <li><b>A yellow warning under the field</b> usually means that the action refers to a Conditions cell that was reset to 0 (for example, after a device was deleted). Such an action is blocked until the cell holds a correct condition again.</li>
+            <li><b>One cell can be used in many places.</b> The number next to a cell on the "Global Settings" page shows how many places use it. Editing a cell instantly changes the behavior of all those places.</li>
+          </ul>
+        </div>
+        </section>
       </div>
     `,
   };
@@ -793,7 +1091,7 @@ const TabButton = () => {
   if (!varbutton) return '';
 
   return html`
-    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-center items-center">
+    <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-start items-center" style="overflow-anchor:none;">
       <!-- Decorative background glow -->
       <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
@@ -838,7 +1136,7 @@ const TabButton = () => {
 
             <div class="flex justify-end mt-6">
               <button
-                onclick=${() => setShowHelp(!showHelp)}
+                onclick=${(e) => { lockToggle(e); setShowHelp(!showHelp); }}
                 class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
               >
                 ${showHelp ? 'Hide Help' : 'Show Help'}
@@ -847,7 +1145,7 @@ const TabButton = () => {
 
             ${showHelp &&
               html`
-                <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700">
+                <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;overflow-y:auto;">
                   ${helpContent[language]}
                 </div>
               `}
@@ -871,3 +1169,4 @@ const TabButton = () => {
 };
 
 export { TabButton };
+

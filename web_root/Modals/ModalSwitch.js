@@ -1,9 +1,10 @@
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
-import { fetchConditions } from '../condlib.js';
+import { fetchConditions, fetchCondPool, condPayload, validateCondExpr, CondInput } from '../condlib.js';
 
 function ModalSwitch({
   modalType,
@@ -14,6 +15,7 @@ function ModalSwitch({
   selectedSwitch,
   onSwitchChange,
   connectionOptions,
+  pintopin = [],
   SliderComponent = MyPolzunok
 }) {
   const [switchInfo, setSwitchInfo] = useState(selectedSwitch?.info || '');
@@ -24,7 +26,34 @@ function ModalSwitch({
   );
   const [pinOptions, setPinOptions] = useState([]);
   const [condsList, setCondsList] = useState([]);
-  const [linkCond, setLinkCond] = useState(0);
+  const [poolInfo, setPoolInfo] = useState(null);
+  // Свободное выражение условия связи (текст) + исходное состояние, чтобы
+  // не превращать ссылку на ячейку библиотеки в собственное выражение при
+  // простом пересохранении.
+  const [linkExpr, setLinkExpr] = useState('');
+  const [condText0, setCondText0] = useState('');
+  const [condNum0, setCondNum0] = useState(0);
+
+  // Связь выключателя с выбранным устройством (по id устройства)
+  const linkOf = (conn) => {
+    if (!Array.isArray(pintopin) || conn === '' || conn === undefined || conn === null) return null;
+    const opt = pinOptions.find(
+      (p) => p.pins === conn || String(p.id) === String(conn)
+    );
+    if (!opt) return null;
+    return (
+      pintopin.find(
+        (l) => l.idin === selectedSwitch?.id && String(l.idout) === String(opt.id)
+      ) || null
+    );
+  };
+
+  const loadCondFor = (conn) => {
+    const l = linkOf(conn);
+    setLinkExpr(l?.cexpr || '');
+    setCondText0(l?.cexpr || '');
+    setCondNum0(parseInt(l?.cond, 10) || 0);
+  };
 
   const fetchWithRetry = async (url, options = {}, retries = 3, delay = 1000) => {
     for (let i = 0; i < retries; i++) {
@@ -69,8 +98,16 @@ function ModalSwitch({
 
     loadData();
     fetchConditions().then(setCondsList);
+    fetchCondPool().then(setPoolInfo);
     return () => controller.abort();
   }, []);
+
+  // Условие подгружаем после pinOptions (нужен id устройства) и при смене
+  // выбранного устройства — у каждой связи своё условие.
+  useEffect(() => {
+    loadCondFor(selectedConnection);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinOptions, selectedConnection, selectedSwitch?.id]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -87,8 +124,15 @@ function ModalSwitch({
       // не строки в кавычках — из-за этого ptype тихо не сохранялся.
       jsonData.ptype = ptype;
     } else if (modalType === 'connection') {
-      // Дополнительное условие срабатывания новой связи (0 = нет, 1..12)
-      jsonData.cond = parseInt(linkCond) || 0;
+      // Условие связи: свободное выражение "cexpr" либо номер ячейки "cond".
+      const condErr = validateCondExpr(linkExpr);
+      if (condErr) {
+        alert(condErr[document.documentElement.lang === 'en' ? 'en' : 'ru']);
+        return;
+      }
+      delete jsonData.linkcond;
+      delete jsonData.cexpr;
+      Object.assign(jsonData, condPayload({ loadedText: condText0, loadedNum: condNum0, text: linkExpr }));
       // ВАЖНО: берём значение из React-state (selectedConnection), а не из
       // FormData/jsonData.setrpins. Если пин, который был выбран ранее,
       // на момент открытия модалки выпал из pinOptions (например, сменился
@@ -107,6 +151,10 @@ function ModalSwitch({
           ...selectedSwitch.pinact,
           [selectedPin.id]: selectedPin.pins
         };
+        // Условие относится к конкретной связи: id выбранного устройства.
+        // Без него условие применилось бы ко всем НОВЫМ связям этого
+        // выключателя и не смогло бы изменить уже существующую.
+        jsonData.condtarget = selectedPin.id;
       } else if (selectedConnection === '') {
         // Пользователь осознанно выбрал "Select a connection" — это
         // единственный случай, когда связь действительно нужно очистить.
@@ -218,21 +266,15 @@ function ModalSwitch({
                   <tr class="bg-white">
                     <td class="p-2 font-bold">Condition</td>
                     <td class="p-2">
-                      <select
-                        name="linkcond"
-                        value=${String(linkCond)}
-                        onchange=${(e) => setLinkCond(parseInt(e.target.value) || 0)}
-                        class="border rounded p-2 w-full"
-                      >
-                        <option value="0">None</option>
-                        ${condsList.map((c, i) => c ? html`
-                          <option value=${i + 1}>
-                            #${i + 1}: ${c}
-                          </option>
-                        ` : null)}
-                      </select>
+                      <${CondInput}
+                        value=${linkExpr}
+                        onChange=${setLinkExpr}
+                        conds=${condsList}
+                        pool=${poolInfo}
+                        isRu=${true}
+                      />
                       <div class="text-xs text-slate-500 mt-1">
-                        Связь сработает только при истинном условии (библиотека - Global Settings)
+                        Связь сработает только при истинном условии. Пустое поле - без условия. Кнопки C1..C12 вставляют ссылку на ячейку библиотеки условий (панель Conditions под таблицей: её можно править там же).
                       </div>
                     </td>
                   </tr>

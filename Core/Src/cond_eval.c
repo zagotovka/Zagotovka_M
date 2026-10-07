@@ -1,3 +1,4 @@
+
 /*
  * cond_eval.c — вычислитель дополнительных условий срабатывания действий.
  * См. описание синтаксиса в cond_eval.h.
@@ -5,7 +6,7 @@
  * Разбор выражения полностью итеративный (схема "сортировочной станции"),
  * без рекурсии: стеки операторов/операндов фиксированной глубины,
  * переполнение -> ошибка разбора. Сравнения (=, >, <, g, l, >=, <=)
- * сворачиваются на уровне атома: "RV1>50&R2" == (RV1>50)&R2.
+ * сворачиваются на уровне атома: "DV1>50&D2" == (DV1>50)&D2.
  * Приоритет: '!' выше, затем '&', затем '|'.
  */
 
@@ -27,15 +28,169 @@ extern struct Button *button;              /* DTCM, индекс = ID пина *
 extern ds18b20_pin_t ds18b20[MAX_DS18B20_P];
 extern dht22_pin_t *dht22;                 /* DTCM */
 
+/* ── Встроенный пул выражений (свободный ввод на Switch/Encoder/PID) ──
+ *
+ * Строки живут здесь, в .bss (48 * COND_LEN = 2256 Б), а в dbPinToPin /
+ * dbPidConf по-прежнему лежит только uint8_t номера:
+ *   0                    - условия нет;
+ *   1..NUMCOND           - ячейка библиотеки (правится на месте);
+ *   NUMCOND+1..TOTAL     - слот пула (неизменяем после создания).
+ *
+ * Слоты пула НЕ дедуплицируются с ячейками библиотеки намеренно: иначе
+ * "R1", введённое прямо в связи, совпало бы с ячейкой #3, и её правка в
+ * Global Settings молча изменила бы условие связи.
+ */
+static char cond_pool[COND_POOL_EXTRA][COND_LEN];
+static volatile bool cond_pool_dirty = false;
+static bool cond_pool_gc_off = false;
+
+bool cond_pool_take_dirty(void) {
+  bool d = cond_pool_dirty;
+  cond_pool_dirty = false;
+  return d;
+}
+
 /* ── Библиотека условий (строки живут в SetSettings.conds) ──
  * idx == 0            - условие не выбрано -> true (безусловное поведение);
  * idx вне диапазона   - true (защита от мусора);
  * ячейка ПУСТАЯ       - false! Иначе ссылка "C5" на незаполненную ячейку
  *                       сделала бы действие безусловным. */
 bool cond_eval_ref(uint8_t idx) {
-  if (idx == 0 || idx > NUMCOND) return true;
-  if (SetSettings.conds[idx - 1][0] == '\0') return false;
-  return cond_eval(SetSettings.conds[idx - 1]);
+  if (idx == 0) return true;
+
+  if (idx <= NUMCOND) {
+    if (SetSettings.conds[idx - 1][0] == '\0') return false;
+    return cond_eval(SetSettings.conds[idx - 1]);
+  }
+
+  /* Слот встроенного пула: копия под критической секцией, чтобы читатель
+   * (цикл энкодера / PID) не увидел слот пополам перезаписанным. */
+  int slot = (int)idx - NUMCOND - 1;
+  if (slot < 0 || slot >= COND_POOL_EXTRA) return true; /* мусор в конфиге */
+
+  char buf[COND_LEN];
+  taskENTER_CRITICAL();
+  memcpy(buf, cond_pool[slot], COND_LEN);
+  taskEXIT_CRITICAL();
+  buf[COND_LEN - 1] = '\0';
+
+  if (buf[0] == '\0') return false; /* слот пуст -> действие заблокировано */
+  return cond_eval(buf);
+}
+
+/* Вызывается только под критической секцией. Ссылки собираются ОДНИМ
+ * проходом (1024 связи + 24 PID), а не по проходу на каждый слот: иначе под
+ * отключёнными прерываниями было бы до 50 тыс. итераций. */
+static void cond_pool_gc_locked(void) {
+  bool used[COND_POOL_EXTRA];
+  memset(used, 0, sizeof(used));
+
+  if (PinsLinks) {
+    for (int i = 0; i < NUMPINLINKS; i++) {
+      int s = (int)PinsLinks[i].cond - NUMCOND - 1;
+      if (s >= 0 && s < COND_POOL_EXTRA) used[s] = true;
+    }
+  }
+  if (PidConf) {
+    for (int i = 0; i < PID_MAX_SLOTS; i++) {
+      int s = (int)PidConf[i].cond - NUMCOND - 1;
+      if (s >= 0 && s < COND_POOL_EXTRA) used[s] = true;
+    }
+  }
+
+  for (int i = 0; i < COND_POOL_EXTRA; i++) {
+    if (cond_pool[i][0] == '\0' || used[i]) continue;
+    /* Освобождаем ПОЛНОСТЬЮ (а не только первый байт): читатель может
+     * уже скопировать слот и вычислять его прямо сейчас. */
+    memset(cond_pool[i], 0, COND_LEN);
+  }
+}
+
+void cond_pool_gc(void) {
+  taskENTER_CRITICAL();
+  cond_pool_gc_locked();
+  taskEXIT_CRITICAL();
+}
+
+void cond_pool_clear(void) {
+  taskENTER_CRITICAL();
+  memset(cond_pool, 0, sizeof(cond_pool));
+  taskEXIT_CRITICAL();
+}
+
+void cond_pool_freeze(bool on) {
+  taskENTER_CRITICAL();
+  cond_pool_gc_off = on;
+  taskEXIT_CRITICAL();
+}
+
+int cond_pool_used(void) {
+  int n = 0;
+  for (int i = 0; i < COND_POOL_EXTRA; i++)
+    if (cond_pool[i][0] != '\0') n++;
+  return n;
+}
+
+int cond_pool_capacity(void) { return COND_POOL_EXTRA; }
+
+uint8_t cond_intern(const char *expr) {
+  if (expr == NULL) return COND_IDX_NONE;
+
+  const char *q = expr;
+  while (*q == ' ' || *q == '\t') q++;
+  if (*q == '\0') return COND_IDX_NONE;
+
+  size_t len = strlen(q);
+  if (len >= COND_LEN) {
+    printf("[cond] REFUSE: %u chars (max %d)\r\n", (unsigned)len,
+           (int)COND_LEN - 1);
+    return COND_IDX_INVALID;
+  }
+  if (!cond_valid(q)) {
+    printf("[cond] REFUSE: invalid syntax: %s\r\n", q);
+    return COND_IDX_INVALID;
+  }
+
+  taskENTER_CRITICAL();
+  /* 1) дедупликация внутри пула */
+  uint8_t idx = COND_IDX_INVALID;
+  for (int i = 0; i < COND_POOL_EXTRA; i++) {
+    if (cond_pool[i][0] != '\0' && strcmp(cond_pool[i], q) == 0) {
+      idx = (uint8_t)(NUMCOND + 1 + i);
+      break;
+    }
+  }
+  /* 2) новый слот - сначала подчищаем неиспользуемые */
+  if (idx == COND_IDX_INVALID) {
+    if (!cond_pool_gc_off) cond_pool_gc_locked();
+    for (int i = 0; i < COND_POOL_EXTRA; i++) {
+      if (cond_pool[i][0] != '\0') continue;
+      memcpy(cond_pool[i], q, len + 1);
+      idx = (uint8_t)(NUMCOND + 1 + i);
+      cond_pool_dirty = true;
+      break;
+    }
+  }
+  taskEXIT_CRITICAL();
+
+  if (idx == COND_IDX_INVALID)
+    printf("[cond] REFUSE: pool full (%d slots)\r\n", COND_POOL_EXTRA);
+  return idx;
+}
+
+const char *cond_text(uint8_t idx) {
+  if (idx == 0) return "";
+  if (idx <= NUMCOND) return SetSettings.conds[idx - 1];
+  int slot = (int)idx - NUMCOND - 1;
+  if (slot < 0 || slot >= COND_POOL_EXTRA) return "";
+  return cond_pool[slot];
+}
+
+void cond_text_copy(uint8_t idx, char *dst, size_t dstsz) {
+  if (dst == NULL || dstsz == 0) return;
+  const char *src = cond_text(idx);
+  strncpy(dst, src, dstsz - 1);
+  dst[dstsz - 1] = '\0';
 }
 
 /* ── Время суток для Sr/Ss ──
@@ -200,6 +355,13 @@ static char lc(char ch) {
   return (ch >= 'A' && ch <= 'Z') ? (char)(ch - 'A' + 'a') : ch;
 }
 
+/* Буква операнда "устройство": D (основная) или R (прежнее написание, оставлено
+ * для совместимости с уже сохранёнными условиями). Регистр не важен. */
+static bool is_dev_letter(char ch) {
+  char l = lc(ch);
+  return l == 'd' || l == 'r';
+}
+
 /* Разобрать беззнаковое целое с насыщением (защита от переполнения int
  * на длинных числах вроде "R999999999999"). Возвращает true, если была
  * хотя бы одна цифра. */
@@ -274,8 +436,8 @@ static int parse_operand(cond_ctx_t *c, int32_t *out) {
   int id = 0;
   bool have_digits = false;
 
-  /* RV<id> — значение диммера */
-  if (lc(p[0]) == 'r' && lc(p[1]) == 'v' && is_digit(p[2])) {
+  /* DV<id> (прежнее написание RV<id>) — значение диммера */
+  if (is_dev_letter(p[0]) && lc(p[1]) == 'v' && is_digit(p[2])) {
     p += 2;
     have_digits = scan_uint_sat(&p, &id);
     if (!have_digits) return 0;
@@ -344,8 +506,8 @@ static int parse_operand(cond_ctx_t *c, int32_t *out) {
       *out = 0; /* нет такого условия в библиотеке */
     return 1;
   }
-  /* R<id> — состояние выхода (реле/устройство/вход) */
-  if (lc(p[0]) == 'r' && is_digit(p[1])) {
+  /* D<id> (прежнее написание R<id>) — состояние выхода (DEVICE/PWM/Zigbee) */
+  if (is_dev_letter(p[0]) && is_digit(p[1])) {
     p++;
     have_digits = scan_uint_sat(&p, &id);
     if (!have_digits) return 0;
@@ -373,7 +535,7 @@ static int parse_operand(cond_ctx_t *c, int32_t *out) {
  * "25.5" -> 255 (масштаб x10, как у T/H). Возвращает 0 - не число. */
 static int parse_number(cond_ctx_t *c, int32_t *out, bool *had_decimal) {
   const char *p = c->p;
-  int32_t v = 0;
+  int v = 0;/* was: int32_t v */
   if (!scan_uint_sat(&p, &v)) return 0;
   if (had_decimal) *had_decimal = false;
   if (*p == '.' && is_digit(p[1])) {
@@ -412,9 +574,14 @@ static void parse_atom(cond_ctx_t *c) {
     if (cmp) {
       int32_t n;
       bool had_decimal = false;
+      bool negative = false;
       skip_ws(c);
+      /* Отрицательное число справа от сравнения: "T5<-5", "T5>-0.5".
+       * Минус допустим только сразу перед цифрами (без пробела). */
+      if (*c->p == '-') { negative = true; c->p++; }
       if (!parse_number(c, &n, &had_decimal)) { c->err = true; return; }
       if (tenths && !had_decimal) n *= 10; /* T5>25 == T5>25.0 */
+      if (negative) n = -n;
       if (v == COND_NOVAL) {
         /* Нет данных (датчик не отвечает) - сравнение «НЕИЗВЕСТНО»:
          * блокирует действие и корректно проходит через !, &, | */
@@ -555,9 +722,9 @@ static bool cond_mentions_id(const char *s, int id) {
   while (*p) {
     const char *match = NULL;
     int mlen = 0;
-    if (lc(p[0]) == 'r' && lc(p[1]) == 'v' && is_digit(p[2])) { match = p; mlen = 2; }
+    if (is_dev_letter(p[0]) && lc(p[1]) == 'v' && is_digit(p[2])) { match = p; mlen = 2; }
     else if (lc(p[0]) == 'b' && (lc(p[1]) == 'h' || lc(p[1]) == 'u') && is_digit(p[2])) { match = p; mlen = 2; }
-    else if ((lc(p[0]) == 'r' || lc(p[0]) == 'b' || lc(p[0]) == 't' || lc(p[0]) == 'h') && is_digit(p[1])) { match = p; mlen = 1; }
+    else if ((is_dev_letter(p[0]) || lc(p[0]) == 'b' || lc(p[0]) == 't' || lc(p[0]) == 'h') && is_digit(p[1])) { match = p; mlen = 1; }
     if (match) {
       const char *d = match + mlen;
       int n = 0;
@@ -582,6 +749,17 @@ bool cond_lib_neutralize_id(int id) {
         cond_mentions_id(SetSettings.conds[i], id)) {
       SetSettings.conds[i][0] = '0';
       SetSettings.conds[i][1] = '\0';
+      changed = true;
+    }
+  }
+  /* Встроенный пул: те же правила. Иначе выражение вида "T4>20" пережило бы
+   * удаление датчика 4, а его ID потом достался бы новому устройству. */
+  for (int i = 0; i < COND_POOL_EXTRA; i++) {
+    if (cond_pool[i][0] != '\0' && strcmp(cond_pool[i], "0") != 0 &&
+        cond_mentions_id(cond_pool[i], id)) {
+      cond_pool[i][0] = '0';
+      cond_pool[i][1] = '\0';
+      cond_pool_dirty = true;
       changed = true;
     }
   }
@@ -623,7 +801,7 @@ int cond_strip_id(char *s, int id) {
     *end = saved;
     if (mentions) {
       /* НЕ стираем условие (иначе действие станет безусловным), а делаем
-       * заведомо ложным: "6:1?R2" -> "6:1?0". Действие не сработает,
+       * заведомо ложным: "6:1?D2" -> "6:1?0". Действие не сработает,
        * пока пользователь не задаст новое условие. */
       size_t restlen = strlen(end); /* ",..." или "" */
       q[0] = '?';
@@ -638,3 +816,4 @@ int cond_strip_id(char *s, int id) {
   }
   return removed;
 }
+

@@ -1,9 +1,13 @@
+import { lockToggle } from '../helpLock.js';
+
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote, pageSetting, Toast } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, rulangsettings } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire, enlangsettings } from '../enlang.js';
+import { condHelpTitle } from '../condlib.js';
 
 // ---------------------------------------------------------------------------
 // Глобальный tooltip-портал (position:fixed, body-level)
@@ -150,6 +154,623 @@ const FieldRow = ({ label, tipLabel, index, tip, children }) => {
 };
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Справка по условиям в полях Sunrise / Sunset (RU + EN, карточки Tailwind)
+// Порядок: что это -> как устроена строка -> шаги -> слова и знаки -> примеры
+//          -> частые ошибки -> важные правила
+// ---------------------------------------------------------------------------
+const SUN_HELP = {
+  ru: {
+    panelTitle: condHelpTitle(true) + ' (Sunrise / Sunset)',
+    whatTitle: 'Что это и зачем',
+    what: [
+      'Поля Sunrise и Sunset запускают действия на восходе и на закате: например, включить свет на закате и выключить на рассвете. К любому действию можно добавить «проверку» (условие): «сделай это, но ТОЛЬКО ЕСЛИ ...».',
+      'Это как охранник у двери. В момент восхода (или заката) он подходит и проверяет условие. Верно - действие выполняется. Неверно - действие пропускается, и до завтрашнего дня оно не повторится.',
+    ],
+    onceNote: 'Главное: условие проверяется ОДИН РАЗ - в момент срабатывания (восход или закат плюс смещение). Дальше за ним никто не следит.',
+    formatTitle: 'Как устроена строка',
+    formatIntro: 'Строка состоит из нескольких частей. Пример: -600/6:1?T3<10,12:0',
+    colPart: 'Часть',
+    colMeaning: 'Что означает',
+    format: [
+      ['-600', 'Смещение в секундах от восхода (или заката). 0 - ровно в момент события, -600 - за 10 минут до, 600 - через 10 минут после. Смещение одно на все действия строки.'],
+      ['/', 'Разделитель. Ровно один на всю строку.'],
+      ['6:1', 'Действие: номер пина (ID), двоеточие и что сделать: 0 - выключить, 1 - включить, 2 - переключить на противоположное.'],
+      ['?T3<10', 'Условие: знак ? и сама проверка. Здесь: «только если на датчике 3 меньше 10 градусов». Без знака ? действие выполняется всегда.'],
+      [',', 'Запятая отделяет одно действие от другого. У каждого действия своё условие (или совсем без условия).'],
+    ],
+    formatRead: 'Как читать пример: за 10 минут до события включить пин 6, но только если на датчике 3 меньше 10 градусов; и выключить пин 12 (без условия, всегда).',
+    stepsTitle: 'Как настроить: 4 шага',
+    steps: [
+      'Включите ползунок рядом с нужным полем (Sunrise или Sunset). Пока он выключен, действия этого поля не выполняются.',
+      'Сначала впишите действие без условия и убедитесь, что оно работает. Например: 0/6:1',
+      'Допишите после действия знак ? и условие: 0/6:1?D2. Из чего составить условие - в таблицах ниже.',
+      'Нажмите «Save changes». Если поле покраснело, страница подсказывает, что не так. Но если поле осталось белым, это ещё не значит, что условие верное: страница проверяет только допустимые символы и формат, а не смысл (см. «Частые ошибки»).',
+    ],
+    lifeTitle: 'Пример из жизни: обогрев теплицы',
+    life: 'Вечером нужно включать обогреватель (пин 6) только если на уличном датчике 3 холоднее 10 градусов, а утром - выключать. В поле Sunset пишем: 0/6:1?T3<10. В поле Sunrise пишем: 0/6:0. Результат: в тёплый вечер обогреватель остаётся выключенным, в холодный включается на закате, а на рассвете выключается в любом случае.',
+    buildTitle: 'Как составить своё условие: 4 простых шага',
+    build: [
+      'Решите, ЗА ЧЕМ следить. Буква подсказывает: D - устройство (включено или нет), B - кнопка, T - температура, H - влажность, Sr - день, Ss - ночь.',
+      'Допишите номер устройства (его ID) из таблицы на странице этого устройства. Датчик с ID 3 - это T3, устройство с ID 2 - это D2.',
+      'Если нужно «больше» или «меньше», допишите знак и число: T3<10 значит «на датчике 3 меньше 10 градусов». Для устройств и кнопок число не нужно: D2 - устройство включено, !D2 - выключено. Для отрицательной температуры ставьте минус прямо перед цифрой: T3<-5.',
+      'Если проверок несколько, соедините их знаками: & значит «И» (нужно всё сразу), | значит «ИЛИ» (хватит одного). Пример: T3<10&D1 - «на датчике 3 холодно И устройство 1 включено».',
+    ],
+    wordsTitle: 'Из чего строится условие (слова)',
+    wordsNote: 'Число после буквы - это ID устройства из таблицы на странице этого устройства. Датчик температуры в условии может быть любой, не обязательно связанный с действием.',
+    colEntry: 'Запись',
+    colRead: 'Как читать',
+    words: [
+      ['D5', 'Устройство (пин DEVICE) с ID 5 сейчас ВКЛючено. Для Zigbee-устройства - оно включено.'],
+      ['!D5', 'Пин с ID 5 сейчас ВЫКЛючен (знак ! означает «НЕ»).'],
+      ['DV3>0', 'Диммер (ШИМ) с ID 3 светит (значение больше нуля). Для Zigbee - яркость устройства.'],
+      ['DV3=100', 'Значение диммера 3 ровно 100. У ШИМ-диммера шкала 0-100 (проценты), то есть полная яркость.'],
+      ['DV3g50', 'Значение диммера 3 равно 50 или БОЛЬШЕ (буква g - «greater», то же, что >=).'],
+      ['DV3l50', 'Значение диммера 3 равно 50 или МЕНЬШЕ (буква l - «less», то же, что <=).'],
+      ['B1', 'Кнопка с ID 1 в этот момент нажата.'],
+      ['BU1', 'Кнопка с ID 1 в этот момент НЕ нажата.'],
+      ['BH1', 'Кнопка с ID 1 в этот момент удерживается (долгое нажатие).'],
+      ['T5>25.5', 'Температура датчика 5 больше 25.5 градусов.'],
+      ['T5<10', 'Температура датчика 5 меньше 10 градусов.'],
+      ['T3<-5', 'Температура датчика 3 ниже минус 5 градусов. Минус пишется сразу перед цифрой, без пробела, и только справа от знака сравнения.'],
+      ['T5.2>25.5', 'Температура второго датчика на шине DS18B20 пина 5 больше 25.5 градусов (.2 - номер датчика на шине, одна цифра от 1 до 9; без .номер берётся первый исправный).'],
+      ['H4>50', 'Влажность датчика 4 больше 50 процентов.'],
+      ['H4<30', 'Влажность датчика 4 меньше 30 процентов.'],
+      ['Sr', 'День: в момент срабатывания время между восходом и закатом. Здесь нужен редко: ответ обычно очевиден (после восхода уже день, после заката уже ночь), но со смещением бывает наоборот.'],
+      ['Ss', 'Ночь: в момент срабатывания время между закатом и восходом. Если время восхода и заката не рассчитано, Sr и Ss оба считаются НЕТ.'],
+      ['C3', 'Подставить готовое условие из ячейки C3 библиотеки Conditions (строка ниже на этой странице). Вложенность - не глубже двух уровней.'],
+    ],
+    signsTitle: 'Чем соединять слова (знаки)',
+    colSign: 'Знак',
+    colSignMeaning: 'Смысл',
+    colSignExample: 'Пример и как читать',
+    signs: [
+      ['&', 'И (нужно, чтобы выполнились ОБА)', 'D1&D2', 'устройство 1 включено И устройство 2 включено'],
+      ['|', 'ИЛИ (достаточно ОДНОГО)', 'D1|D2', 'включено устройство 1 ИЛИ устройство 2 (или оба)'],
+      ['!', 'НЕ (наоборот)', '!(D1&D2)', 'неверно, что включены оба сразу (а !D1 - устройство 1 выключено)'],
+      ['( )', 'Скобки - что считать первым', '(D1|D2)&!D3', '(устройство 1 или устройство 2) И устройство 3 выключено'],
+      ['= > < g l', 'Равно, больше, меньше; g - больше или равно, l - меньше или равно (можно писать и >=, <=)', 'T5>25.5, DV3=100, DV3l50', ''],
+    ],
+    tip: 'Совет: если в одном условии смешиваете & и |, всегда ставьте скобки. Без скобок порядок такой: сначала !, потом &, потом | (то есть D1|D2&D3 читается как D1|(D2&D3)). Числа у температуры и влажности пишутся как обычно: T5>25 и T5>25.0 - одно и то же, после точки допускается одна цифра. Большие и маленькие буквы не различаются: r2 и D2 - одно и то же. Пробелы страница убирает сама.',
+    exTitle: 'Готовые примеры - впишите в поле Sunrise или Sunset',
+    exNote: 'В каждом примере записана строка целиком: смещение, действие и условие. Меняйте номера пинов, датчиков и устройств на свои. Условие читается после знака ?.',
+    colType: 'Что вписать в поле',
+    colHappens: 'Что произойдёт',
+    examples: [
+      ['Действия без условия (для сравнения)', [
+        ['0/6:1', 'В момент события включить пин 6. Условия нет, поэтому сработает всегда.'],
+        ['0/6:1,12:0', 'В момент события включить пин 6 и выключить пин 12.'],
+        ['-600/6:1', 'За 10 минут до события включить пин 6.'],
+        ['1800/6:0', 'Через 30 минут после события выключить пин 6.'],
+        ['0/6:2', 'В момент события переключить пин 6 на противоположное состояние.'],
+      ]],
+      ['Устройства и выключатели', [
+        ['0/6:1?D2', 'Включить пин 6, только если устройство 2 включено.'],
+        ['0/6:1?!D2', 'Включить пин 6, только если устройство 2 выключено.'],
+        ['0/6:1?D1&D2', 'Включить пин 6, только если включены и устройство 1, и устройство 2.'],
+        ['0/6:1?D1|D2', 'Включить пин 6, если включено хотя бы одно из устройств 1 и 2.'],
+        ['0/6:1?D1&!D2', 'Включить пин 6, если устройство 1 включено, а устройство 2 выключено.'],
+        ['0/6:1?!D1&!D2', 'Включить пин 6, только если оба устройства выключены.'],
+        ['0/6:1?(D1|D2)&!D3', 'Включить пин 6, если включено устройство 1 или 2 и при этом устройство 3 выключено.'],
+        ['0/6:1?!(D1&D2)', 'Включить пин 6 всегда, кроме случая, когда оба устройства включены сразу.'],
+      ]],
+      ['Диммеры (ШИМ) и Zigbee', [
+        ['0/6:1?DV3>0', 'Включить пин 6, только если диммер 3 светит.'],
+        ['0/6:1?DV3g50', 'Включить пин 6, только если значение диммера 3 равно 50 или больше.'],
+        ['0/6:1?DV3l50', 'Включить пин 6, только если значение диммера 3 равно 50 или меньше.'],
+        ['0/6:1?D93', 'Включить пин 6, только если Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 89).'],
+        ['0/6:1?DV93g100', 'Включить пин 6, только если значение Zigbee-устройства 93 равно 100 или больше.'],
+        ['0/93.1:2?D5', 'Запустить у Zigbee-триггера 93 действие номер 1 (суффикс .1 или .2 после номера), только если устройство 5 включено.'],
+      ]],
+      ['Кнопки', [
+        ['0/6:1?B1', 'Включить пин 6, только если кнопка 1 в этот момент нажата.'],
+        ['0/6:1?BU1', 'Включить пин 6, только если кнопка 1 в этот момент не нажата.'],
+        ['0/6:1?BH1', 'Включить пин 6, только если кнопка 1 в этот момент удерживается долгим нажатием.'],
+      ]],
+      ['Температура и влажность', [
+        ['0/6:1?T3<10', 'Включить пин 6, только если на датчике 3 (например, уличном) холоднее 10 градусов.'],
+        ['0/6:1?T3>25.5', 'Включить пин 6, только если на датчике 3 жарче 25.5 градусов.'],
+        ['0/6:1?T5.2>25.5', 'Включить пин 6, только если второй датчик DS18B20 на пине 5 показывает больше 25.5 градусов.'],
+        ['0/6:1?H4<80', 'Включить пин 6, только если влажность на датчике 4 ниже 80 процентов.'],
+        ['0/6:1?H4>50', 'Включить пин 6, только если влажность на датчике 4 выше 50 процентов.'],
+        ['0/6:1?T3<10&!D7', 'Включить пин 6, если на датчике 3 холодно и устройство 7 (например, другой нагреватель) не включено.'],
+        ['0/6:1?(T3<5|H4>70)&D1', 'Включить пин 6, если устройство 1 включено и при этом на датчике 3 очень холодно или на датчике 4 очень влажно.'],
+        ['0/6:1?T3>10&T3<30', 'Включить пин 6, только если на датчике 3 теплее 10 и холоднее 30 градусов.'],
+        ['0/6:1?T3<15|T3>30', 'Включить пин 6, если на датчике 3 холоднее 15 или жарче 30 градусов.'],
+      ]],
+      ['Мороз и отрицательные температуры', [
+        ['0/6:1?T3<-5', 'Включить пин 6, только если на датчике 3 холоднее минус 5 градусов.'],
+        ['0/6:1?T3g-12.3', 'Включить пин 6, если на датчике 3 минус 12.3 градуса или теплее.'],
+        ['0/6:1?T3>-0.5&T3<3', 'Включить пин 6, только если на датчике 3 температура между минус 0.5 и плюс 3 градуса (около нуля).'],
+      ]],
+      ['День и ночь (нужны редко)', [
+        ['0/6:1?Sr', 'Включить пин 6, только если в момент события уже день. На восходе без смещения условие обычно верно.'],
+        ['-600/6:1?Ss', 'За 10 минут до восхода включить пин 6, только если ещё ночь.'],
+      ]],
+      ['Готовое условие из библиотеки', [
+        ['0/6:1?C3', 'Включить пин 6, только если верно условие из ячейки C3 библиотеки Conditions.'],
+        ['0/6:1?C3&!D2', 'Включить пин 6, если верно условие из ячейки C3 И устройство 2 выключено.'],
+      ]],
+      ['Несколько действий, у каждого своё условие', [
+        ['0/6:1?D2,7:1?T3<10,12:0', 'Три действия. Пин 6 включится, если устройство 2 включено. Пин 7 включится, если на датчике 3 холодно. Пин 12 выключится всегда. Смещение 0 общее для всех трёх.'],
+        ['-300/6:1?D2,7:1', 'За 5 минут до события: пин 6 включится, только если устройство 2 включено. Пин 7 включится всегда (условие стоит только у пина 6).'],
+      ]],
+      ['Особый случай: неисправный датчик', [
+        ['0/6:1?T3<10|D1', 'Включить пин 6, если на датчике 3 меньше 10 градусов ИЛИ включено устройство 1. Если датчик 3 неисправен, а устройство 1 включено, действие всё равно выполнится.'],
+      ]],
+    ],
+    mistakesTitle: 'Частые ошибки: так писать нельзя',
+    mistakesNote: 'Одни ошибки страница ловит сразу и красит поле красным. Другие она пропускает: запись сохраняется, но условие потом всегда считается НЕТ, и действие молча не выполняется. Слева то, что писать нельзя, справа - что будет и как правильно.',
+    colWrong: 'Так не надо',
+    colWhy: 'Что будет и как правильно',
+    mistakes: [
+      ['6:1?D2', 'Нет смещения и знака /. Страница покажет ошибку. Пишите 0/6:1?D2.'],
+      ['0/6:1?', 'После знака ? нет проверки. Страница покажет ошибку. Допишите условие или уберите знак ?.'],
+      ['0/6:3?D2', 'Действие бывает только 0, 1 или 2. Страница покажет ошибку.'],
+      ['0/6:1?D2,D3', 'Запятая начинает новое действие, а D3 действием не является. Страница покажет ошибку. Пишите D2&D3 (И) или D2|D3 (ИЛИ).'],
+      ['0/6:1?T3>25,5', 'Десятые пишутся через точку, а не через запятую. Страница покажет ошибку. Пишите T3>25.5.'],
+      ['0/6:1?D2?D3', 'Знак ? ставится один раз на действие. Страница покажет ошибку. Проверки соединяйте знаками & и |.'],
+      ['0/6:1?D2 and D3', 'Слова писать нельзя, только знаки. Запись сохранится, но действие не сработает никогда. Пишите D2&D3.'],
+      ['0/6:1?T3>T5', 'Сравнивать можно только с числом, а не с другим датчиком. Запись сохранится, но действие не сработает. Пишите T3>20.'],
+      ['0/6:1?(D1|D2', 'Не закрыта скобка. Запись сохранится, но действие не сработает. Пишите (D1|D2).'],
+      ['0/6:1?D1&', 'Знак & или | в конце без второй половины. Запись сохранится, но действие не сработает. Пишите D1&D2.'],
+      ['0/6:1?T3', 'Датчик без сравнения - это просто число, а не «да/нет», и условие работает неправильно. Допишите сравнение: T3<10.'],
+      ['Р2, Т3, В1', 'Русские буквы, похожие на латинские, в это поле не вводятся (пропадают). Переключите раскладку на английскую и пишите D2, T3, B1.'],
+      ['0/6:1?C13', 'В библиотеке 12 ячеек (с 1 по 12). Ссылка на несуществующую ячейку считается НЕТ, действие не сработает.'],
+      ['В ячейку Conditions: 0/6:1?D2', 'В ячейку библиотеки пишется только проверка, то есть то, что стоит после знака ?: D2. Строку с действием туда вписывать нельзя, ячейка её отклонит.'],
+    ],
+    rulesTitle: 'Важные правила',
+    rules: [
+      'Проверка идёт один раз - в момент срабатывания (восход или закат плюс смещение). Если условие верно, действие выполняется. Если нет, оно пропускается и в этот день больше не повторяется, даже если условие станет верным через минуту.',
+      'Устройство должно работать в этот момент: действие выполняется в течение примерно 5 минут после назначенного времени. Если устройство в это время было выключено или перезагружалось дольше, действие за этот день пропущено.',
+      'Условие относится только к своему действию. В строке 0/6:1?D2,7:1 условие D2 касается только пина 6, а пин 7 включится всегда.',
+      'Смещение одно на всю строку, а не на каждое действие.',
+      'Внутри условия нельзя ставить запятые и второй знак ?. Длина условия прямо в действии - до 60 символов, а в одной ячейке библиотеки - до 46. Если условие длинное или повторяется, запишите его один раз в ячейку библиотеки Conditions (строка ниже на этой странице; те же ячейки можно править и на страницах Switch, Encoder, PID) и ссылайтесь коротко: 0/6:1?C3. Условие длиннее 46 символов разбейте на две ячейки и соедините ссылками: 0/6:1?C3|C4. В ячейку пишется только проверка, без смещения и действия.',
+      'Часть строки после знака / устройство читает максимум 99 символов: страница принимает больше, но прошивка обрезает хвост, и обрезанное условие сработает неверно. Держите строку короче.',
+      'Неисправный или молчащий датчик в условии даёт ответ «неизвестно»: действие пропускается, даже если перед условием стоит !. Исключение: явная правда через |, например T3<10|D1.',
+      'Страница проверяет только допустимые символы и формат строки, но не смысл условия. Поэтому после настройки проверьте условие на деле: например, временно задайте время срабатывания через пару минут.',
+      'Условие работает только при срабатывании по Sunrise/Sunset. Ручное включение и выключение (ползунки, MQTT, API) условие не проверяет.',
+      'Если время восхода и заката не рассчитано, условия с Sr и Ss всегда НЕТ.',
+      'Если удалить устройство, упомянутое в условии, то условие превращается в ?0 (всегда НЕТ), и действие перестаёт срабатывать, пока вы не впишете новое условие.',
+    ],
+  },
+  en: {
+    panelTitle: condHelpTitle(false) + ' (Sunrise / Sunset)',
+    whatTitle: 'What it is and why',
+    what: [
+      'The Sunrise and Sunset fields run actions at sunrise and at sunset: for example, turn a light on at sunset and off at dawn. You can add a "check" (a condition) to any action: "do this, but ONLY IF ...".',
+      'It is like a guard at a door. At the moment of sunrise (or sunset) the guard comes and checks the condition. If it is true, the action is performed. If it is false, the action is skipped and will not be repeated until tomorrow.',
+    ],
+    onceNote: 'The main point: the condition is checked ONCE, at the moment of triggering (sunrise or sunset plus the offset). After that nobody watches it.',
+    formatTitle: 'How the line is built',
+    formatIntro: 'The line consists of several parts. Example: -600/6:1?T3<10,12:0',
+    colPart: 'Part',
+    colMeaning: 'What it means',
+    format: [
+      ['-600', 'Offset in seconds from sunrise (or sunset). 0 - exactly at the moment of the event, -600 - 10 minutes before, 600 - 10 minutes after. One offset for all actions of the line.'],
+      ['/', 'Separator. Exactly one in the whole line.'],
+      ['6:1', 'The action: pin number (ID), a colon, and what to do: 0 - turn off, 1 - turn on, 2 - switch to the opposite.'],
+      ['?T3<10', 'The condition: the ? sign and the check itself. Here: "only if sensor 3 is below 10 degrees". Without the ? sign the action is always performed.'],
+      [',', 'A comma separates one action from another. Every action has its own condition (or none at all).'],
+    ],
+    formatRead: 'How to read the example: 10 minutes before the event turn pin 6 on, but only if sensor 3 is below 10 degrees; and turn pin 12 off (no condition, always).',
+    stepsTitle: 'How to set it up: 4 steps',
+    steps: [
+      'Turn on the switch next to the field you need (Sunrise or Sunset). While it is off, the actions of that field are not performed.',
+      'First type the action without a condition and make sure it works. For example: 0/6:1',
+      'Then add the ? sign and the condition after the action: 0/6:1?D2. What to build the condition from is in the tables below.',
+      'Press "Save changes". If the field turned red, the page tells you what is wrong. But if the field stayed white, it does not yet mean the condition is correct: the page checks only the allowed characters and the format, not the meaning (see "Common mistakes").',
+    ],
+    lifeTitle: 'Real-life example: greenhouse heating',
+    life: 'In the evening the heater (pin 6) must turn on only if the outdoor sensor 3 shows below 10 degrees, and in the morning it must turn off. In the Sunset field type: 0/6:1?T3<10. In the Sunrise field type: 0/6:0. Result: on a warm evening the heater stays off, on a cold one it turns on at sunset, and at dawn it turns off in any case.',
+    buildTitle: 'How to write your own condition: 4 simple steps',
+    build: [
+      'Decide WHAT to watch. The letter tells it: D - device (on or off), B - button, T - temperature, H - humidity, Sr - daytime, Ss - night.',
+      'Add the device number (its ID) from the table on that device page. The sensor with ID 3 is T3, the device with ID 2 is D2.',
+      'If you need "more" or "less", add a sign and a number: T3<10 means "sensor 3 is below 10 degrees". Devices and buttons need no number: D2 - device is on, !D2 - device is off. For a negative temperature put the minus right before the digit: T3<-5.',
+      'If there are several checks, join them with signs: & means AND (all at once), | means OR (one is enough). Example: T3<10&D1 - "sensor 3 is cold AND device 1 is on".',
+    ],
+    wordsTitle: 'What a condition is made of (words)',
+    wordsNote: 'The number after the letter is the device ID from the table on that device page. The temperature sensor in a condition can be any sensor, not necessarily one connected to the action.',
+    colEntry: 'Entry',
+    colRead: 'How to read it',
+    words: [
+      ['D5', 'The device (DEVICE pin) with ID 5 is ON right now. For a Zigbee device - it is on.'],
+      ['!D5', 'The pin with ID 5 is OFF right now (the ! sign means "NOT").'],
+      ['DV3>0', 'Dimmer (PWM) with ID 3 is lit (value greater than zero). For Zigbee - the device brightness.'],
+      ['DV3=100', 'Dimmer 3 value is exactly 100. A PWM dimmer uses a 0-100 scale (percent), so this is full brightness.'],
+      ['DV3g50', 'Dimmer 3 value is 50 or GREATER (letter g = "greater", same as >=).'],
+      ['DV3l50', 'Dimmer 3 value is 50 or LESS (letter l = "less", same as <=).'],
+      ['B1', 'Button with ID 1 is pressed at this moment.'],
+      ['BU1', 'Button with ID 1 is NOT pressed at this moment.'],
+      ['BH1', 'Button with ID 1 is being held (long press) at this moment.'],
+      ['T5>25.5', 'Temperature of sensor 5 is above 25.5 degrees.'],
+      ['T5<10', 'Temperature of sensor 5 is below 10 degrees.'],
+      ['T3<-5', 'Temperature of sensor 3 is below minus 5 degrees. The minus sign goes right before the digit, without a space, and only to the right of the comparison sign.'],
+      ['T5.2>25.5', 'Temperature of the second DS18B20 sensor on the bus of pin 5 is above 25.5 degrees (.2 is the sensor number on the bus, a single digit from 1 to 9; without .number the first working sensor is used).'],
+      ['H4>50', 'Humidity of sensor 4 is above 50 percent.'],
+      ['H4<30', 'Humidity of sensor 4 is below 30 percent.'],
+      ['Sr', 'Daytime: at the moment of triggering the time is between sunrise and sunset. Rarely needed here: the answer is usually obvious (after sunrise it is already day, after sunset already night), but with an offset it can be the opposite.'],
+      ['Ss', 'Night: at the moment of triggering the time is between sunset and sunrise. If the sunrise and sunset times are not calculated, both Sr and Ss count as NO.'],
+      ['C3', 'Insert the ready-made condition from cell C3 of the Conditions library (the row below on this page). Nesting - no deeper than two levels.'],
+    ],
+    signsTitle: 'What joins the words (signs)',
+    colSign: 'Sign',
+    colSignMeaning: 'Meaning',
+    colSignExample: 'Example and how to read it',
+    signs: [
+      ['&', 'AND (BOTH must be true)', 'D1&D2', 'device 1 is on AND device 2 is on'],
+      ['|', 'OR (ONE is enough)', 'D1|D2', 'device 1 is on OR device 2 is on (or both)'],
+      ['!', 'NOT (the opposite)', '!(D1&D2)', 'it is not true that both are on at once (and !D1 - device 1 is off)'],
+      ['( )', 'Brackets - what to calculate first', '(D1|D2)&!D3', '(device 1 or device 2) AND device 3 is off'],
+      ['= > < g l', 'Equal, greater, less; g - greater or equal, l - less or equal (>= and <= also work)', 'T5>25.5, DV3=100, DV3l50', ''],
+    ],
+    tip: 'Tip: if you mix & and | in one condition, always use brackets. Without brackets the order is: ! first, then &, then | (so D1|D2&D3 reads as D1|(D2&D3)). Numbers for temperature and humidity are written as usual: T5>25 and T5>25.0 are the same, one digit after the dot is allowed. Uppercase and lowercase letters are not distinguished: r2 and D2 are the same. The page removes spaces by itself.',
+    exTitle: 'Ready-made examples - type into the Sunrise or Sunset field',
+    exNote: 'Each example is a whole line: offset, action and condition. Replace the numbers of pins, sensors and devices with your own. The condition is what comes after the ? sign.',
+    colType: 'What to type into the field',
+    colHappens: 'What will happen',
+    examples: [
+      ['Actions without a condition (for comparison)', [
+        ['0/6:1', 'At the moment of the event turn pin 6 on. There is no condition, so it always works.'],
+        ['0/6:1,12:0', 'At the moment of the event turn pin 6 on and pin 12 off.'],
+        ['-600/6:1', '10 minutes before the event turn pin 6 on.'],
+        ['1800/6:0', '30 minutes after the event turn pin 6 off.'],
+        ['0/6:2', 'At the moment of the event switch pin 6 to the opposite state.'],
+      ]],
+      ['Devices and switches', [
+        ['0/6:1?D2', 'Turn pin 6 on only if device 2 is on.'],
+        ['0/6:1?!D2', 'Turn pin 6 on only if device 2 is off.'],
+        ['0/6:1?D1&D2', 'Turn pin 6 on only if both device 1 and device 2 are on.'],
+        ['0/6:1?D1|D2', 'Turn pin 6 on if at least one of devices 1 and 2 is on.'],
+        ['0/6:1?D1&!D2', 'Turn pin 6 on if device 1 is on and device 2 is off.'],
+        ['0/6:1?!D1&!D2', 'Turn pin 6 on only if both devices are off.'],
+        ['0/6:1?(D1|D2)&!D3', 'Turn pin 6 on if device 1 or 2 is on and device 3 is off.'],
+        ['0/6:1?!(D1&D2)', 'Turn pin 6 on always, except when both devices are on at once.'],
+      ]],
+      ['Dimmers (PWM) and Zigbee', [
+        ['0/6:1?DV3>0', 'Turn pin 6 on only if dimmer 3 is lit.'],
+        ['0/6:1?DV3g50', 'Turn pin 6 on only if the dimmer 3 value is 50 or greater.'],
+        ['0/6:1?DV3l50', 'Turn pin 6 on only if the dimmer 3 value is 50 or less.'],
+        ['0/6:1?D93', 'Turn pin 6 on only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 89).'],
+        ['0/6:1?DV93g100', 'Turn pin 6 on only if the value of Zigbee device 93 is 100 or greater.'],
+        ['0/93.1:2?D5', 'Run action number 1 of the Zigbee trigger 93 (suffix .1 or .2 after the number), only if device 5 is on.'],
+      ]],
+      ['Buttons', [
+        ['0/6:1?B1', 'Turn pin 6 on only if button 1 is pressed at this moment.'],
+        ['0/6:1?BU1', 'Turn pin 6 on only if button 1 is not pressed at this moment.'],
+        ['0/6:1?BH1', 'Turn pin 6 on only if button 1 is held with a long press at this moment.'],
+      ]],
+      ['Temperature and humidity', [
+        ['0/6:1?T3<10', 'Turn pin 6 on only if sensor 3 (for example an outdoor one) is colder than 10 degrees.'],
+        ['0/6:1?T3>25.5', 'Turn pin 6 on only if sensor 3 is hotter than 25.5 degrees.'],
+        ['0/6:1?T5.2>25.5', 'Turn pin 6 on only if the second DS18B20 sensor on pin 5 shows more than 25.5 degrees.'],
+        ['0/6:1?H4<80', 'Turn pin 6 on only if humidity on sensor 4 is below 80 percent.'],
+        ['0/6:1?H4>50', 'Turn pin 6 on only if humidity on sensor 4 is above 50 percent.'],
+        ['0/6:1?T3<10&!D7', 'Turn pin 6 on if sensor 3 shows cold and device 7 (for example another heater) is not on.'],
+        ['0/6:1?(T3<5|H4>70)&D1', 'Turn pin 6 on if device 1 is on and sensor 3 is very cold or sensor 4 is very humid.'],
+        ['0/6:1?T3>10&T3<30', 'Turn pin 6 on only if sensor 3 is warmer than 10 and colder than 30 degrees.'],
+        ['0/6:1?T3<15|T3>30', 'Turn pin 6 on if sensor 3 is colder than 15 or hotter than 30 degrees.'],
+      ]],
+      ['Frost and negative temperatures', [
+        ['0/6:1?T3<-5', 'Turn pin 6 on only if sensor 3 is colder than minus 5 degrees.'],
+        ['0/6:1?T3g-12.3', 'Turn pin 6 on if sensor 3 shows minus 12.3 degrees or warmer.'],
+        ['0/6:1?T3>-0.5&T3<3', 'Turn pin 6 on only if sensor 3 is between minus 0.5 and plus 3 degrees (around zero).'],
+      ]],
+      ['Day and night (rarely needed)', [
+        ['0/6:1?Sr', 'Turn pin 6 on only if it is already day at the moment of the event. At sunrise without an offset the condition is usually true.'],
+        ['-600/6:1?Ss', '10 minutes before sunrise turn pin 6 on only if it is still night.'],
+      ]],
+      ['A ready-made condition from the library', [
+        ['0/6:1?C3', 'Turn pin 6 on only if the condition from cell C3 of the Conditions library is true.'],
+        ['0/6:1?C3&!D2', 'Turn pin 6 on if the condition from cell C3 is true AND device 2 is off.'],
+      ]],
+      ['Several actions, each with its own condition', [
+        ['0/6:1?D2,7:1?T3<10,12:0', 'Three actions. Pin 6 turns on if device 2 is on. Pin 7 turns on if sensor 3 is cold. Pin 12 turns off always. The offset 0 is common to all three.'],
+        ['-300/6:1?D2,7:1', '5 minutes before the event: pin 6 turns on only if device 2 is on. Pin 7 turns on always (the condition is only on pin 6).'],
+      ]],
+      ['Special case: a faulty sensor', [
+        ['0/6:1?T3<10|D1', 'Turn pin 6 on if sensor 3 is below 10 degrees OR device 1 is on. If sensor 3 is faulty but device 1 is on, the action is still performed.'],
+      ]],
+    ],
+    mistakesTitle: 'Common mistakes: do not write it like this',
+    mistakesNote: 'Some mistakes the page catches at once and turns the field red. Others it lets through: the line is saved, but the condition then always counts as NO and the action silently does not run. On the left is what must not be written, on the right is what happens and how to write it correctly.',
+    colWrong: 'Not like this',
+    colWhy: 'What happens and how to write it correctly',
+    mistakes: [
+      ['6:1?D2', 'No offset and no / sign. The page shows an error. Write 0/6:1?D2.'],
+      ['0/6:1?', 'There is no check after the ? sign. The page shows an error. Add a condition or remove the ? sign.'],
+      ['0/6:3?D2', 'The action can only be 0, 1 or 2. The page shows an error.'],
+      ['0/6:1?D2,D3', 'A comma starts a new action, and D3 is not an action. The page shows an error. Write D2&D3 (AND) or D2|D3 (OR).'],
+      ['0/6:1?T3>25,5', 'Tenths are written with a dot, not a comma. The page shows an error. Write T3>25.5.'],
+      ['0/6:1?D2?D3', 'The ? sign is used once per action. The page shows an error. Join the checks with the signs & and |.'],
+      ['0/6:1?D2 and D3', 'Words are not allowed, only signs. The line is saved, but the action never runs. Write D2&D3.'],
+      ['0/6:1?T3>T5', 'You can compare only with a number, not with another sensor. The line is saved, but the action does not run. Write T3>20.'],
+      ['0/6:1?(D1|D2', 'A bracket is not closed. The line is saved, but the action does not run. Write (D1|D2).'],
+      ['0/6:1?D1&', 'The sign & or | at the end without a second half. The line is saved, but the action does not run. Write D1&D2.'],
+      ['0/6:1?T3', 'A sensor without a comparison is just a number, not a yes/no, and the condition works incorrectly. Add a comparison: T3<10.'],
+      ['Р2, Т3, В1', 'Russian letters that look like Latin ones cannot be typed into this field (they disappear). Switch the keyboard layout to English and write D2, T3, B1.'],
+      ['0/6:1?C13', 'The library has 12 cells (1 to 12). A reference to a non-existent cell counts as NO, the action does not run.'],
+      ['Into a Conditions cell: 0/6:1?D2', 'Only the check goes into a library cell, that is what comes after the ? sign: D2. A line with an action cannot be typed there, the cell rejects it.'],
+    ],
+    rulesTitle: 'Important rules',
+    rules: [
+      'The check happens once - at the moment of triggering (sunrise or sunset plus the offset). If the condition is true, the action is performed. If not, it is skipped and not repeated that day, even if the condition becomes true a minute later.',
+      'The device must be running at that moment: the action is performed within about 5 minutes after the scheduled time. If the device was off or rebooting for longer, the action for that day is skipped.',
+      'A condition belongs only to its own action. In the line 0/6:1?D2,7:1 the condition D2 affects only pin 6, and pin 7 turns on always.',
+      'The offset is one for the whole line, not for each action.',
+      'Inside a condition you cannot use commas or a second ? sign. A condition written right in the action can be up to 60 characters long, while one library cell holds up to 46. If a condition is long or repeats, write it once into a cell of the Conditions library (the row below on this page; the same cells can also be edited on the Switch, Encoder and PID pages) and refer to it briefly: 0/6:1?C3. A condition longer than 46 characters can be split into two cells and joined by references: 0/6:1?C3|C4. Only the check goes into the cell, without the offset and the action.',
+      'The part of the line after the / sign is read by the device up to 99 characters: the page accepts more, but the firmware cuts the tail, and a cut condition will work incorrectly. Keep the line shorter.',
+      'A faulty or silent sensor in a condition gives the answer "unknown": the action is skipped, even if the condition starts with !. Exception: explicit truth through |, for example T3<10|D1.',
+      'The page checks only the allowed characters and the format of the line, not the meaning of the condition. So after setting up, test the condition in practice: for example, temporarily set the trigger time a couple of minutes ahead.',
+      'A condition works only when triggered by Sunrise/Sunset. Manual on/off (switches, MQTT, API) does not check conditions.',
+      'If the sunrise and sunset times are not calculated, conditions with Sr and Ss are always NO.',
+      'If you delete a device mentioned in a condition, the condition turns into ?0 (always NO), and the action stops running until you type a new condition.',
+    ],
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Оформление справок страницы по "Правилам форматирования кода проекта":
+// цветные карточки-секции, чёрные жирные заголовки (h2 text-xl, h4 text-lg),
+// текст text-base, единый шрифт без font-mono, таблицы bg-white/70,
+// предупреждения - красная плашка, все блоки всегда открыты.
+// Классы Tailwind записаны целиком (без склейки строк), чтобы их увидела сборка.
+// ---------------------------------------------------------------------------
+
+const sunTable2 = (h1, h2, rows) => html`
+  <div class="overflow-x-auto mb-3">
+    <table class="w-full bg-white/70">
+      <thead>
+        <tr>
+          <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">${h1}</th>
+          <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">${h2}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r) => html`
+          <tr>
+            <td class="border px-4 py-2 whitespace-nowrap"><code>${r[0]}</code></td>
+            <td class="border px-4 py-2">${r[1]}</td>
+          </tr>
+        `)}
+      </tbody>
+    </table>
+  </div>
+`;
+
+const sunTable3 = (h1, h2, h3, rows) => html`
+  <div class="overflow-x-auto mb-3">
+    <table class="w-full bg-white/70">
+      <thead>
+        <tr>
+          <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">${h1}</th>
+          <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">${h2}</th>
+          <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">${h3}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r) => html`
+          <tr>
+            <td class="border px-4 py-2 whitespace-nowrap"><code>${r[0]}</code></td>
+            <td class="border px-4 py-2">${r[1]}</td>
+            <td class="border px-4 py-2"><code>${r[2]}</code>${r[3] ? ' - ' + r[3] : ''}</td>
+          </tr>
+        `)}
+      </tbody>
+    </table>
+  </div>
+`;
+
+function SunCondHelp({ isRu }) {
+  const X = SUN_HELP[isRu ? 'ru' : 'en'];
+  return html`
+    <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+
+      <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">${X.whatTitle}</h2>
+        <div class="space-y-3">
+          ${X.what.map((t) => html`<p>${t}</p>`)}
+          <div class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">${X.onceNote}</div>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">${X.formatTitle}</h4>
+          <p class="mb-2">${X.formatIntro}</p>
+          ${sunTable2(X.colPart, X.colMeaning, X.format)}
+          <div class="p-4 rounded-xl bg-white/80 border border-sky-300 mb-3">
+            <p>${X.formatRead}</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">${X.stepsTitle}</h2>
+        <div class="space-y-3">
+          <ol class="list-decimal ml-6 mb-3 space-y-1">
+            ${X.steps.map((t) => html`<li>${t}</li>`)}
+          </ol>
+          <div class="p-4 rounded-xl bg-white/80 border border-emerald-300 mb-3">
+            <p class="text-lg font-bold text-black mb-1">${X.lifeTitle}</p>
+            <p>${X.life}</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">${X.buildTitle}</h2>
+        <div class="space-y-3">
+          <ol class="list-decimal ml-6 mb-3 space-y-1">
+            ${X.build.map((t) => html`<li>${t}</li>`)}
+          </ol>
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">${X.wordsTitle}</h4>
+          <p class="mb-2">${X.wordsNote}</p>
+          ${sunTable2(X.colEntry, X.colRead, X.words)}
+
+          <h4 class="text-lg font-bold text-black mt-4 mb-2">${X.signsTitle}</h4>
+          ${sunTable3(X.colSign, X.colSignMeaning, X.colSignExample, X.signs)}
+          <p class="mb-3">${X.tip}</p>
+        </div>
+      </section>
+
+      <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">${X.exTitle}</h2>
+        <div class="space-y-3">
+          <p class="mb-2">${X.exNote}</p>
+          ${X.examples.map((g) => html`
+            <h4 class="text-lg font-bold text-black mt-4 mb-2">${g[0]}</h4>
+            ${sunTable2(X.colType, X.colHappens, g[1])}
+          `)}
+        </div>
+      </section>
+
+      <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">${X.mistakesTitle}</h2>
+        <div class="space-y-3">
+          <p class="mb-2">${X.mistakesNote}</p>
+          ${sunTable2(X.colWrong, X.colWhy, X.mistakes)}
+        </div>
+      </section>
+
+      <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">${X.rulesTitle}</h2>
+        <div class="space-y-3">
+          <ul class="list-disc ml-6 mb-3 space-y-1">
+            ${X.rules.map((t) => html`<li>${t}</li>`)}
+          </ul>
+        </div>
+      </section>
+
+    </div>
+  `;
+}
+
+// Справка по встроенному MQTT-брокеру (блок под таблицей MQTT Server).
+// Тексты сверены с Core/Inc/mqtt_server.h и Core/Src/mqtt_server.c.
+function MqttServerHelp({ isRu }) {
+  return html`
+    <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+      ${isRu ? html`
+        <div class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">MQTT Server - встроенный MQTT-брокер, в настоящее время находится в разработке.</div>
+
+        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Клиенты MQTT Server</h2>
+          <div class="space-y-3">
+            <p>MQTT Server поддерживает от 1 до 6 одновременно подключённых MQTT-клиентов. Вы можете изменить это значение, указав параметр <b>Max clients</b> в диапазоне от 1 до 6.</p>
+            <p>Клиентом считается любое устройство или приложение, подключённое к серверу по MQTT. Например:</p>
+            <ul class="list-disc ml-6 mb-3 space-y-1">
+              <li>Шлюз SLZB-06p7U занимает 1 клиентское подключение.</li>
+              <li>Подключённое Android-приложение с MQTT-клиентом - ещё одно подключение.</li>
+            </ul>
+            <p>Таким образом, вы можете настроить сервер на работу с необходимым количеством клиентов (от 1 до 6 устройств или приложений).</p>
+          </div>
+        </section>
+
+        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Технические ограничения</h2>
+          <div class="space-y-3">
+            <ul class="list-disc ml-6 mb-3 space-y-1">
+              <li>Поддерживается только QoS 0.</li>
+              <li>Retained-сообщения поддерживаются в ограниченном виде: брокер помнит до 8 последних сообщений (топик до 63 символов, данные до 128 байт). LWT и TLS не поддерживаются.</li>
+              <li>Не используйте MQTT Server и внешний MQTT-клиент на одном порту одновременно.</li>
+              <li>Изменение настроек (включая Max clients) требует перезагрузки устройства.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">SLZB IP - watchdog шлюза SLZB-06p7U</h2>
+          <div class="space-y-3">
+            <p>Если шлюз SLZB-06p7U не подключился к брокеру в течение 40 секунд после старта (или отвалился в процессе работы), устройство само перезагрузит его через веб-API - не чаще одного раза в минуту. Укажите в поле <b>SLZB IP</b> IP-адрес шлюза (например, 192.168.1.115). Пустое поле = watchdog выключен.</p>
+          </div>
+        </section>
+
+        <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Производительность при высокой нагрузке</h2>
+          <div class="space-y-3">
+            <div class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">При высокой нагрузке возможны задержки и пропуски MQTT-сообщений от Zigbee-устройств.</div>
+            <p>В настоящее время у автора проекта нет достаточного количества Zigbee-устройств и физического оборудования для полноценного тестирования MQTT Server при максимальной нагрузке. Поэтому невозможно гарантировать стабильную работу системы при одновременном использовании всех 89 физических пинов, 200 Zigbee-пинов и 50 таймеров, особенно если они одновременно отправляют MQTT-сообщения.</p>
+
+            <h4 class="text-lg font-bold text-black mt-4 mb-2">Рекомендации при проблемах</h4>
+            <p>Если вы столкнётесь с задержками, пропусками сообщений или другими проблемами при высокой нагрузке, отключите MQTT Server и настройте MQTT Client. MQTT Client работает стабильно даже при больших нагрузках.</p>
+            <p>Для этого потребуется внешнее устройство с установленным MQTT-сервером. Это может быть:</p>
+            <ul class="list-disc ml-6 mb-3 space-y-1">
+              <li>Роутер с поддержкой MQTT-брокера</li>
+              <li>Raspberry Pi</li>
+              <li>Другое устройство (сервер, ПК и т.п.)</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Обратная связь</h2>
+          <div class="space-y-3">
+            <p>Если вы используете встроенный MQTT Server и столкнулись с проблемами, пожалуйста, сообщите о своём опыте. Предоставьте подробности конфигурации и журналы работы - эта информация поможет автору внести необходимые изменения в код и расширить возможности проекта.</p>
+          </div>
+        </section>
+      ` : html`
+        <div class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">MQTT Server - the built-in MQTT broker is currently under development.</div>
+
+        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">MQTT Server clients</h2>
+          <div class="space-y-3">
+            <p>MQTT Server supports from 1 to 6 simultaneously connected MQTT clients. You can change this value via the <b>Max clients</b> parameter, in the range from 1 to 6.</p>
+            <p>A client is any device or application connected to the server over MQTT. For example:</p>
+            <ul class="list-disc ml-6 mb-3 space-y-1">
+              <li>The SLZB-06p7U gateway takes up 1 client connection.</li>
+              <li>A connected Android app with an MQTT client is another connection.</li>
+            </ul>
+            <p>This way, you can configure the server to work with the number of clients you need (from 1 to 6 devices or applications).</p>
+          </div>
+        </section>
+
+        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Technical limitations</h2>
+          <div class="space-y-3">
+            <ul class="list-disc ml-6 mb-3 space-y-1">
+              <li>Only QoS 0 is supported.</li>
+              <li>Retained messages are supported in a limited form: the broker keeps up to 8 latest messages (topic up to 63 characters, payload up to 128 bytes). LWT and TLS are not supported.</li>
+              <li>Do not use MQTT Server and an external MQTT client on the same port at the same time.</li>
+              <li>Changing the settings (including Max clients) requires a device reboot.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">SLZB IP - SLZB-06p7U gateway watchdog</h2>
+          <div class="space-y-3">
+            <p>If the SLZB-06p7U gateway does not connect to the broker within 40 seconds after startup (or drops out during operation), the device will reboot it via its web API - no more than once per minute. Enter the gateway IP address in the <b>SLZB IP</b> field (for example, 192.168.1.115). An empty field = watchdog disabled.</p>
+          </div>
+        </section>
+
+        <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Performance under heavy load</h2>
+          <div class="space-y-3">
+            <div class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">Under heavy load, delays and dropped MQTT messages from Zigbee devices are possible.</div>
+            <p>The project author currently does not have enough Zigbee devices and physical hardware to fully test MQTT Server under maximum load. Therefore stable operation cannot be guaranteed when simultaneously using all 89 physical pins, 200 Zigbee pins and 50 timers, especially if they send MQTT messages at the same time.</p>
+
+            <h4 class="text-lg font-bold text-black mt-4 mb-2">Recommendations if you run into problems</h4>
+            <p>If you encounter delays, dropped messages or other issues under heavy load, disable MQTT Server and set up MQTT Client instead. MQTT Client works reliably even under heavy load.</p>
+            <p>For this you will need an external device with an MQTT server installed. This can be:</p>
+            <ul class="list-disc ml-6 mb-3 space-y-1">
+              <li>A router with MQTT broker support</li>
+              <li>A Raspberry Pi</li>
+              <li>Another device (a server, a PC, etc.)</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Feedback</h2>
+          <div class="space-y-3">
+            <p>If you use the built-in MQTT Server and run into problems, please share your experience. Provide configuration details and logs - this information will help the author make the necessary code changes and expand the project's capabilities.</p>
+          </div>
+        </section>
+      `}
+    </div>
+  `;
+}
+// ---------------------------------------------------------------------------
+
 const LOG_CATEGORIES = [
   { id: 0, key: 'SYSTEM',    labelEn: 'System',    labelRu: 'Система' },
   { id: 1, key: 'MQTT',      labelEn: 'MQTT',      labelRu: 'MQTT' },
@@ -183,6 +804,7 @@ function Settings({ }) {
   const [logFilterOpen, setLogFilterOpen] = useState(false);
   const [mqttSectionOpen, setMqttSectionOpen] = useState(false);
   const mqttSectionInit = useRef(false);
+  const [condHelpOpen, setCondHelpOpen] = useState(false);
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => {
     initGlobalTooltip();
@@ -282,8 +904,9 @@ function Settings({ }) {
 
   const sanitizeSunInput = (value) => {
     if (typeof value !== 'string') return '';
-    // Разрешены цифры/формат и символы условий после '?': R1, !R2, RV1>0, B1, BH1, T5>25.5, Sr, Ss...
-    return value.replace(/[^0-9:,./+-A-Za-z()!&|=<>.?]/g, '');
+    // Разрешены цифры/формат и символы условий после '?': D1, !D2, DV1>0, B1, BH1, T5>25.5, Sr, Ss...
+    // '-' экранирован: без этого "+-A" - диапазон, и заглавные B..Y (C, R, S, T, H...) вырезались
+    return value.replace(/[^0-9:,.\/+\-A-Za-z()!&|=<>?]/g, '');
   };
 
   const validateSunActions = (value, required, isRu) => {
@@ -313,13 +936,13 @@ function Settings({ }) {
                   : 'Actions part is longer than ' + SUN_ACTIONS_MAX_LEN + ' characters';
     }
     const tokens = actionsPart.split(',');
-    const condChars = 'A-Za-z0-9()!&|=<>.';
+    const condChars = 'A-Za-z0-9()!&|=<>.-';
     const tokRe = new RegExp('^(\\d{1,3})(?:\\.([12]))?:([0-2])(\\?[' + condChars + ']{1,60})?$');
     for (const tok of tokens) {
       const m = tokRe.exec(tok);
       if (!m || parseInt(m[1], 10) > 255) {
-        return isRu ? 'Неверное действие "' + tok + '". Ожидается пин:действие?условие, действие 0, 1 или 2 (например 6:1 или 6:1?R2)'
-                    : 'Invalid action "' + tok + '". Expected pin:action?condition, action is 0, 1 or 2 (e.g. 6:1 or 6:1?R2)';
+        return isRu ? 'Неверное действие "' + tok + '". Ожидается пин:действие?условие, действие 0, 1 или 2 (например 6:1 или 6:1?D2)'
+                    : 'Invalid action "' + tok + '". Expected pin:action?condition, action is 0, 1 or 2 (e.g. 6:1 or 6:1?D2)';
       }
     }
     return null;
@@ -617,11 +1240,11 @@ function Settings({ }) {
   const sunErr_sunset_pins = validateSunActions(settings.sunset_pins, !!settings.onsunset, isRuSun);
   const sunHasError = !!(sunErr_sunrise_pins || sunErr_sunset_pins);
   const sunHint = isRuSun
-    ? 'Формат: СМЕЩЕНИЕ/действия. Одно смещение (секунды от восхода ИЛИ заката — смотря в какое поле записано; отрицательное — раньше) относится ко всем действиям после "/". У каждого действия может быть условие после "?". Примеры: 0/6:1,12:0 (на восходе: вкл 6, выкл 12), -600/6:1?R2 (за 10 мин до восхода включить 6, если реле 2 включено)'
-    : 'Format: OFFSET/actions. A single offset (seconds from sunrise OR sunset - whichever field it is in; negative = earlier) applies to ALL actions after "/". Each action may carry a condition after "?". Examples: 0/6:1,12:0 (at sunrise: on 6, off 12), -600/6:1?R2 (10 min before sunrise, turn 6 on if relay 2 is on)';
+    ? 'Формат: СМЕЩЕНИЕ/действия. Одно смещение (секунды от восхода ИЛИ заката - смотря в какое поле записано; отрицательное - раньше) относится ко всем действиям после "/". У каждого действия может быть условие после "?". Примеры: 0/6:1,12:0 (на восходе: вкл 6, выкл 12), -600/6:1?D2 (за 10 мин до восхода включить 6, если устройство 2 включено). Подробная справка по условиям - в блоке ниже'
+    : 'Format: OFFSET/actions. A single offset (seconds from sunrise OR sunset - whichever field it is in; negative = earlier) applies to ALL actions after "/". Each action may carry a condition after "?". Examples: 0/6:1,12:0 (at sunrise: on 6, off 12), -600/6:1?D2 (10 min before sunrise, turn 6 on if device 2 is on). Detailed help on conditions is in the block below';
 
   // Библиотека условий (12 записей): условия выбираются в модалках
-  // Encoder/Switch/PID; инлайн-условия пишутся прямо в действиях "?R2&RV3>50"
+  // Encoder/Switch/PID; инлайн-условия пишутся прямо в действиях "?D2&DV3>50"
   const handleCondChange = (idx, value) => {
     setSettings(prev => {
       const arr = Array.isArray(prev.conds) ? prev.conds.slice() : [];
@@ -919,70 +1542,8 @@ function Settings({ }) {
                   ` : html`<tbody></tbody>`}
                 </table>
                 ${settings.check_mqtt_srv ? html`
-                  <div class="px-6 py-3 text-sm font-semibold text-amber-700 bg-amber-500/10 border-t border-amber-500/20 space-y-2">
-                    ${settings.lang === 'ru' ? html`
-                      <p>MQTT Server — встроенный MQTT-брокер в настоящее время находится в разработке.</p>
-                      <p>MQTT Server поддерживает от 1 до 6 одновременно подключённых MQTT-клиентов. Вы можете изменить это значение, указав параметр <b>Max clients</b> в диапазоне от 1 до 6.</p>
-                      <p>Клиентом считается любое устройство или приложение, подключённое к серверу по MQTT. Например:</p>
-                      <ul class="list-disc pl-5 space-y-1">
-                        <li>Шлюз SLZB-06p7U занимает 1 клиентское подключение</li>
-                        <li>Подключённое Android-приложение с MQTT-клиентом — ещё одно подключение</li>
-                      </ul>
-                      <p>Таким образом, вы можете настроить сервер на работу с необходимым количеством клиентов (от 1 до 6 устройств или приложений).</p>
-                      <p class="font-bold pt-1">Технические ограничения</p>
-                      <ul class="list-disc pl-5 space-y-1">
-                        <li>Поддерживается только QoS 0</li>
-                        <li>Retained-сообщения, LWT и TLS не поддерживаются</li>
-                        <li>Не используйте MQTT Server и внешний MQTT-клиент на одном порту одновременно</li>
-                        <li>Изменение настроек (включая Max clients) требует перезагрузки устройства</li>
-                      </ul>
-                      <p class="font-bold pt-1">SLZB IP — watchdog шлюза SLZB-06p7U</p>
-                      <p>Если шлюз SLZB-06p7U не подключился к брокеру в течение 40 секунд после старта (или отвалился в процессе работы), устройство само перезагрузит его через веб-API — не чаще одного раза в минуту. Укажите в поле <b>SLZB IP</b> IP-адрес шлюза (например, 192.168.1.115). Пустое поле = watchdog выключен.</p>
-                      <p class="font-bold pt-1">Производительность при высокой нагрузке</p>
-                      <p>При высокой нагрузке возможны задержки и пропуски MQTT-сообщений от Zigbee-устройств.</p>
-                      <p>В настоящее время у автора проекта нет достаточного количества Zigbee-устройств и физического оборудования для полноценного тестирования MQTT Server при максимальной нагрузке. Поэтому невозможно гарантировать стабильную работу системы при одновременном использовании всех 89 физических пинов, 200 Zigbee-пинов и 50 таймеров, особенно если они одновременно отправляют MQTT-сообщения.</p>
-                      <p class="font-bold pt-1">Рекомендации при проблемах</p>
-                      <p>Если вы столкнётесь с задержками, пропусками сообщений или другими проблемами при высокой нагрузке, отключите MQTT Server и настройте MQTT Client. MQTT Client работает стабильно даже при больших нагрузках.</p>
-                      <p>Для этого потребуется внешнее устройство с установленным MQTT-сервером. Это может быть:</p>
-                      <ul class="list-disc pl-5 space-y-1">
-                        <li>Роутер с поддержкой MQTT-брокера</li>
-                        <li>Raspberry Pi</li>
-                        <li>Другое устройство (сервер, ПК и т.п.)</li>
-                      </ul>
-                      <p class="font-bold pt-1">Обратная связь</p>
-                      <p>Если вы используете встроенный MQTT Server и столкнулись с проблемами, пожалуйста, сообщите о своём опыте. Предоставьте подробности конфигурации и журналы работы — эта информация поможет автору внести необходимые изменения в код и расширить возможности проекта.</p>
-                    ` : html`
-                      <p>MQTT Server — the built-in MQTT broker is currently under development.</p>
-                      <p>MQTT Server supports from 1 to 6 simultaneously connected MQTT clients. You can change this value via the <b>Max clients</b> parameter, in the range from 1 to 6.</p>
-                      <p>A client is any device or application connected to the server over MQTT. For example:</p>
-                      <ul class="list-disc pl-5 space-y-1">
-                        <li>The SLZB-06p7U gateway takes up 1 client connection</li>
-                        <li>A connected Android app with an MQTT client — another connection</li>
-                      </ul>
-                      <p>This way, you can configure the server to work with the number of clients you need (from 1 to 6 devices or applications).</p>
-                      <p class="font-bold pt-1">Technical limitations</p>
-                      <ul class="list-disc pl-5 space-y-1">
-                        <li>Only QoS 0 is supported</li>
-                        <li>Retained messages, LWT and TLS are not supported</li>
-                        <li>Do not use MQTT Server and an external MQTT client on the same port at the same time</li>
-                        <li>Changing the settings (including Max clients) requires a device reboot</li>
-                      </ul>
-                      <p class="font-bold pt-1">SLZB IP — SLZB-06p7U gateway watchdog</p>
-                      <p>If the SLZB-06p7U gateway does not connect to the broker within 40 seconds after startup (or drops out during operation), the device will reboot it via its web API — no more than once per minute. Enter the gateway IP address in the <b>SLZB IP</b> field (for example, 192.168.1.115). An empty field = watchdog disabled.</p>
-                      <p class="font-bold pt-1">Performance under heavy load</p>
-                      <p>Under heavy load, delays and dropped MQTT messages from Zigbee devices are possible.</p>
-                      <p>The project author currently does not have enough Zigbee devices and physical hardware to fully test MQTT Server under maximum load. Therefore stable operation cannot be guaranteed when simultaneously using all 89 physical pins, 200 Zigbee pins and 50 timers, especially if they send MQTT messages at the same time.</p>
-                      <p class="font-bold pt-1">Recommendations if you run into problems</p>
-                      <p>If you encounter delays, dropped messages or other issues under heavy load, disable MQTT Server and set up MQTT Client instead. MQTT Client works reliably even under heavy load.</p>
-                      <p>For this you will need an external device with an MQTT server installed. This can be:</p>
-                      <ul class="list-disc pl-5 space-y-1">
-                        <li>A router with MQTT broker support</li>
-                        <li>A Raspberry Pi</li>
-                        <li>Another device (a server, a PC, etc.)</li>
-                      </ul>
-                      <p class="font-bold pt-1">Feedback</p>
-                      <p>If you use the built-in MQTT Server and run into problems, please share your experience. Provide configuration details and logs — this information will help the author make the necessary code changes and expand the project's capabilities.</p>
-                    `}
+                  <div class="px-6 py-5 border-t border-amber-500/20">
+                    <${MqttServerHelp} isRu=${(settings.lang || 'ru') === 'ru'} />
                   </div>
                 ` : ''}
               </div>
@@ -1137,8 +1698,8 @@ function Settings({ }) {
                       maxlength="135" placeholder="0/6:1,12:0"
                       class=${`flex-grow w-full px-3 py-2 bg-white/50 border ${sunErr_sunrise_pins ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`} />
                   </div>
-                  ${sunErr_sunrise_pins ? html`<p class="mt-1 text-sm text-red-600">${sunErr_sunrise_pins}</p>` : null}
-                  <p class="mt-1 text-xs text-slate-600">${sunHint}</p>
+                  ${sunErr_sunrise_pins ? html`<p class="mt-1 rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">${sunErr_sunrise_pins}</p>` : null}
+                  <p class="mt-1 text-base text-slate-700">${sunHint}</p>
                 </td>
               </tr>
 
@@ -1157,8 +1718,8 @@ function Settings({ }) {
                       maxlength="135" placeholder="0/6:1,12:0"
                       class=${`flex-grow w-full px-3 py-2 bg-white/50 border ${sunErr_sunset_pins ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`} />
                   </div>
-                  ${sunErr_sunset_pins ? html`<p class="mt-1 text-sm text-red-600">${sunErr_sunset_pins}</p>` : null}
-                  <p class="mt-1 text-xs text-slate-600">${sunHint}</p>
+                  ${sunErr_sunset_pins ? html`<p class="mt-1 rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">${sunErr_sunset_pins}</p>` : null}
+                  <p class="mt-1 text-base text-slate-700">${sunHint}</p>
                 </td>
               </tr>
 
@@ -1166,36 +1727,38 @@ function Settings({ }) {
               <tr class="transition-colors border-b border-slate-200 bg-white/80 hover:bg-slate-200/80">
                 <td
                   class="w-1/3 text-lg font-bold text-slate-700 px-6 border-r border-slate-500 py-4 align-top cursor-help"
-                  data-tip=${isRuSun ? 'Общие условия. Каждая связь Encoder/Switch и PID-слот может ссылаться на условие по номеру. В действиях кнопок/таймеров условие пишется инлайн после "?"' : 'Shared conditions. Each Encoder/Switch link and PID slot can reference a condition by number. For button/timer actions write the condition inline after "?"'}
+                  data-tip=${isRuSun ? 'Общие условия. В Encoder/Switch/PID условие вводится свободно в поле Condition; эти 12 ячеек нужны для коротких ссылок C1..C12 и для действий кнопок/таймеров, где условие пишется инлайн после "?". Те же ячейки можно смотреть и править на страницах Switch, Encoder, PID' : 'Shared conditions. Encoder/Switch/PID take a free-form condition in the Condition field; these 12 cells are for short C1..C12 references and for button/timer actions, where the condition is written inline after "?". The same cells can be viewed and edited on the Switch, Encoder and PID pages'}
                 >
                   Conditions
-                  <div class="text-xs font-normal text-slate-500 mt-2 max-w-[16rem]">1..12 — используются в Encoder, Switch и PID</div>
+                  <div class="text-base font-normal text-slate-700 mt-2">${isRuSun
+                      ? '1..12 - общие ячейки C1..C12 (то же, что панель Conditions на страницах Switch, Encoder, PID): на них можно ссылаться из условий и действий. Своё условие можно вписать прямо в Encoder/Switch/PID - пул: ' + (settings.cond_pool ? `${settings.cond_pool.used}/${settings.cond_pool.total}` : '48')
+                      : '1..12 - shared cells C1..C12 (the same as the Conditions panel on the Switch, Encoder, PID pages): they can be referenced from conditions and actions. You can also type a condition right in Encoder/Switch/PID - pool: ' + (settings.cond_pool ? `${settings.cond_pool.used}/${settings.cond_pool.total}` : '48')}</div>
                 </td>
                 <td class="w-2/3 pl-4 py-4 pr-6">
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     ${Array.from({ length: 12 }, (_, i) => html`
                       <div class="flex items-center gap-2">
-                        <span class="text-xs font-bold text-slate-500 w-6">#${i + 1}</span>
+                        <span class="text-sm font-bold text-indigo-800 w-10">C${i + 1}</span>
                         <input type="text" value=${condsArr[i] || ''}
                           onInput=${(e) => handleCondChange(i, e.target.value)}
                           maxlength="46"
-                          placeholder=${i === 0 ? 'R1&!R2 | Ss' : ''}
+                          placeholder=${i === 0 ? 'D1&!D2 | Ss' : ''}
                           class="flex-grow w-full px-3 py-2 bg-white/50 border border-white/50 rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-sm" />
                         ${(() => {
                           const used = Array.isArray(settings.conds_used) ? (settings.conds_used[i] || 0) : 0;
                           const cleared = (condsArr[i] || '') === '0';
                           return html`
-                            ${used > 0 ? html`<span class="text-[10px] font-semibold text-amber-700 bg-amber-100 rounded px-1.5 py-0.5 whitespace-nowrap" title=${isRuSun ? 'Мест использования: связи Encoder/Switch, слоты PID и инлайн-ссылки ?C в действиях. Правка условия меняет их поведение сразу' : 'Usage sites: Encoder/Switch links, PID slots and inline ?C references. Editing this condition affects all of them at once'}>${used}</span>` : null}
-                            ${cleared ? html`<span class="text-[10px] font-semibold text-red-700 bg-red-100 rounded px-1.5 py-0.5 whitespace-nowrap" title=${isRuSun ? 'Условие сброшено в "0" (обычно после удаления устройства). Все ссылки на него теперь блокируют действия' : 'Condition reset to "0" (usually after deleting a device). All references to it now block actions'}>${isRuSun ? 'сброшено' : 'reset'}</span>` : null}
+                            ${used > 0 ? html`<span class="text-sm font-semibold text-amber-700 bg-amber-100 rounded px-1.5 py-0.5 whitespace-nowrap" title=${isRuSun ? 'Мест использования: связи Encoder/Switch, слоты PID и инлайн-ссылки ?C в действиях. Правка условия меняет их поведение сразу' : 'Usage sites: Encoder/Switch links, PID slots and inline ?C references. Editing this condition affects all of them at once'}>${used}</span>` : null}
+                            ${cleared ? html`<span class="text-sm font-semibold text-red-700 bg-red-100 rounded px-1.5 py-0.5 whitespace-nowrap" title=${isRuSun ? 'Условие сброшено в "0" (обычно после удаления устройства). Все ссылки на него теперь блокируют действия' : 'Condition reset to "0" (usually after deleting a device). All references to it now block actions'}>${isRuSun ? 'сброшено' : 'reset'}</span>` : null}
                           `;
                         })()}
                       </div>
                     `)}
                   </div>
-                  <p class="mt-2 text-xs text-slate-600">
+                  <p class="mt-2 text-base text-slate-700">
                     ${isRuSun
-                      ? 'Синтаксис: R1 - реле 1 вкл, !R2 - выкл, RV1>0 / RV1=255 / RV1g100 / RV1l100 - диммер (для Zigbee - состояние/яркость устройства), B1 - кнопка нажата, BU1 - не нажата, BH1 - удерживается, T5>25.5 - температура (°C), H4>50 - влажность (%), Sr - день, Ss - ночь. Операторы: ! & | ( ) = > < g l. В действиях можно ссылаться сюда: C3 = это условие №3. Мёртвый датчик даёт «неизвестно» — действие блокируется, в т.ч. под отрицанием, но явная истина через | перекрывает: T5<25|R1 сработает при мёртвом T5, если R1 вкл. Вложенность C-ссылок: 2 работают, глубже — блокировка. ВАЖНО: прямое управление (ползунок On/Off, MQTT/API set) условие НЕ проверяет'
-                      : 'Syntax: R1 - relay 1 on, !R2 - off, RV1>0 / RV1=255 / RV1g100 / RV1l100 - dimmer (for Zigbee - device state/level), B1 - button pressed, BU1 - not pressed, BH1 - held, T5>25.5 - temperature, H4>50 - humidity, Sr - daytime, Ss - night. Operators: ! & | ( ) = > < g l. Actions can reference here: C3 = this condition #3. Dead sensor yields "unknown" - blocked even under negation, but explicit truth via | overrides: T5<25|R1 fires with dead T5 if R1 is on. C-chain: 2 nested refs work, deeper is blocked. NOTE: direct control (On/Off toggle, MQTT/API set) does NOT check conditions'}
+                      ? 'Синтаксис: D1 - устройство с ID 1 включено (выход на пине DEVICE, PWM с яркостью больше 0 или Zigbee-устройство; прежняя запись R1 тоже работает), !D2 - выключено, DV1>0 / DV1=100 / DV1g100 / DV1l100 - диммер (для Zigbee - состояние/яркость устройства), B1 - кнопка нажата, BU1 - не нажата, BH1 - удерживается, T5>25.5 - температура (°C), H4>50 - влажность (%), Sr - день, Ss - ночь. Операторы: ! & | ( ) = > < g l. В действиях можно ссылаться сюда: C3 = это условие №3. Мёртвый датчик даёт «неизвестно» - действие блокируется, в т.ч. под отрицанием, но явная истина через | перекрывает: T5<25|D1 сработает при мёртвом T5, если D1 вкл. Вложенность C-ссылок: 2 работают, глубже - блокировка. ВАЖНО: прямое управление (ползунок On/Off, MQTT/API set) условие НЕ проверяет'
+                      : 'Syntax: D1 - device with ID 1 is on (an output on a DEVICE pin, PWM with brightness above 0, or a Zigbee device; the old notation R1 also works), !D2 - off, DV1>0 / DV1=100 / DV1g100 / DV1l100 - dimmer (for Zigbee - device state/level), B1 - button pressed, BU1 - not pressed, BH1 - held, T5>25.5 - temperature, H4>50 - humidity, Sr - daytime, Ss - night. Operators: ! & | ( ) = > < g l. Actions can reference here: C3 = this condition #3. Dead sensor yields "unknown" - blocked even under negation, but explicit truth via | overrides: T5<25|D1 fires with dead T5 if D1 is on. C-chain: 2 nested refs work, deeper is blocked. NOTE: direct control (On/Off toggle, MQTT/API set) does NOT check conditions'}
                   </p>
                 </td>
               </tr>
@@ -1214,6 +1777,23 @@ function Settings({ }) {
               </tbody>
             </table>
             </div>
+
+            <!-- Справка по условиям Sunrise/Sunset (RU/EN): заголовок и кнопка Show Help / Hide Help -->
+            <div class="flex items-center justify-between mt-6">
+              <h2 class="text-xl font-bold text-black">${SUN_HELP[isRuSun ? 'ru' : 'en'].panelTitle}</h2>
+              <button
+                type="button"
+                onClick=${(e) => { lockToggle(e); setCondHelpOpen(v => !v); }}
+                class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
+              >
+                ${condHelpOpen ? 'Hide Help' : 'Show Help'}
+              </button>
+            </div>
+            ${condHelpOpen && html`
+              <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;overflow-y:auto;">
+                <${SunCondHelp} isRu=${isRuSun} />
+              </div>
+            `}
           </div>
 
           <!-- ============================================================
@@ -1329,7 +1909,7 @@ function Settings({ }) {
                             />
                             <div class="flex flex-col">
                               <span class="font-bold text-slate-800 text-base leading-tight">${cat.key}</span>
-                              <span class="text-xs text-slate-500 font-medium">${(settings.lang || 'ru') === 'ru' ? cat.labelRu : cat.labelEn}</span>
+                              <span class="text-sm text-slate-600 font-medium">${(settings.lang || 'ru') === 'ru' ? cat.labelRu : cat.labelEn}</span>
                             </div>
                           </label>
                         `;

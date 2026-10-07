@@ -1,3 +1,4 @@
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -27,7 +28,7 @@ const ModalSecurity = ({
   });
   const [submitError, setSubmitError] = useState(null);
 
-  const mecurityRegex = buildActionRegex(3); /* + поддержка условия "?R2&RV3>50" */
+  const mecurityRegex = buildActionRegex(3); /* + поддержка условия "?D2&DV3>50" */
 
   const validateInput = (key, value) => {
     if (!value || value.trim() === '' || value.toLowerCase() === 'none') {
@@ -37,7 +38,7 @@ const ModalSecurity = ({
     if (key === 'action') {
       return mecurityRegex.test(value)
         ? null
-        : 'Incorrect format. Use "None", "pin:value" or "pin:value?cond" (e.g. 6:1?R2).';
+        : 'Incorrect format. Use "None", "pin:value" or "pin:value?cond" (e.g. 6:1?D2).';
     }
 
     if (value.length > 100) {
@@ -152,7 +153,7 @@ const ModalSecurity = ({
                   class="border rounded p-2 w-full ${errors.action
       ? 'border-red-500'
       : ''}"
-                  placeholder="None, 6:1, 6:1?R6"
+                  placeholder="None, 6:1, 6:1?D6"
                 />
                 <p class="text-gray-500 text-xs mt-1">${condHint((selectedSecurity?.lang || 'ru') === 'ru')}</p>
                 ${hasDisabledCond(action) &&

@@ -1,3 +1,4 @@
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -124,7 +125,7 @@ function ModalCron({
                           value=${activValue}
                           onInput=${handleActivChange}
                           class="border rounded p-2 w-full"
-                          placeholder="5:1, pwm:5,60,0,100, p60, 5:1?R2"
+                          placeholder="5:1, pwm:5,60,0,100, p60, 5:1?D2"
                         />
                         <p class="text-gray-500 text-xs mt-1 text-right">${(activValue || '').length}/255</p>
                         ${hasDisabledCond(activValue) &&
@@ -234,3 +235,4 @@ function ModalCron({
 }
 
 export { ModalCron };
+

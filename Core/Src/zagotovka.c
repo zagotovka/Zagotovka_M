@@ -1,3 +1,4 @@
+
 /*
  * zagotovka.c
  *
@@ -188,6 +189,96 @@ volatile uint32_t g_ver_select   = 1;
 /* Флаг «в PinsLinks нет свободных слотов» — сбрасывается при входе в parse_*,
  * выставляется при неудачной записи связи. HTTP-хендлеры отдают 507 вместо 200. */
 volatile bool g_pintopin_overflow = false;
+
+/* Ошибка разбора условия из JSON ("cexpr"/"cond"): parse_* выставляют её и
+ * прерываются, HTTP-хендлер отдаёт 400 с текстом сообщения (как при
+ * "conds[%d] too long"), чтобы не сохранить молча обрезанное условие. */
+volatile bool g_cond_error = false;
+char g_cond_error_msg[128] = {0};
+
+void set_cond_error(const char *msg) {
+  g_cond_error = true;
+  snprintf(g_cond_error_msg, sizeof(g_cond_error_msg), "%s", msg ? msg : "");
+}
+
+/* ─── Условие из JSON: свободное выражение "cexpr" ИЛИ номер "cond" ───
+ *
+ * Возвращает:
+ *   >= 0            индекс условия (COND_IDX_NONE = 0 = без условия);
+ *   COND_PARSE_KEEP - ключей условия в теле нет, ничего не менять;
+ *   COND_PARSE_ERR  - ошибка, подробности в g_cond_error_msg.
+ *
+ * "cexpr" приоритетнее: строка "" снимает условие, непустая проходит через
+ * cond_valid() и кладётся в пул (дедупликация). Старый веб, шлющий только
+ * номер "cond", работает как раньше.
+ */
+#define COND_PARSE_KEEP (-1)
+#define COND_PARSE_ERR (-2)
+
+static int cond_parse_json(struct mg_str body) {
+  int expr_ofs = mg_json_get(body, "$.cexpr", NULL);
+  if (expr_ofs >= 0) {
+    char expr[COND_LEN];
+    char msg[128];
+    int len = 0;
+    if (mg_json_get(body, "$.cexpr", &len) < 0) len = 0;
+    if (len < 0) len = 0;
+    /* len — длина ТОКЕНА вместе с кавычками, то есть текст имеет len-2
+     * символов. Обрезать НЕЛЬЗЯ: молча укороченное условие слабее задуманного,
+     * поэтому проверяем точную границу (COND_LEN-1 = 46 символов) и отказ. */
+    if (len < 2) {
+      snprintf(msg, sizeof(msg), "Condition: value is not a string");
+      set_cond_error(msg);
+      return COND_PARSE_ERR;
+    }
+    if ((size_t)(len - 2) >= sizeof(expr)) {
+      snprintf(msg, sizeof(msg),
+               "Condition too long: %d chars, max %d - refused (not "
+               "truncated)", len - 2, (int)COND_LEN - 1);
+      set_cond_error(msg);
+      return COND_PARSE_ERR;
+    }
+    /* mg_json_unescape() возвращает длину результата, 0 - ошибка. Для пустой
+     * строки "" она тоже возвращает 0, поэтому пустое значение ("снять
+     * условие") разбираем отдельно, а не как ошибку. */
+    if (len == 2) {
+      expr[0] = '\0';
+    } else if (mg_json_unescape(body, "$.cexpr", expr, sizeof(expr)) == 0) {
+      snprintf(msg, sizeof(msg),
+               "Condition: value is not a string or has a broken escape "
+               "sequence");
+      set_cond_error(msg);
+      return COND_PARSE_ERR;
+    }
+    /* Синтаксис проверяем самим cond_valid(), чтобы отличить опечатку от
+     * переполнения пула и показать точное сообщение. */
+    if (expr[0] != '\0' && !cond_valid(expr)) {
+      snprintf(msg, sizeof(msg),
+               "Bad condition syntax: \"%s\" (D1 !D2 DV1>50 B1 T5>25.5 "
+               "H4>50 Sr Ss C3)", expr);
+      set_cond_error(msg);
+      return COND_PARSE_ERR;
+    }
+    uint8_t idx = cond_intern(expr);
+    if (idx == COND_IDX_INVALID) {
+      snprintf(msg, sizeof(msg),
+               "Condition pool is full (%d slots) - reuse an existing "
+               "condition or delete unused links", cond_pool_capacity());
+      set_cond_error(msg);
+      return COND_PARSE_ERR;
+    }
+    return (int)idx;
+  }
+
+  if (mg_json_get(body, "$.cond", NULL) >= 0) {
+    long cv = mg_json_get_long(body, "$.cond", 0);
+    if (cv < 0) cv = 0;
+    if (cv > COND_POOL_TOTAL) cv = COND_POOL_TOTAL;
+    return (int)cv;
+  }
+
+  return COND_PARSE_KEEP;
+}
 
 void mark_slice_dirty(volatile uint32_t *ver) {
     taskENTER_CRITICAL();
@@ -721,6 +812,8 @@ static void cascade_delete_pin_id(int deleted_id) {
     if (changed_onewire)  { usbnum = 5; xQueueSend(usbQueueHandle, &usbnum, 0); }
     if (changed_pid)      { usbnum = 6; xQueueSend(usbQueueHandle, &usbnum, 0); }
     if (changed_zigbee)   { usbnum = 7; xQueueSend(usbQueueHandle, &usbnum, 0); }
+    /* Встроенный пул выражений: cond_lib_neutralize_id() мог обнулить слот */
+    if (cond_pool_take_dirty()) { usbnum = 8; xQueueSend(usbQueueHandle, &usbnum, 0); }
   }
 
   // 11. Инкремент версий (dirty status для ETag)
@@ -1046,21 +1139,28 @@ void handle_pintopin_get(struct mg_connection *c) {
     if (link.idin == 0 && link.idout == 0)
       continue;
 
-    /* Флашим буфер, если очередная запись может не поместиться */
-    if (sizeof(buf) - n < 96) {
+    /* Флашим буфер, если очередная запись может не поместиться.
+     * Порог 192: запись стала длиннее на ~60 байт из-за "cexpr"
+     * (выражение до 46 символов + кавычки). */
+    if (sizeof(buf) - n < 192) {
       mg_http_write_chunk(c, buf, n);
       n = 0;
     }
 
     char esc_pp_pins[16];
+    char ce_raw[COND_LEN];
+    char ce_expr[2 * COND_LEN + 8];
     json_escape_str(esc_pp_pins, link.pins, sizeof(esc_pp_pins));
+    cond_text_copy(link.cond, ce_raw, sizeof(ce_raw));
+    json_escape_str(ce_expr, ce_raw, sizeof(ce_expr));
 
     int w = snprintf(buf + n, sizeof(buf) - n,
-                     "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\",\"cond\":%d}",
+                     "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\",\"cond\":%d,"
+                     "\"cexpr\":\"%s\"}",
                      first ? "" : ",", link.idin, link.idout, esc_pp_pins,
-                     link.cond);
+                     link.cond, ce_expr);
     if (w < 0 || (size_t)w >= sizeof(buf) - n)
-      break; /* не должно происходить: флаш при остатке < 64 */
+      break; /* не должно происходить: флаш при остатке < 192 */
     n += (size_t)w;
     first = false;
   }
@@ -1075,6 +1175,18 @@ void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm) {
     //	printf("We got a switch JSON: %.*s\n", (int) hm->body.len,
     // hm->body.buf);
     parse_switch_json(hm->body.buf, PinsConf, PinsInfo, NUMPIN);
+    /* Некорректное/слишком длинное условие — 400 с текстом, ничего не сохранено */
+    if (g_cond_error) {
+      mg_http_reply(c, 400, s_json_header,
+                    "{\"status\":false,\"message\":\"%s\"}",
+                    g_cond_error_msg);
+      return;
+    }
+    /* Новый слот встроенного пула выражений -> сохранить cond.ini */
+    if (cond_pool_take_dirty()) {
+      uint8_t poolnum = 8;
+      xQueueSend(usbQueueHandle, &poolnum, 0);
+    }
     /* ETag меняем сразу, как в handle_onoff_set: Zigbee-ветка пишет конфиг
      * через SetZigbeeConfig() (usbnum=7), который g_ver_switch НЕ трогает,
      * а физическая — только когда разгрузится очередь USB-записи
@@ -1186,6 +1298,7 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
                        const struct dbPinsInfo *PinsInfo, int count) {
   struct mg_str body = mg_str_n(json, strlen(json));
   g_pintopin_overflow = false;
+  g_cond_error = false;
 
   long id_val = mg_json_get_long(body, "$.id", -1);
   if (id_val < 0) {
@@ -1195,10 +1308,22 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
     return;
   }
 
-  /* Условие для создаваемой связи (библиотека условий, 0 = нет). */
-  long cond_val = mg_json_get_long(body, "$.cond", -1);
-  if (cond_val > NUMCOND) cond_val = NUMCOND;
-  if (cond_val < 0) cond_val = 0;
+  /* Условие для создаваемой связи: свободное выражение "cexpr" или номер
+   * библиотеки "cond" (0 = нет). Разбираем ДО любых изменений, чтобы
+   * некорректное условие не оставило связи наполовину сохранёнными. */
+  int cond_val = cond_parse_json(body);
+  if (cond_val == COND_PARSE_ERR) {
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
+    return;
+  }
+  /* Ключей условия нет — у новой связи условия не будет (как раньше) */
+  if (cond_val == COND_PARSE_KEEP) cond_val = COND_IDX_NONE;
+
+  /* Номер связи (idout), к которой относится условие. Нужен, потому что у
+   * выключателя бывает несколько связей с РАЗНЫМИ условиями, а в теле запроса
+   * приходит весь pinact списка. -1 = старый веб, условие ко всем новым. */
+  long condtarget = mg_json_get_long(body, "$.condtarget", -1);
 
   /* ── Zigbee выключатель (id >= NUMPIN) ── */
   if (id_val >= NUMPIN) {
@@ -1267,8 +1392,12 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
                   memcpy(PinsLinks[findex].pins, "ZBEE", 4);
                 }
                 PinsLinks[findex].pins[sizeof(PinsLinks[findex].pins) - 1] = '\0';
-                /* Zigbee-связи пересоздаются целиком - условие ко всем */
-                PinsLinks[findex].cond = (uint8_t)cond_val;
+                /* Zigbee-связи пересоздаются целиком (условие при этом
+                 * терялось). Старый веб (без "condtarget") - условие ко всем
+                 * связям, как раньше; новый веб присылает "condtarget", и тогда
+                 * условие получает только выбранная связь. */
+                PinsLinks[findex].cond =
+                    (condtarget < 0 || condtarget == pin_id) ? (uint8_t)cond_val : 0;
               } else {
                 g_pintopin_overflow = true;
                 printf("No free space in PinsLinks (idin=%ld)!\r\n", id_val);
@@ -1367,9 +1496,14 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
               memcpy(PinsLinks[indextu].pins, "ZBEE", 4);
             }
             PinsLinks[indextu].pins[sizeof(PinsLinks[indextu].pins) - 1] = '\0';
-            /* Условие применяется только к НОВОЙ связи, чтобы полный
-             * pinact из модалки не перетирал условия существующих связей */
-            if (eindex == -1) {
+            /* Старый веб (без "condtarget"): условие — только НОВОЙ связи,
+             * чтобы полный pinact из модалки не перетирал условия остальных.
+             * Новый веб присылает "condtarget" — тогда условие правится у
+             * конкретной связи, даже уже существующей. */
+            if (eindex == -1 && condtarget < 0) {
+              PinsLinks[indextu].cond = (uint8_t)cond_val;
+            }
+            if (condtarget == pin_id) {
               PinsLinks[indextu].cond = (uint8_t)cond_val;
             }
           } else {
@@ -1396,7 +1530,7 @@ void handle_button_get(struct mg_connection *c, struct mg_http_message *hm) {
 }
 /* ── Проверка длины строковых полей JSON: отказывать, а не обрезать ──
  * Обрезанное действие может тихо ослабить условие блокировки
- * ("6:1?R2&R3" -> "6:1?R2"), поэтому переполнение = ответ 400 без сохранения.
+ * ("6:1?D2&D3" -> "6:1?D2"), поэтому переполнение = ответ 400 без сохранения.
  * Возвращает true, если ответ 400 уже отправлен. */
 static bool reply_if_str_too_long(struct mg_connection *c, struct mg_str body,
                                   const char *const *paths, const int *limits,
@@ -1703,6 +1837,16 @@ void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm) {
 
   if (hm->body.len > 0) {
     parse_encoder_json(hm->body.buf, PinsConf, PinsLinks, PinsInfo, NUMPIN);
+    if (g_cond_error) {
+      mg_http_reply(c, 400, extra_headers,
+                    "{\"status\":false,\"message\":\"%s\"}",
+                    g_cond_error_msg);
+      return;
+    }
+    if (cond_pool_take_dirty()) {
+      uint8_t poolnum = 8;
+      xQueueSend(usbQueueHandle, &poolnum, 0);
+    }
     if (g_pintopin_overflow) {
       MG_INFO(("Response headers for connection %ld:", c->id));
       log_headers(extra_headers);
@@ -1778,6 +1922,12 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
                                       ? pins_info[encoderb_id].pins
                                       : "";
 
+      /* Текст условия выгружаем вместе с номером: при переносе конфига на
+       * другой контроллер номер слота встроенного пула может не совпасть. */
+      char ce_raw[COND_LEN];
+      char ce_expr[2 * COND_LEN + 8];
+      cond_text_copy((uint8_t)enc_cond, ce_raw, sizeof(ce_raw));
+      json_escape_str(ce_expr, ce_raw, sizeof(ce_expr));
       offset += snprintf(buffer + offset, buffer_size - offset,
                          "      \"topin\": %d,\n"
                          "      \"id\": %d,\n"
@@ -1789,11 +1939,12 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
                          "      \"pwmmax\": %d,\n"
                          "      \"ponr\": %d,\n"
                          "      \"zbee_bind\": %d,\n"
-                         "      \"cond\": %d,\n",
+                         "      \"cond\": %d,\n"
+                         "      \"cexpr\": \"%s\",\n",
                          pins_conf[i].topin, i, pins_info[i].pins, encoderb_id,
                          encb_pin_name, pwm_dvalue, pwm_freq, pwm_max,
                          pins_conf[i].ponr, pins_conf[i].zbee_bind_id,
-                         enc_cond);
+                         enc_cond, ce_expr);
       // Обработка pinact
       offset += snprintf(buffer + offset, buffer_size - offset,
                          "      \"pinact\": {");
@@ -1844,6 +1995,7 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
   struct mg_str body = mg_str_n(json, strlen(json));
   uint8_t usbnum = 255;
   g_pintopin_overflow = false;
+  g_cond_error = false;
 
   long id_val = mg_json_get_long(body, "$.id", -1);
   if (id_val < 0) {
@@ -1860,13 +2012,16 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
     return;
   }
 
-  /* Условие на связь энкодера (библиотека условий, 0 = нет).
-   * Применяется только если ключ "cond" присутствует в запросе. */
-  bool has_cond = mg_json_get(body, "$.cond", NULL) >= 0;
-  long cond_val = mg_json_get_long(body, "$.cond", 0);
-  if (cond_val > NUMCOND) cond_val = NUMCOND;
-  if (cond_val < 0) cond_val = 0;
-  if (!has_cond) cond_val = -1; /* маркер "не менять" */
+  /* Условие на связь энкодера: свободное выражение "cexpr" либо номер
+   * библиотеки "cond" (0 = нет). Применяется, только если ключ прислан;
+   * разбираем до изменений, чтобы ошибка не оставила энкодер наполовину
+   * сохранённым. */
+  int cond_val = cond_parse_json(body);
+  if (cond_val == COND_PARSE_ERR) {
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
+    return;
+  }
 
   bool has_topin = mg_json_get(body, "$.topin", NULL) >= 0;
   bool has_dvalue = mg_json_get(body, "$.dvalue", NULL) >= 0;
@@ -2448,6 +2603,11 @@ static void emit_conds(struct mg_connection *c, const struct dbSettings *s,
   }
   cond_count_crefs(SetSettings.srise_pins, used);
   cond_count_crefs(SetSettings.sset_pins, used);
+  /* Ссылки "?C<n>" из встроенного пула выражений (Switch/Encoder/PID) */
+  for (int i = 1; i <= COND_POOL_TOTAL; i++) {
+    const char *e = cond_text((uint8_t)i);
+    if (e[0] != '\0') cond_count_crefs(e, used);
+  }
 
   len = snprintf(buf, 512, "\"conds_used\":[");
   mg_http_write_chunk(c, buf, (size_t)len);
@@ -2456,6 +2616,11 @@ static void emit_conds(struct mg_connection *c, const struct dbSettings *s,
     mg_http_write_chunk(c, buf, (size_t)len);
   }
   len = snprintf(buf, 512, "],");
+  mg_http_write_chunk(c, buf, (size_t)len);
+  /* Ёмкость и занятость встроенного пула: веб показывает подсказку при
+   * переполнении, пользователь видит, куда делось свободное место. */
+  len = snprintf(buf, 512, "\"cond_pool\":{\"used\":%d,\"total\":%d},",
+                 cond_pool_used(), cond_pool_capacity());
   mg_http_write_chunk(c, buf, (size_t)len);
 }
 
@@ -6954,7 +7119,7 @@ void action_handler(uint8_t button_id, const char *action_str,
   char *saveptr = NULL;
   char *token = strtok_r(str, ",", &saveptr);
   while (token != NULL) {
-    /* Дополнительное условие срабатывания: "5:1?R2&RV3>50".
+    /* Дополнительное условие срабатывания: "5:1?D2&DV3>50".
      * Разбираем ДО поиска '.', т.к. условие может содержать точку (T5.2). */
     const char *cond = NULL;
     {
@@ -9729,24 +9894,31 @@ void gen_pid_json(char *buffer, int buffer_size) {
 
     char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[i].tmpset, 1);
     char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), PidConf[i].tmpcur, 1);
+    char ce_raw[COND_LEN];
+    char ce_expr[2 * COND_LEN + 8];
+    cond_text_copy(PidConf[i].cond, ce_raw, sizeof(ce_raw));
+    json_escape_str(ce_expr, ce_raw, sizeof(ce_expr));
     pos += snprintf(buffer + pos, buffer_size - pos,
                     ",\"selsens\":\"%d\",\"sernum\":\"%s\",\"presets\":\"%d\""
                     ",\"tmpset\":\"%s\",\"tmpcur\":\"%s\""
                     ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d"
-                    ",\"cond\":%d"
+                    ",\"cond\":%d,\"cexpr\":\"%s\""
                     ",\"tune_state\":%d,\"tune_progress\":%d}",
                     (int)PidConf[i].selsens, PidConf[i].sernum,
                     PidConf[i].preset, s_ts, s_tc,
                     current_duty, PidConf[i].info, PidConf[i].onoff,
-                    PidConf[i].cond,
+                    PidConf[i].cond, ce_expr,
                     (int)PidConf[i].tune_state, (int)PidConf[i].tune_progress);
   }
   pos += snprintf(buffer + pos, buffer_size - pos, "]}");
 }
 
 /* ──── parse_pid_json: парсит JSON от /api/pid/set ──── */
+
+
 void parse_pid_json(const char *json) {
   struct mg_str body = mg_str_n(json, strlen(json));
+  g_cond_error = false;
 
   long id_val = mg_json_get_long(body, "$.id", -1);
   if (id_val < 0) {
@@ -9756,6 +9928,16 @@ void parse_pid_json(const char *json) {
   }
   int id = (int)id_val - 1;
   if (id < 0 || id >= PID_MAX_SLOTS) {
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
+    return;
+  }
+
+  /* Дополнительное условие работы регулятора. Разбираем ДО применения
+   * остальных полей: некорректное условие не должно оставлять слот
+   * изменённым наполовину. "cexpr" - свободное выражение, "cond" - номер. */
+  int pid_cond = cond_parse_json(body);
+  if (pid_cond == COND_PARSE_ERR) {
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
@@ -9828,12 +10010,9 @@ void parse_pid_json(const char *json) {
     PidConf[id].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", 0);
   }
 
-  /* Дополнительное условие работы регулятора (библиотека условий) */
-  if (mg_json_get(body, "$.cond", NULL) >= 0) {
-    long cv = mg_json_get_long(body, "$.cond", 0);
-    if (cv < 0) cv = 0;
-    if (cv > NUMCOND) cv = NUMCOND;
-    PidConf[id].cond = (uint8_t)cv;
+  /* Дополнительное условие работы регулятора (вычислено выше) */
+  if (pid_cond != COND_PARSE_KEEP) {
+    PidConf[id].cond = (uint8_t)pid_cond;
   }
 
   if (PidConf[id].selsens == PID_SENS_DS18B20 &&
@@ -9923,16 +10102,20 @@ void handle_pid_get(struct mg_connection *c) {
 
     { char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), pid.tmpset, 1);
       char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), pid.tmpcur, 1);
+      char ce_raw[COND_LEN];
+      char ce_expr[2 * COND_LEN + 8];
+      cond_text_copy(pid.cond, ce_raw, sizeof(ce_raw));
+      json_escape_str(ce_expr, ce_raw, sizeof(ce_expr));
       len = snprintf(buf, sizeof(buf),
                    ",\"selsens\":\"%d\",\"sernum\":\"%s\",\"presets\":\"%d\""
                    ",\"tmpset\":\"%s\",\"tmpcur\":\"%s\""
                    ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d"
-                   ",\"cond\":%d"
+                   ",\"cond\":%d,\"cexpr\":\"%s\""
                    ",\"tune_state\":%d,\"tune_progress\":%d}",
                    (int)pid.selsens, pid.sernum,
                    pid.preset, s_ts, s_tc,
                    current_duty, pid.info, pid.onoff,
-                   pid.cond,
+                   pid.cond, ce_expr,
                    (int)pid.tune_state, (int)pid.tune_progress); }
     mg_http_write_chunk(c, buf, (size_t)len);
   }
@@ -9956,9 +10139,21 @@ void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm) {
 
   parse_pid_json(g_body);
 
+  /* Некорректное условие — 400, слот PID не изменён */
+  if (g_cond_error) {
+    mg_http_reply(c, 400, s_json_header, "{\"status\":false,\"message\":\"%s\"}",
+                  g_cond_error_msg);
+    return;
+  }
+
   /* Сохранение на Flash */
   uint8_t num = 6;
   xQueueSend(usbQueueHandle, &num, 0);
+  /* Встроенный пул выражений мог измениться (новое свободное условие) */
+  if (cond_pool_take_dirty()) {
+    num = 8;
+    xQueueSend(usbQueueHandle, &num, 0);
+  }
 
   mg_http_reply(c, 200, s_json_header, "{\"status\":\"ok\"}");
   /* НЕТ pvPortMalloc / vPortFree */
@@ -11112,3 +11307,4 @@ void handle_zigbee_rescan(struct mg_connection *c, struct mg_http_message *hm) {
 
   mg_http_reply(c, 200, "Content-Type: application/json\r\n", "{\"status\":true}");
 }
+

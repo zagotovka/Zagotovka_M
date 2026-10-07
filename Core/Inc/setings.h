@@ -30,6 +30,11 @@ extern bool g_log_filter_from_file; // Флаг: log_filter_mask был проч
 void GetPidConfig();
 void SetPidConfig();
 
+/* Встроенный пул выражений условий (свободный ввод для Switch/Encoder/PID).
+ * Читается ДО pintopin.ini/pid.ini: номера в них ссылаются на слоты пула. */
+void GetCondPool();
+void SetCondPool();
+
 #define ADM_NAME "admin"
 #define ADM_PASS "12345678"
 #define LANG "ru"

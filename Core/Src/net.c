@@ -12,6 +12,7 @@
 #include "fmt_float.h"
 #include <stdlib.h>   // rand()
 #include <stdarg.h>   // va_list for ota_log_direct()
+#include "cond_eval.h" /* текст условия связи для /api/state/encoder */
 #include "dtcm_alloc.h"
 
 struct user {
@@ -1530,7 +1531,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
         if (ZigbeeConf[i].ep_onoff > 0) {
           char zbee_sub_topic[96];
           snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
-                   "%s/data/%s/%d/EF00/%04X",
+                   "%s/data/%.16s/%d/EF00/%04X",
                    get_rxzbtop(),
                    ZigbeeConf[i].zbee_ieee,
                    ZigbeeConf[i].zbee_endpoint,
@@ -1546,7 +1547,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
           /* Также подписываемся на кластер 8 (Dimmer) для этого EP */
           if (ZigbeeConf[i].cluster_flags & ZBEE_CL_DIMMER) {
             snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
-                     "%s/data/%s/%d/0008/%04X",
+                     "%s/data/%.16s/%d/0008/%04X",
                      get_rxzbtop(),
                      ZigbeeConf[i].zbee_ieee,
                      ZigbeeConf[i].zbee_endpoint,
@@ -1566,7 +1567,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
         if (flags & ZBEE_CL_ONOFF) {
           char zbee_sub_topic[80];
           snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
-                   "%s/data/%s/%d/0006/%04X",
+                   "%s/data/%.16s/%d/0006/%04X",
                    get_rxzbtop(),
                    ZigbeeConf[i].zbee_ieee,
                    ZigbeeConf[i].zbee_endpoint,
@@ -1581,7 +1582,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
         if (flags & ZBEE_CL_DIMMER) {
           char zbee_sub_topic[80];
           snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
-                   "%s/data/%s/%d/0008/%04X",
+                   "%s/data/%.16s/%d/0008/%04X",
                    get_rxzbtop(),
                    ZigbeeConf[i].zbee_ieee,
                    ZigbeeConf[i].zbee_endpoint,
@@ -1596,7 +1597,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
         if (flags & ZBEE_CL_COLOR) {
           char zbee_sub_topic[80];
           snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
-                   "%s/data/%s/%d/0300/%04X",
+                   "%s/data/%.16s/%d/0300/%04X",
                    get_rxzbtop(),
                    ZigbeeConf[i].zbee_ieee,
                    ZigbeeConf[i].zbee_endpoint,
@@ -1611,7 +1612,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
         if (flags & ZBEE_CL_COVER) {
           char zbee_sub_topic[80];
           snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
-                   "%s/data/%s/%d/0102/%04X",
+                   "%s/data/%.16s/%d/0102/%04X",
                    get_rxzbtop(),
                    ZigbeeConf[i].zbee_ieee,
                    ZigbeeConf[i].zbee_endpoint,
@@ -1626,7 +1627,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
         if (flags & ZBEE_CL_THERMO) {
           char zbee_sub_topic[80];
           snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
-                   "%s/data/%s/%d/0201/%04X",
+                   "%s/data/%.16s/%d/0201/%04X",
                    get_rxzbtop(),
                    ZigbeeConf[i].zbee_ieee,
                    ZigbeeConf[i].zbee_endpoint,
@@ -1641,7 +1642,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
         if (flags & ZBEE_CL_LOCK) {
           char zbee_sub_topic[80];
           snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
-                   "%s/data/%s/%d/0101/%04X",
+                   "%s/data/%.16s/%d/0101/%04X",
                    get_rxzbtop(),
                    ZigbeeConf[i].zbee_ieee,
                    ZigbeeConf[i].zbee_endpoint,
@@ -1662,7 +1663,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
           if (is_trigger) {
             char zbee_sub_topic[80];
             snprintf(zbee_sub_topic, sizeof(zbee_sub_topic),
-                     "%s/trigger/%s",
+                     "%s/trigger/%.16s",
                      get_rxzbtop(),
                      ZigbeeConf[i].zbee_ieee);
             struct mg_mqtt_opts zbee_sub;
@@ -2142,7 +2143,7 @@ void handle_buttons(struct mg_connection *c, struct mg_http_message *hm) {
         } else if (ZigbeeConf[i].pt_single[0] != '\0') {
             json_escape_str(esc_pins, ZigbeeConf[i].pt_single, sizeof(esc_pins));
         } else {
-            snprintf(esc_pins, sizeof(esc_pins), "ZB_%s", ZigbeeConf[i].zbee_ieee);
+            snprintf(esc_pins, sizeof(esc_pins), "ZB_%.16s", ZigbeeConf[i].zbee_ieee);
         }
 
         CHUNK_SEND_FMT(c, &first,
@@ -2264,7 +2265,7 @@ void handle_switches(struct mg_connection *c) {
             ZigbeeConf[i].pt_single[0] != '\0') {
             json_escape_str(esc_pins, ZigbeeConf[i].pt_single, sizeof(esc_pins));
         } else {
-            snprintf(esc_pins, sizeof(esc_pins), "ZB_%s", ZigbeeConf[i].zbee_ieee);
+            snprintf(esc_pins, sizeof(esc_pins), "ZB_%.16s", ZigbeeConf[i].zbee_ieee);
         }
 
         char pinact_buf[256];
@@ -2324,6 +2325,8 @@ void handle_encoders(struct mg_connection *c) {
          * двойном цикле), pinact собирается за один проход без O(N²). */
         int pwm_dvalue = 0, pwm_freq = 0, pwm_max = 0;
         int best_out = -1;
+        int enc_cond = 0;          /* условие на связи энкодера (первая связь с PWM) */
+        bool cond_set = false;
         char pinact[256];
         int pa_off   = 0;
         int pa_first = 1;
@@ -2332,6 +2335,7 @@ void handle_encoders(struct mg_connection *c) {
             int out_id = PinsLinks[k].idout;
             if (out_id < 0 || out_id >= NUMPIN) continue;
             if (PinsConf[out_id].topin != 5) continue;
+            if (!cond_set) { enc_cond = PinsLinks[k].cond; cond_set = true; }
             if (out_id > best_out) {
                 best_out   = out_id;
                 pwm_dvalue = PinsConf[out_id].dvalue;
@@ -2352,13 +2356,17 @@ void handle_encoders(struct mg_connection *c) {
         char esc_info[64];
         char esc_pins[16];
         char esc_encb[16];
+        char ce_raw[COND_LEN];
+        char ce_expr[2 * COND_LEN + 8];
         json_escape_str(esc_info, PinsConf[i].info, sizeof(esc_info));
         json_escape_str(esc_pins, PinsInfo[i].pins, sizeof(esc_pins));
         json_escape_str(esc_encb, encb_pin, sizeof(esc_encb));
+        cond_text_copy(enc_cond, ce_raw, sizeof(ce_raw));
+        json_escape_str(ce_expr, ce_raw, sizeof(ce_expr));
 
         /* ── Проверка остатка буфера перед записью слота ── */
         int remaining = (int)G_BODY_SIZE - pos;
-        if (remaining < 400) {  // 400 — максимум одного encoder-слота с pinact
+        if (remaining < 700) {  // 700 — максимум одного encoder-слота (pinact 256 + cexpr 102 + поля)
             MG_ERROR(("encoders: OVERFLOW at pin %d, pos=%d remaining=%d",
                       i, pos, remaining));
             break;
@@ -2369,14 +2377,14 @@ void handle_encoders(struct mg_connection *c) {
             "\"encoderb\":%d,\"encdrbpin\":\"%s\","
             "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,\"ponr\":%d,"
             "\"pinact\":{%s},\"info\":\"%s\",\"onoff\":%d,"
-            "\"zbee_bind\":%d}",
+        	"\"zbee_bind\":%d,\"cond\":%d,\"cexpr\":\"%s\"}",
             first ? "" : ",",
             PinsConf[i].topin, i, esc_pins,
             encoderb_id, esc_encb,
             pwm_dvalue, pwm_freq, pwm_max,
             PinsConf[i].ponr,
             pinact, esc_info, PinsConf[i].onoff,
-            PinsConf[i].zbee_bind_id);
+			PinsConf[i].zbee_bind_id, enc_cond, ce_expr);
 
         first = false;
     }
@@ -2423,12 +2431,16 @@ static void handle_pid(struct mg_connection *c) {
 
         char esc_info[64];
         char esc_pname[16];
+        char ce_raw[COND_LEN];
+        char ce_expr[2 * COND_LEN + 8];
         json_escape_str(esc_info, PidConf[i].info, sizeof(esc_info));
         json_escape_str(esc_pname, pin_name, sizeof(esc_pname));
+        cond_text_copy(PidConf[i].cond, ce_raw, sizeof(ce_raw));
+        json_escape_str(ce_expr, ce_raw, sizeof(ce_expr));
 
         /* Проверка — остаток буфера перед записью слота */
         int remaining = (int)G_BODY_SIZE - pos;
-        if (remaining < 350) {  // 350 — максимум одного PID-слота
+        if (remaining < 500) {  // 500 — максимум одного PID-слота с cexpr
             MG_ERROR(("pid: OVERFLOW at slot %d, pos=%d remaining=%d",
                       i, pos, remaining));
             break;  // JSON будет неполным но не битым — закроем массив ниже
@@ -2455,7 +2467,8 @@ static void handle_pid(struct mg_connection *c) {
             "\"selsens\":\"%s\",\"sernum\":\"%s\",\"presets\":\"%u\","
             "\"tmpset\":\"%s\",\"tmpcur\":\"%s\","
             "\"duty\":%d,\"info\":\"%s\",\"onoff\":%d,"
-            "\"tune_state\":%u,\"tune_progress\":%u}",
+            "\"tune_state\":%u,\"tune_progress\":%u,"
+            "\"cond\":%d,\"cexpr\":\"%s\"}",
             first ? "" : ",",
             i + 1, esc_pname,
             pinact,
@@ -2466,7 +2479,8 @@ static void handle_pid(struct mg_connection *c) {
             duty,
             esc_info,
             PidConf[i].onoff,
-            PidConf[i].tune_state, PidConf[i].tune_progress);
+            PidConf[i].tune_state, PidConf[i].tune_progress,
+            (int)PidConf[i].cond, ce_expr);
 
         first = false;
     }

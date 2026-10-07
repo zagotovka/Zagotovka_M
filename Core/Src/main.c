@@ -1,3 +1,4 @@
+
 /* USER CODE BEGIN Header */
 /**
  ******************************************************************************
@@ -69,7 +70,7 @@ extern volatile uint8_t onlineFlg;
 extern uint8_t *gsm_rx_buffer;
 extern volatile gsm_rx_buffer_index_t gsm_rx_buffer_head;
 extern uint8_t _sitcm[], _eitcm[];
-extern uint32_t _sitcm_load;
+extern uint32_t _sitcm_load[];
 uint8_t RxByte; // Буфер для приема одного байта по UART
 
 uint8_t owflag = 0;
@@ -935,7 +936,7 @@ int main(void)
 
   /* ── ITCM check #0: сразу после входа в main() ── */
   {
-    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+    uint32_t *flash_src = (uint32_t *)_sitcm_load;
     uint32_t *itcm_dst  = (uint32_t *)_sitcm;
     if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
       EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT ENTRY #0 ***\r\n");
@@ -992,7 +993,7 @@ int main(void)
 
       /* ── ITCM check 1d1: сразу после HAL_FLASHEx_OBGetConfig, до printf ── */
       {
-        uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+        uint32_t *flash_src = (uint32_t *)_sitcm_load;
         uint32_t *itcm_dst  = (uint32_t *)_sitcm;
         if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
           EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1d1 (after HAL_FLASHEx_OBGetConfig) ***\r\n");
@@ -1028,7 +1029,7 @@ int main(void)
 
       /* ── ITCM check 1d2: сразу после printf (теперь early_uart_print) ── */
       {
-        uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+        uint32_t *flash_src = (uint32_t *)_sitcm_load;
         uint32_t *itcm_dst  = (uint32_t *)_sitcm;
         if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
           EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1d2 (after bank print) ***\r\n");
@@ -1044,7 +1045,7 @@ int main(void)
 
   /* ── ITCM check 1e: после memset(ds18b20) ── */
   {
-    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+    uint32_t *flash_src = (uint32_t *)_sitcm_load;
     uint32_t *itcm_dst  = (uint32_t *)_sitcm;
     if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
       EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1e (after memset ds18b20) ***\r\n");
@@ -1060,7 +1061,7 @@ int main(void)
 
   /* ── ITCM check 1g: после DWT_Init() ── */
   {
-    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+    uint32_t *flash_src = (uint32_t *)_sitcm_load;
     uint32_t *itcm_dst  = (uint32_t *)_sitcm;
     if (flash_src[0] != itcm_dst[0] || flash_src[1] != itcm_dst[1]) {
       EARLY_LOG_SYSTEM("[SYSTEM] *** ITCM CORRUPTED AT 1g (after DWT_Init) ***\r\n");
@@ -1075,7 +1076,7 @@ int main(void)
 
   /* ── ITCM check #2: перед dtcm_alloc_init() ── */
   {
-    uint32_t *flash_src = (uint32_t *)&_sitcm_load;
+    uint32_t *flash_src = (uint32_t *)_sitcm_load;
     uint32_t *itcm_dst  = (uint32_t *)_sitcm;
     uint32_t  itcm_size = (uint32_t)(_eitcm - _sitcm);
     uint32_t  nwords    = itcm_size / 4;
@@ -1717,7 +1718,7 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
   token = strtok_r(str, delim, &saveptr);
   while (token != NULL) {
     char *end_token;
-    /* Дополнительное условие срабатывания: "5:1?R2" (см. cond_eval.h).
+    /* Дополнительное условие срабатывания: "5:1?D2" (см. cond_eval.h).
      * Разбираем до ветвлений pwm:/p: условие не содержит запятых,
      * но может содержать ':' и '.'. */
     const char *cond = NULL;
@@ -1741,7 +1742,7 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
       char *t3 = strtok_r(NULL, delim, &saveptr);
       char *t4 = strtok_r(NULL, delim, &saveptr);
       if (t1 && t2 && t3 && t4) {
-        /* Условие может стоять и на последнем параметре: pwm:5,60,0,100?R2 */
+        /* Условие может стоять и на последнем параметре: pwm:5,60,0,100?D2 */
         char *q4 = strchr(t4, '?');
         if (q4 != NULL) {
           *q4 = '\0';
@@ -1803,7 +1804,7 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
  * Возвращает число несовпавших слов (макс. 8), details первого несовпадения. */
 static uint32_t itcm_check_words(uint32_t *first_idx, uint32_t *exp_word, uint32_t *got_word)
 {
-  const uint32_t *flash_src = (const uint32_t *)&_sitcm_load;
+  const uint32_t *flash_src = (const uint32_t *)_sitcm_load;
   const uint32_t *itcm_dst  = (const uint32_t *)_sitcm;
   uint32_t n = (uint32_t)(_eitcm - _sitcm) / 4;
   uint32_t errors = 0;
@@ -1868,6 +1869,14 @@ void StartConfigTask(void *argument)
 	          GetPinConfig(); // "pins.ini" существует — читаем его
 	        } else {
 	          SetPinConfig(); // "pins.ini" не существует — создаём его
+	        }
+
+	        /* Встроенный пул выражений условий читаем ПЕРВЫМ: номера слотов в
+	         * pintopin.ini/pid.ini ссылаются именно на него. */
+	        if (f_stat("cond.ini", &finfo) == FR_OK) {
+	          GetCondPool(); // "cond.ini" существует — читаем его
+	        } else {
+	          SetCondPool(); // "cond.ini" не существует — создаём его
 	        }
 
 	        if (f_stat("pintopin.ini", &finfo) == FR_OK) {
@@ -1951,6 +1960,9 @@ void StartConfigTask(void *argument)
 	          break;
 	        case 7:
 	          SetZigbeeConfig(); // Сохранение Zigbee конфигурации в "zigbee.ini"
+	          break;
+	        case 8:
+	          SetCondPool(); // Сохранение встроенных выражений условий в "cond.ini"
 	          break;
 	        default:
 	          printf("xQueueReceive get wrong data! \r\n");
@@ -4082,3 +4094,4 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
+

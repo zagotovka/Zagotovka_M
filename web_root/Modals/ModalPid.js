@@ -1,9 +1,10 @@
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
-import { fetchConditions } from '../condlib.js';
+import { fetchConditions, fetchCondPool, condPayload, validateCondExpr, CondInput } from '../condlib.js';
 
 // Список пресетов и подсказка приходят из TabPid.js через параметры presetList и PresetHintComponent
 const SENSOR_OPTIONS = [
@@ -36,7 +37,12 @@ function ModalPid({
   const [selectedPwm, setSelectedPwm] = useState(Object.entries(selectedPid?.pinact || {})[0] || ['', '']
 );
   const [condsList, setCondsList] = useState([]);
-  const [pidCond, setPidCond] = useState(selectedPid?.cond || 0);
+  const [poolInfo, setPoolInfo] = useState(null);
+  // Условие регулятора - свободное выражение (исходные значения нужны,
+  // чтобы не отвязать ссылку на ячейку библиотеки 1..12 без правки).
+  const [pidCond, setPidCond] = useState(selectedPid?.cexpr || '');
+  const [condText0, setCondText0] = useState(selectedPid?.cexpr || '');
+  const [condNum0, setCondNum0] = useState(parseInt(selectedPid?.cond, 10) || 0);
 
   // Обновляем состояние при смене selectedPid
 useEffect(() => {
@@ -48,12 +54,15 @@ useEffect(() => {
   setTmpset(selectedPid?.tmpset || '');
   setTmpcur(selectedPid?.tmpcur || '');
   setSelectedPwm(Object.entries(selectedPid?.pinact || {})[0] || ['', '']);
-  setPidCond(selectedPid?.cond || 0);
+  setPidCond(selectedPid?.cexpr || '');
+  setCondText0(selectedPid?.cexpr || '');
+  setCondNum0(parseInt(selectedPid?.cond, 10) || 0);
 }, [selectedPid]);
 
 
   useEffect(() => {
   fetchConditions().then(setCondsList);
+  fetchCondPool().then(setPoolInfo);
   fetch('/api/select/get', {
     method: 'GET',
     cache: 'no-store',
@@ -83,6 +92,15 @@ useEffect(() => {
 
 const hasPwm = selectedPwm[0] && selectedPwm[1] !== undefined && selectedPwm[1] !== '';
 
+// Условие регулятора: свободное выражение ("cexpr") либо, если текст не
+// менялся, ссылка на ячейку библиотеки (номер "cond").
+const condErr = validateCondExpr(pidCond);
+if (condErr) {
+  alert(condErr.ru);
+  return;
+}
+const condBody = condPayload({ loadedText: condText0, loadedNum: condNum0, text: pidCond });
+
 const jsonData = {
   id: selectedPid.id,
   pins: selectedPwm[0],          // имя пина, например "PB15"
@@ -96,7 +114,7 @@ const jsonData = {
   tmpcur: tmpcur,
   info: pidInfo,
   onoff: onoff ? 1 : 0,
-  cond: parseInt(pidCond) || 0,   // условие работы регулятора (0 = нет)
+  ...condBody,                  // условие работы регулятора
 };
 
     console.log('Data being sent to server:', jsonData);
@@ -106,8 +124,13 @@ const jsonData = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(jsonData)
     })
-      .then((response) => response.json())
-      .then((data) => {
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          // 400: условие длиннее 46 символов / ошибка синтаксиса / пул полон
+          alert(data.message || `Ошибка ${response.status}`);
+          return;
+        }
         console.log('Success:', data);
         handlePidChange({ ...selectedPid, ...jsonData });
         hideModal();
@@ -261,24 +284,20 @@ const handlePwmChange = (e) => {
                     label: 'Condition',
                     value: html`
                       <div>
-                        <select
-                          value=${String(pidCond)}
-                          onChange=${(e) => setPidCond(parseInt(e.target.value) || 0)}
-                          class="border rounded p-2 w-full"
-                        >
-                          <option value="0">None</option>
-                          ${condsList.map((c, i) => c ? html`
-                            <option value=${i + 1}>
-                              #${i + 1}: ${c}
-                            </option>
-                          ` : null)}
-                        </select>
-                        <div class="text-xs text-gray-500 mt-1">
-                          Регулятор активен только при истинном условии (иначе выход = 0). Библиотека условий - Global Settings
+                        <${CondInput}
+                          value=${pidCond}
+                          onChange=${setPidCond}
+                          conds=${condsList}
+                          pool=${poolInfo}
+                          isRu=${true}
+                        />
+                        <div class="text-gray-500 text-xs mt-1">
+                          Регулятор работает только при истинном условии, иначе выход = 0. Пустое поле - без условия. Кнопки C1..C12 вставляют ссылку на ячейку библиотеки условий (панель Conditions под таблицей).
                         </div>
                       </div>
                     `
                   },
+
                   {
                     label: 'INFO',
                     value: html`
@@ -398,4 +417,5 @@ const handlePwmChange = (e) => {
 }
 
 export { ModalPid };
+
 

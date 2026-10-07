@@ -1,10 +1,11 @@
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
 import { pwmTimerMap } from '../Tabs/TabEncoder.js';
-import { fetchConditions, condHint } from '../condlib.js';
+import { fetchConditions, fetchCondPool, condPayload, validateCondExpr, CondInput, condHint } from '../condlib.js';
 
 function ModalEncoder({
   modalType,
@@ -31,7 +32,12 @@ function ModalEncoder({
   const [pwmOptions, setPwmOptions] = useState([]);
   const [zbeeBind, setZbeeBind] = useState(selectedEncoder?.zbee_bind || 0);
   const [condsList, setCondsList] = useState([]);
-  const [linkCond, setLinkCond] = useState(selectedEncoder?.cond || 0);
+  const [poolInfo, setPoolInfo] = useState(null);
+  // Условие связи энкодера - свободное выражение. Исходные значения нужны,
+  // чтобы не отвязать ссылку на ячейку библиотеки (cond 1..12) без правки.
+  const [linkExpr, setLinkExpr] = useState(selectedEncoder?.cexpr || '');
+  const [condText0] = useState(selectedEncoder?.cexpr || '');
+  const [condNum0] = useState(parseInt(selectedEncoder?.cond, 10) || 0);
 
   // dvalue хранится как ПРОЦЕНТ 0-100. C-код сам масштабирует в шаги таймера.
   const pwmmax = selectedEncoder.pwmmax || 100;
@@ -43,6 +49,7 @@ function ModalEncoder({
 
   useEffect(() => {
     fetchConditions().then(setCondsList);
+    fetchCondPool().then(setPoolInfo);
     fetch('/api/select/get?limit=100', {
       // limit=100 обязателен: без него бэкенд отдаёт только пины с ID 0-29
       // (дефолт offset=0, limit=30 в handle_select_get), из-за чего пины
@@ -161,8 +168,14 @@ function ModalEncoder({
 
       // Добавляем объект связей (пустой объект {} если связь не выбрана)
       jsonData.pinact = pinactValue;
-      // Дополнительное условие срабатывания связи (0 = нет, 1..12 - из библиотеки)
-      jsonData.cond = parseInt(linkCond) || 0;
+      // Дополнительное условие срабатывания связи: свободное выражение
+      // ("cexpr") либо, если текст условия не менялся, номер ячейки.
+      const condErr = validateCondExpr(linkExpr);
+      if (condErr) {
+        alert(condErr.ru);
+        return;
+      }
+      Object.assign(jsonData, condPayload({ loadedText: condText0, loadedNum: condNum0, text: linkExpr }));
     }
 
     console.log('Sending JSON to STM32:', JSON.stringify(jsonData));
@@ -172,8 +185,13 @@ function ModalEncoder({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(jsonData)
     })
-      .then(r => r.json())
-      .then(data => {
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          // Например 400: условие длиннее 46 символов или с ошибкой синтаксиса
+          alert(data.message || `Ошибка ${r.status}`);
+          return;
+        }
         handleEncoderChange({ ...selectedEncoder, ...jsonData });
         hideModal();
       })
@@ -288,21 +306,15 @@ function ModalEncoder({
                   <tr class="bg-white">
                     <td class="p-2 font-bold">Condition</td>
                     <td class="p-2">
-                      <select
-                        name="linkcond"
-                        value=${String(linkCond)}
-                        onchange=${e => setLinkCond(parseInt(e.target.value) || 0)}
-                        class="border rounded p-2 w-full"
-                      >
-                        <option value="0">None</option>
-                        ${condsList.map((c, i) => c ? html`
-                          <option value=${i + 1}>
-                            #${i + 1}: ${c}
-                          </option>
-                        ` : null)}
-                      </select>
+                      <${CondInput}
+                        value=${linkExpr}
+                        onChange=${setLinkExpr}
+                        conds=${condsList}
+                        pool=${poolInfo}
+                        isRu=${true}
+                      />
                       <div class="text-xs text-slate-500 mt-1">
-                        Срабатывает только при истинном условии (библиотека - Global Settings)
+                        Срабатывает только при истинном условии. Пустое поле - без условия. Кнопки C1..C12 вставляют ссылку на ячейку библиотеки условий (панель Conditions под таблицей: её можно править там же).
                       </div>
                     </td>
                   </tr>
