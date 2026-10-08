@@ -310,11 +310,11 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
   }[t] || t);
 
   return html`
-    <div class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[5vh]"
+    <div class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[2vh] sm:pt-[5vh]"
          onClick=${e => e.target === e.currentTarget && onClose?.()}>
-      <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90dvh] flex flex-col overflow-hidden">
 
-        <div class="flex items-center justify-between px-6 py-4 border-b shrink-0">
+        <div class="flex items-center justify-between px-4 sm:px-6 py-4 border-b shrink-0">
           <h2 class="text-xl font-bold text-slate-800">
             ${savedType
               ? (lang === 'ru' ? 'Устройство определено!' : 'Device identified!')
@@ -324,7 +324,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
                   onClick=${onClose}>×</button>
         </div>
 
-        <div class="px-6 py-4 flex-1 min-h-0 overflow-y-auto">
+        <div class="px-4 sm:px-6 py-4 flex-1 min-h-0 overflow-y-auto">
 
           ${savedType && html`
             <div class="text-center py-8">
@@ -437,7 +437,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
                   ${lang === 'ru' ? 'Сессия обучения остановлена.' : 'The learning session was stopped.'}
                 </p>
               `}
-              <button class="mt-3 px-6 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+              <button class="mt-3 px-4 sm:px-6 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
                       onClick=${restart}>
                 ${lang === 'ru' ? 'Повторить' : 'Retry'}
               </button>
@@ -756,7 +756,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
           })()}
         </div>
 
-        <div class="flex justify-end gap-3 px-6 py-4 border-t shrink-0 bg-white">
+        <div class="flex justify-end gap-3 px-4 sm:px-6 py-4 border-t shrink-0 bg-white">
           <button class="px-4 py-2 rounded-lg border text-sm"
                   onClick=${onClose}>
             ${lang === 'ru' ? 'Отмена' : 'Cancel'}

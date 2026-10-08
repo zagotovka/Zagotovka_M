@@ -246,6 +246,13 @@ void pid_autotune_stop(int slot);
 void pid_set_pwm_f(int slot, float duty);
 void pid_compute_imc(int slot);
 bool is_pin_in_autotune(uint8_t pin_id);
+/* PWM helpers: PWM без энкодера, рубильник On/Off, CH Polarity */
+bool pwm_owned_by_pid(uint8_t pwm_id);
+bool pwm_has_encoder_link(uint8_t pwm_id);
+bool pwm_gate_open(uint8_t pwm_id);
+void pwm_write_duty(uint8_t pwm_id);
+void pwm_set_percent(uint8_t pwm_id, int percent);
+void pwm_apply_polarity(uint8_t pwm_id);
 void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm);
 
 void parse_relay_json(char* json_string, struct dbPinsConf* PinsConf,const struct dbPinsInfo* PinsInfo, int count);

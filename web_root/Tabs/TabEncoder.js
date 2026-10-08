@@ -1,6 +1,4 @@
 import { lockToggle } from '../helpLock.js';
-
-
 import { ModalEncoder } from '../Modals/ModalEncoder.js';
 import { condInfo, condBadgeProps, condHelpTitle } from '../condlib.js';
 import { CondLibraryPanel, useCondLibrary } from '../CondLibrary.js';
@@ -86,6 +84,13 @@ function initGlobalTooltip() {
   document.addEventListener('mouseout', e => {
     const el = e.target.closest('[data-tip]');
     if (el) hide();
+  });
+
+  // Touch screens: tap on an element with a tooltip shows it, tap elsewhere hides it
+  document.addEventListener('click', e => {
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el); else hide();
   });
 }
 // ---------------------------------------------------------------------------
@@ -193,7 +198,8 @@ function TabEncoder({ }) {
     // в таблице по-прежнему использует handleEncoderChange.
     const handleEncoderSaved = (updatedEncoder) => {
       console.log('handleEncoderSaved:', updatedEncoder);
-      if (updatedEncoder.onoff !== selectedEncoder?.onoff) {
+      // Строка PWM без энкодера: /api/encoder/set уже применил On/Off на самом PWM-пине
+      if (updatedEncoder.kind !== 'pwm' && updatedEncoder.onoff !== selectedEncoder?.onoff) {
         handleEncoderChange(updatedEncoder);
       } else {
         setEncoder((prevEncoders) =>
@@ -327,14 +333,35 @@ function TabEncoder({ }) {
     const helpContent = {
       ru: html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-slate-50 border-slate-300 p-5 space-y-4"><h2 class="text-xl font-bold text-black">Строки таблицы: энкодер и PWM без энкодера</h2>
+          <div>
+            <p class="mb-2">В таблице бывает два вида строк.</p>
+            <ul class="list-disc ml-6 mb-2 space-y-1">
+              <li><b>Строка энкодера</b> - пины Encoder A и Encoder B, подключённый PWM-выход (PWM connection) и условие (Condition). Ручкой меняется яркость подключённого выхода.</li>
+              <li><b>Строка с меткой PWM</b> - PWM-пин, на который не ссылается ни один энкодер. В колонках Encoder A, Encoder B, PWM connection и Condition у неё прочерки. Так настраивается выход, которым управляют без ручки: Zigbee-диммер, API, MQTT, страницы Timer(s) и PID. Если подключить такой PWM к энкодеру (Edit энкодера - PWM connection), он перейдёт в строку этого энкодера.</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-black mb-2">Кнопка Edit PWM: что можно настроить</h3>
+            <table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Поле</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Что делает</th></tr></thead><tbody><tr><td class="border px-3 py-1 whitespace-nowrap"><b>PWM Frequency, Resolution</b></td><td class="border px-3 py-1">Частота ШИМ и число шагов. Применяются сразу, без перезагрузки.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b>Dimmer value (0-100)</b></td><td class="border px-3 py-1">Яркость выхода в процентах.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b>Duty on restore</b></td><td class="border px-3 py-1">Восстановить яркость после включения контроллера.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b>INFO</b></td><td class="border px-3 py-1">Название строки для быстрой навигации.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b>On/Off</b></td><td class="border px-3 py-1">Рубильник выхода. В положении Off на выходе 0%, а заданное значение запоминается и вернётся при включении. Рубильник сохраняется: после перезагрузки выключенный выход остаётся выключенным. Переключается ползунком, а также по SMS и DTMF (команды - в разделе «Управление по SMS и DTMF»). У PWM, настроенных раньше, ползунок показывает «включено» и ничего не гасит, пока вы сами его не переключите.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b>Полярность PWM / CH Polarity</b></td><td class="border px-3 py-1">Normal: 20% в интерфейсе = 20% на нагрузке. Inverted: для плат с инвертирующим каскадом (например, оптрон 6N137): активным уровнем выхода становится LOW, и 20% в интерфейсе по-прежнему дают 20% на нагрузке. Применяется сразу, сохраняется и действует после перезагрузки. Настройка у каждого PWM-пина своя, в Edit энкодера она относится к подключённому PWM.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b>Zigbee Device</b></td><td class="border px-3 py-1">Zigbee-диммер управляет этим PWM напрямую, пины Encoder A/B не нужны. Рубильник On/Off при этом сохраняет силу.</td></tr></tbody></table>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-black mb-2">Метки в строке PWM</h3>
+            <ul class="list-disc ml-6 mb-2 space-y-1">
+              <li><b>PWM</b> - строка без энкодера.</li>
+              <li><b>PID</b> - выходом управляет PID-регулятор. Значение Dimmer value только для чтения (регулятор перезаписывает его каждый цикл), а ползунок On/Off заблокирован: у PID свой переключатель.</li>
+              <li><b>[lock]</b> - идёт автотюн PID. Настройки этого выхода заблокированы до его окончания.</li>
+            </ul>
+          </div>
+        </section>
         <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Управление по SMS и DTMF</h2>
-<div><h4 class="text-lg font-bold text-black mt-4 mb-2">Рубильник On/Off по SMS и DTMF</h4><p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Действие</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Отключить строку (ползунок Off)</td><td class="border px-3 py-1"><code>5#00*</code></td><td class="border px-3 py-1"><code>5#00*#</code></td></tr><tr><td class="border px-3 py-1">Включить строку (ползунок On)</td><td class="border px-3 py-1"><code>5#11*</code></td><td class="border px-3 py-1"><code>5#11*#</code></td></tr></tbody></table><p class="mb-2">В таблице ID = 5 - это пример, подставьте ID своей строки.</p><p class="mb-2">Несколько команд подряд: <code>5#00*7#11*</code> (SMS) и <code>5#00*7#11*#</code> (звонок). Ввод во время звонка всегда завершается символами <code>*#</code>: последняя команда уже заканчивается на <code>*</code>, поэтому в конце добавляется только <code>#</code>.</p><p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p><p class="mb-2">В ответ приходит SMS-отчёт, например <code>OnOff: Pin5=OFF</code> (отчёт отправляется, только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.</p><p class="mb-2">ID - число из колонки ID строки энкодера этой страницы.</p></div>
+<div><h4 class="text-lg font-bold text-black mt-4 mb-2">Рубильник On/Off по SMS и DTMF</h4><p class="mb-2">Ползунок On/Off строки энкодера или PWM без энкодера на этой странице можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Действие</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Отключить строку (ползунок Off)</td><td class="border px-3 py-1"><code>5#00*</code></td><td class="border px-3 py-1"><code>5#00*#</code></td></tr><tr><td class="border px-3 py-1">Включить строку (ползунок On)</td><td class="border px-3 py-1"><code>5#11*</code></td><td class="border px-3 py-1"><code>5#11*#</code></td></tr></tbody></table><p class="mb-2">В таблице ID = 5 - это пример, подставьте ID своей строки.</p><p class="mb-2">Несколько команд подряд: <code>5#00*7#11*</code> (SMS) и <code>5#00*7#11*#</code> (звонок). Ввод во время звонка всегда завершается символами <code>*#</code>: последняя команда уже заканчивается на <code>*</code>, поэтому в конце добавляется только <code>#</code>.</p><p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p><p class="mb-2">В ответ приходит SMS-отчёт, например <code>OnOff: Pin5=OFF</code> (отчёт отправляется, только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.</p><p class="mb-2">ID - число из колонки ID строки этой страницы (энкодера или PWM).</p><p class="mb-2"><b>Строка PWM без энкодера:</b> <code>12#00*</code> выключает выход (на нём 0%, заданная яркость запоминается), <code>12#11*</code> включает его обратно; ответ - <code>OnOff: Pin12=OFF</code> или <code>OnOff: Pin12=ON</code>. ID = 12 - пример, подставьте ID своей строки. Состояние рубильника сохраняется и после перезагрузки.</p><p class="mb-2">Команда отклоняется (попадёт в Invld pins/cmd), если PWM подключён к энкодеру (используйте ID энкодера), управляется PID (используйте коды PID 55 и 66) или идёт автотюн PID.</p></div>
         </section>
         <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Управление по API (локальная сеть)</h2>
           <div>
-            <p class="mb-1">Данный API позволяет дистанционно управлять энкодером, просто выполнив команду в браузере любого устройства в вашей локальной сети.</p>
+            <p class="mb-1">Данный API позволяет дистанционно управлять яркостью PWM-выхода (диммера), просто выполнив команду в браузере любого устройства в вашей локальной сети.</p>
             <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">Не открывайте доступ из интернета к вашим API - это небезопасно!</p>
           </div>
           <div>
@@ -358,11 +385,14 @@ function TabEncoder({ }) {
               </tbody>
             </table>
           </div>
+          <div>
+            <ul class="list-disc ml-6 mb-2 space-y-1"><li>id - это ID самого PWM-пина (у строки с меткой PWM - её собственный ID).</li><li>Если рубильник On/Off выхода выключен (или выключен связанный энкодер), значение запоминается, но на выходе остаётся 0%.</li><li>Если выходом управляет PID, регулятор перезапишет значение на следующем цикле. Во время автотюна PID команда отклоняется (ошибка 409).</li></ul>
+          </div>
         </section>
         <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">MQTT: управление и отслеживание</h2>
           <div>
-            <p class="mb-1">MQTT позволяет дистанционно управлять энкодером из интернета!</p>
+            <p class="mb-1">MQTT позволяет дистанционно управлять PWM-выходами (диммерами) из интернета!</p>
           </div>
           <div>
             <h3 class="text-lg font-bold text-black mb-2">Примеры команд MQTT</h3>
@@ -382,6 +412,9 @@ function TabEncoder({ }) {
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div>
+            <p class="mb-2">Рубильник On/Off, PID и автотюн действуют так же, как у API: при выключенном рубильнике значение запоминается, но на выходе остаётся 0%.</p>
           </div>
           <div>
             <h3 class="text-lg font-bold text-black mb-2">Отслеживание изменений</h3>
@@ -599,6 +632,7 @@ function TabEncoder({ }) {
             <ul class="list-disc ml-6 mb-3 space-y-1">
               <li><b>Проверка идёт на каждый щелчок.</b> Если в момент щелчка условие НЕТ - этот щелчок пропущен: яркость и сохранённое значение не меняются. Когда условие станет ДА, ручка снова заработает сама.</li>
               <li><b>Главный ползунок On/Off энкодера</b> сильнее любого условия. Если он выключен, ручка не меняет яркость на лампе (запоминаемое значение меняется, только если условие ДА).</li>
+              <li><b>У строк PWM без энкодера условия нет.</b> Поле Condition есть только у энкодеров. PWM без энкодера управляется напрямую (Zigbee, API, MQTT, PID), а его рубильник On/Off действует так же, как главный ползунок энкодера.</li>
               <li><b>Прямое управление условие не проверяет:</b> ползунок диммера на странице, команда API или MQTT, а также обратная связь от Zigbee-диммера работают независимо от условия.</li>
               <li><b>Неисправный или молчащий датчик</b> даёт ответ «неизвестно», и ручка блокируется, даже если перед условием стоит !: <code>${'!(T5<25)'}</code> при мёртвом датчике НЕ откроет ручку. Исключение: явная правда через |, например <code>${'T5<25|D1'}</code>.</li>
               <li><b>Пустая ячейка и ячейка со значением 0 блокируют ручку.</b> Если условие энкодера ссылается на ячейку (например C3), а потом ячейку очистили - ручка перестанет работать (пустая ячейка считается НЕТ, а не «без условия»). Значение 0 появляется, например, после удаления устройства, которое было в условии. Впишите верное условие в ячейку в панели «Библиотека условий» или очистите поле Condition у энкодера. В таблице такая связь подсвечивается красным бейджем «C1: пусто» (или жёлтым, если пустая ячейка стоит внутри составного условия).</li>
@@ -615,6 +649,7 @@ function TabEncoder({ }) {
           <div>
             <h3 class="text-lg font-bold text-black mb-2">Общий лимит: 1024 места</h3>
             <p class="mb-2">Поле PWM connection — это лампа или диммер, яркостью которой управляет энкодер («крутилка»). <b>Один энкодер управляет одним устройством:</b> в окне Edit выбирается одно устройство. Каждое такое подключение занимает одно из <b>1024 «мест»</b>, тех же, что и на странице «Switch(es) pin(s)».</p>
+            <p class="mb-2"><b>Строки PWM без энкодера места не занимают:</b> место тратится только на подключение PWM к энкодеру.</p>
             <p class="mb-2"><b>Ограничения на количество энкодеров нет</b> — главное, чтобы во всей системе в сумме не набралось больше 1024 подключений.</p>
             <p class="mb-2"><b>Пример:</b> если на странице «Switch(es) pin(s)» уже подключено 57 устройств, то для энкодеров остаётся только <b>967 свободных мест</b> (1024 − 57 = 967).</p>
           </div>
@@ -633,8 +668,9 @@ function TabEncoder({ }) {
           <div>
             <div class="space-y-2">
               <p class="mb-2"><strong>Важно:</strong> Вы можете установить желаемую частоту ШИМ от <strong>0.05 Hz до 2 MHz</strong>. Однако, генерация ШИМ зависит от аппаратных таймеров микроконтроллера (например, TIM1, TIM2 и т.д.).</p>
-              <p class="mb-2"><strong>Один таймер не может генерировать разные частоты одновременно!</strong> Если вы назначите разные пины, которые используют <em>один и тот же таймер</em>, к разным энкодерам и зададите им разную частоту, применится последняя установленная частота ко всем пинам этого таймера.</p>
+              <p class="mb-2"><strong>Один таймер не может генерировать разные частоты одновременно!</strong> Если вы назначите разные пины, которые используют <em>один и тот же таймер</em>, к разным энкодерам (или PWM-строкам) и зададите им разную частоту, применится последняя установленная частота ко всем пинам этого таймера.</p>
               <p class="mb-2">Чтобы использовать разную частоту для разных устройств, выбирайте пины, привязанные к <strong>разным таймерам</strong>.</p>
+              <p class="mb-2">Полярность (CH Polarity) у каждого канала своя: два пина одного таймера могут иметь разную полярность, но частота у них общая. У таймеров TIM1 и TIM8 вместе с полярностью автоматически меняется и уровень выхода в покое.</p>
               <p class="mt-4 font-bold text-black">Карта привязки пинов ШИМ к таймерам и их возможности:</p>
               <ul class="list-disc pl-5 mt-2 space-y-3 text-slate-700">
                 <li>
@@ -689,14 +725,35 @@ function TabEncoder({ }) {
       `,
       en: html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-slate-50 border-slate-300 p-5 space-y-4"><h2 class="text-xl font-bold text-black">Table rows: encoder and PWM without an encoder</h2>
+          <div>
+            <p class="mb-2">The table has two kinds of rows.</p>
+            <ul class="list-disc ml-6 mb-2 space-y-1">
+              <li><b>Encoder row</b> - the Encoder A and Encoder B pins, the connected PWM output (PWM connection) and the condition (Condition). The knob changes the brightness of the connected output.</li>
+              <li><b>Row marked PWM</b> - a PWM pin that no encoder refers to. Its Encoder A, Encoder B, PWM connection and Condition columns show dashes. This is how you configure an output controlled without a knob: a Zigbee dimmer, API, MQTT, the Timer(s) and PID pages. If you connect such a PWM to an encoder (encoder Edit - PWM connection), it moves into the row of that encoder.</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-black mb-2">The Edit PWM button: what you can set</h3>
+            <table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Field</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">What it does</th></tr></thead><tbody><tr><td class="border px-3 py-1 whitespace-nowrap"><b>PWM Frequency, Resolution</b></td><td class="border px-3 py-1">PWM frequency and number of steps. Applied immediately, no reboot needed.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b>Dimmer value (0-100)</b></td><td class="border px-3 py-1">Output brightness in percent.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b>Duty on restore</b></td><td class="border px-3 py-1">Restore the brightness when the controller starts.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b>INFO</b></td><td class="border px-3 py-1">Row name for quick navigation.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b>On/Off</b></td><td class="border px-3 py-1">Output switch. In the Off position the output is 0%, and the set value is remembered and returns when you switch it on. The switch is saved: after a reboot a switched-off output stays off. It can be switched with the slider and also by SMS and DTMF (commands - see "Control by SMS and DTMF"). For PWM configured earlier the slider shows "on" and turns nothing off until you switch it yourself.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b>CH Polarity</b></td><td class="border px-3 py-1">Normal: 20% in the interface = 20% on the load. Inverted: for boards with an inverting stage (for example a 6N137 optocoupler): the active level of the output becomes LOW, and 20% in the interface is still 20% on the load. Applied immediately, saved and kept after a reboot. The setting is per PWM pin; in the encoder Edit window it applies to the connected PWM.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b>Zigbee Device</b></td><td class="border px-3 py-1">A Zigbee dimmer controls this PWM directly, the Encoder A/B pins are not needed. The On/Off switch stays in force.</td></tr></tbody></table>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-black mb-2">Marks in a PWM row</h3>
+            <ul class="list-disc ml-6 mb-2 space-y-1">
+              <li><b>PWM</b> - a row without an encoder.</li>
+              <li><b>PID</b> - the output is controlled by a PID regulator. Dimmer value is read-only (the regulator overwrites it every cycle), and the On/Off slider is locked: PID has its own switch.</li>
+              <li><b>[lock]</b> - PID autotune is running. The settings of this output are locked until it finishes.</li>
+            </ul>
+          </div>
+        </section>
         <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Control by SMS and DTMF</h2>
-<div><h4 class="text-lg font-bold text-black mt-4 mb-2">On/Off switch by SMS and DTMF</h4><p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Action</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (during a call)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Turn the row off (slider Off)</td><td class="border px-3 py-1"><code>5#00*</code></td><td class="border px-3 py-1"><code>5#00*#</code></td></tr><tr><td class="border px-3 py-1">Turn the row on (slider On)</td><td class="border px-3 py-1"><code>5#11*</code></td><td class="border px-3 py-1"><code>5#11*#</code></td></tr></tbody></table><p class="mb-2">In the table ID = 5 is an example, use the ID of your own row.</p><p class="mb-2">Several commands in a row: <code>5#00*7#11*</code> (SMS) and <code>5#00*7#11*#</code> (call). Input during a call always ends with <code>*#</code>: the last command already ends with <code>*</code>, so only <code>#</code> is added at the end.</p><p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p><p class="mb-2">An SMS report is sent back, for example <code>OnOff: Pin5=OFF</code> (the report is sent only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.</p><p class="mb-2">ID is the number from the ID column of the encoder row on this page.</p></div>
+<div><h4 class="text-lg font-bold text-black mt-4 mb-2">On/Off switch by SMS and DTMF</h4><p class="mb-2">The On/Off slider of an encoder row or of a PWM row without an encoder on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Action</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (during a call)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Turn the row off (slider Off)</td><td class="border px-3 py-1"><code>5#00*</code></td><td class="border px-3 py-1"><code>5#00*#</code></td></tr><tr><td class="border px-3 py-1">Turn the row on (slider On)</td><td class="border px-3 py-1"><code>5#11*</code></td><td class="border px-3 py-1"><code>5#11*#</code></td></tr></tbody></table><p class="mb-2">In the table ID = 5 is an example, use the ID of your own row.</p><p class="mb-2">Several commands in a row: <code>5#00*7#11*</code> (SMS) and <code>5#00*7#11*#</code> (call). Input during a call always ends with <code>*#</code>: the last command already ends with <code>*</code>, so only <code>#</code> is added at the end.</p><p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p><p class="mb-2">An SMS report is sent back, for example <code>OnOff: Pin5=OFF</code> (the report is sent only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.</p><p class="mb-2">ID is the number from the ID column of a row on this page (encoder or PWM).</p><p class="mb-2"><b>A PWM row without an encoder:</b> <code>12#00*</code> turns the output off (it gives 0%, the set brightness is remembered), <code>12#11*</code> turns it back on; the reply is <code>OnOff: Pin12=OFF</code> or <code>OnOff: Pin12=ON</code>. ID = 12 is an example, use the ID of your own row. The switch state is saved and kept after a reboot.</p><p class="mb-2">The command is rejected (it goes to Invld pins/cmd) if the PWM is connected to an encoder (use the encoder ID), is controlled by PID (use the PID codes 55 and 66) or PID autotune is running.</p></div>
         </section>
         <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">API control (local network)</h2>
           <div>
-            <p class="mb-1">This API allows you to remotely control a switch by simply executing a command in the browser of any device on your local network.</p>
+            <p class="mb-1">This API allows you to remotely control the brightness of a PWM output (dimmer) by simply executing a command in the browser of any device on your local network.</p>
             <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">Do not expose your APIs to the internet - it's not secure!</p>
           </div>
           <div>
@@ -720,11 +777,14 @@ function TabEncoder({ }) {
               </tbody>
             </table>
           </div>
+          <div>
+            <ul class="list-disc ml-6 mb-2 space-y-1"><li>id is the ID of the PWM pin itself (for a row marked PWM it is the ID of that row).</li><li>If the On/Off switch of the output is off (or the linked encoder is off), the value is remembered, but the output stays at 0%.</li><li>If the output is controlled by PID, the regulator overwrites the value on the next cycle. During PID autotune the command is rejected (error 409).</li></ul>
+          </div>
         </section>
         <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">MQTT: control and tracking</h2>
           <div>
-            <p class="mb-1">MQTT allows you to remotely control a switch from the internet!</p>
+            <p class="mb-1">MQTT allows you to remotely control PWM outputs (dimmers) from the internet!</p>
           </div>
           <div>
             <h3 class="text-lg font-bold text-black mb-2">MQTT Command Examples</h3>
@@ -744,6 +804,9 @@ function TabEncoder({ }) {
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div>
+            <p class="mb-2">The On/Off switch, PID and autotune work the same way as for the API: with the switch off the value is remembered, but the output stays at 0%.</p>
           </div>
           <div>
             <h3 class="text-lg font-bold text-black mb-2">Change Tracking</h3>
@@ -961,6 +1024,7 @@ function TabEncoder({ }) {
             <ul class="list-disc ml-6 mb-3 space-y-1">
               <li><b>The check happens on every click.</b> If the condition is NO at the moment of a click, that click is skipped: neither the brightness nor the stored value changes. When the condition becomes YES, the knob works again by itself.</li>
               <li><b>The encoder main On/Off slider</b> is stronger than any condition. If it is off, the knob does not change the lamp brightness (the remembered value changes only if the condition is YES).</li>
+              <li><b>Rows PWM without an encoder have no condition.</b> The Condition field exists only for encoders. A PWM without an encoder is controlled directly (Zigbee, API, MQTT, PID), and its On/Off switch acts like the main slider of an encoder.</li>
               <li><b>Direct control does not check the condition:</b> the dimmer slider on the page, an API or MQTT command, and feedback from a Zigbee dimmer all work regardless of the condition.</li>
               <li><b>A faulty or silent sensor</b> gives the answer "unknown", and the knob is blocked even if the condition starts with !: <code>${'!(T5<25)'}</code> with a dead sensor does NOT unlock the knob. Exception: explicit truth through |, for example <code>${'T5<25|D1'}</code>.</li>
               <li><b>An empty cell and a cell with the value 0 block the knob.</b> If the encoder condition refers to a cell (for example C3) and the cell is later cleared, the knob stops working (an empty cell counts as NO, not as "no condition"). The value 0 appears, for example, after a device used in the condition is deleted. Type a valid condition into the cell in the Conditions library panel, or clear the Condition field of the encoder. In the table such a link is shown with a red badge "C1: empty" (or a yellow one if the empty cell is inside a compound condition).</li>
@@ -977,6 +1041,7 @@ function TabEncoder({ }) {
           <div>
             <h3 class="text-lg font-bold text-black mb-2">Total limit: 1024 slots</h3>
             <p class="mb-2">The PWM connection field is the lamp or dimmer whose brightness the encoder (the "knob") controls. <b>One encoder controls one device:</b> a single device is selected in the Edit window. Every such connection takes one of the <b>1024 "slots"</b> — the same slots used on the "Switch(es) pin(s)" page.</p>
+            <p class="mb-2"><b>Rows PWM without an encoder take no slots:</b> a slot is used only when a PWM is connected to an encoder.</p>
             <p class="mb-2"><b>There is no limit on the number of encoders</b> — as long as the total across the whole system does not exceed 1024 connections.</p>
             <p class="mb-2"><b>Example:</b> if 57 devices are already connected on the "Switch(es) pin(s)" page, only <b>967 free slots</b> are left for encoders (1024 − 57 = 967).</p>
           </div>
@@ -995,8 +1060,9 @@ function TabEncoder({ }) {
           <div>
             <div class="space-y-2">
               <p class="mb-2"><strong>Important:</strong> You can set the desired PWM frequency from <strong>0.05 Hz to 2 MHz</strong>. However, PWM generation depends on the microcontroller's hardware timers (e.g., TIM1, TIM2, etc.).</p>
-              <p class="mb-2"><strong>A single timer cannot generate different frequencies simultaneously!</strong> If you assign different pins that share the <em>same timer</em> to different encoders and set different frequencies, the last set frequency will apply to all pins sharing that timer.</p>
+              <p class="mb-2"><strong>A single timer cannot generate different frequencies simultaneously!</strong> If you assign different pins that share the <em>same timer</em> to different encoders (or PWM rows) and set different frequencies, the last set frequency will apply to all pins sharing that timer.</p>
               <p class="mb-2">To use different frequencies for different devices, choose pins connected to <strong>different hardware timers</strong>.</p>
+              <p class="mb-2">The polarity (CH Polarity) is set per channel: two pins of one timer can have different polarity, but they share the frequency. For the TIM1 and TIM8 timers the idle level of the output also changes automatically together with the polarity.</p>
               <p class="mt-4 font-bold text-black">PWM Pin to Timer Mapping and Capabilities:</p>
               <ul class="list-disc pl-5 mt-2 space-y-3 text-slate-700">
                 <li>
@@ -1077,7 +1143,66 @@ function TabEncoder({ }) {
       return l ? l.cexpr || '' : '';
     };
 
+    // Строка PWM без энкодера (kind:"pwm"): без Encoder A/B/Condition,
+    // остаются PWM, рубильник, Zigbee и полярность (в Edit).
+    const ArrayPwmRow = ({ d, index }) => {
+      const fStatus = getFreqStatus(d.pwm || 0);
+      const timerName = pwmTimerMap[d.pins];
+      const isPid = d.owner === 'pid';
+      const isRu = language === 'ru';
+      const pidTip = isRu
+        ? 'Этим PWM управляет PID: значение перезаписывается каждый цикл, у PID свой переключатель.'
+        : 'This PWM is driven by PID: the value is overwritten every cycle, PID has its own switch.';
+      const lockTip = isRu
+        ? 'Идёт автотюн PID: настройки заблокированы.'
+        : 'PID autotune is running: settings are locked.';
+      return html`
+        <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
+          <td class="px-6 py-2 text-sm text-slate-800 font-medium">
+            ${d.pins}(${d.id})
+            <span class="ml-2 text-xs font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200">PWM</span>
+            ${isPid ? html`<span class="ml-1 text-xs font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300 cursor-help" data-tip=${pidTip}>PID</span>` : ''}
+            ${d.locked ? html`<span class="ml-1 text-xs font-bold text-red-700 cursor-help" data-tip=${lockTip}>[lock]</span>` : ''}
+          </td>
+          <td class="px-6 py-2 text-sm text-slate-400">—</td>
+          <td class="px-6 py-2 text-sm text-slate-400">—</td>
+          <td class="px-6 py-2 text-sm text-slate-400">—</td>
+          <td class="px-6 py-2 text-sm">
+            <span class="font-mono text-slate-700">${formatPwmFreq(d.pwm)}</span>
+            <span class="ml-1 font-bold ${fStatus.cls}">${fStatus.msg}</span>
+            ${timerName ? html`<span class="ml-2 font-mono text-xs text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200 shadow-sm" title="Hardware Timer">${timerName}</span>` : ''}
+            <span class="ml-2 text-xs font-semibold ${d.pol ? 'text-orange-700' : 'text-slate-500'}">${d.pol ? 'Inverted' : 'Normal'}</span>
+          </td>
+          <td class="px-6 py-2 font-mono text-sm text-blue-600">${d.pwmmax ? `${d.pwmmax} steps` : '—'}</td>
+          <td class="px-6 py-2 text-sm text-slate-800">${d.dvalue}${isPid ? ' (PID)' : ''}</td>
+          <td class="px-6 py-2 text-sm text-slate-700 font-semibold">${d.ponr === 1 ? 'ON' : 'OFF'}</td>
+          <td class="px-6 py-2 text-sm text-slate-600">${d.info}</td>
+          <td class="px-6 py-2" data-tip=${isPid ? pidTip : ''}>
+            <${MyPolzunok}
+              value=${d.onoff}
+              disabled=${isPid || !!d.locked}
+              onChange=${(value) => handleEncoderChange({ ...d, onoff: value })}
+            />
+          </td>
+          <td class="px-6 py-2 text-sm">
+            ${d.zbee_bind && d.zbee_bind > 0 ? html`
+              <span class="font-mono text-sm text-cyan-700 font-semibold">ID ${d.zbee_bind}</span>
+            ` : html`<span class="text-slate-400 text-sm">—</span>`}
+          </td>
+          <td class="px-6 py-2 text-sm whitespace-nowrap">
+            <button
+              onClick=${() => openModal('edit', d)}
+              class="text-blue-600 hover:text-blue-800 font-semibold transition-colors"
+            >
+              Edit PWM
+            </button>
+          </td>
+        </tr>
+      `;
+    };
+
     const ArrayEncoder = ({ d, index }) => {
+      if (d.kind === 'pwm') return html`<${ArrayPwmRow} d=${d} index=${index} />`;
       const connectedPins = getConnectedPins(d.id);
       const fStatus = getFreqStatus(d.pwm || 0);
 
@@ -1165,6 +1290,11 @@ function TabEncoder({ }) {
       `;
     };
 
+    const pageSubtitle = {
+      ru: 'Здесь настраиваются ШИМ-выходы (диммеры, регуляторы скорости) и энкодеры для них: частота, яркость, On/Off, полярность, Zigbee. Выход без энкодера управляется по Zigbee, API, MQTT, Timer(s) и PID.',
+      en: 'Configure PWM outputs (dimmers, speed controllers) and their encoders: frequency, brightness, On/Off, polarity, Zigbee. An output without an encoder is controlled via Zigbee, API, MQTT, Timer(s) and PID.',
+    };
+
     if (!varencoder) return html`<div class="flex items-center justify-center p-8 text-slate-500 font-medium">Loading...</div>`;
 
     return html`
@@ -1174,9 +1304,10 @@ function TabEncoder({ }) {
         <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
         <div class="w-full relative z-10">
-          <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
-            Encoder(s) pin(s)
+          <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
+            PWM/Encoder(s) pin(s)
           </div>
+          <p class="text-sm text-slate-600 mb-6 max-w-3xl">${pageSubtitle[language] || pageSubtitle.en}</p>
           <div class="flex-grow flex flex-col justify-center items-center w-full">
             <div class="w-full">
               <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6 overflow-auto">
@@ -1221,7 +1352,7 @@ function TabEncoder({ }) {
 
               ${showHelp &&
       html`
-                  <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;overflow-y:auto;">
+                  <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">
                     ${helpContent[language]}
                   </div>
                 `}
@@ -1235,7 +1366,7 @@ function TabEncoder({ }) {
                 hideModal=${closeModal}
                 title=${modalType === 'connection'
           ? 'Edit Connection'
-          : 'Edit Encoder'}
+          : (selectedEncoder && selectedEncoder.kind === 'pwm' ? 'Edit PWM' : 'Edit Encoder')}
                 selectedEncoder=${selectedEncoder}
                 handleEncoderChange=${handleEncoderSaved}
               />
@@ -1247,4 +1378,3 @@ function TabEncoder({ }) {
 }
 
 export { TabEncoder };
-

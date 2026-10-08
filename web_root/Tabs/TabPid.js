@@ -1,6 +1,4 @@
 import { lockToggle } from '../helpLock.js';
-
-
 import { ModalPid } from '../Modals/ModalPid.js';
 import { condInfo, condBadgeProps, condHelpTitle } from '../condlib.js';
 import { CondLibraryPanel, useCondLibrary } from '../CondLibrary.js';
@@ -79,6 +77,13 @@ function initGlobalTooltip() {
   document.addEventListener('mouseout', e => {
     const el = e.target.closest('[data-tip]');
     if (el) hide();
+  });
+
+  // Touch screens: tap on an element with a tooltip shows it, tap elsewhere hides it
+  document.addEventListener('click', e => {
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el); else hide();
   });
 }
 // ---------------------------------------------------------------------------
@@ -1537,9 +1542,10 @@ function TabPid({ }) {
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
       <div class="w-full relative z-10">
-        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           PID Controller(s)
         </div>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь настраивается автоматическое поддержание температуры: датчик измеряет, а контроллер сам включает и выключает нагрев, чтобы держать нужные градусы.' : 'Automatic temperature keeping: a sensor measures, and the controller switches the heating on and off by itself to hold the temperature you set.'}</p>
         <div class="w-full mb-6 relative">
           ${visiblePids > 0
             ? html`
@@ -1622,7 +1628,7 @@ function TabPid({ }) {
       </div>
 
       ${showHelp && html`
-        <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700 w-full" style="max-height:70vh;overflow-y:auto;">
+        <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700 w-full" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">
           <${PidHelp} lang=${language} />
         </div>
       `}
@@ -1646,4 +1652,3 @@ function TabPid({ }) {
 }
 
 export { TabPid };
-

@@ -175,3 +175,155 @@ td {
   border: 1px solid black;
   padding: 8px;
 }
+
+/********************* Mobile / touch layer ***************************/
+/* Decorative glows in page cards stick out of the page and cause sideways scroll */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* Sidebar must never be wider than the screen */
+.hs-overlay {
+  max-width: 85vw;
+}
+
+/* Modals built on .modal-overlay: card must scroll when taller than the screen */
+.modal-overlay > .modal-content {
+  max-height: calc(100vh - 1rem);
+  max-height: calc(100dvh - 1rem);
+  overflow-y: auto;
+}
+
+/* Phones and small tablets in portrait */
+@media (max-width: 767px) {
+  /* Blurred glows are decorative and heavy for mobile GPUs */
+  .blur-3xl.pointer-events-none {
+    display: none !important;
+  }
+
+  /* Page titles and large captions */
+  .font-extrabold.text-3xl {
+    font-size: 1.5rem !important;
+    line-height: 2rem !important;
+    margin-bottom: 1rem !important;
+  }
+
+  .text-2xl {
+    font-size: 1.25rem !important;
+    line-height: 1.75rem !important;
+  }
+
+  /* Table headers and cells: tighter, so more columns fit */
+  th.text-2xl {
+    font-size: 1rem !important;
+    line-height: 1.5rem !important;
+  }
+
+  th.py-4 {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  td.px-6,
+  th.px-6 {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+
+  td.py-4 {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  /* Page card and inner blocks */
+  .rounded-3xl.p-4 {
+    padding: 0.75rem !important;
+  }
+
+  .p-6 {
+    padding: 1rem !important;
+  }
+
+  /* Modals */
+  .modal-overlay {
+    padding: 0.5rem;
+  }
+
+  .modal-overlay .modal-content {
+    padding: 1rem !important;
+  }
+
+  .modal-content {
+    max-width: 100%;
+  }
+
+  /* Settings: "label | value" rows become "label over value" */
+  th.w-2\/3 {
+    display: none;
+  }
+
+  td.w-1\/3,
+  td.w-2\/3,
+  th.w-1\/3 {
+    display: block;
+    width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  td.w-1\/3 {
+    border-right: 0 !important;
+    padding-bottom: 0.25rem !important;
+  }
+
+  td.w-2\/3 {
+    padding-top: 0.25rem !important;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+
+  tr:has(> td.w-1\/3) {
+    display: block;
+  }
+
+  /* Tables inside help panels */
+  td.border.px-4,
+  th.border.px-4 {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+
+  /* Zigbee: indent of child rows (60px on desktop) */
+  :root {
+    --zb-indent: 0.5rem;
+  }
+
+  /* 16px in text fields stops iOS Safari from zooming the page on focus */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Touch screens: comfortable tap targets */
+@media (pointer: coarse) {
+  label.cursor-pointer.rounded-full.py-1\.5 {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  button,
+  select,
+  input:not([type='checkbox']):not([type='radio']):not([type='range']) {
+    min-height: 2.5rem;
+  }
+
+  .close-button {
+    min-width: 2.5rem;
+  }
+}

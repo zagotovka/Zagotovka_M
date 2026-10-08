@@ -746,7 +746,7 @@ export function Login({ loginFn, logoIcon, title, tipText }) {
       <div class="absolute top-0 right-0 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
       <div class="absolute bottom-0 left-0 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
-      <div class="rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl w-96 p-8 relative z-10 flex flex-col items-center">
+      <div class="rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl w-full max-w-sm mx-4 p-6 sm:p-8 relative z-10 flex flex-col items-center">
         <div class="mb-8 flex flex-col items-center justify-center gap-y-4">
           <div class="p-3 bg-gradient-to-br from-teal-400/20 to-cyan-500/20 rounded-2xl shadow-inner">
             <${logoIcon} class="h-16 w-16 stroke-cyan-600 drop-shadow-sm" />

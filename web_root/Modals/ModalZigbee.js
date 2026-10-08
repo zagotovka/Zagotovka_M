@@ -196,10 +196,10 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
       style="margin-top: 7px;"
       onclick=${handleOverlayClick}
     >
-      <div class="flex items-center justify-center min-h-full p-4">
+      <div class="flex items-center justify-center min-h-full p-2 sm:p-4">
         <div
-          class="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 relative shadow-2xl"
-          style="max-height: calc(100vh - 57px); overflow-y: auto;"
+          class="bg-white rounded-2xl p-4 sm:p-6 max-w-lg w-full mx-0 sm:mx-4 relative shadow-2xl"
+          style="max-height: calc(100vh - 57px); max-height: calc(100dvh - 57px); overflow-y: auto;"
         >
           <div class="flex justify-between items-center mb-6">
             <div>

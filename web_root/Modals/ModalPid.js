@@ -361,7 +361,7 @@ const handlePwmChange = (e) => {
             closeOnOverlayClick && e.target === e.currentTarget && hideModal()}
         >
           <div
-            class="modal-content bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-lg relative flex flex-col"
+            class="modal-content bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6 w-full max-w-lg relative flex flex-col"
             style="margin-top: 0px; max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem);"
           >
             <div
@@ -417,5 +417,3 @@ const handlePwmChange = (e) => {
 }
 
 export { ModalPid };
-
-

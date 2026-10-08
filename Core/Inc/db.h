@@ -69,12 +69,17 @@ struct dbCron {
 	uint8_t onoff;	// On | Off
 };
 
+/* Биты dbPinsConf.pwm_flags (используются только для topin == 5) */
+#define PWMF_INVERT  0x01  // CH Polarity: 0 - Normal, 1 - Inverted (OCxP = LOW)
+#define PWMF_SWITCH  0x02  // On/Off рубильник PWM-пина без энкодера (PinsConf[id].onoff)
+
 struct dbPinsConf {     // Создали структуру с необходимым набором типов элиментов.
 	uint8_t topin;		// Type of pins: NONE-0; BUTTON-1; DEVICE-2; SWITCH-3; ONEWIRE-4; PWM-5; I2C-6,7; Encoder-8,9; SECURITY-10; ZIGBEE-11;
 	int pwm;		    // PWM frequency
 	int pwmmax;         // PWM максимальное значение сейчас пока 100
 	uint8_t on;			// Состояние выхода - 1-вкл, 0-выкл. К примеру 'EncoderB'.
 	uint8_t istate;		// Invert state
+	uint8_t pwm_flags;	// PWM: bit0 - polarity inverted, bit1 - On/Off gate owned by PWM row (лежит в паддинге, sizeof не меняется)
 	int dvalue;		    // Dimmer value
 	uint8_t ponr;		// Power on restore
 	uint8_t ptype;		// Pullup type 0 - NONE; 1 - GPIO_PULLUP; 2 - GPIO_PULLDOWN
@@ -425,4 +430,3 @@ void GetZigbeeConfig(void);
 void SetZigbeeConfig(void);
 
 #endif /* INC_DB_H_ */
-

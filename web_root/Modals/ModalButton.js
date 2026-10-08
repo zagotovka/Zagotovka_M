@@ -212,8 +212,8 @@ const ModalButton = ({
       onClick=${(e) => closeOnOverlayClick && e.target === e.currentTarget && hideModal()}
     >
       <div
-        class="bg-white rounded-lg p-6 max-w-2xl w-full relative"
-        style="max-height: 90vh; overflow-y: auto;"
+        class="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full relative"
+        style="max-height: 90vh; max-height: 90dvh; overflow-y: auto;"
       >
         <div class="modal-header flex justify-between items-center mb-4">
           <h2 class="text-xl font-bold">${title}</h2>

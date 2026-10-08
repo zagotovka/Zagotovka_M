@@ -1,6 +1,4 @@
 import { lockToggle } from '../helpLock.js';
-
-
 import { ModalSwitch } from '../Modals/ModalSwitch.js';
 import { condInfo, condBadgeProps, condHelpTitle } from '../condlib.js';
 import { CondLibraryPanel, useCondLibrary } from '../CondLibrary.js';
@@ -89,6 +87,13 @@ function initGlobalTooltip() {
   document.addEventListener('mouseout', e => {
     const el = e.target.closest('[data-tip]');
     if (el) hide();
+  });
+
+  // Touch screens: tap on an element with a tooltip shows it, tap elsewhere hides it
+  document.addEventListener('click', e => {
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el); else hide();
   });
 }
 // ---------------------------------------------------------------------------
@@ -635,7 +640,7 @@ function TabSwitch({ }) {
         <div>
           <h3 class="text-lg font-bold text-black mb-2">Что ещё использует эти места</h3>
           <ul class="list-disc ml-6 space-y-1">
-            <li>Поле <b>PWM connection</b> на странице Encoder pin использует те же 1024 места.</li>
+            <li>Поле <b>PWM connection</b> на странице PWM/Encoder pin использует те же 1024 места.</li>
             <li>После перезагрузки устройство само восстанавливает все сохранённые подключения (из файла pintopin.ini) - новых мест они не занимают.</li>
           </ul>
         </div>
@@ -938,7 +943,7 @@ function TabSwitch({ }) {
         <div>
           <h3 class="text-lg font-bold text-black mb-2">What else uses these slots</h3>
           <ul class="list-disc ml-6 space-y-1">
-            <li>The <b>PWM connection</b> field on the Encoder pin page uses the same 1024 slots.</li>
+            <li>The <b>PWM connection</b> field on the PWM/Encoder pin page uses the same 1024 slots.</li>
             <li>After a reboot the device restores all saved connections by itself (from the pintopin.ini file) - they do not take any extra slots.</li>
           </ul>
         </div>
@@ -1030,9 +1035,10 @@ function TabSwitch({ }) {
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
       <div class="w-full relative z-10">
-        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           Switch(es) pin(s)
         </div>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь настраиваются настенные выключатели: какие лампы и приборы включает каждый из них. Можно задать условие, например, только ночью.' : 'Set up wall switches: which lamps and appliances each of them turns on. You can add a condition, for example only at night.'}</p>
 
         <div class="flex-grow flex flex-col justify-center items-center w-full">
           <div class="w-full">
@@ -1073,7 +1079,7 @@ function TabSwitch({ }) {
 
             ${showHelp &&
               html`
-                <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;overflow-y:auto;">
+                <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">
                   ${helpContent[language]}
                 </div>
               `}
@@ -1100,4 +1106,3 @@ function TabSwitch({ }) {
 }
 
 export { TabSwitch };
-

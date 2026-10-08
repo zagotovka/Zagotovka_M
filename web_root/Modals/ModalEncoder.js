@@ -1,4 +1,3 @@
-
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -44,6 +43,12 @@ function ModalEncoder({
   const [dvalue, setDvalue] = useState(selectedEncoder.dvalue || 0);
   const [ponr, setPonr] = useState(selectedEncoder.ponr || 0);
   const [pwmFreq, setPwmFreq] = useState(selectedEncoder.pwm || 10000000);
+  // Строка PWM без энкодера (kind:"pwm"): настройки пишутся в сам PWM-пин
+  const isPwmRow = selectedEncoder.kind === 'pwm';
+  const isPid = selectedEncoder.owner === 'pid';
+  const isLocked = !!selectedEncoder.locked;
+  // CH Polarity: 0 - Normal, 1 - Inverted
+  const [pol, setPol] = useState(selectedEncoder.pol ? 1 : 0);
 
   const percentToSteps = (percent) => Math.round((percent * pwmmax) / 100);
 
@@ -128,7 +133,8 @@ function ModalEncoder({
     if (modalType === 'edit') {
       // Окно редактирования параметров (Частота, Шаги и т.д.)
       jsonData = {
-        topin: 8,
+        // PWM-строка остаётся topin 5: иначе Save превратил бы PWM-пин в Encoder A
+        topin: isPwmRow ? 5 : 8,
         id: selectedEncoder.id,
         pins: selectedEncoder.pins,
         pwm: parseInt(pwmFreq), // Отправляем миллигерцы (10000000)
@@ -136,8 +142,10 @@ function ModalEncoder({
         dvalue: parseInt(dvalue),  // 0-100%, C-код масштабирует в шаги
         ponr: parseInt(ponr),
         info: encoderInfo,
-        onoff: onoff ? 1 : 0
+        onoff: onoff ? 1 : 0,
+        pol: pol
       };
+      if (isPwmRow) jsonData.zbee_bind = zbeeBind;
     } else if (modalType === 'connection') {
       // Окно редактирования связей (Connection)
 
@@ -401,8 +409,10 @@ function ModalEncoder({
                         max="100"
                         value=${dvalue}
                         oninput=${handleDvalueChange}
-                        class="border rounded p-2 w-full"
+                        disabled=${isPid}
+                        class="border rounded p-2 w-full ${isPid ? 'bg-gray-100 text-gray-500' : ''}"
                       />
+                      ${isPid ? html`<div class="text-xs text-amber-700">PID: значение задаёт регулятор (read-only)</div>` : ''}
                       <div class="text-xs text-gray-500">
                         ${dvalue}% = ${percentToSteps(parseInt(dvalue) || 0)} / ${pwmmax} steps
                       </div>
@@ -438,10 +448,50 @@ function ModalEncoder({
                     <td class="p-2">
                       <${SliderComponent}
                         value=${onoff}
+                        disabled=${isPid}
                         onChange=${handleOnOffChange}
                       />
+                      ${isPid ? html`<div class="text-xs text-amber-700">У PID свой переключатель</div>` : ''}
                     </td>
                   </tr>
+                  <tr class="bg-gray-200">
+                    <td class="p-2 font-bold">Полярность PWM / CH Polarity</td>
+                    <td class="p-2">
+                      <select
+                        value=${pol}
+                        disabled=${isLocked}
+                        onchange=${e => setPol(parseInt(e.target.value) || 0)}
+                        class="border rounded p-2 w-full"
+                      >
+                        <option value="0">Normal</option>
+                        <option value="1">Inverted</option>
+                      </select>
+                      <div class="text-xs text-slate-500 mt-1">
+                        Normal: 20% в интерфейсе = 20% на нагрузке. Inverted: для плат с инвертирующим каскадом (например, оптрон 6N137), чтобы 20% в интерфейсе по-прежнему были 20% на нагрузке. Применяется сразу, без перезагрузки.
+                      </div>
+                    </td>
+                  </tr>
+                  ${isPwmRow ? html`
+                    <tr class="bg-white">
+                      <td class="p-2 font-bold">Zigbee Device</td>
+                      <td class="p-2">
+                        <select
+                          name="zbee_bind"
+                          value=${zbeeBind}
+                          onchange=${e => setZbeeBind(parseInt(e.target.value) || 0)}
+                          class="border rounded p-2 w-full"
+                        >
+                          <option value="0">None</option>
+                          ${(window.__zigbeeConf || []).filter(z => z.ieee && z.type === 'dimmer').map(z => html`
+                            <option value=${z.id || 0}>ID: ${z.id}</option>
+                          `)}
+                        </select>
+                        <div class="text-xs text-slate-500 mt-1">
+                          Zigbee-диммер управляет этим PWM напрямую, пины Encoder A/B не нужны
+                        </div>
+                      </td>
+                    </tr>
+                  ` : ''}
                 </tbody>
               </table>
             </div>
@@ -465,8 +515,8 @@ function ModalEncoder({
       onClick=${(e) => closeOnOverlayClick && e.target === e.currentTarget && hideModal()}
     >
       <div
-        class="bg-white rounded-lg p-6 max-w-2xl w-full relative"
-        style="max-height: 90vh; overflow-y: auto;"
+        class="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full relative"
+        style="max-height: 90vh; max-height: 90dvh; overflow-y: auto;"
       >
         <div class="modal-header flex justify-between items-center mb-4">
           <h2 class="text-xl font-bold">${title}</h2>

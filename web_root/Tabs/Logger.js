@@ -178,7 +178,7 @@ function LogsTerminal({ language }) {
       <div
         ref=${boxRef}
         class="bg-slate-900 text-amber-300 text-xs font-mono p-3 rounded-xl overflow-auto whitespace-pre-wrap selection:bg-amber-300 selection:text-slate-900"
-        style="height: 420px;"
+        style="height: min(420px, 60vh); height: min(420px, 60dvh);"
       >
         ${text || (language === 'ru' ? '...ожидание данных...' : '...waiting for data...')}
       </div>
@@ -209,8 +209,11 @@ export function Logger({ }) {
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
       <div class="w-full relative z-10 flex flex-col gap-6">
-        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 drop-shadow-sm tracking-tight uppercase">
+        <div>
+          <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           ${language === 'ru' ? 'Логи устройства' : 'Device Logs'}
+        </div>
+          <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь виден «дневник» контроллера: что он делает прямо сейчас. Пригодится, чтобы понять, почему что-то не сработало.' : 'The diary of the controller: what it is doing right now. Handy for finding out why something did not work.'}</p>
         </div>
 
         <${LogsTerminal} language=${language} />

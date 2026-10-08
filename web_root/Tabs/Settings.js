@@ -1,6 +1,4 @@
 import { lockToggle } from '../helpLock.js';
-
-
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
@@ -80,6 +78,13 @@ function initGlobalTooltip() {
   document.addEventListener('mouseout', e => {
     const el = e.target.closest('[data-tip]');
     if (el) hide();
+  });
+
+  // Touch screens: tap on an element with a tooltip shows it, tap elsewhere hides it
+  document.addEventListener('click', e => {
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el); else hide();
   });
 }
 // ---------------------------------------------------------------------------
@@ -1274,7 +1279,7 @@ function Settings({ }) {
         <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
         <!-- Header -->
-        <div class="w-full mb-6 px-2 flex flex-row items-center gap-6">
+        <div class="w-full mb-2 px-2 flex flex-row items-center gap-6">
           <h2 class="text-3xl font-extrabold text-slate-800 tracking-tight drop-shadow-sm uppercase">Global Settings</h2>
           <select
             value=${settings.lang}
@@ -1283,6 +1288,9 @@ function Settings({ }) {
           >
             ${languages.map((lang) => html`<option value=${lang.value}>${lang.label}</option>`)}
           </select>
+        </div>
+        <div class="w-full px-2">
+          <p class="text-sm text-slate-600 mb-6 max-w-3xl">${(settings.lang || 'ru') === 'ru' ? 'Общие настройки контроллера: язык, логин и пароль, часовой пояс, восход и закат, сеть, MQTT. Достаточно настроить один раз.' : 'General controller settings: language, login and password, time zone, sunrise and sunset, network, MQTT. Set them up once.'}</p>
         </div>
 
         ${topNotification && html`
@@ -1790,7 +1798,7 @@ function Settings({ }) {
               </button>
             </div>
             ${condHelpOpen && html`
-              <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;overflow-y:auto;">
+              <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">
                 <${SunCondHelp} isRu=${isRuSun} />
               </div>
             `}
@@ -1870,9 +1878,9 @@ function Settings({ }) {
               </div>
 
               ${logFilterOpen && html`
-                <div class="flex items-stretch">
+                <div class="flex flex-col sm:flex-row items-stretch">
 
-                  <div class="w-1/4 border-r border-slate-300 px-6 py-6 flex flex-col justify-center items-center gap-4"
+                  <div class="w-full sm:w-1/4 sm:border-r border-b sm:border-b-0 border-slate-300 px-4 sm:px-6 py-4 sm:py-6 flex flex-col justify-center items-center gap-4"
                       data-tip=${(settings.lang || 'ru') === 'ru'
                         ? 'Выберите категории логов, которые выводятся в UART и отсылаются. Изменения применяются немедленно в RAM!'
                         : 'Select which log categories are enabled. Changes apply immediately in RAM!'}>
@@ -1889,8 +1897,8 @@ function Settings({ }) {
                     </button>
                   </div>
 
-                  <div class="w-3/4 px-6 py-6">
-                    <div class="grid grid-cols-4 gap-3">
+                  <div class="w-full sm:w-3/4 px-4 sm:px-6 py-4 sm:py-6">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       ${LOG_CATEGORIES.map(cat => {
                         const maskVal = settings.log_filter_mask !== undefined ? settings.log_filter_mask : 0x7FF;
                         const isEnabled = (maskVal & (1 << cat.id)) !== 0;

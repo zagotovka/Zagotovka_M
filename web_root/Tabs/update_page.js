@@ -1,5 +1,4 @@
 import { lockToggle } from '../helpLock.js';
-
 import { h, useState, useEffect, useRef, html } from '../bundle.js';
 import { pauseAll, resumeAll } from '../pollQueue.js';
 import { Icons, Button } from '../components.js';
@@ -524,7 +523,7 @@ export function FirmwareUpdate({ }) {
 
     return html`
       <div
-        class=${`fixed top-0 left-0 right-0 z-50 border-b-4 p-4 ${bgColor}`}
+        class=${`fixed top-0 left-0 right-0 z-50 border-b-4 p-3 sm:p-4 break-words ${bgColor}`}
         role="alert"
       >
         <p class="font-bold text-center">${message}</p>
@@ -575,9 +574,10 @@ export function FirmwareUpdate({ }) {
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
       <div class="w-full relative z-10">
-        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           ${language === 'ru' ? 'Обновление прошивки' : 'Firmware Update'}
         </div>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь обновляется программа контроллера: выберите файл с новой версией и загрузите его в контроллер.' : 'Update the controller software: choose the file with the new version and upload it to the controller.'}</p>
 
         <!-- Полоса прогресса загрузки: над блоками CURRENT FIRMWARE IMAGE и DEVICE UPDATE,
              во всю ширину сетки, толщиной не меньше кнопки Upload. Заливка сделана
@@ -742,7 +742,7 @@ export function FirmwareUpdate({ }) {
 
         ${showHelp &&
           html`
-            <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;overflow-y:auto;">
+            <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">
               ${helpContent[language] || helpContent.en}
             </div>
           `}

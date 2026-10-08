@@ -123,10 +123,10 @@ function ModalSIM800L({ hideModal, title, selectedGps, onSave, language = 'en' }
       class="fixed inset-0 z-[999] bg-black bg-opacity-50"
       style="margin-top: 7px;"
     >
-      <div class="flex items-center justify-center min-h-full p-4">
+      <div class="flex items-center justify-center min-h-full p-2 sm:p-4">
         <div
-          class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 relative"
-          style="max-height: calc(100vh - 57px); overflow-y: auto;"
+          class="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full mx-0 sm:mx-4 relative"
+          style="max-height: calc(100vh - 57px); max-height: calc(100dvh - 57px); overflow-y: auto;"
         >
           <div class="modal-header flex justify-between items-center mb-4">
             <h2 class="text-xl font-bold">${title}</h2>

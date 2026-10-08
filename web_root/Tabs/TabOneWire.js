@@ -1,6 +1,4 @@
 import { lockToggle } from '../helpLock.js';
-
-
 import { ModalEditSensor } from '../Modals/ModalEditSensor.js';
 import { ModalOneWire } from '../Modals/ModalOneWire.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
@@ -74,6 +72,13 @@ function initGlobalTooltip() {
   document.addEventListener('mouseout', e => {
     const el = e.target.closest('[data-tip]');
     if (el) hide();
+  });
+
+  // Touch screens: tap on an element with a tooltip shows it, tap elsewhere hides it
+  document.addEventListener('click', e => {
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el); else hide();
   });
 }
 
@@ -1035,7 +1040,7 @@ const TabOneWire = () => {
             ${showHelp ? T.hideHelp : T.showHelp}
           </button>
         </div>
-        ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full" style="max-height:70vh;overflow-y:auto;">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
+        ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
       </div>
     </div>
     ${isModalOpen && (selectedSensor
@@ -1046,4 +1051,3 @@ const TabOneWire = () => {
 };
 
 export { TabOneWire };
-

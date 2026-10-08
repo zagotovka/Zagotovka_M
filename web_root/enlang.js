@@ -43,19 +43,21 @@ export const enlangmonitoring = [
 
 export const enencoder = [
   '', // 0
-  'ID - A unique numerical identifier of the encoder. Assigned automatically.', // 1
+  'ID - A unique numerical identifier of the row (encoder or PWM pin). Assigned automatically.', // 1
   'PIN - The unique number of the pin.', // 2
   'Encoder A (ID) - Main pin of encoder A (DT).', // 3
   'Encoder B (ID) - Additional pin of encoder B (CLK).', // 4
   'PWM connection - PWM connection for brightness control (dimmer).', // 5
   'Dimmer value (0-100) - Current dimmer value from 0 to 100.', // 6
   'Duty on restore - Value of duty cycle (brightness) to restore when the controller is turned on.', // 7
-  'INFO - Give a name to this encoder for quick navigation.', // 8
-  'On/Off - Enable or disable the encoder handler.', // 9
-  'Action - The Edit button allows you to access the encoder settings menu.', // 10
+  'INFO - Give a name to this row (encoder or PWM) for quick navigation.', // 8
+  'On/Off - Enable or disable the encoder handler. For a PWM row without an encoder it is the switch of the output itself (Off means 0% on the output).', // 9
+  'Action - The Edit button allows you to access the settings menu of the encoder or PWM output.', // 10
   'PWM Frequency - PWM frequency of the controlled device (in Hertz).', // 11
   'Resolution (steps) - Maximum number of steps from 0 to 100% for the PWM device.', // 12
-  'Zigbee - Bind to a Zigbee dimmer for automatic brightness control.' // 13
+  'Zigbee - Bind to a Zigbee dimmer for automatic brightness control.', // 13
+  'Condition - Extra condition for the encoder link.', // 14
+  'CH Polarity - Normal: 20% gives 20% on the load. Inverted: for inverting stages (for example a 6N137 optocoupler) so that 20% in the interface is still 20% on the load.' // 15
 ];
 
 export const enlangeditbutton = [
@@ -286,4 +288,5 @@ export const enlangpid = [
   'Action - Button to enter the PID controller settings menu.', // 11
   'Auto tune - Automatic tuning of PID coefficients.' // 12
 ];
+
 

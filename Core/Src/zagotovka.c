@@ -1,4 +1,3 @@
-
 /*
  * zagotovka.c
  *
@@ -688,6 +687,7 @@ static void cascade_delete_pin_id(int deleted_id) {
     PinsConf[deleted_id].info[0] = '\0';
     PinsConf[deleted_id].onoff = 0;
     PinsConf[deleted_id].dvalue = 0;
+    PinsConf[deleted_id].pwm_flags = 0;
     changed_pins = true;
   }
 
@@ -964,6 +964,92 @@ static char *json_get_str_allow_empty(struct mg_str json, const char *path) {
   return result;
 }
 
+/* ===================== PWM helpers (PWM без энкодера) ===================== */
+
+/* true, если PWM-пином управляет PID-слот (как в pid_set_pwm: id 0 не бывает) */
+bool pwm_owned_by_pid(uint8_t pwm_id) {
+  if (pwm_id == 0 || pwm_id >= NUMPIN) return false;
+  for (int p = 0; p < PID_MAX_SLOTS; p++) {
+    if (PidConf[p].pwm_pin_id == pwm_id) return true;
+  }
+  return false;
+}
+
+/* true, если на PWM-пин ссылается связь от Encoder A (topin == 8) */
+bool pwm_has_encoder_link(uint8_t pwm_id) {
+  for (int a = 0; a < NUMPINLINKS; a++) {
+    if (PinsLinks[a].idout != (short)pwm_id) continue;
+    int e = PinsLinks[a].idin;
+    if (e >= 0 && e < NUMPIN && PinsConf[e].topin == 8) return true;
+  }
+  return false;
+}
+
+/* Рубильник PWM. Закрыт, если:
+ *  - связанный энкодер выключен (прежнее поведение), либо
+ *  - энкодера нет, бит PWMF_SWITCH установлен и PinsConf[pwm].onoff == 0.
+ * Старые PWM (cron, PID) без бита PWMF_SWITCH всегда открыты. */
+bool pwm_gate_open(uint8_t pwm_id) {
+  if (pwm_id >= NUMPIN) return false;
+  bool has_enc = false;
+  for (int a = 0; a < NUMPINLINKS; a++) {
+    if (PinsLinks[a].idout != (short)pwm_id) continue;
+    int e = PinsLinks[a].idin;
+    if (e >= 0 && e < NUMPIN && PinsConf[e].topin == 8) {
+      has_enc = true;
+      if (PinsConf[e].onoff == 0) return false;
+    }
+  }
+  if (!has_enc && (PinsConf[pwm_id].pwm_flags & PWMF_SWITCH) &&
+      PinsConf[pwm_id].onoff == 0)
+    return false;
+  return true;
+}
+
+/* Записать в CCR текущий dvalue с учётом рубильника */
+void pwm_write_duty(uint8_t pwm_id) {
+  if (pwm_id >= NUMPIN || PinsConf[pwm_id].topin != 5) return;
+  if (PinsInfo[pwm_id].tim == NULL) return;
+  uint32_t pulse = 0;
+  if (pwm_gate_open(pwm_id)) {
+    pulse = (uint32_t)((uint64_t)PinsConf[pwm_id].dvalue *
+                       PinsConf[pwm_id].pwmmax / 100ULL);
+  }
+  __HAL_TIM_SET_COMPARE(&htim[pwm_id], PinsInfo[pwm_id].tim_channel, pulse);
+}
+
+/* Установить duty 0..100 % (Zigbee-диммер, API): dvalue + CCR */
+void pwm_set_percent(uint8_t pwm_id, int percent) {
+  if (pwm_id >= NUMPIN || PinsConf[pwm_id].topin != 5) return;
+  if (is_pin_in_autotune(pwm_id)) return; /* AutoTune lock */
+  if (percent < 0) percent = 0;
+  if (percent > 100) percent = 100;
+  PinsConf[pwm_id].dvalue = percent;
+  pwm_write_duty(pwm_id);
+}
+
+/* Применить полярность из бита PWMF_INVERT на лету: меняем только CCxP
+ * (и OISx у TIM1/TIM8), бит включения канала CCxE не трогаем. */
+void pwm_apply_polarity(uint8_t pwm_id) {
+  if (pwm_id >= NUMPIN || PinsConf[pwm_id].topin != 5) return;
+  TIM_TypeDef *t = PinsInfo[pwm_id].tim;
+  if (t == NULL) return;
+  uint32_t ch = PinsInfo[pwm_id].tim_channel; /* 0,4,8,12 = сдвиг в CCER */
+  bool inv = (PinsConf[pwm_id].pwm_flags & PWMF_INVERT) != 0;
+  uint32_t ccp = (uint32_t)TIM_CCER_CC1P << ch;
+  taskENTER_CRITICAL();
+  uint32_t v = t->CCER;
+  v = inv ? (v | ccp) : (v & ~ccp);
+  t->CCER = v;
+  if (t == TIM1 || t == TIM8) {
+    uint32_t ois = (uint32_t)TIM_CR2_OIS1 << (ch >> 1);
+    uint32_t c2 = t->CR2;
+    c2 = inv ? (c2 | ois) : (c2 & ~ois);
+    t->CR2 = c2;
+  }
+  taskEXIT_CRITICAL();
+}
+
 void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
                       int num_pins) {
   struct mg_str body = mg_str_n(json_string, strlen(json_string));
@@ -1042,6 +1128,16 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
     PinsConf[onoffid].onoff = onoff;
     printf("Updated pin %" PRId32 ": onoff = %d\n", onoffid, onoff);
 
+    /* PWM-строка без энкодера: рубильник живёт на самом PWM-пине. Бит
+     * PWMF_SWITCH ставится при первом использовании ползунка, поэтому старые
+     * PWM (cron, PID) не гаснут после обновления. PID-пин рубильника не имеет. */
+    if (PinsConf[onoffid].topin == 5 && !pwm_owned_by_pid((uint8_t)onoffid) &&
+        !pwm_has_encoder_link((uint8_t)onoffid) &&
+        !is_pin_in_autotune((uint8_t)onoffid)) {
+      PinsConf[onoffid].pwm_flags |= PWMF_SWITCH;
+      pwm_write_duty((uint8_t)onoffid);
+    }
+
     for (int a = 0; a < NUMPINLINKS; a++) {
       if (PinsLinks[a].idin == (int)onoffid) {
         int idpwm = PinsLinks[a].idout;
@@ -1095,6 +1191,7 @@ void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
       switch (PinsConf[onoffid].topin) {
         case 1:  mark_slice_dirty(&g_ver_button);   break;
         case 3:  mark_slice_dirty(&g_ver_switch);    break;
+        case 5:  mark_slice_dirty(&g_ver_encoder);   break;
         case 8:  mark_slice_dirty(&g_ver_encoder);   break;
         case 10: mark_slice_dirty(&g_ver_security);  break;
       }
@@ -1989,6 +2086,101 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
   //        printf("No encoders found.\n");
   //    }
 }
+/* Применить частоту и dvalue к PWM-пину j (прежний код из Edit-ветки).
+ * pwm_json - миллигерцы, dvalue_json - проценты 0..100. */
+static void pwm_apply_freq_duty(uint8_t j, long pwm_json, long dvalue_json) {
+  uint64_t timer_clk_mhz;
+  if (PinsInfo[j].tim == TIM1 || PinsInfo[j].tim == TIM8 ||
+      PinsInfo[j].tim == TIM9 || PinsInfo[j].tim == TIM10 ||
+      PinsInfo[j].tim == TIM11) {
+    timer_clk_mhz = 216000000ULL * 1000ULL;
+  } else {
+    timer_clk_mhz = 108000000ULL * 1000ULL;
+  }
+  uint32_t target_freq = (uint32_t)pwm_json;
+  if (target_freq == 0 || target_freq > timer_clk_mhz)
+    target_freq = 10000000;
+  PinsConf[j].pwm = target_freq;
+
+  uint32_t prescaler = 0;
+  uint32_t period = (uint32_t)((timer_clk_mhz / (uint64_t)target_freq) - 1);
+  while (period > 65535) {
+    prescaler++;
+    period = (uint32_t)((timer_clk_mhz /
+                         ((uint64_t)target_freq * (prescaler + 1))) - 1);
+  }
+  PinsConf[j].pwmmax = period;
+
+  int new_dvalue = (int)dvalue_json;
+  if (new_dvalue < 0) new_dvalue = 0;
+  if (new_dvalue > 100) new_dvalue = 100;
+  PinsConf[j].dvalue = new_dvalue;
+
+  __HAL_TIM_SET_PRESCALER(&htim[j], prescaler);
+  __HAL_TIM_SET_AUTORELOAD(&htim[j], period);
+  uint32_t pulse_json = (uint32_t)((uint64_t)new_dvalue * period / 100ULL);
+  __HAL_TIM_SET_COMPARE(&htim[j], PinsInfo[j].tim_channel, pulse_json);
+
+  printf("Updated PWM [%d] %s: freq=%lu mHz, period=%lu, psc=%lu, "
+         "dvalue=%d%% = %lu steps\r\n",
+         j, PinsInfo[j].pins, (unsigned long)PinsConf[j].pwm,
+         (unsigned long)period, (unsigned long)prescaler,
+         new_dvalue, (unsigned long)pulse_json);
+}
+
+/* Edit строки "PWM без энкодера" (kind:"pwm", topin == 5).
+ * Настройки пишутся в сам PWM-пин, topin не меняется: иначе Save превратил бы
+ * PWM-пин в Encoder A. */
+static void parse_pwm_row_edit(struct mg_str body, int id) {
+  bool pid = pwm_owned_by_pid((uint8_t)id);
+  bool locked = is_pin_in_autotune((uint8_t)id);
+  long dvalue_json = mg_json_get_long(body, "$.dvalue", -1);
+  long pwm_json = mg_json_get_long(body, "$.pwm", -1);
+  bool has_pol = mg_json_get(body, "$.pol", NULL) >= 0;
+  bool has_onoff = mg_json_get(body, "$.onoff", NULL) >= 0;
+
+  if (!locked) {
+    /* У PID свой dvalue (он перезаписывает его каждый цикл): берём текущий */
+    long dv = pid ? (long)PinsConf[id].dvalue : dvalue_json;
+    if (dv >= 0 && pwm_json >= 0)
+      pwm_apply_freq_duty((uint8_t)id, pwm_json, dv);
+
+    if (has_pol) {
+      long pol = mg_json_get_long(body, "$.pol", 0);
+      if (pol) PinsConf[id].pwm_flags |= PWMF_INVERT;
+      else PinsConf[id].pwm_flags &= (uint8_t)~PWMF_INVERT;
+      pwm_apply_polarity((uint8_t)id);
+    }
+
+    /* Рубильник: только без PID (у PID свой переключатель) */
+    if (!pid && has_onoff) {
+      PinsConf[id].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[id].onoff);
+      PinsConf[id].pwm_flags |= PWMF_SWITCH;
+    }
+    if (!pid) pwm_write_duty((uint8_t)id);
+  } else {
+    printf("PWM row %d: hardware settings locked by AutoTune\r\n", id);
+  }
+
+  PinsConf[id].ponr = (uint8_t)mg_json_get_long(body, "$.ponr", PinsConf[id].ponr);
+  char *info = json_get_str_allow_empty(body, "$.info");
+  if (info) {
+    strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
+    PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
+    mg_free(info);
+  }
+  PinsConf[id].zbee_bind_id =
+      (uint16_t)mg_json_get_long(body, "$.zbee_bind", PinsConf[id].zbee_bind_id);
+  printf("PWM row edit: id=%d, pins=%s, pwm=%d, dvalue=%d, flags=0x%02X, "
+         "onoff=%d, zbee_bind=%d\r\n",
+         id, PinsInfo[id].pins, PinsConf[id].pwm, PinsConf[id].dvalue,
+         PinsConf[id].pwm_flags, PinsConf[id].onoff, PinsConf[id].zbee_bind_id);
+  mark_slice_dirty(&g_ver_encoder);
+  mark_slice_dirty(&g_ver_pins);
+  int usbnum = 1;
+  xQueueSend(usbQueueHandle, &usbnum, 0);
+}
+
 void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
                         struct dbPinToPin *PinsLinks,
                         struct dbPinsInfo *PinsInfo, uint8_t count) {
@@ -2028,6 +2220,16 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
   bool has_pwm = mg_json_get(body, "$.pwm", NULL) >= 0;
   bool has_pwmmax = mg_json_get(body, "$.pwmmax", NULL) >= 0;
   bool is_edit_type = has_topin && (has_dvalue || has_pwm || has_pwmmax);
+  bool has_pol = mg_json_get(body, "$.pol", NULL) >= 0;
+  long pol_json = mg_json_get_long(body, "$.pol", 0);
+
+  /* Строка PWM без энкодера: пишем настройки в сам PWM-пин, topin не трогаем */
+  if (PinsConf[id].topin == 5) {
+    parse_pwm_row_edit(body, id);
+    if (my_DgnTaskHandle)
+      xTaskNotifyGive(my_DgnTaskHandle);
+    return;
+  }
 
   if (is_edit_type) {
     char *pins = mg_json_get_str(body, "$.pins");
@@ -2045,48 +2247,13 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
         for (int k = 0; k < NUMPINLINKS; k++) {
           if (PinsLinks[k].idin == id && PinsLinks[k].idout == j) {
             if (is_pin_in_autotune(j)) break;
-            if (dvalue_json >= 0 && pwm_json >= 0) {
-              uint64_t timer_clk_mhz;
-              if (PinsInfo[j].tim == TIM1 || PinsInfo[j].tim == TIM8 ||
-                  PinsInfo[j].tim == TIM9 || PinsInfo[j].tim == TIM10 ||
-                  PinsInfo[j].tim == TIM11) {
-                timer_clk_mhz = 216000000ULL * 1000ULL;
-              } else {
-                timer_clk_mhz = 108000000ULL * 1000ULL;
-              }
-              uint32_t target_freq = (uint32_t)pwm_json;
-              if (target_freq == 0 || target_freq > timer_clk_mhz)
-                target_freq = 10000000;
-              PinsConf[j].pwm = target_freq;
-
-              uint32_t prescaler = 0;
-              uint32_t period =
-                  (uint32_t)((timer_clk_mhz / (uint64_t)target_freq) - 1);
-              while (period > 65535) {
-                prescaler++;
-                period = (uint32_t)((timer_clk_mhz / ((uint64_t)target_freq *
-                                                      (prescaler + 1))) -
-                                    1);
-              }
-              PinsConf[j].pwmmax = period;
-
-              int new_dvalue = (int)dvalue_json;
-              if (new_dvalue < 0) new_dvalue = 0;
-              if (new_dvalue > 100) new_dvalue = 100;
-              PinsConf[j].dvalue = new_dvalue;
-
-              __HAL_TIM_SET_PRESCALER(&htim[j], prescaler);
-              __HAL_TIM_SET_AUTORELOAD(&htim[j], period);
-              uint32_t pulse_json =
-                  (uint32_t)((uint64_t)new_dvalue * period / 100ULL);
-              __HAL_TIM_SET_COMPARE(&htim[j], PinsInfo[j].tim_channel,
-                                    pulse_json);
-
-              printf("Updated PWM [%d] %s: freq=%lu mHz, period=%lu, psc=%lu, "
-                     "dvalue=%d%% = %lu steps\r\n",
-                     j, PinsInfo[j].pins, (unsigned long)PinsConf[j].pwm,
-                     (unsigned long)period, (unsigned long)prescaler,
-                     new_dvalue, (unsigned long)pulse_json);
+            if (dvalue_json >= 0 && pwm_json >= 0)
+              pwm_apply_freq_duty((uint8_t)j, pwm_json, dvalue_json);
+            /* CH Polarity: применяется независимо от pwm/dvalue */
+            if (has_pol) {
+              if (pol_json) PinsConf[j].pwm_flags |= PWMF_INVERT;
+              else PinsConf[j].pwm_flags &= (uint8_t)~PWMF_INVERT;
+              pwm_apply_polarity((uint8_t)j);
             }
             break;
           }
@@ -2146,6 +2313,9 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
           keybuf[klen] = '\0';
           int value = (int)mg_json_get_long(
               mg_str_n(val.buf, val.len), "$", 0);
+          /* PWM переходит под рубильник энкодера: свой рубильник снимаем */
+          if (value >= 0 && value < NUMPIN && PinsConf[value].topin == 5)
+            PinsConf[value].pwm_flags &= (uint8_t)~PWMF_SWITCH;
 
           bool found = false;
           for (int i = 0; i < NUMPINLINKS; i++) {
@@ -3981,8 +4151,9 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
               if (value > 100)
                 value = 100;
               PinsConf[id].dvalue = value;
-              uint32_t pulse_web =
-                  (uint32_t)((uint64_t)value * PinsConf[id].pwmmax / 100ULL);
+              uint32_t pulse_web = pwm_gate_open((uint8_t)id)
+                  ? (uint32_t)((uint64_t)value * PinsConf[id].pwmmax / 100ULL)
+                  : 0;
               __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel,
                                     pulse_web);
               printf("PWM WEB [%d] %s: %d%% = %lu steps\r\n", id,
@@ -5315,6 +5486,17 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                             int zbee_id = NUMPIN + dp_slot;
                             bool found_encoder = false;
                             bool found_pwm = false;
+                            /* PWM без энкодера: привязка zbee_bind_id у самого PWM-пина */
+                            bool found_direct = false;
+                            for (int d = 0; d < NUMPIN; d++) {
+                                if (PinsConf[d].topin == 5 &&
+                                    PinsConf[d].zbee_bind_id == (uint16_t)zbee_id) {
+                                    found_direct = true;
+                                    pwm_set_percent((uint8_t)d, mapped);
+                                    LOG_Z2M("dimmer id=%d direct PWM[%d]=%d%%\r\n",
+                                           zbee_id, d, mapped);
+                                }
+                            }
                             for (int e = 0; e < NUMPIN; e++) {
                                 if (PinsConf[e].topin == 8 &&
                                     PinsConf[e].zbee_bind_id == (uint16_t)zbee_id) {
@@ -5328,7 +5510,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                                             PinsConf[link_out].topin == 5) {
                                             found_pwm = true;
                                             int pwm_id = PinsLinks[k].idout;
-                                            PinsConf[pwm_id].dvalue = mapped;
+                                            pwm_set_percent((uint8_t)pwm_id, mapped);
                                             LOG_Z2M("dimmer id=%d PWM[%d]=%d%%\r\n",
                                                    zbee_id, pwm_id, mapped);
                                             break;
@@ -5336,7 +5518,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                                     }
                                 }
                             }
-                            if (!found_encoder || !found_pwm) {
+                            if (!found_direct && (!found_encoder || !found_pwm)) {
                                 LOG_Z2M("dimmer id=%d err enc=%d pwm=%d\r\n",
                                        zbee_id, found_encoder, found_pwm);
             }
@@ -5455,8 +5637,18 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                         if (mapped > 100) mapped = 100;
                     }
 
-                    /* Ищем привязанный encoder и обновляем его dvalue */
+                    /* PWM без энкодера: привязка zbee_bind_id у самого PWM-пина */
                     int zbee_id = NUMPIN + i;
+                    for (int d = 0; d < NUMPIN; d++) {
+                        if (PinsConf[d].topin == 5 &&
+                            PinsConf[d].zbee_bind_id == (uint16_t)zbee_id) {
+                            pwm_set_percent((uint8_t)d, mapped);
+                            LOG_Z2M("dimmer cl8 id=%d direct PWM[%d] = %d%%\r\n",
+                                   zbee_id, d, mapped);
+                        }
+                    }
+
+                    /* Ищем привязанный encoder и обновляем его dvalue */
                     for (int e = 0; e < NUMPIN; e++) {
                         if (PinsConf[e].topin == 8 &&
                             PinsConf[e].zbee_bind_id == (uint16_t)zbee_id) {
@@ -5464,7 +5656,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                             if (PinsConf[e].encoderb > 0 &&
                                 PinsConf[e].encoderb < NUMPIN &&
                                 PinsConf[PinsConf[e].encoderb].topin == 5) {
-                                PinsConf[PinsConf[e].encoderb].dvalue = mapped;
+                                pwm_set_percent(PinsConf[e].encoderb, mapped);
                                 LOG_Z2M("dimmer cl8 id=%d -> PWM[%d] = %d%%\r\n",
                                        zbee_id, PinsConf[e].encoderb, mapped);
                             }
@@ -7075,8 +7267,9 @@ void mqtt_message_handler(const char *topic, const char *payload) {
           if (sscanf(dvalue_part + 7, "%d", &value) == 1) {
             if (value >= 0 && value <= 100) { // dvalue — ПРОЦЕНТ 0-100
               PinsConf[id].dvalue = value;
-              uint32_t pulse_mqtt =
-                  (uint32_t)((uint64_t)value * PinsConf[id].pwmmax / 100ULL);
+              uint32_t pulse_mqtt = pwm_gate_open((uint8_t)id)
+                  ? (uint32_t)((uint64_t)value * PinsConf[id].pwmmax / 100ULL)
+                  : 0;
               __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel,
                                     pulse_mqtt);
               printf("[MQTT] PWM MQTT %s: %d%% = %lu steps\r\n",
@@ -8560,8 +8753,8 @@ void sms_alarm_poll(void) {
 
 /* ------------------------------------------------------------------
  * Удалённый "рубильник" On/Off (SMS / DTMF). Единый формат: ID#КОД*
- *   КОД 00 / 11 - пины (Button, Switch, Encoder, OneWire, Security,
- *                 SIM800L, Zigbee): выключить / включить
+ *   КОД 00 / 11 - пины (Button, Switch, Encoder, PWM без энкодера,
+ *                 OneWire, Security, SIM800L, Zigbee): выключить / включить
  *   КОД 33 / 44 - строки Cron
  *   КОД 55 / 66 - слоты PID
  * sub > 0 - дочерняя строка Zigbee вида "93.1" (ищется по display id).
@@ -8606,7 +8799,16 @@ static int remote_onoff_pin(int id, int sub, uint8_t onoff, char *label,
     /* Физический пин: только типы, у которых есть колонка On/Off.
      * Пин 1 - общий ползунок SIM800L (страница Security). */
     uint8_t t = PinsConf[id].topin;
-    if (id != 1 && t != 1 && t != 3 && t != 4 && t != 8 && t != 9 && t != 10)
+    if (id != 1 && t != 1 && t != 3 && t != 4 && t != 5 && t != 8 && t != 9 &&
+        t != 10)
+      return 0;
+    /* PWM: рубильник только у строки PWM без энкодера и без PID. У PWM с
+     * энкодером рубильник у энкодера (его ID), у PID - слот PID (55/66). Во
+     * время AutoTune настройки PWM заблокированы. Иначе команда не имела бы
+     * эффекта, а SMS-отчёт показал бы ложный успех. */
+    if (id != 1 && t == 5 &&
+        (pwm_owned_by_pid((uint8_t)id) || pwm_has_encoder_link((uint8_t)id) ||
+         is_pin_in_autotune((uint8_t)id)))
       return 0;
   }
 
@@ -8643,6 +8845,7 @@ static int remote_onoff_pin(int id, int sub, uint8_t onoff, char *label,
       switch (PinsConf[id].topin) {
         case 1:  mark_slice_dirty(&g_ver_button);   break;
         case 3:  mark_slice_dirty(&g_ver_switch);   break;
+        case 5:
         case 8:
         case 9:  mark_slice_dirty(&g_ver_encoder);  break;
         case 10: mark_slice_dirty(&g_ver_security); break;
@@ -11307,4 +11510,3 @@ void handle_zigbee_rescan(struct mg_connection *c, struct mg_http_message *hm) {
 
   mg_http_reply(c, 200, "Content-Type: application/json\r\n", "{\"status\":true}");
 }
-

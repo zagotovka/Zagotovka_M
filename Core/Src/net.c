@@ -2324,6 +2324,7 @@ void handle_encoders(struct mg_connection *c) {
          * dvalue берётся от совпадения с наибольшим idout (как в старом
          * двойном цикле), pinact собирается за один проход без O(N²). */
         int pwm_dvalue = 0, pwm_freq = 0, pwm_max = 0;
+        int pwm_pol = 0;   /* CH Polarity связанного PWM (PWMF_INVERT) */
         int best_out = -1;
         int enc_cond = 0;          /* условие на связи энкодера (первая связь с PWM) */
         bool cond_set = false;
@@ -2341,6 +2342,7 @@ void handle_encoders(struct mg_connection *c) {
                 pwm_dvalue = PinsConf[out_id].dvalue;
                 pwm_freq   = PinsConf[out_id].pwm;
                 pwm_max    = PinsConf[out_id].pwmmax;
+                pwm_pol    = (PinsConf[out_id].pwm_flags & PWMF_INVERT) ? 1 : 0;
             }
             if (PinsLinks[k].pins[0] != '\0') {
                 pa_off += snprintf(pinact + pa_off, sizeof(pinact) - pa_off,
@@ -2377,15 +2379,64 @@ void handle_encoders(struct mg_connection *c) {
             "\"encoderb\":%d,\"encdrbpin\":\"%s\","
             "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,\"ponr\":%d,"
             "\"pinact\":{%s},\"info\":\"%s\",\"onoff\":%d,"
-        	"\"zbee_bind\":%d,\"cond\":%d,\"cexpr\":\"%s\"}",
+        	"\"zbee_bind\":%d,\"cond\":%d,\"cexpr\":\"%s\",\"pol\":%d}",
             first ? "" : ",",
             PinsConf[i].topin, i, esc_pins,
             encoderb_id, esc_encb,
             pwm_dvalue, pwm_freq, pwm_max,
             PinsConf[i].ponr,
             pinact, esc_info, PinsConf[i].onoff,
-			PinsConf[i].zbee_bind_id, enc_cond, ce_expr);
+			PinsConf[i].zbee_bind_id, enc_cond, ce_expr, pwm_pol);
 
+        first = false;
+    }
+
+    /* ── Строки PWM без энкодера (kind:"pwm") ──
+     * PWM-пины (topin == 5), на которые не ссылается ни один Encoder A.
+     * Без них PWM пользователя без пинов A/B (Zigbee, API, MQTT, cron, PID)
+     * негде настроить. Связи просматриваем один раз (без O(N^2)). */
+    uint8_t enc_linked[NUMPIN];
+    memset(enc_linked, 0, sizeof(enc_linked));
+    for (int k = 0; k < NUMPINLINKS; k++) {
+        int in_id = PinsLinks[k].idin;
+        int out_id = PinsLinks[k].idout;
+        if (in_id < 0 || in_id >= NUMPIN || out_id < 0 || out_id >= NUMPIN) continue;
+        if (PinsConf[in_id].topin == 8) enc_linked[out_id] = 1;
+    }
+    for (int i = 0; i < NUMPIN; i++) {
+        if (PinsConf[i].topin != 5 || enc_linked[i]) continue;
+
+        int remaining = (int)G_BODY_SIZE - pos;
+        if (remaining < 700) {
+            MG_ERROR(("encoders: OVERFLOW (pwm rows) at pin %d, pos=%d remaining=%d",
+                      i, pos, remaining));
+            break;
+        }
+
+        bool by_pid = pwm_owned_by_pid((uint8_t)i);
+        bool locked = is_pin_in_autotune((uint8_t)i);
+        /* Для старых PWM (бит рубильника не стоял) onoff исторически не
+         * использовался: показываем "включено", чтобы первый Save не погасил их. */
+        int onoff_eff = (PinsConf[i].pwm_flags & PWMF_SWITCH) ? PinsConf[i].onoff : 1;
+
+        char esc_info[64];
+        char esc_pins[16];
+        json_escape_str(esc_info, PinsConf[i].info, sizeof(esc_info));
+        json_escape_str(esc_pins, PinsInfo[i].pins, sizeof(esc_pins));
+
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+            "%s{\"kind\":\"pwm\",\"topin\":5,\"id\":%d,\"pins\":\"%s\","
+            "\"encoderb\":255,\"encdrbpin\":\"\","
+            "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,\"ponr\":%d,"
+            "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d,"
+            "\"zbee_bind\":%d,\"cond\":0,\"cexpr\":\"\","
+            "\"pol\":%d,\"owner\":\"%s\",\"locked\":%d}",
+            first ? "" : ",", i, esc_pins,
+            PinsConf[i].dvalue, PinsConf[i].pwm, PinsConf[i].pwmmax,
+            PinsConf[i].ponr, esc_info, onoff_eff,
+            PinsConf[i].zbee_bind_id,
+            (PinsConf[i].pwm_flags & PWMF_INVERT) ? 1 : 0,
+            by_pid ? "pid" : "", locked ? 1 : 0);
         first = false;
     }
 

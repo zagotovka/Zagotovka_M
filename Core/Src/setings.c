@@ -970,6 +970,8 @@ void GetPinConfig() {
           PinsConf[currentPin].on = atoi(value);
         else if (strcmp(key, "istate") == 0)
           PinsConf[currentPin].istate = atoi(value);
+        else if (strcmp(key, "pwmfl") == 0)
+          PinsConf[currentPin].pwm_flags = (uint8_t)(atoi(value) & 0x03);
         else if (strcmp(key, "dvalue") == 0)
           PinsConf[currentPin].dvalue = atoi(value);
         else if (strcmp(key, "ponr") == 0)
@@ -1096,6 +1098,8 @@ void GetPinConfig() {
           PinsConf[currentPin].on = atoi(value);
         else if (strcmp(key, "istate") == 0)
           PinsConf[currentPin].istate = atoi(value);
+        else if (strcmp(key, "pwmfl") == 0)
+          PinsConf[currentPin].pwm_flags = (uint8_t)(atoi(value) & 0x03);
         else if (strcmp(key, "dvalue") == 0)
           PinsConf[currentPin].dvalue = atoi(value);
         else if (strcmp(key, "ponr") == 0)
@@ -1236,6 +1240,13 @@ void SetPinConfig() {
     fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
     if (fresult != FR_OK) {
       printf("Failed to write 'istate': %d\n", fresult);
+      f_close(&USBHFile);
+      return;
+    }
+    snprintf(buffer, sizeof(buffer), ",\"pwmfl\":%d", PinsConf[i].pwm_flags);
+    fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
+    if (fresult != FR_OK) {
+      printf("Failed to write 'pwmfl': %d\n", fresult);
       f_close(&USBHFile);
       return;
     }
@@ -1728,11 +1739,22 @@ void InitPin() {
         PinsConf[i].dvalue = 100;
       uint32_t pulse =
           (uint32_t)((uint64_t)PinsConf[i].dvalue * period / 100ULL);
+      /* Рубильник PWM-строки (без энкодера): после перезагрузки выключенный
+       * PWM не должен выдавать dvalue. Бит снимается при привязке к энкодеру. */
+      if ((PinsConf[i].pwm_flags & PWMF_SWITCH) && PinsConf[i].onoff == 0)
+        pulse = 0;
       sConfigOC.Pulse = pulse;
-      sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+      /* CH Polarity из сохранённого бита: Inverted = активный уровень LOW.
+       * ConfigChannel выполняется до включения GPIO AF и Start, поэтому
+       * первый импульс уже имеет правильную полярность. */
+      {
+        bool pol_inv = (PinsConf[i].pwm_flags & PWMF_INVERT) != 0;
+        sConfigOC.OCPolarity = pol_inv ? TIM_OCPOLARITY_LOW : TIM_OCPOLARITY_HIGH;
+        /* Idle (только TIM1/TIM8): неактивный уровень, согласованный с полярностью */
+        sConfigOC.OCIdleState = pol_inv ? TIM_OCIDLESTATE_SET : TIM_OCIDLESTATE_RESET;
+      }
       sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
       sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-      sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
       sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
       if (HAL_TIM_PWM_ConfigChannel(&htim[i], &sConfigOC,
                                     PinsInfo[i].tim_channel) != HAL_OK) {

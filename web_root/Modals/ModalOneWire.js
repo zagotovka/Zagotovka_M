@@ -103,8 +103,8 @@ function ModalOneWire({
       onclick=${handleOverlayClick}
     >
       <div
-        class="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg relative"
-        style="max-height: 90vh; overflow-y: auto;"
+        class="bg-white rounded-lg shadow-lg p-4 sm:p-6 w-full max-w-lg relative"
+        style="max-height: 90vh; max-height: 90dvh; overflow-y: auto;"
       >
         <div class="modal-header flex justify-between items-center border-b pb-4 mb-4">
           <h5 class="text-xl font-bold">Edit OneWire pin</h5>

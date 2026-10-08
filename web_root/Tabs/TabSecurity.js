@@ -1,6 +1,4 @@
 import { lockToggle } from '../helpLock.js';
-
-
 import { ModalSIM800L, maskPhone, EyeIcon, EyeSlashIcon } from '../Modals/ModalSIM800L.js';
 import { ModalSecurity } from '../Modals/ModalSecurity.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
@@ -42,6 +40,8 @@ function initGlobalTooltip() {
   function hide() { hideTimer = setTimeout(() => { tip.style.opacity = '0'; setTimeout(() => { tip.style.display = 'none'; }, 120); }, 80); }
   document.addEventListener('mouseover', e => { const el = e.target.closest('[data-tip]'); if (el) show(el); });
   document.addEventListener('mouseout', e => { const el = e.target.closest('[data-tip]'); if (el) hide(); });
+  // Touch screens: tap on an element with a tooltip shows it, tap elsewhere hides it
+  document.addEventListener('click', e => { if (!window.matchMedia('(pointer: coarse)').matches) return; const el = e.target.closest('[data-tip]'); if (el) show(el); else hide(); });
 }
 
 const TabSecurity = () => {
@@ -917,7 +917,8 @@ const TabSecurity = () => {
       `}
       <div class="flex flex-col items-center w-full p-6 bg-white/40 backdrop-blur-md rounded-2xl shadow-xl border border-white/50 relative overflow-hidden">
         <div class="w-full mb-10">
-          <h2 class="text-3xl font-extrabold text-slate-800 tracking-tight mb-6 drop-shadow-sm">${T.titleSim}</h2>
+          <h2 class="text-3xl font-extrabold text-slate-800 tracking-tight mb-2 drop-shadow-sm">${T.titleSim}</h2>
+          <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь настраивается связь через SIM-карту: контроллер присылает SMS на ваш телефон, а вы можете управлять им SMS-командами и звонком.' : 'Set up the SIM card link: the controller sends SMS to your phone, and you can control it with SMS commands and by phone call.'}</p>
           <div class="overflow-x-auto w-full rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm mb-4">
             <table class="w-full text-left border-collapse">
               <thead>
@@ -961,11 +962,12 @@ const TabSecurity = () => {
             </table>
           </div>
           <div class="flex justify-end mt-6 w-full"><button onclick=${(e) => { lockToggle(e); setShowHelpSim800L(!showHelpSim800L); }} class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40">${showHelpSim800L ? T.hideHelp : T.showHelp}</button></div>
-          ${showHelpSim800L && html`<div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;overflow-y:auto;">${helpContentSim800L[language]}</div>`}
+          ${showHelpSim800L && html`<div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">${helpContentSim800L[language]}</div>`}
         </div>
 
         <div class="w-full">
-          <h2 class="text-3xl font-extrabold text-slate-800 tracking-tight mb-6 drop-shadow-sm">${T.titlePins}</h2>
+          <h2 class="text-3xl font-extrabold text-slate-800 tracking-tight mb-2 drop-shadow-sm">${T.titlePins}</h2>
+          <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь подключаются охранные датчики (дверь, движение): при срабатывании контроллер выполнит заданные действия, например отправит SMS.' : 'Connect security sensors (door, motion): when one triggers, the controller performs the actions you set, for example sends an SMS.'}</p>
           <div class="overflow-x-auto w-full rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm mb-4">
             <table class="w-full text-left border-collapse">
               <thead>
@@ -994,7 +996,7 @@ const TabSecurity = () => {
             </table>
           </div>
           <div class="flex justify-end mt-6 w-full"><button onclick=${(e) => { lockToggle(e); setShowHlp(!showHelpSecurity); }} class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40">${showHelpSecurity ? T.hideHelp : T.showHelp}</button></div>
-          ${showHelpSecurity && html`<div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;overflow-y:auto;">${helpContentSecurity[language]}</div>`}
+          ${showHelpSecurity && html`<div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">${helpContentSecurity[language]}</div>`}
         </div>
       </div>
       ${isModalOpenSim800L && html`<${ModalSIM800L} hideModal=${() => setIsModalOpenSim800L(false)} title=${T.edit} selectedGps=${sim800lData} onSave=${handleSim800lSave} language=${language} />`}
@@ -1004,4 +1006,3 @@ const TabSecurity = () => {
 };
 
 export { TabSecurity };
-

@@ -1,5 +1,4 @@
 import { lockToggle } from '../helpLock.js';
-
 import { h, useState, useEffect, useRef, html } from '../bundle.js';
 import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { Icons } from '../components.js';
@@ -404,9 +403,10 @@ export function TabZigbee({}) {
       <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
       <div class="w-full relative z-10">
-        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           Zigbee Devices
         </div>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь собраны беспроводные устройства Zigbee: лампочки, розетки, датчики. Видно их состояние, и ими можно управлять.' : 'Wireless Zigbee devices are collected here: bulbs, plugs, sensors. You can see their state and control them.'}</p>
         <div class="text-center text-slate-500 text-lg py-12">
           ${language === 'ru' ? 'Нет настроенных Zigbee устройств. Добавьте их на странице Select pin.' : 'No Zigbee devices configured. Add them on the Select pin page.'}
         </div>
@@ -417,7 +417,7 @@ export function TabZigbee({}) {
           ${showHelp ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help') : (language === 'ru' ? 'Показать справку' : 'Show Help')}
         </button>
       </div>
-      ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full relative z-10" style="max-height:70vh;overflow-y:auto;">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
+      ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full relative z-10" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
     </div>
   `;
 
@@ -427,9 +427,10 @@ export function TabZigbee({}) {
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
       
       <div class="w-full relative z-10">
-        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           Zigbee Devices
         </div>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь собраны беспроводные устройства Zigbee: лампочки, розетки, датчики. Видно их состояние, и ими можно управлять.' : 'Wireless Zigbee devices are collected here: bulbs, plugs, sensors. You can see their state and control them.'}</p>
         
         <div class="flex-grow flex flex-col justify-center items-center w-full">
           <div class="w-full">
@@ -522,12 +523,12 @@ export function TabZigbee({}) {
                               <tr class="hover:bg-slate-200/80 transition-colors bg-white/60"
                                   style="font-size:0.9em;">
                                 <td class="px-6 py-2 text-sm font-mono"
-                                    style="padding-left:60px; color:#6b7fa3;">${d.display_id || d.id}</td>
+                                    style="padding-left:var(--zb-indent, 60px); color:#6b7fa3;">${d.display_id || d.id}</td>
                                 <td class="px-6 py-2 text-sm font-mono"
-                                    style="border-left:3px solid var(--accent-color, #06b6d4); padding-left:60px; color:#6b7fa3;">↳ EP${d.ep}</td>
-                                <td class="px-6 py-2 text-sm" style="padding-left:60px; color:#6b7fa3;">${subType}</td>
-                                <td class="px-6 py-2 text-sm" style="padding-left:60px; color:#6b7fa3;">${d.zbee_label || ''}</td>
-                                <td class="px-6 py-2" style="padding-left:60px;">
+                                    style="border-left:3px solid var(--accent-color, #06b6d4); padding-left:var(--zb-indent, 60px); color:#6b7fa3;">↳ EP${d.ep}</td>
+                                <td class="px-6 py-2 text-sm" style="padding-left:var(--zb-indent, 60px); color:#6b7fa3;">${subType}</td>
+                                <td class="px-6 py-2 text-sm" style="padding-left:var(--zb-indent, 60px); color:#6b7fa3;">${d.zbee_label || ''}</td>
+                                <td class="px-6 py-2" style="padding-left:var(--zb-indent, 60px);">
                                   <${MyPolzunok} value=${d.onoff || 0} disabled=${(head.onoff || 0) === 0 || dirtyIds.current.has(d.id)} activeColor="linear-gradient(to right, #5b7093, #8599b8)" onChange=${(val) => handleToggle(d, val)} />
                                 </td>
                                 <td class="px-6 py-2 text-sm">
@@ -582,7 +583,7 @@ export function TabZigbee({}) {
           ${showHelp ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help') : (language === 'ru' ? 'Показать справку' : 'Show Help')}
         </button>
       </div>
-      ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full" style="max-height:70vh;overflow-y:auto;">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
+      ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
     </div>
   `;
 }

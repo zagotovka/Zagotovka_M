@@ -1,4 +1,3 @@
-
 /* USER CODE BEGIN Header */
 /**
  ******************************************************************************
@@ -1652,18 +1651,8 @@ void start_pwm_fade(uint8_t pwm_id, uint32_t duration_sec,
         return;
     }
 
-    /* Encoder onoff — ПРИОРИТЕТНЫЙ рубильник */
-    bool enc_on = true;
-    for (int a = 0; a < NUMPINLINKS; a++) {
-        if (PinsLinks[a].idout == pwm_id) {
-            int enc_id = PinsLinks[a].idin;
-            if (enc_id >= 0 && enc_id < NUMPIN &&
-                PinsConf[enc_id].topin == 8 && PinsConf[enc_id].onoff == 0) {
-                enc_on = false;
-                break;
-            }
-        }
-    }
+    /* Рубильник: Encoder onoff (приоритетный) либо On/Off самой PWM-строки */
+    bool enc_on = pwm_gate_open(pwm_id);
     if (!enc_on) {
         // Гасим PWM и блокируем — БЕЗОПАСНОСТЬ
         __HAL_TIM_SET_COMPARE(&htim[pwm_id], PinsInfo[pwm_id].tim_channel, 0);
@@ -3186,18 +3175,8 @@ void StartServiceTask(void *argument)
 	        if (PinsConf[i].topin != 5)  continue;
 	        if (is_pin_in_autotune(i))   continue; /* AutoTune lock */
 
-	        /* Encoder onoff — ПРИОРИТЕТНЫЙ рубильник */
-	        bool enc_on = true;
-	        for (int a = 0; a < NUMPINLINKS; a++) {
-	            if (PinsLinks[a].idout == i) {
-	                int enc_id = PinsLinks[a].idin;
-	                if (enc_id >= 0 && enc_id < NUMPIN &&
-	                    PinsConf[enc_id].topin == 8 && PinsConf[enc_id].onoff == 0) {
-	                    enc_on = false;
-	                    break;
-	                }
-	            }
-	        }
+	        /* Рубильник: Encoder onoff (приоритетный) либо On/Off самой PWM-строки */
+	        bool enc_on = pwm_gate_open((uint8_t)i);
 	        if (!enc_on) {
 	            // Гасим PWM и блокируем — БЕЗОПАСНОСТЬ
 	            __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, 0);
@@ -4094,4 +4073,3 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
-

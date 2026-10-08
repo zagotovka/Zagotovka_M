@@ -1,6 +1,4 @@
 import { lockToggle } from '../helpLock.js';
-
-
 import { ModalCron } from '../Modals/ModalCron.js';
 import { ModalPwmCron } from '../Modals/ModalPwmCron.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
@@ -85,6 +83,13 @@ function initGlobalTooltip() {
   document.addEventListener('mouseout', e => {
     const el = e.target.closest('[data-tip]');
     if (el) hide();
+  });
+
+  // Touch screens: tap on an element with a tooltip shows it, tap elsewhere hides it
+  document.addEventListener('click', e => {
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el); else hide();
   });
 }
 // ---------------------------------------------------------------------------
@@ -1161,9 +1166,10 @@ const ArrayCron = ({ d, index }) => {
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
       <div class="w-full relative z-10">
-        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           Timer(s)
         </div>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь задаётся расписание: что и когда включать или выключать само, например свет каждый вечер в 18:00 или полив по утрам.' : 'Set a schedule: what turns on or off by itself and when, for example the light every evening at 18:00 or watering every morning.'}</p>
         <div class="w-full mb-6 relative">
           ${varcron && varcron.length > 0
       ? html`
@@ -1231,7 +1237,7 @@ const ArrayCron = ({ d, index }) => {
       </div>
 
       ${showHelp && html`
-        <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700 w-full" style="max-height:70vh;overflow-y:auto;">
+        <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700 w-full" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">
           ${helpContent[language]}
         </div>
       `}
@@ -1262,4 +1268,3 @@ const ArrayCron = ({ d, index }) => {
 }
 
 export { TabCron };
-

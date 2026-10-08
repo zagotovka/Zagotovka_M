@@ -187,7 +187,7 @@ function ModalCron({
       closeOnOverlayClick && e.target === e.currentTarget && hideModal()}
         >
           <div
-            class="modal-content bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-lg relative"
+            class="modal-content bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6 w-full max-w-lg relative"
             style="margin-top: 0px;"
           >
             <div
@@ -235,4 +235,3 @@ function ModalCron({
 }
 
 export { ModalCron };
-

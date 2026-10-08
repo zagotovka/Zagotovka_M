@@ -1,6 +1,4 @@
 import { lockToggle } from '../helpLock.js';
-
-
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
@@ -82,6 +80,13 @@ function initGlobalTooltip() {
   document.addEventListener('mouseout', e => {
     const el = e.target.closest('[data-tip]');
     if (el) hide();
+  });
+
+  // Touch screens: tap on an element with a tooltip shows it, tap elsewhere hides it
+  document.addEventListener('click', e => {
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el); else hide();
   });
 }
 // ---------------------------------------------------------------------------
@@ -241,12 +246,12 @@ const HELP_CONTENT = {
             <tr>
               <td class="border px-4 py-2"><b>PWM</b></td>
               <td class="border px-4 py-2">ШИМ-выход: яркость лампы, скорость вентилятора.</td>
-              <td class="border px-4 py-2">Страницы Timer(s) и PID Controller(s).</td>
+              <td class="border px-4 py-2">Страницы PWM/Encoder(s) pin(s), Timer(s) и PID Controller(s).</td>
             </tr>
             <tr>
               <td class="border px-4 py-2"><b>Enc.OutA</b>, <b>Enc.OutB</b></td>
               <td class="border px-4 py-2">Выходы A и B энкодера.</td>
-              <td class="border px-4 py-2">Страница <b>Encoder(s) pin(s)</b>.</td>
+              <td class="border px-4 py-2">Страница <b>PWM/Encoder(s) pin(s)</b>.</td>
             </tr>
             <tr>
               <td class="border px-4 py-2"><b>Security</b></td>
@@ -366,12 +371,12 @@ const HELP_CONTENT = {
             <tr>
               <td class="border px-4 py-2"><b>PWM</b></td>
               <td class="border px-4 py-2">PWM output: lamp brightness, fan speed.</td>
-              <td class="border px-4 py-2">The Timer(s) and PID Controller(s) pages.</td>
+              <td class="border px-4 py-2">The PWM/Encoder(s) pin(s), Timer(s) and PID Controller(s) pages.</td>
             </tr>
             <tr>
               <td class="border px-4 py-2"><b>Enc.OutA</b>, <b>Enc.OutB</b></td>
               <td class="border px-4 py-2">Encoder outputs A and B.</td>
-              <td class="border px-4 py-2">The <b>Encoder(s) pin(s)</b> page.</td>
+              <td class="border px-4 py-2">The <b>PWM/Encoder(s) pin(s)</b> page.</td>
             </tr>
             <tr>
               <td class="border px-4 py-2"><b>Security</b></td>
@@ -688,9 +693,10 @@ function TabSelect({ }) {
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
       <div class="w-full relative z-10">
-        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           Select pin(s)
         </div>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь вы решаете, для чего служит каждый вывод контроллера: кнопка, лампа, датчик температуры, диммер. После выбора вывод появится на нужной странице.' : 'Decide what each pin of the controller is for: a button, a lamp, a temperature sensor, a dimmer. After you choose, the pin appears on the matching page.'}</p>
 
         <form onSubmit=${handleSubmit} class="flex-grow flex flex-col justify-center items-center w-full">
           <div class="w-full">
@@ -792,11 +798,10 @@ function TabSelect({ }) {
             ${showHelp ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help') : (language === 'ru' ? 'Показать справку' : 'Show Help')}
           </button>
         </div>
-        ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full" style="max-height:70vh;overflow-y:auto;">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
+        ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
       </div>
     </div>
   `;
 }
 
 export { TabSelect };
-

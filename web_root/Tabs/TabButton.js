@@ -1,6 +1,4 @@
 import { lockToggle } from '../helpLock.js';
-
-
 import { ModalButton } from '../Modals/ModalButton.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
 import { registerPoll, unregisterPoll } from '../pollQueue.js';
@@ -85,6 +83,13 @@ function initGlobalTooltip() {
   document.addEventListener('mouseout', e => {
     const el = e.target.closest('[data-tip]');
     if (el) hide();
+  });
+
+  // Touch screens: tap on an element with a tooltip shows it, tap elsewhere hides it
+  document.addEventListener('click', e => {
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el); else hide();
   });
 }
 // ---------------------------------------------------------------------------
@@ -1097,9 +1102,10 @@ const TabButton = () => {
       <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
       <div class="w-full relative z-10">
-        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-8 drop-shadow-sm tracking-tight uppercase">
+        <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           Button(s) pin(s)
         </div>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь настраиваются кнопки: что произойдёт при одном нажатии, при двойном и при удержании, например включится свет или отопление.' : 'Set up buttons: what happens on a single press, a double press and a long press, for example the light or the heating turns on.'}</p>
 
         <div class="flex-grow flex flex-col justify-center items-center w-full">
           <div class="w-full">
@@ -1145,7 +1151,7 @@ const TabButton = () => {
 
             ${showHelp &&
               html`
-                <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;overflow-y:auto;">
+                <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">
                   ${helpContent[language]}
                 </div>
               `}
@@ -1169,4 +1175,3 @@ const TabButton = () => {
 };
 
 export { TabButton };
-
