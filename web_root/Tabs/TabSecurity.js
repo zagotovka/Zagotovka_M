@@ -84,89 +84,195 @@ const TabSecurity = () => {
   const helpContentSim800L = {
     ru: html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
-        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">Модуль SIM800L</h2>
-          <p>Модуль позволяет управлять "Заготовкой" при помощи мобильной связи - интернет не нужен!</p>
-        <div>
-          <h3 class="text-lg font-bold text-black mb-2">Возможности модуля</h3>
-          <ul class="list-disc ml-6 space-y-1">
-            <li>Входящие вызовы и SMS принимаются только с номера, указанного в поле «Phone Number». Вызовы с других номеров отклоняются автоматически, SMS игнорируются.</li>
-            <li>Держит вас в курсе происходящего при помощи SMS-уведомлений.</li>
-            <li>Включается и отключается при помощи ползунка 'OnOFF'.</li>
-          </ul>
-        </div>
-        </section>
         <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">Ползунок 'OnOFF' модуля</h2>
+          <h2 class="text-xl font-bold text-black">Как подключить модуль SIM800L (пошагово)</h2>
+          <ol class="list-decimal ml-6 space-y-3">
+            <li><b>Соберите модуль.</b> Вставьте SIM-карту в SIM800L. Пин <b>PA3</b> (RXD Pin, ID 1) принимает данные, поэтому его соединяют с выходом TXD модуля. Пин <b>PD5</b> (TXD Pin, ID 35) передаёт данные, поэтому его соединяют со входом RXD модуля. Земли (GND) платы и модуля соедините вместе, а модуль питайте от отдельного мощного источника.</li>
+            <li><b>Включите модуль в проекте.</b> Откройте страницу <b>"Select pin(s)"</b>, включите переключатель <b>SIM800L</b> вверху страницы и нажмите <b>"Submit"</b>. Пины ID 1 и ID 35 при этом блокируются, их тип менять нельзя.</li>
+            <li><b>Укажите свой номер.</b> В блоке <b>SIM800L Settings</b> нажмите <b>Ред.</b> и в поле <b>"Мобильный телефон"</b> введите ВАШ номер: знак <b>+</b> и от 11 до 20 цифр, например <code>${'+358401234567'}</code>. Это не номер SIM-карты, которая стоит в модуле!</li>
+            <li><b>Сохраните.</b> Нажмите <b>"Сохранить"</b>. Пока номер введён неверно, кнопка остаётся серой.</li>
+            <li><b>Включите ползунок OnOff</b> в строке модуля. Пока он выключен, SMS от модуля не отправляются.</li>
+            <li><b>Включите питание по порядку и проверьте.</b> Сначала SIM-карта в модуле, затем питание SIM800L, дождитесь подключения к сети GSM и только потом включайте STM32. Для проверки отправьте со своего телефона SMS <code>${'777'}</code>: придёт ответ <code>${'ALL SMS notifications are switched ON!'}</code>.</li>
+          </ol>
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300"><b>Как это работает:</b> Модуль принимает звонки и SMS только с номера из поля <b>"Мобильный телефон"</b> и отправляет SMS на тот же номер. Звонок с чужого номера сбрасывается, чужие SMS игнорируются. Ползунок <b>OnOff</b> - общий рубильник SMS-уведомлений всего проекта.</div>
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300"><b>Важно:</b> без SIM-карты и без правильного порядка включения (SIM-карта, SIM800L, ожидание GSM, STM32) модуль не заработает.</div>
+          <div class="mt-4"><b>Пример.</b> Ваш телефон <b>+358401234567</b> (номер условный). В поле <b>"Мобильный телефон"</b> пишем именно его, без пробелов и дефисов: <code>${'+358401234567'}</code>. Сохраняем, включаем ползунок <b>OnOff</b> и отправляем с этого телефона SMS <code>${'777'}</code>. Ответ пришёл - модуль работает!</div>
+        </section>
+        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Управление по SMS и DTMF</h2>
+          <div class="overflow-x-auto">
           <table class="w-full bg-white/70">
-            <thead>
-              <tr>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Состояние</th>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Что происходит</th>
-              </tr>
-            </thead>
+            <thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Действие</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th></tr></thead>
             <tbody>
-              <tr>
-                <td class="border px-4 py-2 whitespace-nowrap font-semibold">Ползунок 'OnOFF' ВКЛючен</td>
-                <td class="border px-4 py-2">SMS-уведомления работают по вашим настройкам из таблицы 'Security Pins'.</td>
-              </tr>
-              <tr>
-                <td class="border px-4 py-2 whitespace-nowrap font-semibold">Ползунок 'OnOFF' ОТКлючен</td>
-                <td class="border px-4 py-2">Все SMS-уведомления отключены, настройки из таблицы 'Security Pins' не учитываются.</td>
-              </tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Включить все SMS-уведомления</td><td class="border px-4 py-2"><code>${'777'}</code></td><td class="border px-4 py-2"><code>${'777'}</code></td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Выключить все SMS-уведомления</td><td class="border px-4 py-2"><code>${'222'}</code></td><td class="border px-4 py-2"><code>${'222'}</code></td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">То же рубильником (ID строки модуля = 1): включить</td><td class="border px-4 py-2"><code>${'1#11*'}</code></td><td class="border px-4 py-2"><code>${'1#11*#'}</code></td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">То же рубильником (ID строки модуля = 1): выключить</td><td class="border px-4 py-2"><code>${'1#00*'}</code></td><td class="border px-4 py-2"><code>${'1#00*#'}</code></td></tr>
             </tbody>
           </table>
-          <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">ВАЖНО! Без SIM-карты и без соблюдения порядка включения модуль работать не будет.</p>
-          <ol class="list-decimal ml-6 space-y-1">
-            <li>Установите SIM-карту в модуль SIM800L.</li>
-            <li>Включите SIM800L.</li>
-            <li>Дождитесь подключения к GSM.</li>
-            <li>Включите STM32.</li>
-          </ol>
+          </div>
+          <p class="mb-2">Для DTMF позвоните на SIM-карту модуля со своего телефона: модуль сам снимет трубку, а коды вы набираете на клавиатуре телефона. Коды <code>${'777'}</code> и <code>${'222'}</code> вводятся без <code>${'*'}</code> и <code>${'#'}</code>. Команды вида <code>${'ID#КОД*'}</code> во время звонка завершаются символами <code>${'*#'}</code>.</p>
+          <p class="mb-2">Ответ на <code>${'777'}</code> - <code>${'ALL SMS notifications are switched ON!'}</code>, на <code>${'222'}</code> - <code>${'ALL SMS notifications are switched OFF!'}</code>. Ответ <code>${'OnOff: Pin1=ON'}</code> на команду <code>${'1#11*'}</code> приходит, только если после команды ползунок включён. Поэтому на <code>${'1#00*'}</code> ответа не будет, а на <code>${'222'}</code> будет.</p>
+          <p class="mb-2">Все команды принимаются только с номера из поля <b>"Мобильный телефон"</b>. Остальные номера модуль игнорирует.</p>
+        </section>
+        <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Ползунок 'OnOff' модуля</h2>
+          <div class="overflow-x-auto">
+          <table class="w-full bg-white/70">
+            <thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Состояние</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Что происходит</th></tr></thead>
+            <tbody>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Ползунок 'OnOff' ВКЛючен</td><td class="border px-4 py-2">Тревоги от датчиков и SMS-ответы на ваши команды отправляются по настройкам из таблицы 'Security Pins'.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Ползунок 'OnOff' ОТКлючен</td><td class="border px-4 py-2">Все SMS от модуля прекращаются: ни тревог, ни ответов на команды вида <code>${'ID#КОД*'}</code>, настройки из таблицы 'Security Pins' не учитываются. Сами команды с вашего телефона при этом выполняются, а коды <code>${'777'}</code> и <code>${'222'}</code> и ответы на них работают всегда.</td></tr>
+            </tbody>
+          </table>
+          </div>
+          <p class="text-slate-700">Выключение SMS не отключает сами датчики: действия на устройствах и события MQTT продолжают работать, замолкают только SMS.</p>
+        </section>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Примеры из жизни: что на самом деле умеет эта страница</h2>
+          <p class="mb-2">Четыре истории о том, как SIM-карта превращает Zagotovka-M в пульт, которому не нужен интернет.</p>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Телефон вибрирует в самый неподходящий момент</p>
+            <p class="mb-1">Важная встреча (или кино, или сон), а телефон дрожит от SMS-тревог: датчик у двери срабатывает снова и снова. Выключить бы всё, но вы не дома.</p>
+            <p class="mb-1">Спокойно! Отправьте SMS <code>${'222'}</code> (или позвоните и наберите <code>${'222'}</code>): все SMS-уведомления выключены, придёт <code>${'ALL SMS notifications are switched OFF!'}</code>. Освободились - отправьте <code>${'777'}</code>, и тревоги снова приходят. Датчики и действия на устройствах работали всё это время, молчали только SMS.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Дача без интернета</p>
+            <p class="mb-1">В деревне нет ни роутера, ни Wi-Fi, а на телефоне ни одного приложения под рукой. Через час вы приезжаете, а в доме холодно.</p>
+            <p class="mb-1">Спокойно! Позвоните на SIM-карту модуля с номера из настроек. Модуль сам снимет трубку, наберите <code>${'6#1*#'}</code>, где 6 - условный ID реле обогрева. Обогрев включён, а после окончания звонка придёт SMS-отчёт.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Звонит незнакомый номер</p>
+            <p class="mb-1">Кто-то посторонний узнал номер модуля и названивает, пробуя набрать коды. Неприятно, правда?</p>
+            <p class="mb-1">Спокойно! Модуль слушается только номера из поля <b>"Мобильный телефон"</b>: вызов с любого другого номера сбрасывается автоматически, а чужие SMS игнорируются. Проверьте сами: позвоните с другого телефона, и модуль сбросит вызов.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Номер на экране виден всем</p>
+            <p class="mb-1">Вы показываете настройки другу на видеозвонке или делаете скриншот для форума, а в таблице светится ваш номер.</p>
+            <p class="mb-1">Спокойно! Номер скрыт звёздочками, по одной на каждую цифру, знак + остаётся. Чтобы увидеть его, нажмите значок глаза рядом с номером, и он снова спрячется по вашему же нажатию.</p>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Ограничения и значения</h2>
+          <div class="overflow-x-auto">
+          <table class="w-full bg-white/70">
+            <thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Параметр</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Значение</th></tr></thead>
+            <tbody>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">RXD Pin</td><td class="border px-4 py-2">PA3 (ID 1), фиксированный</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">TXD Pin</td><td class="border px-4 py-2">PD5 (ID 35), фиксированный</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Phone Number</td><td class="border px-4 py-2">Знак + и от 11 до 20 цифр, без пробелов и дефисов. Пустое поле - модуль не используется</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Кто может управлять</td><td class="border px-4 py-2">Только номер из этого поля</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Пины PA3 и PD5</td><td class="border px-4 py-2">Пока включён переключатель SIM800L на странице "Select pin(s)", их тип изменить нельзя</td></tr>
+            </tbody>
+          </table>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Не работает? Проверьте</h2>
+          <ul class="list-disc ml-6 space-y-1">
+            <li>Модуль молчит на ваши SMS: проверьте, что вы пишете с номера из поля <b>"Мобильный телефон"</b> (а не с другого телефона) и что он не пустой.</li>
+            <li>Команды выполняются, но ответов нет: выключен ползунок <b>OnOff</b>. Отправьте <code>${'777'}</code> - ответ придёт даже при выключенном ползунке, а сам ползунок включится.</li>
+            <li>Модуль не отвечает совсем: не включён переключатель <b>SIM800L</b> на странице <b>"Select pin(s)"</b>, нарушен порядок включения или перепутаны RXD и TXD.</li>
+            <li>Кнопка <b>"Сохранить"</b> серая: номер введён неверно, нужен знак + и от 11 до 20 цифр.</li>
+            <li>Звонок сбрасывается сразу: вы звоните не с того номера, который указан в настройках.</li>
+          </ul>
         </section>
       </div>
     `,
     en: html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
-        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">SIM800L Module</h2>
-          <p>The module controls your "Template" using mobile network - no internet required!</p>
-        <div>
-          <h3 class="text-lg font-bold text-black mb-2">Module capabilities</h3>
-          <ul class="list-disc ml-6 space-y-1">
-            <li>Incoming calls and SMS messages are accepted only from the number specified in the "Phone Number" field. Calls from other numbers are automatically rejected, and SMS messages are ignored.</li>
-            <li>Keeps you updated using SMS notifications.</li>
-            <li>Turns ON and OFF using the 'OnOFF' slider.</li>
-          </ul>
-        </div>
-        </section>
         <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">Module 'OnOFF' slider</h2>
+          <h2 class="text-xl font-bold text-black">How to connect the SIM800L module (step by step)</h2>
+          <ol class="list-decimal ml-6 space-y-3">
+            <li><b>Assemble the module.</b> Insert the SIM card into SIM800L. Pin <b>PA3</b> (RXD Pin, ID 1) receives data, so it goes to the TXD output of the module. Pin <b>PD5</b> (TXD Pin, ID 35) sends data, so it goes to the RXD input of the module. Connect the grounds (GND) of the board and the module together, and power the module from a separate powerful supply.</li>
+            <li><b>Enable the module in the project.</b> Open the <b>"Select pin(s)"</b> page, turn on the <b>SIM800L</b> switch at the top of the page and click <b>"Submit"</b>. Pins ID 1 and ID 35 become locked, their type cannot be changed.</li>
+            <li><b>Enter your number.</b> In the <b>SIM800L Settings</b> block click <b>Edit</b> and in the <b>"Mobile phone"</b> field enter YOUR number: the <b>+</b> sign and 11 to 20 digits, for example <code>${'+358401234567'}</code>. This is not the number of the SIM card inside the module!</li>
+            <li><b>Save.</b> Click <b>"Save changes"</b>. While the number is invalid, the button stays gray.</li>
+            <li><b>Turn on the OnOff slider</b> in the module row. While it is off, the module sends no SMS.</li>
+            <li><b>Power up in the right order and test.</b> First the SIM card in the module, then power on SIM800L, wait for the GSM network connection and only then turn on STM32. To test, send the SMS <code>${'777'}</code> from your phone: the reply is <code>${'ALL SMS notifications are switched ON!'}</code>.</li>
+          </ol>
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300"><b>How it works:</b> The module accepts calls and SMS only from the number in the <b>"Mobile phone"</b> field and sends SMS to the same number. A call from any other number is rejected, foreign SMS are ignored. The <b>OnOff</b> slider is the common switch of SMS notifications of the whole project.</div>
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300"><b>Important:</b> without a SIM card and without the right power-up order (SIM card, SIM800L, wait for GSM, STM32) the module will not work.</div>
+          <div class="mt-4"><b>Example.</b> Your phone is <b>+358401234567</b> (the number is made up). In the <b>"Mobile phone"</b> field we write exactly that, without spaces or dashes: <code>${'+358401234567'}</code>. We save, turn on the <b>OnOff</b> slider and send the SMS <code>${'777'}</code> from this phone. A reply came - the module works!</div>
+        </section>
+        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Control by SMS and DTMF</h2>
+          <div class="overflow-x-auto">
           <table class="w-full bg-white/70">
-            <thead>
-              <tr>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">State</th>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">What happens</th>
-              </tr>
-            </thead>
+            <thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Action</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">DTMF (during a call)</th></tr></thead>
             <tbody>
-              <tr>
-                <td class="border px-4 py-2 whitespace-nowrap font-semibold">'OnOFF' slider is ON</td>
-                <td class="border px-4 py-2">SMS notifications work according to your settings in the 'Security Pins' table.</td>
-              </tr>
-              <tr>
-                <td class="border px-4 py-2 whitespace-nowrap font-semibold">'OnOFF' slider is OFF</td>
-                <td class="border px-4 py-2">All SMS notifications are disabled, settings in the 'Security Pins' table are ignored.</td>
-              </tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Turn all SMS notifications on</td><td class="border px-4 py-2"><code>${'777'}</code></td><td class="border px-4 py-2"><code>${'777'}</code></td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Turn all SMS notifications off</td><td class="border px-4 py-2"><code>${'222'}</code></td><td class="border px-4 py-2"><code>${'222'}</code></td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">The same with the switch (module row ID = 1): on</td><td class="border px-4 py-2"><code>${'1#11*'}</code></td><td class="border px-4 py-2"><code>${'1#11*#'}</code></td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">The same with the switch (module row ID = 1): off</td><td class="border px-4 py-2"><code>${'1#00*'}</code></td><td class="border px-4 py-2"><code>${'1#00*#'}</code></td></tr>
             </tbody>
           </table>
-          <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">IMPORTANT! Without a SIM card and the correct power-up order the module will not work.</p>
-          <ol class="list-decimal ml-6 space-y-1">
-            <li>Insert the SIM card into the SIM800L module.</li>
-            <li>Turn ON SIM800L.</li>
-            <li>Wait for the GSM connection.</li>
-            <li>Turn ON STM32.</li>
-          </ol>
+          </div>
+          <p class="mb-2">For DTMF call the SIM card of the module from your phone: the module picks up by itself and you dial the codes on the phone keypad. The codes <code>${'777'}</code> and <code>${'222'}</code> are entered without <code>${'*'}</code> and <code>${'#'}</code>. Commands like <code>${'ID#CODE*'}</code> end with <code>${'*#'}</code> during a call.</p>
+          <p class="mb-2">The reply to <code>${'777'}</code> is <code>${'ALL SMS notifications are switched ON!'}</code>, to <code>${'222'}</code> it is <code>${'ALL SMS notifications are switched OFF!'}</code>. The reply <code>${'OnOff: Pin1=ON'}</code> to the command <code>${'1#11*'}</code> comes only if the slider is on after the command. So <code>${'1#00*'}</code> gets no reply, while <code>${'222'}</code> does.</p>
+          <p class="mb-2">All commands are accepted only from the number in the <b>"Mobile phone"</b> field. The module ignores all other numbers.</p>
+        </section>
+        <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Module 'OnOff' slider</h2>
+          <div class="overflow-x-auto">
+          <table class="w-full bg-white/70">
+            <thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">State</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">What happens</th></tr></thead>
+            <tbody>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">'OnOff' slider is ON</td><td class="border px-4 py-2">Sensor alerts and SMS replies to your commands are sent according to your settings in the 'Security Pins' table.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">'OnOff' slider is OFF</td><td class="border px-4 py-2">All SMS from the module stop: no alerts, no replies to commands like <code>${'ID#CODE*'}</code>, settings in the 'Security Pins' table are ignored. The commands from your phone are still executed, and the codes <code>${'777'}</code> and <code>${'222'}</code> and their replies always work.</td></tr>
+            </tbody>
+          </table>
+          </div>
+          <p class="text-slate-700">Turning SMS off does not turn the sensors off: actions on devices and MQTT events keep working, only SMS go silent.</p>
+        </section>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Examples from real life: what this page can really do</h2>
+          <p class="mb-2">Four stories about how a SIM card turns Zagotovka-M into a remote that needs no internet.</p>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Your phone buzzes at the worst moment</p>
+            <p class="mb-1">An important meeting (or a movie, or sleep), and your phone shakes with SMS alerts: the door sensor triggers again and again. You would switch it all off, but you are not at home.</p>
+            <p class="mb-1">Relax! Send the SMS <code>${'222'}</code> (or call and dial <code>${'222'}</code>): all SMS notifications are off, and you get <code>${'ALL SMS notifications are switched OFF!'}</code>. When you are free, send <code>${'777'}</code> and the alerts come back. The sensors and actions on devices worked all that time, only the SMS were silent.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">A cottage without internet</p>
+            <p class="mb-1">In the village there is no router, no Wi-Fi, and not a single app at hand on your phone. You arrive in an hour, and the house is cold.</p>
+            <p class="mb-1">Relax! Call the SIM card of the module from the number in the settings. The module picks up by itself, dial <code>${'6#1*#'}</code>, where 6 is a made-up ID of the heating relay. The heating is on, and after the call ends an SMS report arrives.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">An unknown number is calling</p>
+            <p class="mb-1">Someone outside learned the number of the module and keeps calling, trying to dial codes. Unpleasant, right?</p>
+            <p class="mb-1">Relax! The module obeys only the number from the <b>"Mobile phone"</b> field: a call from any other number is rejected automatically, and foreign SMS are ignored. Check it yourself: call from another phone and the module drops the call.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Your number is visible to everyone</p>
+            <p class="mb-1">You show the settings to a friend on a video call or take a screenshot for a forum, and your number shines in the table.</p>
+            <p class="mb-1">Relax! The number is hidden by asterisks, one per digit, the + sign stays. To see it, click the eye icon next to the number, and it hides again on your next click.</p>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Limits and values</h2>
+          <div class="overflow-x-auto">
+          <table class="w-full bg-white/70">
+            <thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Parameter</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Value</th></tr></thead>
+            <tbody>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">RXD Pin</td><td class="border px-4 py-2">PA3 (ID 1), fixed</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">TXD Pin</td><td class="border px-4 py-2">PD5 (ID 35), fixed</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Phone Number</td><td class="border px-4 py-2">The + sign and 11 to 20 digits, no spaces or dashes. An empty field - the module is not used</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Who can control</td><td class="border px-4 py-2">Only the number from this field</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Pins PA3 and PD5</td><td class="border px-4 py-2">While the SIM800L switch on the "Select pin(s)" page is on, their type cannot be changed</td></tr>
+            </tbody>
+          </table>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Not working? Check</h2>
+          <ul class="list-disc ml-6 space-y-1">
+            <li>The module is silent to your SMS: check that you write from the number in the <b>"Mobile phone"</b> field (not from another phone) and that it is not empty.</li>
+            <li>Commands are executed but there are no replies: the <b>OnOff</b> slider is off. Send <code>${'777'}</code> - the reply comes even with the slider off, and the slider turns on.</li>
+            <li>The module does not answer at all: the <b>SIM800L</b> switch on the <b>"Select pin(s)"</b> page is off, the power-up order was broken, or RXD and TXD are swapped.</li>
+            <li>The <b>"Save changes"</b> button is gray: the number is invalid, it needs the + sign and 11 to 20 digits.</li>
+            <li>The call is dropped at once: you call not from the number set in the settings.</li>
+          </ul>
         </section>
       </div>
     `,
@@ -175,84 +281,65 @@ const TabSecurity = () => {
   const helpContentSecurity = {
     ru: html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Как подключить датчик (пошагово)</h2>
+          <ol class="list-decimal ml-6 space-y-3">
+            <li><b>Выберите пин.</b> Откройте страницу <b>"Select pin(s)"</b>, найдите нужный пин, выберите для него режим <b>"Security"</b> и нажмите <b>"Submit"</b>. Если переключатель Security у пина неактивен, этот пин такую роль выполнять не может. После этого пин появится в таблице <b>Security Pins</b>.</li>
+            <li><b>Подключите датчик.</b> Геркон: один провод к пину, второй к <b>+3.3V</b>. Датчик движения (PIR): его выход к пину, питание и земля по паспорту датчика. Схемы и логику срабатывания смотрите в блоке "Подключение датчиков" ниже.</li>
+            <li><b>Выберите тип датчика.</b> В строке пина нажмите <b>Ред.</b> в колонке <b>Edit Pin</b> и в списке <b>"Type of sensor"</b> выберите <b>PIR</b> (датчик движения), <b>Normal open</b> (нормально открытый геркон) или <b>Normal close</b> (нормально закрытый геркон).</li>
+            <li><b>Скажите, что делать.</b> В поле <b>"Action"</b> впишите ID устройства, двоеточие и команду: <b>1</b> - включить, <b>0</b> - выключить, <b>2</b> - переключить. Без пробелов! Несколько устройств через запятую: <code>${'6:1,8:1'}</code>. Если нужны только SMS, напишите <b>None</b>.</li>
+            <li><b>Настройте SMS и название.</b> В поле <b>"Send SMS"</b> выберите <b>YES</b>, если нужна SMS-тревога, а в поле <b>"INFO"</b> напишите короткое название места латиницей, например <code>${'Corridor'}</code>. Нажмите <b>"Save changes"</b>.</li>
+            <li><b>Включите ползунок On/Off</b> в строке датчика и проверьте: пройдите перед датчиком движения или поднесите и уберите магнит. Если ползунок выключен, датчик игнорируется целиком.</li>
+          </ol>
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300"><b>Как это работает:</b> прошивка постоянно следит за пином и сама отсеивает дребезг контактов. При срабатывании по очереди: (1) выполняется <b>Action</b> с проверкой условий; (2) событие уходит по MQTT, если <b>Action</b> не пустой; (3) уходит SMS, если <b>Send SMS</b> = YES, и для этого <b>Action</b> не нужен. Повторные срабатывания чаще одного раза в секунду пропускаются.</div>
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300"><b>Важно:</b> в поле <b>Action</b> пишется <b>ID устройства, которым вы хотите управлять</b> (реле, лампа, сирена, Zigbee-устройство), а <b>не</b> ID самого датчика.</div>
+          <div class="mt-4"><b>Пример.</b> Датчик движения подключён к пину с ID <b>14</b> (все номера условные, у вас будут свои). Лампа коридора - ID <b>6</b>, сирена - ID <b>8</b>. Хотим при движении включить лампу и сирену и получить SMS:
+            <ul class="list-disc ml-6 mt-1">
+              <li><b>Type of sensor</b> - PIR</li>
+              <li><b>Action</b> - <code>${'6:1,8:1'}</code></li>
+              <li><b>Send SMS</b> - YES, <b>INFO</b> - <code>${'Corridor'}</code></li>
+              <li>Ползунок <b>On/Off</b> включён</li>
+            </ul>
+            <div class="mt-2">Результат: при движении лампа и сирена включаются, а на телефон приходит <code>${'ALARM:ID=14:Corridor'}</code>.</div></div>
+        </section>
         <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Управление по SMS и DTMF</h2>
-          <div><h4 class="text-lg font-bold text-black mt-4 mb-2">Рубильник On/Off по SMS и DTMF</h4><p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Действие</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Отключить строку (ползунок Off)</td><td class="border px-3 py-1"><code>12#00*</code></td><td class="border px-3 py-1"><code>12#00*#</code></td></tr><tr><td class="border px-3 py-1">Включить строку (ползунок On)</td><td class="border px-3 py-1"><code>12#11*</code></td><td class="border px-3 py-1"><code>12#11*#</code></td></tr></tbody></table><p class="mb-2">В таблице ID = 12 - это пример, подставьте ID своей строки.</p><p class="mb-2">Несколько команд подряд: <code>12#00*7#11*</code> (SMS) и <code>12#00*7#11*#</code> (звонок). Ввод во время звонка всегда завершается символами <code>*#</code>: последняя команда уже заканчивается на <code>*</code>, поэтому в конце добавляется только <code>#</code>.</p><p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p><p class="mb-2">В ответ приходит SMS-отчёт, например <code>OnOff: Pin12=OFF</code> (отчёт отправляется, только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.</p><p class="mb-2">Те же команды работают для строки SIM800L (общий ползунок SMS-уведомлений) и для Zigbee-датчиков движения в таблице Z2M (их ID начинаются с 89). Для строки SIM800L ID = 1.</p></div>
-        </section>
-        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">Подключение датчиков</h2>
-        <div>
-          <h3 class="text-lg font-bold text-black mb-2">Нормально открытый геркон (Normal open)</h3>
-          <ul class="list-disc ml-6 space-y-1">
-            <li>Контакты разомкнуты без магнитного поля.</li>
-            <li>Контакты замыкаются при поднесении магнита.</li>
-            <li>Подключение: один провод к пину STM32, второй к <b>+3.3V</b>.</li>
-            <li>Срабатывание: при размыкании контактов (магнит убрали).</li>
-          </ul>
-        </div>
-        <div>
-          <h3 class="text-lg font-bold text-black mb-2">Нормально закрытый геркон (Normal close)</h3>
-          <ul class="list-disc ml-6 space-y-1">
-            <li>Контакты замкнуты без магнитного поля.</li>
-            <li>Контакты размыкаются при поднесении магнита.</li>
-            <li>Подключение: один провод к пину STM32, второй к <b>+3.3V</b>.</li>
-            <li>Срабатывание: при замыкании контактов (магнит убрали).</li>
-          </ul>
-        </div>
-        <div>
-          <h3 class="text-lg font-bold text-black mb-2">Датчики движения (PIR)</h3>
-          <ul class="list-disc ml-6 space-y-1">
-            <li>В покое: выход LOW (логический 0).</li>
-            <li>При движении: выход HIGH (логическая 1, максимум <b>+3.3V</b>).</li>
-            <li>Срабатывание: при появлении движения (переход из LOW в HIGH).</li>
-          </ul>
-        </div>
+          <div><h4 class="text-lg font-bold text-black mt-4 mb-2">Рубильник On/Off по SMS и DTMF</h4><p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки.</p><div class="overflow-x-auto"><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Действие</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Отключить строку (ползунок Off)</td><td class="border px-3 py-1"><code>${'14#00*'}</code></td><td class="border px-3 py-1"><code>${'14#00*#'}</code></td></tr><tr><td class="border px-3 py-1">Включить строку (ползунок On)</td><td class="border px-3 py-1"><code>${'14#11*'}</code></td><td class="border px-3 py-1"><code>${'14#11*#'}</code></td></tr></tbody></table></div><p class="mb-2">В таблице ID = 14 - это пример, подставьте ID своей строки.</p><p class="mb-2">Несколько команд подряд: <code>${'14#00*15#11*'}</code> (SMS) и <code>${'14#00*15#11*#'}</code> (звонок). Ввод во время звонка всегда завершается символами <code>${'*#'}</code>: последняя команда уже заканчивается на <code>${'*'}</code>, поэтому в конце добавляется только <code>${'#'}</code>.</p><p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p><p class="mb-2">В ответ приходит SMS-отчёт, например <code>${'OnOff: Pin14=OFF'}</code>. Он подтверждает, что команда выполнена и ползунок строки переключён, а не перепроверяет сам датчик. Отчёт отправляется, только если включён общий ползунок <b>OnOff</b> в блоке SIM800L Settings. Неверные команды попадают в список Invld pins/cmd.</p><p class="mb-2">Для датчика работают и короткие команды из одной цифры: <code>${'14#0*'}</code> (выключить), <code>${'14#1*'}</code> (включить), <code>${'14#2*'}</code> (переключить). Ответ у них другой, например <code>${'Valid pins: SEC-TY:14:ON'}</code>: в нём сразу видно итоговое состояние датчика.</p><p class="mb-2">Ответа <code>${'DISABLED'}</code> у датчика не бывает: команда сама переключает его ползунок On/Off и выполняется при любом его положении.</p><p class="mb-2">Те же команды работают для строки SIM800L (общий ползунок SMS-уведомлений, ID = 1) и для Zigbee-датчиков движения в таблице Z2M (их ID начинаются с 89). Быстрые коды <code>${'777'}</code> и <code>${'222'}</code> сразу включают и выключают все SMS-уведомления, подробности в справке блока SIM800L Settings.</p></div>
         </section>
         <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Настройка SMS-уведомлений</h2>
+          <div class="overflow-x-auto">
           <table class="w-full bg-white/70">
-            <thead>
-              <tr>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Значение в столбце "Send SMS"</th>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Что произойдёт</th>
-              </tr>
-            </thead>
+            <thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Значение в столбце "Send SMS"</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Что произойдёт</th></tr></thead>
             <tbody>
-              <tr>
-                <td class="border px-4 py-2 whitespace-nowrap"><b>YES</b></td>
-                <td class="border px-4 py-2">SMS-уведомление будет отправлено.</td>
-              </tr>
-              <tr>
-                <td class="border px-4 py-2 whitespace-nowrap"><b>NO</b></td>
-                <td class="border px-4 py-2">SMS-уведомление не будет отправлено.</td>
-              </tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><b>YES</b></td><td class="border px-4 py-2">SMS-тревога будет отправлена.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><b>NO</b></td><td class="border px-4 py-2">SMS-тревога не будет отправлена.</td></tr>
             </tbody>
           </table>
+          </div>
           <div class="p-4 rounded-xl bg-white/80 border border-emerald-300">
             <h4 class="text-lg font-bold text-black mb-2">Примечание</h4>
             <ul class="list-disc ml-6 space-y-1">
               <li>Действия в столбце 'Action' зависят от ползунка 'OnOff' выбранного пина.</li>
-              <li>SMS-уведомление отправляется, только если включены ползунок 'OnOFF' выбранного пина и ползунок 'OnOFF' модуля SIM800L.</li>
+              <li>SMS-тревога отправляется, только если включены ползунок 'OnOFF' выбранного пина и общий ползунок 'OnOFF' в блоке SIM800L Settings.</li>
               <li>Send SMS не зависит от поля Action: SMS уйдёт, даже если Action = None.</li>
+              <li>Текст тревоги: <code>${'ALARM:ID=14:Corridor'}</code>, где 14 - ID датчика, а Corridor - содержимое поля INFO. Для Zigbee-датчика движения то же самое, например <code>${'ALARM:ID=89:Hall'}</code>.</li>
+              <li>Пишите INFO латиницей и цифрами: SMS отправляется в кодировке GSM, и кириллица может не отобразиться.</li>
             </ul>
           </div>
         </section>
         <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">MQTT: отслеживание изменений</h2>
+          <div class="overflow-x-auto">
           <table class="w-full bg-white/70">
-            <thead>
-              <tr>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Топик</th>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Описание</th>
-              </tr>
-            </thead>
+            <thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Топик</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Описание</th></tr></thead>
             <tbody>
-              <tr>
-                <td class="border px-4 py-2 whitespace-nowrap font-semibold">Swarm/security/</td>
-                <td class="border px-4 py-2">Данная страница отслеживает изменения сенсоров и автоматически отправляет каждое изменение по MQTT на топик: Swarm/security/. Где "Swarm" это Ваш 'TX topic'.</td>
-              </tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Swarm/security/</td><td class="border px-4 py-2">Когда датчик сработал и в поле Action что-то записано, страница отправляет событие по MQTT на топик Swarm/security/. Пример: <code>${'SECURITY/ID=14/ACTION=6:1,8:1/Corridor'}</code>. Где "Swarm" это Ваш 'TX topic'.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Swarm/onoff/</td><td class="border px-4 py-2">При каждом изменении ползунка On/Off датчика (на сайте, по SMS или звонку) отправляется <code>${'ID=14/OnOff=OFF/Corridor'}</code>.</td></tr>
             </tbody>
           </table>
+          </div>
+          <p class="text-slate-700">Если поле Action пустое или None, событие срабатывания по MQTT не отправляется, а SMS уходит как обычно. Условие в Action событие MQTT не блокирует. Для отправки в разделе MQTT должен быть указан 'TX topic'.</p>
         </section>
         <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">${condHelpTitle(true)}</h2>
@@ -450,6 +537,7 @@ const TabSecurity = () => {
           <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700 mb-3">Условие запирает только Action. Отправка SMS (Send SMS = YES) и отправка события в MQTT условием не блокируются: SMS уйдёт, даже если условие НЕТ.</p>
           <ul class="list-disc ml-6 mb-3 space-y-1">
             <li><b>Условие проверяется в момент срабатывания датчика</b> и для каждого действия отдельно. Если в этот момент было НЕТ - действие пропущено. Когда условие потом станет ДА, само по себе ничего не произойдёт: нужно дождаться следующего срабатывания датчика.</li>
+            <li><b>Условие проверяется и для команды выключения.</b> Запись <code>${'6:0?Ss'}</code> выключит пин 6 только ночью; если условие НЕТ, пин останется как был.</li>
             <li><b>Ползунок On/Off в строке датчика</b> сильнее любого условия: если он выключен, датчик игнорируется целиком.</li>
             <li><b>Датчик срабатывает не чаще одного раза в секунду.</b> Повторные срабатывания внутри этой секунды пропускаются, условие для них не проверяется.</li>
             <li><b>Прямое управление устройством</b> (ползунок On/Off у самого реле, команда API или MQTT прямо на реле) условия не проверяет. Условия работают только внутри полей Action.</li>
@@ -480,6 +568,30 @@ const TabSecurity = () => {
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?-5<T5'}</code></td><td class="border px-4 py-2">${'<'}code${'>'}${'6:1?T5>-5'}${'<'}/code${'>'} - число и минус слева от знака сравнения не принимаются: слева слово, справа число.</td></tr>
             </tbody>
           </table>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Примеры из жизни: что на самом деле умеет эта страница</h2>
+          <p class="mb-2">Четыре истории о том, как дом учится охранять себя сам.</p>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Сердце ёкнуло в аэропорту</p>
+            <p class="mb-1">Вы уже в очереди на посадку, и вдруг мысль: а я поставил дом на охрану? Возвращаться поздно, и сердце колотится.</p>
+            <p class="mb-1">Спокойно! Достаньте телефон и отправьте SMS <code>${'14#11*'}</code>, где 14 - ID вашего датчика. Придёт <code>${'OnOff: Pin14=ON'}</code>: команда выполнена, датчик на охране. Если ответа нет, проверьте общий ползунок <b>OnOff</b> в блоке SIM800L Settings.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Шаги в тёмном коридоре</p>
+            <p class="mb-1">Ночью вы идёте на кухню и шарите рукой по стене в поисках выключателя. А днём свет в коридоре вообще не нужен.</p>
+            <p class="mb-1">Спокойно! Датчик движения в коридоре, в поле <b>Action</b> записано <code>${'6:1?Ss'}</code>: лампа 6 включается по движению, но только ночью. Днём датчик тоже срабатывает, а лампа спит. Время восхода и заката должно быть задано на странице "Global Settings".</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Окно открыли, пока вас нет</p>
+            <p class="mb-1">Вы на работе, а дома кто-то открывает окно. Узнать об этом хочется сразу, а не вечером.</p>
+            <p class="mb-1">Спокойно! Магнит на створке, геркон <b>Normal open</b> на раме: пока окно закрыто, магнит рядом. Как только створку открыли, контакты размыкаются и датчик срабатывает. В <b>Action</b> записано <code>${'8:1'}</code> (сирена), <b>Send SMS</b> = YES, <b>INFO</b> = <code>${'Window'}</code>. Сирена воет, на телефон приходит <code>${'ALARM:ID=15:Window'}</code>, а в MQTT уходит событие на Swarm/security/.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Сигнализация, которая знает, что вы дома</p>
+            <p class="mb-1">Сирена на двери - это отлично, пока вы сами не пришли домой. Оправдываться перед соседями совсем не хочется.</p>
+            <p class="mb-1">Спокойно! Устройство 10 - ваш "режим охраны". В поле <b>Action</b> датчика двери записано <code>${'8:1?D10'}</code>: сирена включается, только когда устройство 10 включено. Пришли домой - выключили устройство 10, и дверь можно открывать спокойно. Условие запирает только сирену: SMS при Send SMS = YES придёт в любом случае.</p>
           </div>
         </section>
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
@@ -516,88 +628,108 @@ const TabSecurity = () => {
             </tbody>
           </table>
         </section>
+        <section class="rounded-2xl border-2 bg-orange-50 border-orange-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Подключение датчиков</h2>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">Нормально открытый геркон (Normal open)</h3>
+          <ul class="list-disc ml-6 space-y-1">
+            <li>Контакты разомкнуты без магнитного поля.</li>
+            <li>Контакты замыкаются при поднесении магнита.</li>
+            <li>Подключение: один провод к пину STM32, второй к <b>+3.3V</b>.</li>
+            <li>Срабатывание: при размыкании контактов (магнит убрали).</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">Нормально закрытый геркон (Normal close)</h3>
+          <ul class="list-disc ml-6 space-y-1">
+            <li>Контакты замкнуты без магнитного поля.</li>
+            <li>Контакты размыкаются при поднесении магнита.</li>
+            <li>Подключение: один провод к пину STM32, второй к <b>+3.3V</b>.</li>
+            <li>Срабатывание: при замыкании контактов (магнит убрали).</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">Датчики движения (PIR)</h3>
+          <ul class="list-disc ml-6 space-y-1">
+            <li>В покое: выход LOW (логический 0).</li>
+            <li>При движении: выход HIGH (логическая 1, максимум <b>+3.3V</b>).</li>
+            <li>Срабатывание: при появлении движения (переход из LOW в HIGH).</li>
+          </ul>
+        </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-cyan-50 border-cyan-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Не работает? Проверьте</h2>
+          <ul class="list-disc ml-6 space-y-1">
+            <li>Ничего не происходит: выключен ползунок <b>On/Off</b> в строке датчика. В таком случае игнорируются и действие, и SMS, и MQTT.</li>
+            <li>Действие не выполняется: в <b>Action</b> указан ID самого датчика вместо ID устройства, условие после ? дало НЕТ, или срабатывание пришлось на ту же секунду, что и предыдущее.</li>
+            <li>SMS не приходят: выключен общий ползунок <b>OnOff</b> в SIM800L Settings, в строке датчика <b>Send SMS</b> = NO, или не указан номер в поле Phone Number.</li>
+            <li>Датчик реагирует не в тот момент: неверно выбран <b>Type of sensor</b>. Normal open и Normal close срабатывают на противоположные события, поэтому для геркона выберите именно тот тип, который у вас стоит.</li>
+            <li>Команда по SMS попала в Invld pins/cmd: ID не соответствует строке с ползунком On/Off или команда записана неверно.</li>
+          </ul>
+        </section>
       </div>
     `,
     en: html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">How to connect a sensor (step by step)</h2>
+          <ol class="list-decimal ml-6 space-y-3">
+            <li><b>Choose a pin.</b> Open the <b>"Select pin(s)"</b> page, find the pin you need, choose the <b>"Security"</b> mode for it and click <b>"Submit"</b>. If the Security option of a pin is inactive, that pin cannot play this role. After that the pin appears in the <b>Security Pins</b> table.</li>
+            <li><b>Connect the sensor.</b> Reed switch: one wire to the pin, the other to <b>+3.3V</b>. Motion sensor (PIR): its output to the pin, power and ground as in the sensor datasheet. Wiring diagrams and the trigger logic are in the "Sensor Connection" block below.</li>
+            <li><b>Choose the sensor type.</b> In the pin row click <b>Edit</b> in the <b>Edit Pin</b> column and in the <b>"Type of sensor"</b> list choose <b>PIR</b> (motion sensor), <b>Normal open</b> (normally open reed switch) or <b>Normal close</b> (normally closed reed switch).</li>
+            <li><b>Say what to do.</b> In the <b>"Action"</b> field write the ID of a device, a colon and a command: <b>1</b> - turn on, <b>0</b> - turn off, <b>2</b> - toggle. No spaces! Several devices go through commas: <code>${'6:1,8:1'}</code>. If you only need SMS, write <b>None</b>.</li>
+            <li><b>Set up SMS and the name.</b> In the <b>"Send SMS"</b> field choose <b>YES</b> if you want an SMS alert, and in the <b>"INFO"</b> field write a short name of the place in Latin letters, for example <code>${'Corridor'}</code>. Click <b>"Save changes"</b>.</li>
+            <li><b>Turn on the On/Off slider</b> in the sensor row and test: walk in front of the motion sensor or bring a magnet and take it away. If the slider is off, the sensor is ignored completely.</li>
+          </ol>
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300"><b>How it works:</b> the firmware watches the pin all the time and filters out contact bounce by itself. When the sensor triggers, in turn: (1) the <b>Action</b> is executed with the conditions checked; (2) the event goes out by MQTT if <b>Action</b> is not empty; (3) an SMS is sent if <b>Send SMS</b> = YES, and <b>Action</b> is not needed for that. Repeated triggers more often than once per second are skipped.</div>
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300"><b>Important:</b> the <b>Action</b> field holds <b>the ID of the device you want to control</b> (a relay, a lamp, a siren, a Zigbee device), <b>not</b> the ID of the sensor itself.</div>
+          <div class="mt-4"><b>Example.</b> A motion sensor is connected to the pin with ID <b>14</b> (all numbers are made up, yours will differ). The hallway lamp is ID <b>6</b>, the siren is ID <b>8</b>. We want the lamp and the siren to turn on on motion and an SMS to arrive:
+            <ul class="list-disc ml-6 mt-1">
+              <li><b>Type of sensor</b> - PIR</li>
+              <li><b>Action</b> - <code>${'6:1,8:1'}</code></li>
+              <li><b>Send SMS</b> - YES, <b>INFO</b> - <code>${'Corridor'}</code></li>
+              <li>The <b>On/Off</b> slider is on</li>
+            </ul>
+            <div class="mt-2">Result: on motion the lamp and the siren turn on, and <code>${'ALARM:ID=14:Corridor'}</code> arrives on your phone.</div></div>
+        </section>
         <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Control by SMS and DTMF</h2>
-          <div><h4 class="text-lg font-bold text-black mt-4 mb-2">On/Off switch by SMS and DTMF</h4><p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Action</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (during a call)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Turn the row off (slider Off)</td><td class="border px-3 py-1"><code>12#00*</code></td><td class="border px-3 py-1"><code>12#00*#</code></td></tr><tr><td class="border px-3 py-1">Turn the row on (slider On)</td><td class="border px-3 py-1"><code>12#11*</code></td><td class="border px-3 py-1"><code>12#11*#</code></td></tr></tbody></table><p class="mb-2">In the table ID = 12 is an example, use the ID of your own row.</p><p class="mb-2">Several commands in a row: <code>12#00*7#11*</code> (SMS) and <code>12#00*7#11*#</code> (call). Input during a call always ends with <code>*#</code>: the last command already ends with <code>*</code>, so only <code>#</code> is added at the end.</p><p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p><p class="mb-2">An SMS report is sent back, for example <code>OnOff: Pin12=OFF</code> (the report is sent only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.</p><p class="mb-2">The same commands work for the SIM800L row (common SMS alerts slider) and for the Zigbee motion sensors in the Z2M table (their IDs start from 89). For the SIM800L row ID = 1.</p></div>
-        </section>
-        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">Sensor Connection</h2>
-        <div>
-          <h3 class="text-lg font-bold text-black mb-2">Normally Open Reed Switch (Normal open)</h3>
-          <ul class="list-disc ml-6 space-y-1">
-            <li>Contacts are open without magnetic field.</li>
-            <li>Contacts close when a magnet is nearby.</li>
-            <li>Connection: one wire to STM32 pin, another to <b>+3.3V</b>.</li>
-            <li>Triggers: when the contacts open (the magnet is removed).</li>
-          </ul>
-        </div>
-        <div>
-          <h3 class="text-lg font-bold text-black mb-2">Normally Closed Reed Switch (Normal close)</h3>
-          <ul class="list-disc ml-6 space-y-1">
-            <li>Contacts are closed without magnetic field.</li>
-            <li>Contacts open when a magnet is nearby.</li>
-            <li>Connection: one wire to STM32 pin, another to <b>+3.3V</b>.</li>
-            <li>Triggers: when the contacts close (the magnet is removed).</li>
-          </ul>
-        </div>
-        <div>
-          <h3 class="text-lg font-bold text-black mb-2">Motion Sensors (PIR)</h3>
-          <ul class="list-disc ml-6 space-y-1">
-            <li>At rest: output LOW (logical 0).</li>
-            <li>When motion is detected: output HIGH (logical 1, max <b>+3.3V</b>).</li>
-            <li>Triggers: when motion appears (LOW to HIGH transition).</li>
-          </ul>
-        </div>
+          <div><h4 class="text-lg font-bold text-black mt-4 mb-2">On/Off switch by SMS and DTMF</h4><p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row.</p><div class="overflow-x-auto"><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Action</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (during a call)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Turn the row off (slider Off)</td><td class="border px-3 py-1"><code>${'14#00*'}</code></td><td class="border px-3 py-1"><code>${'14#00*#'}</code></td></tr><tr><td class="border px-3 py-1">Turn the row on (slider On)</td><td class="border px-3 py-1"><code>${'14#11*'}</code></td><td class="border px-3 py-1"><code>${'14#11*#'}</code></td></tr></tbody></table></div><p class="mb-2">In the table ID = 14 is an example, use the ID of your own row.</p><p class="mb-2">Several commands in a row: <code>${'14#00*15#11*'}</code> (SMS) and <code>${'14#00*15#11*#'}</code> (call). Input during a call always ends with <code>${'*#'}</code>: the last command already ends with <code>${'*'}</code>, so only <code>${'#'}</code> is added at the end.</p><p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p><p class="mb-2">An SMS report is sent back, for example <code>${'OnOff: Pin14=OFF'}</code>. It confirms that the command was executed and the row slider was switched; it does not re-check the sensor itself. The report is sent only if the common <b>OnOff</b> slider in the SIM800L Settings block is on. Wrong commands are listed in Invld pins/cmd.</p><p class="mb-2">For a sensor the short one-digit commands work too: <code>${'14#0*'}</code> (turn off), <code>${'14#1*'}</code> (turn on), <code>${'14#2*'}</code> (toggle). Their reply is different, for example <code>${'Valid pins: SEC-TY:14:ON'}</code>: it shows the resulting state of the sensor right away.</p><p class="mb-2">A sensor never gets the <code>${'DISABLED'}</code> reply: the command itself switches its On/Off slider and is executed with the slider in any position.</p><p class="mb-2">The same commands work for the SIM800L row (common SMS alerts slider, ID = 1) and for the Zigbee motion sensors in the Z2M table (their IDs start from 89). The quick codes <code>${'777'}</code> and <code>${'222'}</code> turn all SMS notifications on and off at once, details are in the help of the SIM800L Settings block.</p></div>
         </section>
         <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">SMS Notification Settings</h2>
+          <div class="overflow-x-auto">
           <table class="w-full bg-white/70">
-            <thead>
-              <tr>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Value in the "Send SMS" column</th>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">What happens</th>
-              </tr>
-            </thead>
+            <thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Value in the "Send SMS" column</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">What happens</th></tr></thead>
             <tbody>
-              <tr>
-                <td class="border px-4 py-2 whitespace-nowrap"><b>YES</b></td>
-                <td class="border px-4 py-2">SMS notification will be sent.</td>
-              </tr>
-              <tr>
-                <td class="border px-4 py-2 whitespace-nowrap"><b>NO</b></td>
-                <td class="border px-4 py-2">SMS notification will not be sent.</td>
-              </tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><b>YES</b></td><td class="border px-4 py-2">An SMS alert will be sent.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><b>NO</b></td><td class="border px-4 py-2">An SMS alert will not be sent.</td></tr>
             </tbody>
           </table>
+          </div>
           <div class="p-4 rounded-xl bg-white/80 border border-emerald-300">
             <h4 class="text-lg font-bold text-black mb-2">Note</h4>
             <ul class="list-disc ml-6 space-y-1">
               <li>Actions in the 'Action' column depend on the 'OnOff' slider of the selected pin.</li>
-              <li>An SMS is sent only when both the pin 'OnOFF' slider and the SIM800L module 'OnOFF' slider are ON.</li>
+              <li>An SMS alert is sent only when both the pin 'OnOFF' slider and the common 'OnOFF' slider in the SIM800L Settings block are ON.</li>
               <li>Send SMS does not depend on the Action field: the SMS is sent even if Action = None.</li>
+              <li>The alert text is <code>${'ALARM:ID=14:Corridor'}</code>, where 14 is the sensor ID and Corridor is the content of the INFO field. For a Zigbee motion sensor it is the same, for example <code>${'ALARM:ID=89:Hall'}</code>.</li>
+              <li>Write INFO in Latin letters and digits: the SMS is sent in the GSM charset, and Cyrillic may not display.</li>
             </ul>
           </div>
         </section>
         <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">MQTT: change tracking</h2>
+          <div class="overflow-x-auto">
           <table class="w-full bg-white/70">
-            <thead>
-              <tr>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Topic</th>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Description</th>
-              </tr>
-            </thead>
+            <thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Topic</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Description</th></tr></thead>
             <tbody>
-              <tr>
-                <td class="border px-4 py-2 whitespace-nowrap font-semibold">Swarm/security/</td>
-                <td class="border px-4 py-2">This page tracks sensor changes and automatically sends each change via MQTT to the topic: Swarm/security/. Where "Swarm" is your 'TX topic'.</td>
-              </tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Swarm/security/</td><td class="border px-4 py-2">When the sensor has triggered and something is written in the Action field, the page sends the event by MQTT to the topic Swarm/security/. Example: <code>${'SECURITY/ID=14/ACTION=6:1,8:1/Corridor'}</code>. Where "Swarm" is your 'TX topic'.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap">Swarm/onoff/</td><td class="border px-4 py-2">Every time the On/Off slider of a sensor changes (on the site, by SMS or by a call), <code>${'ID=14/OnOff=OFF/Corridor'}</code> is sent.</td></tr>
             </tbody>
           </table>
+          </div>
+          <p class="text-slate-700">If the Action field is empty or None, the trigger event is not sent by MQTT, while the SMS goes out as usual. A condition in Action does not block the MQTT event. To send anything, the 'TX topic' must be set in the MQTT section.</p>
         </section>
         <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">${condHelpTitle(false)}</h2>
@@ -795,6 +927,7 @@ const TabSecurity = () => {
           <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700 mb-3">The condition locks only the Action. Sending the SMS (Send SMS = YES) and sending the event to MQTT are not blocked by the condition: the SMS goes out even if the condition is NO.</p>
           <ul class="list-disc ml-6 mb-3 space-y-1">
             <li><b>The condition is checked at the moment the sensor triggers</b> and separately for each action. If it was NO at that moment - the action is skipped. When the condition later becomes YES, nothing happens by itself: wait for the next sensor trigger.</li>
+            <li><b>The condition is checked for a turn-off command too.</b> The entry <code>${'6:0?Ss'}</code> turns pin 6 off only at night; if the condition is NO, the pin stays as it was.</li>
             <li><b>The On/Off slider in the sensor row</b> is stronger than any condition: if it is off, the sensor is ignored completely.</li>
             <li><b>The sensor triggers no more than once per second.</b> Repeated triggers inside that second are skipped and their condition is not checked.</li>
             <li><b>Direct control of a device</b> (the On/Off slider of the relay itself, an API or MQTT command straight to the relay) does not check conditions. Conditions work only inside the Action fields.</li>
@@ -825,6 +958,30 @@ const TabSecurity = () => {
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?-5<T5'}</code></td><td class="border px-4 py-2">${'<'}code${'>'}${'6:1?T5>-5'}${'<'}/code${'>'} - a number and a minus on the left of the comparison are not accepted: a word on the left, a number on the right.</td></tr>
             </tbody>
           </table>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Examples from real life: what this page can really do</h2>
+          <p class="mb-2">Four stories about how a home learns to guard itself.</p>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Your heart skipped a beat at the airport</p>
+            <p class="mb-1">You are already in the boarding line, and suddenly: did I arm the house? It is too late to go back, and your heart is pounding.</p>
+            <p class="mb-1">Relax! Take out your phone and send the SMS <code>${'14#11*'}</code>, where 14 is the ID of your sensor. You get <code>${'OnOff: Pin14=ON'}</code>: the command was executed, the sensor is armed. If there is no reply, check the common <b>OnOff</b> slider in the SIM800L Settings block.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Steps in a dark hallway</p>
+            <p class="mb-1">At night you walk to the kitchen, feeling the wall for a switch. In the daytime the hallway light is not needed at all.</p>
+            <p class="mb-1">Relax! A motion sensor in the hallway, the <b>Action</b> field says <code>${'6:1?Ss'}</code>: lamp 6 turns on on motion, but only at night. In the daytime the sensor triggers too, and the lamp sleeps. The sunrise and sunset times must be set on the "Global Settings" page.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">The window was opened while you are away</p>
+            <p class="mb-1">You are at work, and at home someone opens a window. You want to know right away, not in the evening.</p>
+            <p class="mb-1">Relax! A magnet on the sash, a <b>Normal open</b> reed switch on the frame: while the window is closed, the magnet is near. As soon as the sash is opened, the contacts open and the sensor triggers. The <b>Action</b> says <code>${'8:1'}</code> (siren), <b>Send SMS</b> = YES, <b>INFO</b> = <code>${'Window'}</code>. The siren howls, <code>${'ALARM:ID=15:Window'}</code> arrives on your phone, and an event goes to Swarm/security/ by MQTT.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">An alarm that knows you are home</p>
+            <p class="mb-1">A siren on the door is great, until you come home yourself. Explaining it to the neighbors is the last thing you want.</p>
+            <p class="mb-1">Relax! Device 10 is your "guard mode". The <b>Action</b> field of the door sensor says <code>${'8:1?D10'}</code>: the siren turns on only when device 10 is on. You came home - turn device 10 off, and the door can be opened in peace. The condition locks only the siren: with Send SMS = YES the SMS arrives anyway.</p>
           </div>
         </section>
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
@@ -860,6 +1017,45 @@ const TabSecurity = () => {
               </tr>
             </tbody>
           </table>
+        </section>
+        <section class="rounded-2xl border-2 bg-orange-50 border-orange-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Sensor Connection</h2>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">Normally Open Reed Switch (Normal open)</h3>
+          <ul class="list-disc ml-6 space-y-1">
+            <li>Contacts are open without magnetic field.</li>
+            <li>Contacts close when a magnet is nearby.</li>
+            <li>Connection: one wire to STM32 pin, another to <b>+3.3V</b>.</li>
+            <li>Triggers: when the contacts open (the magnet is removed).</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">Normally Closed Reed Switch (Normal close)</h3>
+          <ul class="list-disc ml-6 space-y-1">
+            <li>Contacts are closed without magnetic field.</li>
+            <li>Contacts open when a magnet is nearby.</li>
+            <li>Connection: one wire to STM32 pin, another to <b>+3.3V</b>.</li>
+            <li>Triggers: when the contacts close (the magnet is removed).</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-black mb-2">Motion Sensors (PIR)</h3>
+          <ul class="list-disc ml-6 space-y-1">
+            <li>At rest: output LOW (logical 0).</li>
+            <li>When motion is detected: output HIGH (logical 1, max <b>+3.3V</b>).</li>
+            <li>Triggers: when motion appears (LOW to HIGH transition).</li>
+          </ul>
+        </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-cyan-50 border-cyan-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Not working? Check</h2>
+          <ul class="list-disc ml-6 space-y-1">
+            <li>Nothing happens: the <b>On/Off</b> slider in the sensor row is off. Then the action, the SMS and the MQTT event are all ignored.</li>
+            <li>The action is not executed: the <b>Action</b> holds the ID of the sensor itself instead of the ID of a device, the condition after ? gave NO, or the trigger came within the same second as the previous one.</li>
+            <li>No SMS arrive: the common <b>OnOff</b> slider in SIM800L Settings is off, <b>Send SMS</b> = NO in the sensor row, or the Phone Number field is empty.</li>
+            <li>The sensor reacts at the wrong moment: the wrong <b>Type of sensor</b> is chosen. Normal open and Normal close trigger on opposite events, so for a reed switch choose exactly the type you have.</li>
+            <li>An SMS command went to Invld pins/cmd: the ID does not match a row with an On/Off slider or the command is written wrongly.</li>
+          </ul>
         </section>
       </div>
     `,
@@ -918,7 +1114,7 @@ const TabSecurity = () => {
       <div class="flex flex-col items-center w-full p-6 bg-white/40 backdrop-blur-md rounded-2xl shadow-xl border border-white/50 relative overflow-hidden">
         <div class="w-full mb-10">
           <h2 class="text-3xl font-extrabold text-slate-800 tracking-tight mb-2 drop-shadow-sm">${T.titleSim}</h2>
-          <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь настраивается связь через SIM-карту: контроллер присылает SMS на ваш телефон, а вы можете управлять им SMS-командами и звонком.' : 'Set up the SIM card link: the controller sends SMS to your phone, and you can control it with SMS commands and by phone call.'}</p>
+          <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Три часа ночи, вы за тысячу километров от дома, и мысль не отпускает: а я всё выключил? Вставьте SIM-карту, и Zagotovka-M ответит на ваш звонок и SMS даже там, где нет ни Wi-Fi, ни интернета. Один звонок, и дом снова под вашим контролем!' : 'Three in the morning, you are a thousand kilometers from home, and the thought will not let go: did I turn everything off? Put in a SIM card, and Zagotovka-M answers your call and your SMS even where there is no Wi-Fi and no internet. One call, and the house is under your control again!'}</p>
           <div class="overflow-x-auto w-full rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm mb-4">
             <table class="w-full text-left border-collapse">
               <thead>
@@ -967,7 +1163,7 @@ const TabSecurity = () => {
 
         <div class="w-full">
           <h2 class="text-3xl font-extrabold text-slate-800 tracking-tight mb-2 drop-shadow-sm">${T.titlePins}</h2>
-          <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь подключаются охранные датчики (дверь, движение): при срабатывании контроллер выполнит заданные действия, например отправит SMS.' : 'Connect security sensors (door, motion): when one triggers, the controller performs the actions you set, for example sends an SMS.'}</p>
+          <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'В тёмном коридоре что-то скрипнуло, и сердце уже колотится. Спокойно! Датчик движения сам включит свет, а геркон на двери пришлёт SMS раньше, чем вы успеете испугаться. Узнайте, как научить дом охранять себя самому!' : 'Something creaks in the dark hallway, and your heart is already pounding. Relax! A motion sensor turns the light on by itself, and a reed switch on the door texts you before you even get scared. Learn how to teach your home to guard itself!'}</p>
           <div class="overflow-x-auto w-full rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm mb-4">
             <table class="w-full text-left border-collapse">
               <thead>

@@ -346,6 +346,65 @@ function TabSwitch({ }) {
   const helpContent = {
     ru: html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Как подключить выключатель (пошагово)</h2>
+
+          <ol class="list-decimal ml-6 space-y-3">
+            <li>
+              <b>Выберите пин.</b> Откройте страницу <b>"Select pin(s)"</b>, найдите нужный пин
+              (например, <b>PB3</b>), выберите для него режим <b>"SWITCH"</b> и нажмите <b>"Submit"</b>. После этого пин сам появится в таблице на этой странице.
+              Беспроводной Zigbee-выключатель добавляется отдельно, в разделе «Виртуальные пины Zigbee» на странице Select pin(s): в таблице он отображается как <b>Z2M</b>.
+            </li>
+            <li>
+              <b>Выберите подтяжку</b> (столбец "Pullup type"), нажав <b>Edit</b>:
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>GPIO_PULLUP</b> - если выключатель при замыкании соединяет пин с <b>землёй (GND)</b>. Это самый частый вариант.</li>
+                <li><b>GPIO_PULLDOWN</b> - если выключатель при замыкании соединяет пин с <b>плюсом питания (3.3V)</b>.</li>
+              </ul>
+              Не уверены - начните с GPIO_PULLUP. В этом же окне можно вписать понятное имя в поле <b>INFO</b> (например, «Коридор»). У Zigbee-выключателя подтяжки нет.
+            </li>
+            <li>
+              <b>Скажите, что включать.</b> В строке выключателя нажмите <b>Connection</b>, в поле <b>Connection</b> выберите устройство
+              (лампу, реле, диммер или Zigbee-устройство; в списке рядом с названием указан его ID) и нажмите <b>Save changes</b>.
+              Нужно больше устройств - повторите то же для каждого. Все подключения видны в колонке <b>Device connection</b>, красный <b>[x]</b> рядом с подключением удаляет его.
+            </li>
+            <li>
+              <b>Добавьте условие</b> (необязательно). В том же окне Connection впишите в поле <b>Condition</b> правило, например ${'Ss'} - тогда
+              это устройство будет включаться выключателем только ночью. Подробно - в блоке про условия ниже.
+            </li>
+            <li>
+              <b>Включите ползунок On/Off</b> в строке выключателя. Если он выключен, выключатель будет проигнорирован.
+            </li>
+            <li>
+              <b>Проверьте:</b> замкните выключатель - все подключённые устройства включатся, разомкните - выключатся.
+            </li>
+          </ol>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Как он работает:</b> выключатель просто повторяет своё положение. Замкнули (при GPIO_PULLUP - на землю) - всё подключённое включается,
+            разомкнули - выключается. Срабатывание происходит примерно через 0.2 секунды: так прошивка защищается от дребезга контактов.
+          </div>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Важно:</b> в поле Connection выбирается <b>устройство, которым вы хотите управлять</b>
+            (лампа, реле, Zigbee-устройство), а <b>не</b> сам выключатель.
+          </div>
+
+          <div class="mt-4">
+            <b>Пример.</b> Выключатель подключён к пину <b>PB3</b>. На плате есть светодиоды:
+            <ul class="list-disc ml-6 mt-1">
+              <li><b>ID = 6</b> - зелёный светодиод</li>
+              <li><b>ID = 12</b> - синий светодиод</li>
+              <li><b>ID = 18</b> - красный светодиод</li>
+            </ul>
+            <div class="mt-2">Хотим, чтобы выключатель управлял зелёным и синим:</div>
+            <ul class="list-disc ml-6 mt-1">
+              <li>нажимаем <b>Connection</b>, выбираем зелёный светодиод (ID 6), <b>Save changes</b></li>
+              <li>снова <b>Connection</b>, выбираем синий светодиод (ID 12), <b>Save changes</b></li>
+            </ul>
+            Результат: замкнули выключатель - загорелись зелёный и синий, разомкнули - погасли. Красный светодиод мы не подключали, поэтому он остаётся в покое.
+          </div>
+        </section>
         <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Управление по SMS и DTMF</h2>
 <div><h4 class="text-lg font-bold text-black mt-4 mb-2">Рубильник On/Off по SMS и DTMF</h4><p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Действие</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Отключить строку (ползунок Off)</td><td class="border px-3 py-1"><code>5#00*</code></td><td class="border px-3 py-1"><code>5#00*#</code></td></tr><tr><td class="border px-3 py-1">Включить строку (ползунок On)</td><td class="border px-3 py-1"><code>5#11*</code></td><td class="border px-3 py-1"><code>5#11*#</code></td></tr></tbody></table><p class="mb-2">В таблице ID = 5 - это пример, подставьте ID своей строки.</p><p class="mb-2">Несколько команд подряд: <code>5#00*7#11*</code> (SMS) и <code>5#00*7#11*#</code> (звонок). Ввод во время звонка всегда завершается символами <code>*#</code>: последняя команда уже заканчивается на <code>*</code>, поэтому в конце добавляется только <code>#</code>.</p><p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p><p class="mb-2">В ответ приходит SMS-отчёт, например <code>OnOff: Pin5=OFF</code> (отчёт отправляется, только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.</p><p class="mb-2">Не путайте: команды из одной цифры (<code>ID#0*</code>, <code>ID#1*</code>, <code>ID#2*</code>) управляют выходом, а команды из двух цифр (<code>ID#00*</code>, <code>ID#11*</code>) - ползунком On/Off. Пока ползунок Off, переключатель блокируется.</p></div>
@@ -483,10 +542,10 @@ function TabSwitch({ }) {
           </ol>
 
           <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-            <p class="text-lg font-bold text-black mb-1">Пример из жизни</p>
-            <p class="mb-1">Выключатель в коридоре включает свет (устройство с ID 5). Хотим, чтобы свет включался выключателем только ночью.</p>
-            <p class="mb-1">1) На странице Switch pin: Connection, выбираем устройство 5, в Condition вписываем ${'Ss'} (Ss - это «сейчас ночь»), Save changes.</p>
-            <p>Результат: днём щёлкаете выключателем - свет не включается. Ночью щёлкаете - включается.</p>
+            <p class="text-lg font-bold text-black mb-1">Пример из жизни: три часа ночи и свет в глаза</p>
+            <p class="mb-1">Вы бредёте в ванную, щёлкаете выключателем - и яркий свет бьёт в глаза. Сон как рукой сняло.</p>
+            <p class="mb-1">А можно так: днём выключатель включает яркий свет (устройство 5), а ночью - только мягкий ночник (устройство 8). Connection, устройство 5, в Condition ${'Sr'} (Sr - «сейчас день»), Save changes. Снова Connection, устройство 8, в Condition ${'Ss'} (Ss - «сейчас ночь»), Save changes.</p>
+            <p class="mb-1">Результат: выключатель один и тот же, а решает дом. Рассвет и закат прошивка считает сама по координатам из Global Settings.</p>
           </div>
 
           <h4 class="text-lg font-bold text-black mt-4 mb-2">Из чего строится условие (слова)</h4>
@@ -613,6 +672,37 @@ function TabSwitch({ }) {
           </table>
         </div>
         </section>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Примеры из жизни: что на самом деле умеет эта страница</h2>
+          <p class="mb-2">Четыре истории о том, как обычный выключатель превращается в пульт управления всем домом.</p>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Сердце ёкнуло в аэропорту</p>
+            <p class="mb-1">Вы уходите из дома, одним движением размыкаете выключатель у двери - и свет гаснет везде.</p>
+            <p class="mb-1">Но уже в аэропорту вас пронзает мысль: «А отключила ли дочь утюг в своей комнате?» Сердце ёкает...</p>
+            <p class="mb-1">Спокойно! Отправьте SMS <code>${'14#0*#'}</code>, где 14 - выключатель в комнате дочери (в его Connection подключена розетка с утюгом), а 0 - команда «отключить». Zagotovka-M выключит всё подключённое и пришлёт ответный SMS вида <b>14:OFF</b>. Команда принимается с номера, указанного в настройках SIM800L. Та же команда работает через API и MQTT: дом под контролем, где бы вы ни были.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Встать с кровати? Ни за что!</p>
+            <p class="mb-1">Вы уже лежите под одеялом, и тут понимаете: в гостиной и в прихожей горит свет. Вставать? Ни за что.</p>
+            <p class="mb-1">Щёлкаете Zigbee-выключателем на тумбочке - и гаснет и беспроводная лампа в гостиной (ID 93), и проводное реле в прихожей на пине STM32 (ID 6).</p>
+            <p class="mb-1">А утром всё наоборот: вы замыкаете обычный настенный выключатель на пине PB3 - загорается и реле, и Zigbee-лампа, до которой никто не тянул провод. Проводное и беспроводное здесь не делятся на «своих» и «чужих»: в списке Connection они стоят рядом и подключаются одинаково.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Двенадцать выключателей и одно «а давай наоборот»</p>
+            <p class="mb-1">Вы только что настроили двенадцать выключателей, чтобы коридорный свет включался лишь ночью. И тут жена говорит: «Знаешь, лучше наоборот».</p>
+            <p class="mb-1">Спокойно! Вы заранее вписали ${'Ss'} в ячейку C1 и выбрали кнопку <b>C1</b> в Condition каждой связи. Откройте панель «Библиотека условий (Conditions)», замените ${'Ss'} на ${'Sr'} и подтвердите - все двенадцать выключателей перестроились разом. Без обхода дома и без отвёртки.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Дочь сдаёт важный экзамен - а вы спокойны</p>
+            <p class="mb-1">Дочь-студентка живёт в другом городе или стране, и вы всё время переживаете: а вдруг она проспит важный экзамен? Утром в 6:15 вам приходит сообщение: в ванной включён свет.</p>
+            <p class="mb-1">Значит, она встала, всё хорошо. Можно выдохнуть и спокойно пойти покормить Мурку и рыбок. А если до 6:15 тишина - пора звонить и будить!</p>
+            <p class="mb-1">Страница сама отправляет каждое срабатывание выключателя по MQTT в топик <b>Swarm/switch/</b> (где Swarm - ваш 'TX topic'). Подключите его к серверу умного дома или MQTT-приложению на телефоне.</p>
+          </div>
+        </section>
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Сколько устройств можно подключить (Device connection)</h2>
         <div>
@@ -649,6 +739,65 @@ function TabSwitch({ }) {
     `,
         en: html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">How to connect a switch (step by step)</h2>
+
+          <ol class="list-decimal ml-6 space-y-3">
+            <li>
+              <b>Choose a pin.</b> Open the <b>"Select pin(s)"</b> page, find the pin you need
+              (for example, <b>PB3</b>), set its mode to <b>"SWITCH"</b> and press <b>"Submit"</b>. After that the pin appears in the table on this page by itself.
+              A wireless Zigbee switch is added separately, in the "Virtual pins of Zigbee" section of the Select pin(s) page: in the table it is shown as <b>Z2M</b>.
+            </li>
+            <li>
+              <b>Choose the pull type</b> ("Pullup type" column) by pressing <b>Edit</b>:
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>GPIO_PULLUP</b> - if closing the switch connects the pin to <b>ground (GND)</b>. This is the most common case.</li>
+                <li><b>GPIO_PULLDOWN</b> - if closing the switch connects the pin to <b>the supply voltage (3.3V)</b>.</li>
+              </ul>
+              Not sure? Start with GPIO_PULLUP. In the same window you can type a friendly name into the <b>INFO</b> field (for example, "Hallway"). A Zigbee switch has no pull type.
+            </li>
+            <li>
+              <b>Tell it what to turn on.</b> In the switch's row press <b>Connection</b>, in the <b>Connection</b> field choose a device
+              (a lamp, relay, dimmer or Zigbee device; its ID is shown next to its name in the list) and press <b>Save changes</b>.
+              Need more devices? Repeat the same for each one. All connections are shown in the <b>Device connection</b> column, the red <b>[x]</b> next to a connection removes it.
+            </li>
+            <li>
+              <b>Add a condition</b> (optional). In the same Connection window type a rule into the <b>Condition</b> field, for example ${'Ss'} - then
+              this device will be turned on by the switch only at night. Details are in the conditions block below.
+            </li>
+            <li>
+              <b>Turn on the On/Off slider</b> in the switch's row. If it is off, the switch is ignored.
+            </li>
+            <li>
+              <b>Test it:</b> close the switch - all connected devices turn on, open it - they turn off.
+            </li>
+          </ol>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>How it works:</b> the switch simply repeats its position. Closed (with GPIO_PULLUP - to ground) - everything connected turns on,
+            open - it turns off. It reacts after about 0.2 seconds: this is how the firmware protects itself from contact bounce.
+          </div>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Important:</b> the Connection field takes the <b>device you want to control</b>
+            (lamp, relay, Zigbee device), <b>not</b> the switch itself.
+          </div>
+
+          <div class="mt-4">
+            <b>Example.</b> A switch is connected to pin <b>PB3</b>. The board has these LEDs:
+            <ul class="list-disc ml-6 mt-1">
+              <li><b>ID = 6</b> - green LED</li>
+              <li><b>ID = 12</b> - blue LED</li>
+              <li><b>ID = 18</b> - red LED</li>
+            </ul>
+            <div class="mt-2">We want the switch to control the green and the blue one:</div>
+            <ul class="list-disc ml-6 mt-1">
+              <li>press <b>Connection</b>, choose the green LED (ID 6), <b>Save changes</b></li>
+              <li>press <b>Connection</b> again, choose the blue LED (ID 12), <b>Save changes</b></li>
+            </ul>
+            Result: close the switch - green and blue light up, open it - they go out. We did not connect the red LED, so it stays untouched.
+          </div>
+        </section>
         <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Control by SMS and DTMF</h2>
 <div><h4 class="text-lg font-bold text-black mt-4 mb-2">On/Off switch by SMS and DTMF</h4><p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Action</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (during a call)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Turn the row off (slider Off)</td><td class="border px-3 py-1"><code>5#00*</code></td><td class="border px-3 py-1"><code>5#00*#</code></td></tr><tr><td class="border px-3 py-1">Turn the row on (slider On)</td><td class="border px-3 py-1"><code>5#11*</code></td><td class="border px-3 py-1"><code>5#11*#</code></td></tr></tbody></table><p class="mb-2">In the table ID = 5 is an example, use the ID of your own row.</p><p class="mb-2">Several commands in a row: <code>5#00*7#11*</code> (SMS) and <code>5#00*7#11*#</code> (call). Input during a call always ends with <code>*#</code>: the last command already ends with <code>*</code>, so only <code>#</code> is added at the end.</p><p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p><p class="mb-2">An SMS report is sent back, for example <code>OnOff: Pin5=OFF</code> (the report is sent only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.</p><p class="mb-2">Do not confuse them: one-digit commands (<code>ID#0*</code>, <code>ID#1*</code>, <code>ID#2*</code>) control the output, while two-digit commands (<code>ID#00*</code>, <code>ID#11*</code>) change the On/Off slider. While the slider is Off, the switch is blocked.</p></div>
@@ -786,10 +935,10 @@ function TabSwitch({ }) {
           </ol>
 
           <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-            <p class="text-lg font-bold text-black mb-1">Real-life example</p>
-            <p class="mb-1">A hallway switch turns on a light (device with ID 5). We want the switch to turn the light on only at night.</p>
-            <p class="mb-1">1) On the Switch pin page: Connection, choose device 5, type ${'Ss'} into Condition (Ss means "it is night now"), Save changes.</p>
-            <p>Result: during the day the switch does nothing to the light. At night it turns the light on.</p>
+            <p class="text-lg font-bold text-black mb-1">Real-life example: three in the morning and light in your eyes</p>
+            <p class="mb-1">You stumble to the bathroom, click the switch - and bright light hits your eyes. Sleep is gone.</p>
+            <p class="mb-1">It can be different: by day the switch turns on bright light (device 5), at night only a soft night light (device 8). Connection, device 5, type ${'Sr'} into Condition (Sr means "it is day now"), Save changes. Connection again, device 8, type ${'Ss'} (Ss means "it is night now"), Save changes.</p>
+            <p class="mb-1">Result: the switch is the same, but the house decides. The firmware calculates sunrise and sunset by itself from the coordinates in Global Settings.</p>
           </div>
 
           <h4 class="text-lg font-bold text-black mt-4 mb-2">Building blocks (words)</h4>
@@ -916,6 +1065,37 @@ function TabSwitch({ }) {
           </table>
         </div>
         </section>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Real-life examples: what this page can really do</h2>
+          <p class="mb-2">Four stories about how an ordinary switch turns into a remote control for the whole house.</p>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Your heart skips a beat at the airport</p>
+            <p class="mb-1">You leave home, open the switch by the door with one move - and the lights go out everywhere.</p>
+            <p class="mb-1">But at the airport a thought strikes you: "Did my daughter turn off the iron in her room?" Your heart skips a beat...</p>
+            <p class="mb-1">Calm down! Send an SMS <code>${'14#0*#'}</code>, where 14 is the switch in your daughter's room (the socket with the iron is connected in its Connection) and 0 is the "turn off" command. Zagotovka-M turns off everything connected and sends back a reply SMS like <b>14:OFF</b>. The command is accepted from the phone number set in the SIM800L settings. The same command works via API and MQTT: your home is under control wherever you are.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Get out of bed? No way!</p>
+            <p class="mb-1">You are already under the blanket when you realize: the lights are still on in the living room and in the hallway. Get up? No way.</p>
+            <p class="mb-1">You click the Zigbee switch on the bedside table - and both the wireless lamp in the living room (ID 93) and the wired relay on an STM32 pin in the hallway (ID 6) go dark.</p>
+            <p class="mb-1">And in the morning it is the other way round: you close an ordinary wall switch on pin PB3 - and both the relay and the Zigbee lamp, which nobody ran a wire to, light up. Wired and wireless are not "ours" and "theirs" here: in the Connection list they stand side by side and are connected the same way.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Twelve switches and one "actually, let us do it the other way"</p>
+            <p class="mb-1">You have just set up twelve switches so that the corridor light turns on only at night. And then your wife says: "You know, the other way round would be better."</p>
+            <p class="mb-1">Calm down! You had typed ${'Ss'} into cell C1 and chosen the <b>C1</b> button in the Condition of every link. Open the "Conditions library" panel, replace ${'Ss'} with ${'Sr'} and confirm - all twelve switches are reconfigured at once. No walking around the house, no screwdriver.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Your daughter takes an important exam - and you are calm</p>
+            <p class="mb-1">Your student daughter lives in another city or country, and you keep worrying: what if she oversleeps an important exam? At 6:15 in the morning a message arrives: the light in the bathroom is on.</p>
+            <p class="mb-1">So she is up, and all is well. You can exhale and calmly go feed Kitty and the fish. And if there is silence until 6:15 - it is time to call and wake her up!</p>
+            <p class="mb-1">The page itself sends every switch change via MQTT to the topic <b>Swarm/switch/</b> (where Swarm is your 'TX topic'). Connect it to a smart-home server or an MQTT app on your phone.</p>
+          </div>
+        </section>
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">How many devices can be connected (Device connection)</h2>
         <div>
@@ -1038,7 +1218,7 @@ function TabSwitch({ }) {
         <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           Switch(es) pin(s)
         </div>
-        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь настраиваются настенные выключатели: какие лампы и приборы включает каждый из них. Можно задать условие, например, только ночью.' : 'Set up wall switches: which lamps and appliances each of them turns on. You can add a condition, for example only at night.'}</p>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'На этой странице вы настроите выключатели под свою логику! Один случайный клик настенного выключателя в ночи — и просыпается весь дом, включая Zigbee-устройства! А условие вроде «не включать ночью» делает обычный выключатель умным: вы больше никого не разбудите случайно!' : 'Here you set up your switches to follow your own logic! One accidental click of a wall switch in the night - and the whole house wakes up, Zigbee devices included! A condition like "do not turn on at night" makes an ordinary switch smart: you will never wake anyone by accident again!'}</p>
 
         <div class="flex-grow flex flex-col justify-center items-center w-full">
           <div class="w-full">

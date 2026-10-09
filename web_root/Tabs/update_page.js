@@ -8,28 +8,43 @@ const FIRMWARE_UPLOAD_CHUNK_SIZE = 4096; // байт на POST; лимит те�
 const helpContent = {
   ru: html`
     <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
-        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">О проекте</h2>
-          <p>Zagotovka_M - полностью open-source проект. Используйте его как есть на своём устройстве или сделайте форк и адаптируйте под своё оборудование, датчики и задачи: именно для этого он и создан.</p>
-          <p>Есть идея, исправление бага или новая функция? Pull request-ы очень приветствуются!</p>
-          <p><a class="inline-flex items-center gap-1.5 font-semibold text-cyan-700 hover:text-cyan-800 underline underline-offset-2" href="https://github.com/zagotovka/Zagotovka_M" target="_blank" rel="noopener noreferrer"><${Icons.link} class="w-5 h-5" />github.com/zagotovka/Zagotovka_M</a></p>
-        </section>
         <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">Как загрузить новую прошивку</h2>
+          <h2 class="text-xl font-bold text-black">Как загрузить новую прошивку (пошагово)</h2>
           <ol class="list-decimal ml-6 space-y-3">
-            <li>Убедитесь, что файл <code>.bin</code> собран именно для этой платы (Zagotovka_M / STM32F767ZI). Загрузка неверного образа автоматически не отслеживается.</li>
-            <li>Нажмите <b>«Загрузить новую прошивку (.bin)»</b> выше и выберите файл.</li>
+            <li><b>Узнайте, какой банк активен.</b> Это видно в карточке <b>«Текущий образ прошивки»</b>. Обновляется только неактивный банк, поэтому нужен файл для противоположного: активен Bank A - берите <code>${'Zagotovka_Bank_B.bin'}</code>, активен Bank B - берите <code>${'Zagotovka_Bank_A.bin'}</code>.</li>
+            <li>Убедитесь, что файл <code>${'.bin'}</code> собран именно для этой платы (Zagotovka_M / STM32F767ZI). Загрузка образа для другой платы автоматически не отслеживается.</li>
+            <li>В карточке <b>«Обновление устройства»</b> нажмите <b>«Загрузить новую прошивку (.bin)»</b> и выберите файл.</li>
             <li>Не закрывайте вкладку и не выключайте питание устройства, пока движется полоса загрузки: файл передаётся частями напрямую во flash-память.</li>
             <li>Когда появится сообщение <b>«Прошивка успешно загружена»</b>, устройство само переключит образы и перезагрузится.</li>
-            <li>После перезагрузки откройте эту страницу снова и убедитесь, что новая прошивка работает как ожидается.</li>
-            <li>Если всё в порядке, нажмите <b>«Подтвердить эту прошивку»</b>, чтобы подтвердить обновление.</li>
+            <li>После перезагрузки откройте эту страницу снова и убедитесь, что новая прошивка работает как ожидается. Если всё в порядке, нажмите <b>«Подтвердить эту прошивку»</b>.</li>
           </ol>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Как это работает:</b> новый файл записывается только в неактивный банк, а работающая прошивка в активном банке остаётся нетронутой. После загрузки устройство перезагружается на новый образ и «обкатывает» его: даёт до трёх пробных запусков (подробности в блоке ниже).
+          </div>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Важно:</b> нужен файл <b>противоположного</b> банка, а не любой <code>${'.bin'}</code>. Интерфейс не начнёт загрузку, если в имени файла указан не тот банк, а устройство дополнительно проверяет метку банка внутри образа ещё до записи во flash.
+          </div>
+
+          <div class="mt-4">
+            <b>Пример.</b> Сейчас активен Bank A, версия 1.4 (номера условные).
+            <ul class="list-disc ml-6 mt-1">
+              <li>Берём файл <code>${'Zagotovka_Bank_B.bin'}</code> и выбираем его по кнопке <b>«Загрузить новую прошивку (.bin)»</b></li>
+              <li>Ждём конца полосы и сообщения <b>«Прошивка успешно загружена»</b>, устройство перезагружается</li>
+              <li>В статусе видим «1-я тестовая загрузка из 3», проверяем работу и нажимаем <b>«Подтвердить эту прошивку»</b></li>
+              <li>Статус сменится на «Подтверждено», а Bank A останется запасным на случай отката</li>
+            </ul>
+          </div>
         </section>
-        <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">Обновление по HTTP и HTTPS</h2>
-          <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">Обновление по HTTP идёт без шифрования.</p>
-          <p>Для большинства случаев HTTP подходит: например, если устройство находится в вашей домашней или локальной сети за роутером и снаружи не доступно. HTTP-режим не требует настройки домена и сертификатов и работает «из коробки».</p>
-          <p>Но если устройство доступно из недоверенной сети (публичный Wi-Fi, проброс порта в интернет), файл прошивки и админ-сессию теоретически можно перехватить или подменить на лету. Для такого сценария в <b>Settings</b> можно настроить HTTPS (домен и сертификат).</p>
+        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Как устройство «обкатывает» новую прошивку</h2>
+          <p>Представьте, что вы купили новую обувь и меряете её три раза, прежде чем решить, подходит она или нет. Так же устройство «обкатывает» новую прошивку.</p>
+          <ul class="list-disc ml-6 mt-1">
+            <li>После заливки устройство даёт новой прошивке <b>до 3 пробных запусков</b>. В статусе при этом написано «N-я тестовая загрузка из 3». Каждая перезагрузка до подтверждения - это следующая пробная попытка.</li>
+            <li>Самоподтверждение включается на <b>3-й пробной загрузке</b>: если прошивка проработала спокойно <b>целую минуту</b> без перезагрузок, устройство само подтверждает обновление, как будто вы нажали «Подтвердить эту прошивку». На 1-й и 2-й пробных загрузках само оно не подтверждает: нажмите кнопку сами, когда убедитесь, что всё работает.</li>
+            <li>Если после трёх пробных запусков прошивка так и не подтверждена (например, на третьей попытке была перезагрузка раньше минуты), устройство <b>само вернётся</b> на прежнюю рабочую версию. В статусе появится «Выполнен автоматический откат на предыдущую версию прошивки.», чтобы это не путалось с вашим подтверждением.</li>
+          </ul>
         </section>
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Банки Bank A и Bank B</h2>
@@ -48,41 +63,101 @@ const helpContent = {
           <table class="w-full bg-white/70"><thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Кнопка</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Что делает</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Когда доступна</th></tr></thead><tbody><tr><td class="border px-4 py-2"><b>Подтвердить эту прошивку</b></td><td class="border px-4 py-2">Закрепляет только что залитый и уже загрузившийся образ как рабочий, чтобы устройство не откатилось на предыдущий банк при следующей перезагрузке.</td><td class="border px-4 py-2">Только пока есть неподтверждённый кандидат.</td></tr><tr><td class="border px-4 py-2"><b>Переключиться на Bank X</b></td><td class="border px-4 py-2">Мгновенно переключает на уже подтверждённый ранее образ в другом банке. Ничего нового не заливается, пробного цикла нет: устройство перезагрузится сразу, поэтому нужно подтверждение.</td><td class="border px-4 py-2">Только если в другом банке есть рабочий образ и идёт не загрузка файла.</td></tr><tr><td class="border px-4 py-2"><b>Перезагрузить устройство</b></td><td class="border px-4 py-2">Перезагружает устройство. Требует подтверждения, чтобы не нажать случайно.</td><td class="border px-4 py-2">Всегда, кроме времени загрузки файла.</td></tr></tbody></table>
           </div>
         </section>
-        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">Как устройство «обкатывает» новую прошивку</h2>
-          <p>Представьте, что вы купили новую обувь и меряете её три раза, прежде чем решить, подходит она или нет. Так же устройство «обкатывает» новую прошивку.</p>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Примеры из жизни: что на самом деле умеет эта страница</h2>
+          <p class="mb-2">Четыре истории о том, как обновление прошивки перестаёт быть страшным.</p>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Свет мигнул посреди обновления</p>
+            <p class="mb-1">Вы запустили загрузку и пошли ставить чайник. Вернулись, а в доме свет мигнул, и полоса загрузки остановилась. Сердце ёкает: теперь контроллер превратился в кирпич?</p>
+            <p class="mb-1">Спокойно! Новая прошивка пишется только в неактивный банк, а рабочая версия в активном банке не тронута. Пока загрузка не завершена и не появилось «Прошивка успешно загружена», устройство продолжает жить на прежней версии.</p>
+            <p class="mb-1"><b>Результат:</b> дождитесь, пока устройство и сеть вернутся, снова нажмите <b>«Загрузить новую прошивку (.bin)»</b> и повторите загрузку с начала.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Новая версия оказалась с сюрпризом</p>
+            <p class="mb-1">Вы собрали свой форк, залили его, и устройство уходит в перезагрузку снова и снова. Ехать к нему с кабелем и программатором не хочется совсем.</p>
+            <p class="mb-1">Спокойно! У новой прошивки есть три пробные попытки. Если подтвердить её не удалось, устройство само вернётся на прежнюю рабочую версию, а в статусе появится «Выполнен автоматический откат на предыдущую версию прошивки.»</p>
+            <p class="mb-1"><b>Результат:</b> вы снова на старой прошивке без кабеля. Поправьте код, соберите файл и повторите загрузку.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Через неделю стало капризничать</p>
+            <p class="mb-1">Прошивку вы подтвердили, а через неделю замечаете: датчик иногда виснет, и что-то раньше работало лучше. Назад хочется прямо сейчас.</p>
+            <p class="mb-1">Спокойно! Прежняя подтверждённая версия лежит в другом банке. Нажмите красную кнопку <b>«Переключиться на Bank X»</b> в карточке «Текущий образ прошивки» и подтвердите перезагрузку: новую заливку делать не нужно.</p>
+            <p class="mb-1"><b>Результат:</b> одно нажатие, одна перезагрузка, и устройство работает на прежней версии. Кнопка доступна, пока в другом банке есть рабочий образ.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Скачали не тот файл</p>
+            <p class="mb-1">Обновляете вечером, уже устали, и в папке лежат оба файла: Bank_A и Bank_B. Выбрали наугад. Вдруг не тот?</p>
+            <p class="mb-1">Спокойно! Если в имени файла указан не тот банк, интерфейс не начнёт загрузку и скажет, какой файл нужен. Если файл переименован, устройство само проверит метку банка внутри образа и отклонит чужой образ до записи во flash.</p>
+            <p class="mb-1"><b>Результат:</b> ничего не записано, активная прошивка цела. Возьмите файл противоположного банка и нажмите загрузку ещё раз.</p>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Обновление по HTTP и HTTPS</h2>
+          <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">Обновление по HTTP идёт без шифрования.</p>
+          <p>Для большинства случаев HTTP подходит: например, если устройство находится в вашей домашней или локальной сети за роутером и снаружи не доступно. HTTP-режим не требует настройки домена и сертификатов и работает «из коробки».</p>
+          <p>Но если устройство доступно из недоверенной сети (публичный Wi-Fi, проброс порта в интернет), файл прошивки и админ-сессию теоретически можно перехватить или подменить на лету. Для такого сценария в <b>Settings</b> можно настроить HTTPS (домен и сертификат).</p>
+        </section>
+        <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Не работает? Проверьте</h2>
           <ul class="list-disc ml-6 mt-1">
-            <li>После заливки устройство даёт себе <b>3 пробные попытки</b> включиться с новой прошивкой. В статусе при этом написано «N-я тестовая загрузка из 3».</li>
-            <li>Если на третьей попытке прошивка проработала спокойно <b>целую минуту</b> без перезагрузок, устройство само подтверждает обновление, как будто вы нажали «Подтвердить эту прошивку».</li>
-            <li>Если вы (или сбой питания) перезагрузите устройство ещё раз, не дав ему этой минуты, оно решит, что новой прошивке доверять нельзя, и <b>само вернётся</b> на прежнюю рабочую версию. В статусе появится «Выполнен автоматический откат на предыдущую версию прошивки.», чтобы это не путалось с вашим подтверждением.</li>
+            <li>Выбран ли файл противоположного банка: активен Bank A - нужен Bank_B, активен Bank B - нужен Bank_A.</li>
+            <li>Расширение файла должно быть <code>${'.bin'}</code>: другие файлы страница не принимает.</li>
+            <li>Не закрывалась ли вкладка и не пропадало ли питание во время загрузки: тогда просто повторите загрузку.</li>
+            <li>Кнопка <b>«Подтвердить эту прошивку»</b> неактивна: подтверждать нечего, прошивка уже подтверждена или нет неподтверждённого кандидата.</li>
+            <li>Кнопка <b>«Переключиться на Bank X»</b> неактивна: в другом банке нет рабочего образа или сейчас идёт загрузка файла.</li>
           </ul>
+        </section>
+        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">О проекте</h2>
+          <p>Zagotovka_M - полностью open-source проект. Используйте его как есть на своём устройстве или сделайте форк и адаптируйте под своё оборудование, датчики и задачи: именно для этого он и создан.</p>
+          <p>Есть идея, исправление бага или новая функция? Pull request-ы очень приветствуются!</p>
+          <p><a class="inline-flex items-center gap-1.5 font-semibold text-cyan-700 hover:text-cyan-800 underline underline-offset-2" href="https://github.com/zagotovka/Zagotovka_M" target="_blank" rel="noopener noreferrer"><${Icons.link} class="w-5 h-5" />github.com/zagotovka/Zagotovka_M</a></p>
         </section>
     </div>
   `,
   en: html`
     <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
-        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">About the project</h2>
-          <p>Zagotovka_M is a fully open-source project. Take it as-is and run it on your device, or fork it and adapt it to your own hardware, sensors and needs: that is exactly what it is here for.</p>
-          <p>Got an idea, a bugfix, or a new feature? Pull requests are very welcome!</p>
-          <p><a class="inline-flex items-center gap-1.5 font-semibold text-cyan-700 hover:text-cyan-800 underline underline-offset-2" href="https://github.com/zagotovka/Zagotovka_M" target="_blank" rel="noopener noreferrer"><${Icons.link} class="w-5 h-5" />github.com/zagotovka/Zagotovka_M</a></p>
-        </section>
         <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">How to upload a new firmware</h2>
+          <h2 class="text-xl font-bold text-black">How to upload a new firmware (step by step)</h2>
           <ol class="list-decimal ml-6 space-y-3">
-            <li>Make sure the <code>.bin</code> file was built for this exact board (Zagotovka_M / STM32F767ZI). Uploading a wrong image will not be caught automatically.</li>
-            <li>Click <b>"Upload new firmware (.bin)"</b> above and select the file.</li>
+            <li><b>Find out which bank is active.</b> You can see it in the <b>"Current firmware image"</b> card. Only the inactive bank gets updated, so you need the file for the opposite one: Bank A is active - take <code>${'Zagotovka_Bank_B.bin'}</code>, Bank B is active - take <code>${'Zagotovka_Bank_A.bin'}</code>.</li>
+            <li>Make sure the <code>${'.bin'}</code> file was built for this exact board (Zagotovka_M / STM32F767ZI). An image for a different board is not caught automatically.</li>
+            <li>In the <b>"Device update"</b> card press <b>"Upload new firmware (.bin)"</b> and select the file.</li>
             <li>Keep the tab open and do not power off the device while the progress bar is moving: the file is streamed chunk by chunk directly into flash.</li>
-            <li>When you see <b>"Firmware uploaded successfully"</b>, the device swaps images and reboots by itself automatically.</li>
-            <li>After it comes back, open this page again and check that the new firmware works as expected.</li>
-            <li>If everything is fine, press <b>"Commit this firmware"</b> to confirm the update.</li>
+            <li>When you see <b>"Firmware uploaded successfully"</b>, the device swaps images and reboots by itself.</li>
+            <li>After it comes back, open this page again and check that the new firmware works as expected. If everything is fine, press <b>"Commit this firmware"</b>.</li>
           </ol>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>How it works:</b> the new file is written only into the inactive bank, and the working firmware in the active bank stays untouched. After the upload the device reboots into the new image and test-drives it: it allows up to three trial boots (details in the block below).
+          </div>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Important:</b> you need the file of the <b>opposite</b> bank, not just any <code>${'.bin'}</code>. The interface does not start the upload if the file name points to the wrong bank, and the device additionally checks the bank label inside the image before anything is written to flash.
+          </div>
+
+          <div class="mt-4">
+            <b>Example.</b> Bank A is active right now, version 1.4 (the numbers are made up).
+            <ul class="list-disc ml-6 mt-1">
+              <li>Take the file <code>${'Zagotovka_Bank_B.bin'}</code> and pick it with the <b>"Upload new firmware (.bin)"</b> button</li>
+              <li>Wait for the end of the progress bar and the <b>"Firmware uploaded successfully"</b> message, the device reboots</li>
+              <li>The status reads "Trial boot 1 of 3": check that everything works and press <b>"Commit this firmware"</b></li>
+              <li>The status changes to "Committed", and Bank A stays as a spare in case of a rollback</li>
+            </ul>
+          </div>
         </section>
-        <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">Updating over HTTP and HTTPS</h2>
-          <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">Updating over HTTP is unencrypted.</p>
-          <p>HTTP is fine for most setups: for example, when the device is on your home or local network behind a router and not exposed externally. HTTP mode works out of the box, with no domain or certificate setup needed.</p>
-          <p>However, if the device is reachable from an untrusted network (public Wi-Fi, port-forwarded to the internet), the firmware file and admin session could in theory be intercepted or tampered with in transit. For that scenario you can configure HTTPS (domain and certificate) in <b>Settings</b>.</p>
+        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">How the device test-drives a new firmware</h2>
+          <p>Think of trying on a new pair of shoes three times before deciding whether to keep them. The device "test-drives" a new firmware the same way.</p>
+          <ul class="list-disc ml-6 mt-1">
+            <li>After the upload, the device gives the new firmware <b>up to 3 trial boots</b>. The status then reads "Trial boot N of 3". Every reboot before the commit is the next trial attempt.</li>
+            <li>Self-commit switches on at the <b>3rd trial boot</b>: if the firmware runs quietly for a <b>full minute</b> without rebooting, the device confirms the update on its own, as if you had pressed "Commit this firmware". On the 1st and 2nd trial boots it does not commit by itself: press the button yourself once you are sure everything works.</li>
+            <li>If after three trial boots the firmware is still not committed (for example, it rebooted within a minute on the third attempt), the device <b>switches back</b> to the previous working version by itself. The status then shows "Automatic rollback to the previous firmware version was performed.", so it is never confused with you confirming the update.</li>
+          </ul>
         </section>
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Bank A and Bank B</h2>
@@ -101,14 +176,59 @@ const helpContent = {
           <table class="w-full bg-white/70"><thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Button</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">What it does</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">When it is available</th></tr></thead><tbody><tr><td class="border px-4 py-2"><b>Commit this firmware</b></td><td class="border px-4 py-2">Locks in the image that was just uploaded and has already booted, so the device will not roll back to the other bank on the next reboot.</td><td class="border px-4 py-2">Only while there is an uncommitted candidate.</td></tr><tr><td class="border px-4 py-2"><b>Switch to Bank X</b></td><td class="border px-4 py-2">Immediately switches to a previously committed image in the other bank. Nothing new is uploaded and there is no trial cycle: the device reboots right away, which is why it asks for confirmation.</td><td class="border px-4 py-2">Only if the other bank has a working image and no upload is running.</td></tr><tr><td class="border px-4 py-2"><b>Reboot device</b></td><td class="border px-4 py-2">Reboots the device. It asks for confirmation so it cannot be pressed by accident.</td><td class="border px-4 py-2">Always, except while a file is being uploaded.</td></tr></tbody></table>
           </div>
         </section>
-        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">How the device test-drives a new firmware</h2>
-          <p>Think of trying on a new pair of shoes three times before deciding whether to keep them. The device "test-drives" a new firmware the same way.</p>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Real-life examples: what this page can really do</h2>
+          <p class="mb-2">Four stories about how a firmware update stops being scary.</p>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">The lights blinked mid-update</p>
+            <p class="mb-1">You started the upload and went to put the kettle on. You come back: the lights blinked at home and the progress bar has stopped. Your heart skips: is the controller a brick now?</p>
+            <p class="mb-1">Relax! The new firmware is written only into the inactive bank, and the working version in the active bank is untouched. Until the upload finishes and "Firmware uploaded successfully" appears, the device keeps living on the previous version.</p>
+            <p class="mb-1"><b>Result:</b> wait until the device and the network are back, press <b>"Upload new firmware (.bin)"</b> again and repeat the upload from the start.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">The new version came with a surprise</p>
+            <p class="mb-1">You built your own fork, uploaded it, and the device keeps rebooting again and again. Driving to it with a cable and a programmer is the last thing you want.</p>
+            <p class="mb-1">Relax! A new firmware gets three trial boots. If it could not be committed, the device returns to the previous working version by itself, and the status reads "Automatic rollback to the previous firmware version was performed."</p>
+            <p class="mb-1"><b>Result:</b> you are back on the old firmware without a cable. Fix the code, build the file and upload again.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">A week later it started acting up</p>
+            <p class="mb-1">You committed the firmware, and a week later you notice: a sensor sometimes hangs, and something used to work better. You want to go back right now.</p>
+            <p class="mb-1">Relax! The previous committed version sits in the other bank. Press the red <b>"Switch to Bank X"</b> button in the "Current firmware image" card and confirm the reboot: no new upload is needed.</p>
+            <p class="mb-1"><b>Result:</b> one press, one reboot, and the device runs the previous version. The button is available while the other bank holds a working image.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Downloaded the wrong file</p>
+            <p class="mb-1">You update in the evening, already tired, and the folder holds both files: Bank_A and Bank_B. You picked one at random. What if it is the wrong one?</p>
+            <p class="mb-1">Relax! If the file name points to the wrong bank, the interface does not start the upload and tells you which file is needed. If the file was renamed, the device checks the bank label inside the image itself and rejects a foreign image before anything is written to flash.</p>
+            <p class="mb-1"><b>Result:</b> nothing is written, the active firmware is intact. Take the file of the opposite bank and start the upload again.</p>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Updating over HTTP and HTTPS</h2>
+          <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">Updating over HTTP is unencrypted.</p>
+          <p>HTTP is fine for most setups: for example, when the device is on your home or local network behind a router and not exposed externally. HTTP mode works out of the box, with no domain or certificate setup needed.</p>
+          <p>However, if the device is reachable from an untrusted network (public Wi-Fi, port-forwarded to the internet), the firmware file and admin session could in theory be intercepted or tampered with in transit. For that scenario you can configure HTTPS (domain and certificate) in <b>Settings</b>.</p>
+        </section>
+        <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Not working? Check these</h2>
           <ul class="list-disc ml-6 mt-1">
-            <li>After the upload, the device gives itself <b>3 trial attempts</b> to boot with the new firmware. The status then reads "Trial boot N of 3".</li>
-            <li>If on the third attempt the firmware runs quietly for a <b>full minute</b> without rebooting, the device confirms the update on its own, as if you had pressed "Commit this firmware".</li>
-            <li>If you (or a power glitch) reboot it again before that minute passes, the device decides the new firmware cannot be trusted and <b>switches back</b> to the previous working version by itself. The status then shows "Automatic rollback to the previous firmware version was performed.", so it is never confused with you confirming the update.</li>
+            <li>Is it the file of the opposite bank: Bank A is active - you need Bank_B, Bank B is active - you need Bank_A.</li>
+            <li>The file extension must be <code>${'.bin'}</code>: the page accepts no other files.</li>
+            <li>Was the tab closed or the power lost during the upload? Then simply repeat the upload.</li>
+            <li>The <b>"Commit this firmware"</b> button is inactive: there is nothing to commit, the firmware is already committed or there is no uncommitted candidate.</li>
+            <li>The <b>"Switch to Bank X"</b> button is inactive: the other bank has no working image or a file upload is running.</li>
           </ul>
+        </section>
+        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">About the project</h2>
+          <p>Zagotovka_M is a fully open-source project. Take it as-is and run it on your device, or fork it and adapt it to your own hardware, sensors and needs: that is exactly what it is here for.</p>
+          <p>Got an idea, a bugfix, or a new feature? Pull requests are very welcome!</p>
+          <p><a class="inline-flex items-center gap-1.5 font-semibold text-cyan-700 hover:text-cyan-800 underline underline-offset-2" href="https://github.com/zagotovka/Zagotovka_M" target="_blank" rel="noopener noreferrer"><${Icons.link} class="w-5 h-5" />github.com/zagotovka/Zagotovka_M</a></p>
         </section>
     </div>
   `
@@ -577,7 +697,7 @@ export function FirmwareUpdate({ }) {
         <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           ${language === 'ru' ? 'Обновление прошивки' : 'Firmware Update'}
         </div>
-        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь обновляется программа контроллера: выберите файл с новой версией и загрузите его в контроллер.' : 'Update the controller software: choose the file with the new version and upload it to the controller.'}</p>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Вышла новая версия, а контроллер стоит в подвале и каждый его простой на счету. Выберите файл и загрузите его: если что-то пойдёт не так, устройство само вернётся на прежнюю прошивку.' : 'A new version is out, and the controller sits in the cellar where every minute of downtime counts. Pick the file and upload it: if something goes wrong, the device goes back to the previous firmware by itself.'}</p>
 
         <!-- Полоса прогресса загрузки: над блоками CURRENT FIRMWARE IMAGE и DEVICE UPDATE,
              во всю ширину сетки, толщиной не меньше кнопки Upload. Заливка сделана

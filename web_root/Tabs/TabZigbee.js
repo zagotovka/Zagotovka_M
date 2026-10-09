@@ -9,9 +9,38 @@ import { ModalLearn } from '../Modals/ModalLearn.js';
 const HELP_CONTENT = {
   ru: html`
     <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Как подключить Zigbee-устройство (пошагово)</h2>
+          <ol class="list-decimal ml-6 space-y-3">
+            <li><b>Узнайте IEEE Address устройства.</b> Это уникальный адрес из 16 шестнадцатеричных символов, например <code>${'588e81fffe36a343'}</code>. Его можно найти в Zigbee2MQTT или на наклейке устройства.</li>
+            <li>Откройте страницу <b>Select pin(s)</b>, в разделе <b>«Виртуальные пины Zigbee»</b> выберите свободный пин и установите тип <b>Zigbee</b>.</li>
+            <li>В появившейся строке впишите <b>IEEE Address</b> и название в поле <b>Info</b>, затем нажмите <b>Submit</b>.</li>
+            <li>Вернитесь на эту страницу: в таблице появится строка с ID, начиная с 89. Нажмите <b>«Обучение»</b>, подействуйте на устройство (нажмите кнопку, покрутите диммер), опишите появившиеся строки и нажмите <b>«Сохранить»</b>.</li>
+            <li>Нажмите <b>«Управление»</b> и проверьте устройство ползунком <b>Power</b>.</li>
+            <li>Убедитесь, что ползунок <b>On/Off</b> в строке устройства включён: пока он выключен, контроллер не отправляет устройству команды из окна <b>«Управление»</b>.</li>
+          </ol>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Как это работает:</b> контроллер общается с Zigbee-устройствами через Zigbee2MQTT. При обучении он слушает устройство и сам определяет, что оно умеет: включаться, менять яркость или цвет, посылать нажатия. Вам остаётся только дать устройству имя.
+          </div>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Важно:</b> у каждой строки два разных «выключателя». Ползунок <b>On/Off</b> в таблице - рубильник строки (он разрешает или запрещает контроллеру работать с устройством), а ползунок <b>Power</b> в окне <b>«Управление»</b> включает и выключает саму лампу или розетку. Power работает только при включённом рубильнике.
+          </div>
+
+          <div class="mt-4">
+            <b>Пример.</b> Добавляем лампу на кухне. ID и адрес условные, у вас будут свои.
+            <ul class="list-disc ml-6 mt-1">
+              <li>На странице <b>Select pin(s)</b> выбираем свободный Zigbee-пин, тип <b>Zigbee</b>, <b>IEEE Address</b> <code>${'588e81fffe36a343'}</code>, <b>Info</b> «Лампа кухня», жмём <b>Submit</b></li>
+              <li>В таблице на этой странице появилась строка с ID <b>93</b>. Жмём <b>«Обучение»</b>, нажимаем на лампе нужную функцию и сохраняем</li>
+              <li>В окне <b>«Управление»</b> включаем <b>Power</b> - лампа загорается</li>
+              <li>Теперь лампой можно управлять и с других страниц, например указать ID 93 в поле действия кнопки: <code>${'93:2'}</code> переключает лампу по нажатию</li>
+            </ul>
+          </div>
+        </section>
         <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Управление по SMS и DTMF</h2>
-<div><h4 class="text-lg font-bold text-black mt-4 mb-2">Рубильник On/Off по SMS и DTMF</h4><p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Действие</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Отключить строку (ползунок Off)</td><td class="border px-3 py-1"><code>93#00*</code></td><td class="border px-3 py-1"><code>93#00*#</code></td></tr><tr><td class="border px-3 py-1">Включить строку (ползунок On)</td><td class="border px-3 py-1"><code>93#11*</code></td><td class="border px-3 py-1"><code>93#11*#</code></td></tr></tbody></table><p class="mb-2">В таблице ID = 93 - это пример, подставьте ID своей строки.</p><p class="mb-2">Несколько команд подряд: <code>93#00*7#11*</code> (SMS) и <code>93#00*7#11*#</code> (звонок). Ввод во время звонка всегда завершается символами <code>*#</code>: последняя команда уже заканчивается на <code>*</code>, поэтому в конце добавляется только <code>#</code>.</p><p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p><p class="mb-2">В ответ приходит SMS-отчёт, например <code>OnOff: Pin93=OFF</code> (отчёт отправляется, только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.</p><p class="mb-2">ID дочерних строк вида 93.1 по DTMF набрать нельзя (на клавиатуре нет точки): такие строки переключаются только по SMS, например <code>93.1#00*</code>. Головная строка (например 93) переключается и по SMS, и по DTMF. ID 222 по SMS и DTMF недоступен: комбинация 222 зарезервирована под быструю команду "выключить все SMS".</p></div>
+<div><h4 class="text-lg font-bold text-black mt-4 mb-2">Рубильник On/Off по SMS и DTMF</h4><p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Действие</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Отключить строку (ползунок Off)</td><td class="border px-3 py-1"><code>${'93#00*'}</code></td><td class="border px-3 py-1"><code>${'93#00*#'}</code></td></tr><tr><td class="border px-3 py-1">Включить строку (ползунок On)</td><td class="border px-3 py-1"><code>${'93#11*'}</code></td><td class="border px-3 py-1"><code>${'93#11*#'}</code></td></tr></tbody></table><p class="mb-2">В таблице ID = 93 - это пример, подставьте ID своей строки.</p><p class="mb-2">Несколько команд подряд: <code>${'93#00*7#11*'}</code> (SMS) и <code>${'93#00*7#11*#'}</code> (звонок). Ввод во время звонка всегда завершается символами <code>${'*#'}</code>: последняя команда уже заканчивается на <code>${'*'}</code>, поэтому в конце добавляется только <code>${'#'}</code>.</p><p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p><p class="mb-2">В ответ приходит SMS-отчёт, например <code>${'OnOff: Pin93=OFF'}</code> (отчёт отправляется, только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.</p><p class="mb-2">ID дочерних строк вида 93.1 по DTMF набрать нельзя (на клавиатуре нет точки): такие строки переключаются только по SMS, например <code>${'93.1#00*'}</code>. Головная строка (например 93) переключается и по SMS, и по DTMF. ID 222 по SMS и DTMF недоступен: комбинация 222 зарезервирована под быструю команду "выключить все SMS".</p></div>
         </section>
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Таблица устройств</h2>
@@ -26,7 +55,7 @@ const HELP_CONTENT = {
             <p class="mb-2">Включать и выключать саму розетку или лампу нужно ползунком <b>Power</b> в окне <b>Управление</b>. Он работает только при включённом рубильнике строки.</p>
           </div>
         </section>
-        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Кнопка «Управление»</h2>
           <div>
             <p class="mb-2">Открывает окно управления выбранным устройством. IEEE Address и Info здесь не меняются: их задают на странице <b>Select pin(s)</b>.</p>
@@ -45,7 +74,7 @@ const HELP_CONTENT = {
             <p class="mb-2">Вместо ползунков яркости и цвета окно показывает блок <b>Тестирование</b> (кнопки для проверки каждого сигнала) и блок <b>Настройка действий</b> со ссылкой на страницу <b>Button(s) pin(s)</b> или <b>Switch(es) pin(s)</b>. Действия (что включить по нажатию) задаются именно там.</p>
           </div>
         </section>
-        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
+        <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Кнопка «Обучение»</h2>
           <div>
             <p class="mb-2">Запускает режим обучения: контроллер слушает устройство и сам определяет, что оно умеет. Подходит для любых устройств (кнопки, выключатели, диммеры, лампы, датчики), а не только для кнопок.</p>
@@ -84,13 +113,85 @@ const HELP_CONTENT = {
             </ul>
           </div>
         </section>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Примеры из жизни: что на самом деле умеет эта страница</h2>
+          <p class="mb-2">Четыре истории о том, как беспроводные устройства становятся частью вашего дома. ID в них условные.</p>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Выключатель, которого не было в стене</p>
+            <p class="mb-1">Вы лежите в кровати и вспоминаете: на кухне горит лампа. Вставать не хочется, а выключатель у двери, на другом конце комнаты. Тянуть провод - ремонт на выходные.</p>
+            <p class="mb-1">Спокойно! Беспроводную кнопку Zigbee можно приклеить прямо у кровати. Нажмите <b>«Обучение»</b>, нажмите кнопку, выберите роль <b>Кнопка</b> и тип <b>Одиночное</b>, нажмите <b>«Сохранить»</b>. Затем на странице <b>Button(s) pin(s)</b> в поле SINGLE CLICK этой кнопки впишите <code>${'93:2'}</code>, где 93 - лампа на кухне.</p>
+            <p class="mb-1"><b>Результат:</b> одно нажатие у изголовья переключает лампу на кухне, и без единого провода.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Ребёнок нажимает все клавиши подряд</p>
+            <p class="mb-1">Трёхклавишный Zigbee-выключатель в детской, и малыш уже нашёл, что клавиши щёлкают. Свет мигает, вы вздрагиваете от каждого щелчка.</p>
+            <p class="mb-1">Спокойно! Такой выключатель образует группу <b>Multi</b>: головная строка 93 и вложенные 93.1, 93.2, 93.3. Ползунок <b>On/Off</b> головной строки отключает всю группу сразу. Можно и с телефона: SMS <code>${'93#00*'}</code>, номер должен быть тем, что указан в настройках SIM800L.</p>
+            <p class="mb-1"><b>Результат:</b> клавиши перестают действовать. Когда малыш подрастёт, включите группу обратно ползунком или SMS <code>${'93#11*'}</code>.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Диммер, который не знал своих границ</p>
+            <p class="mb-1">Купили Zigbee-крутилку для света. Крутите её, а что именно она посылает контроллеру - непонятно. Не хочется гадать с цифрами.</p>
+            <p class="mb-1">Спокойно! Откройте <b>«Обучение»</b>: в окне есть блок <b>Определение диапазона диммера</b>. Покрутите регулятор до минимума и до максимума, и границы определятся автоматически.</p>
+            <p class="mb-1"><b>Результат:</b> контроллер знает диапазон вашей крутилки, и вы можете спокойно связывать её с диммируемой лампой.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Пока ходили за чаем, окно закрылось</p>
+            <p class="mb-1">Вы начали обучать датчик, нажали на нём пару функций, отошли налить чаю, а вернувшись, видите: сессия закончилась. Неужели всё сначала?</p>
+            <p class="mb-1">Спокойно! Сессия обучения останавливается, если с устройством ничего не происходило 15 минут, но уже увиденные строки остаются в таблице. Нажмите <b>«Повторить»</b>, и сессия стартует заново.</p>
+            <p class="mb-1"><b>Результат:</b> ничего не потеряно: опишите строки, нажмите <b>«Сохранить»</b> и продолжайте.</p>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-orange-50 border-orange-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Не работает? Проверьте</h2>
+          <ul class="list-disc ml-6 mt-1">
+            <li>Включён ли ползунок <b>On/Off</b> в строке устройства. Если он выключен, команды из окна <b>«Управление»</b> не отправляются, а <b>Power</b> не действует.</li>
+            <li>Верно ли указан <b>IEEE Address</b> на странице <b>Select pin(s)</b>: ровно 16 шестнадцатеричных символов, без пробелов.</li>
+            <li>Не трогали ли вы другие Zigbee-устройства во время обучения: это может задержать распознавание.</li>
+            <li>Верно ли определён тип. Если нет, нажмите <b>«Обновить возможности»</b> или выберите тип вручную в окне <b>«Управление»</b>.</li>
+            <li>Кнопка <b>«Сохранить»</b> в окне обучения неактивна: для роли <b>Выключатель</b> не выбрано значение (1, 0 или Toggle).</li>
+            <li>SMS-отчёт на команду <code>${'93#00*'}</code> приходит только при включённом общем ползунке SIM800L.</li>
+          </ul>
+        </section>
     </div>
   `,
   en: html`
     <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">How to connect a Zigbee device (step by step)</h2>
+          <ol class="list-decimal ml-6 space-y-3">
+            <li><b>Find the IEEE Address of the device.</b> It is a unique address of 16 hexadecimal characters, for example <code>${'588e81fffe36a343'}</code>. You can find it in Zigbee2MQTT or on the device sticker.</li>
+            <li>Open the <b>Select pin(s)</b> page, in the <b>"Virtual pins of Zigbee"</b> section choose a free pin and set the type to <b>Zigbee</b>.</li>
+            <li>In the row that appears, type the <b>IEEE Address</b> and a name in the <b>Info</b> field, then press <b>Submit</b>.</li>
+            <li>Come back to this page: a row with an ID starting from 89 appears in the table. Press <b>Learn</b>, act on the device (press a button, turn a dimmer), describe the rows that appear and press <b>Save</b>.</li>
+            <li>Press <b>Control</b> and check the device with the <b>Power</b> slider.</li>
+            <li>Make sure the <b>On/Off</b> slider in the device row is On: while it is Off, the controller does not send the device any commands from the <b>Control</b> window.</li>
+          </ol>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>How it works:</b> the controller talks to Zigbee devices through Zigbee2MQTT. In learning mode it listens to the device and works out what it can do: switch on, change brightness or color, send presses. All that is left for you is to give the device a name.
+          </div>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Important:</b> every row has two different "switches". The <b>On/Off</b> slider in the table is the row master switch (it allows or forbids the controller to work with the device), while the <b>Power</b> slider in the <b>Control</b> window turns the lamp or socket itself on and off. Power works only while the master switch is On.
+          </div>
+
+          <div class="mt-4">
+            <b>Example.</b> Adding a kitchen lamp. The ID and the address are made up, yours will differ.
+            <ul class="list-disc ml-6 mt-1">
+              <li>On the <b>Select pin(s)</b> page choose a free Zigbee pin, type <b>Zigbee</b>, <b>IEEE Address</b> <code>${'588e81fffe36a343'}</code>, <b>Info</b> "Kitchen lamp", press <b>Submit</b></li>
+              <li>A row with ID <b>93</b> appeared in the table on this page. Press <b>Learn</b>, trigger the needed function on the lamp and save</li>
+              <li>In the <b>Control</b> window turn <b>Power</b> on - the lamp lights up</li>
+              <li>Now the lamp can be controlled from other pages too, for example put ID 93 into a button action field: <code>${'93:2'}</code> toggles the lamp on a press</li>
+            </ul>
+          </div>
+        </section>
         <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Control by SMS and DTMF</h2>
-<div><h4 class="text-lg font-bold text-black mt-4 mb-2">On/Off switch by SMS and DTMF</h4><p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Action</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (during a call)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Turn the row off (slider Off)</td><td class="border px-3 py-1"><code>93#00*</code></td><td class="border px-3 py-1"><code>93#00*#</code></td></tr><tr><td class="border px-3 py-1">Turn the row on (slider On)</td><td class="border px-3 py-1"><code>93#11*</code></td><td class="border px-3 py-1"><code>93#11*#</code></td></tr></tbody></table><p class="mb-2">In the table ID = 93 is an example, use the ID of your own row.</p><p class="mb-2">Several commands in a row: <code>93#00*7#11*</code> (SMS) and <code>93#00*7#11*#</code> (call). Input during a call always ends with <code>*#</code>: the last command already ends with <code>*</code>, so only <code>#</code> is added at the end.</p><p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p><p class="mb-2">An SMS report is sent back, for example <code>OnOff: Pin93=OFF</code> (the report is sent only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.</p><p class="mb-2">IDs of child rows like 93.1 cannot be dialed during a call (the keypad has no dot): such rows are switched by SMS only, for example <code>93.1#00*</code>. A head row (for example 93) is switched both by SMS and DTMF. ID 222 is not available by SMS or DTMF: the combination 222 is reserved for the quick command "turn all SMS alerts off".</p></div>
+<div><h4 class="text-lg font-bold text-black mt-4 mb-2">On/Off switch by SMS and DTMF</h4><p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Action</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (during a call)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Turn the row off (slider Off)</td><td class="border px-3 py-1"><code>${'93#00*'}</code></td><td class="border px-3 py-1"><code>${'93#00*#'}</code></td></tr><tr><td class="border px-3 py-1">Turn the row on (slider On)</td><td class="border px-3 py-1"><code>${'93#11*'}</code></td><td class="border px-3 py-1"><code>${'93#11*#'}</code></td></tr></tbody></table><p class="mb-2">In the table ID = 93 is an example, use the ID of your own row.</p><p class="mb-2">Several commands in a row: <code>${'93#00*7#11*'}</code> (SMS) and <code>${'93#00*7#11*#'}</code> (call). Input during a call always ends with <code>${'*#'}</code>: the last command already ends with <code>${'*'}</code>, so only <code>${'#'}</code> is added at the end.</p><p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p><p class="mb-2">An SMS report is sent back, for example <code>${'OnOff: Pin93=OFF'}</code> (the report is sent only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.</p><p class="mb-2">IDs of child rows like 93.1 cannot be dialed during a call (the keypad has no dot): such rows are switched by SMS only, for example <code>${'93.1#00*'}</code>. A head row (for example 93) is switched both by SMS and DTMF. ID 222 is not available by SMS or DTMF: the combination 222 is reserved for the quick command "turn all SMS alerts off".</p></div>
         </section>
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Device table</h2>
@@ -105,7 +206,7 @@ const HELP_CONTENT = {
             <p class="mb-2">To turn the socket or lamp itself on and off, use the <b>Power</b> slider in the <b>Control</b> window. It works only while the row master switch is On.</p>
           </div>
         </section>
-        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">The Control button</h2>
           <div>
             <p class="mb-2">Opens the control window of the selected device. IEEE Address and Info are not changed here: they are set on the <b>Select pin(s)</b> page.</p>
@@ -124,7 +225,7 @@ const HELP_CONTENT = {
             <p class="mb-2">Instead of brightness and color sliders the window shows a <b>Testing</b> block (buttons to test each signal) and a <b>Configure Actions</b> block with a link to the <b>Button(s) pin(s)</b> or <b>Switch(es) pin(s)</b> page. The actions (what to turn on by a press) are set there.</p>
           </div>
         </section>
-        <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
+        <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">The Learn button</h2>
           <div>
             <p class="mb-2">Starts learning mode: the controller listens to the device and works out what it can do. It suits any device (buttons, switches, dimmers, lamps, sensors), not only buttons.</p>
@@ -162,6 +263,49 @@ const HELP_CONTENT = {
               <li>The <b>Control</b> and <b>Learn</b> buttons exist only in the head row. In the <b>Control</b> window each endpoint is controlled separately.</li>
             </ul>
           </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Real-life examples: what this page can really do</h2>
+          <p class="mb-2">Four stories about how wireless devices become part of your home. The IDs in them are made up.</p>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">A switch that was never in the wall</p>
+            <p class="mb-1">You lie in bed and suddenly remember: the kitchen lamp is still on. You do not feel like getting up, and the switch is by the door on the other side of the room. Running a wire is a weekend renovation.</p>
+            <p class="mb-1">Relax! A wireless Zigbee button can be stuck right by the bed. Press <b>Learn</b>, press the button, choose the role <b>Button</b> and the type <b>Single click</b>, press <b>Save</b>. Then on the <b>Button(s) pin(s)</b> page type <code>${'93:2'}</code> into the SINGLE CLICK field of this button, where 93 is the kitchen lamp.</p>
+            <p class="mb-1"><b>Result:</b> one press at the bedside toggles the kitchen lamp, with no wire at all.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">The child presses all the keys in a row</p>
+            <p class="mb-1">A three-key Zigbee switch in the nursery, and the little one has already found out that the keys click. The light flickers, and you flinch at every click.</p>
+            <p class="mb-1">Relax! Such a switch forms a <b>Multi</b> group: the head row 93 and the child rows 93.1, 93.2, 93.3. The <b>On/Off</b> slider of the head row turns off the whole group at once. You can also do it from the phone: SMS <code>${'93#00*'}</code>, sent from the number set in the SIM800L settings.</p>
+            <p class="mb-1"><b>Result:</b> the keys stop working. When the little one grows up, turn the group back on with the slider or with SMS <code>${'93#11*'}</code>.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">A dimmer that did not know its limits</p>
+            <p class="mb-1">You bought a Zigbee knob for the light. You turn it, but what exactly it sends to the controller is a mystery. You do not want to guess with numbers.</p>
+            <p class="mb-1">Relax! Open <b>Learn</b>: the window has a <b>Dimmer range detection</b> block. Turn the knob to the minimum and to the maximum, and the limits are detected automatically.</p>
+            <p class="mb-1"><b>Result:</b> the controller knows the range of your knob, and you can safely link it with a dimmable lamp.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">The window closed while you fetched tea</p>
+            <p class="mb-1">You started learning a sensor, triggered a couple of functions, walked off to pour some tea, and when you come back the session is over. Do you have to start from scratch?</p>
+            <p class="mb-1">Relax! The learning session stops if nothing happened with the device for 15 minutes, but the rows already observed stay in the table. Press <b>Retry</b> and the session starts again.</p>
+            <p class="mb-1"><b>Result:</b> nothing is lost: describe the rows, press <b>Save</b> and carry on.</p>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-orange-50 border-orange-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Not working? Check these</h2>
+          <ul class="list-disc ml-6 mt-1">
+            <li>Is the <b>On/Off</b> slider in the device row On? If it is Off, commands from the <b>Control</b> window are not sent and <b>Power</b> has no effect.</li>
+            <li>Is the <b>IEEE Address</b> on the <b>Select pin(s)</b> page correct: exactly 16 hexadecimal characters, no spaces.</li>
+            <li>Did you touch other Zigbee devices during learning? It may delay recognition.</li>
+            <li>Is the type detected correctly? If not, press <b>Rescan capabilities</b> or choose the type manually in the <b>Control</b> window.</li>
+            <li>The <b>Save</b> button in the learning window is disabled: no value (1, 0 or Toggle) is chosen for the <b>Switch</b> role.</li>
+            <li>The SMS report for the command <code>${'93#00*'}</code> arrives only if the common SIM800L slider is On.</li>
+          </ul>
         </section>
     </div>
   `
@@ -406,7 +550,7 @@ export function TabZigbee({}) {
         <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           Zigbee Devices
         </div>
-        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь собраны беспроводные устройства Zigbee: лампочки, розетки, датчики. Видно их состояние, и ими можно управлять.' : 'Wireless Zigbee devices are collected here: bulbs, plugs, sensors. You can see their state and control them.'}</p>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Беспроводная кнопка у кровати гасит лампу на кухне, и без единого провода. Здесь собраны ваши Zigbee-устройства: лампочки, розетки, датчики. Видно их состояние, ими можно управлять и учить новому.' : 'A wireless button by your bed turns off the kitchen lamp, with no wire at all. Your Zigbee devices live here: bulbs, plugs, sensors. See their state, control them and teach them new tricks.'}</p>
         <div class="text-center text-slate-500 text-lg py-12">
           ${language === 'ru' ? 'Нет настроенных Zigbee устройств. Добавьте их на странице Select pin.' : 'No Zigbee devices configured. Add them on the Select pin page.'}
         </div>
@@ -430,7 +574,7 @@ export function TabZigbee({}) {
         <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           Zigbee Devices
         </div>
-        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь собраны беспроводные устройства Zigbee: лампочки, розетки, датчики. Видно их состояние, и ими можно управлять.' : 'Wireless Zigbee devices are collected here: bulbs, plugs, sensors. You can see their state and control them.'}</p>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Беспроводная кнопка у кровати гасит лампу на кухне, и без единого провода. Здесь собраны ваши Zigbee-устройства: лампочки, розетки, датчики. Видно их состояние, ими можно управлять и учить новому.' : 'A wireless button by your bed turns off the kitchen lamp, with no wire at all. Your Zigbee devices live here: bulbs, plugs, sensors. See their state, control them and teach them new tricks.'}</p>
         
         <div class="flex-grow flex flex-col justify-center items-center w-full">
           <div class="w-full">

@@ -161,8 +161,15 @@ const FieldRow = ({ label, tipLabel, index, tip, children }) => {
 
 // ---------------------------------------------------------------------------
 // Справка по условиям в полях Sunrise / Sunset (RU + EN, карточки Tailwind)
-// Порядок: что это -> как устроена строка -> шаги -> слова и знаки -> примеры
-//          -> частые ошибки -> важные правила
+// По HELP_GUIDELINES.md. Порядок блоков и цвета (RU и EN одинаковы):
+//   1 indigo  - Как настроить (пошагово) + Как это работает + Важно + пример с ID
+//   2 sky     - Что это и как устроена строка
+//   3 violet  - Как составить условие: слова и знаки
+//   4 teal    - Готовые примеры (таблицы)
+//   5 rose    - Примеры из жизни
+//   6 amber   - Частые ошибки
+//   7 emerald - Важные правила и лимиты
+//   8 orange  - Не работает? Проверьте
 // ---------------------------------------------------------------------------
 const SUN_HELP = {
   ru: {
@@ -172,7 +179,6 @@ const SUN_HELP = {
       'Поля Sunrise и Sunset запускают действия на восходе и на закате: например, включить свет на закате и выключить на рассвете. К любому действию можно добавить «проверку» (условие): «сделай это, но ТОЛЬКО ЕСЛИ ...».',
       'Это как охранник у двери. В момент восхода (или заката) он подходит и проверяет условие. Верно - действие выполняется. Неверно - действие пропускается, и до завтрашнего дня оно не повторится.',
     ],
-    onceNote: 'Главное: условие проверяется ОДИН РАЗ - в момент срабатывания (восход или закат плюс смещение). Дальше за ним никто не следит.',
     formatTitle: 'Как устроена строка',
     formatIntro: 'Строка состоит из нескольких частей. Пример: -600/6:1?T3<10,12:0',
     colPart: 'Часть',
@@ -185,15 +191,74 @@ const SUN_HELP = {
       [',', 'Запятая отделяет одно действие от другого. У каждого действия своё условие (или совсем без условия).'],
     ],
     formatRead: 'Как читать пример: за 10 минут до события включить пин 6, но только если на датчике 3 меньше 10 градусов; и выключить пин 12 (без условия, всегда).',
-    stepsTitle: 'Как настроить: 4 шага',
-    steps: [
-      'Включите ползунок рядом с нужным полем (Sunrise или Sunset). Пока он выключен, действия этого поля не выполняются.',
-      'Сначала впишите действие без условия и убедитесь, что оно работает. Например: 0/6:1',
-      'Допишите после действия знак ? и условие: 0/6:1?D2. Из чего составить условие - в таблицах ниже.',
-      'Нажмите «Save changes». Если поле покраснело, страница подсказывает, что не так. Но если поле осталось белым, это ещё не значит, что условие верное: страница проверяет только допустимые символы и формат, а не смысл (см. «Частые ошибки»).',
+    stepsTitle: 'Как настроить восход и закат (пошагово)',
+    stepsView: html`
+      <ol class="list-decimal ml-6 space-y-3">
+        <li><b>Проверьте координаты.</b> Время восхода и заката устройство считает по <b>Longitude</b> и <b>Latitude</b> (строки выше на этой странице). Если координаты неверные, действие сработает не в то время.</li>
+        <li><b>Включите ползунок</b> рядом с полем <b>Sunrise</b> или <b>Sunset</b>. Пока он выключен, действия этого поля не выполняются.</li>
+        <li><b>Впишите действие без условия</b> и убедитесь, что оно работает. Например: <code>${'0/6:1'}</code> (смещение 0, слэш, ID устройства 6, двоеточие, команда 1 - включить).</li>
+        <li><b>Допишите условие.</b> После действия поставьте знак <code>${'?'}</code> и проверку: <code>${'0/6:1?D2'}</code>. Из чего составить проверку - в таблицах ниже.</li>
+        <li><b>Нажмите Save changes.</b> Если поле покраснело, страница подскажет, что не так. Белое поле ещё не значит, что условие верное: страница проверяет только допустимые символы и формат, а не смысл (см. блок «Частые ошибки»).</li>
+        <li><b>Проверьте на деле.</b> Временно задайте смещение так, чтобы время срабатывания наступило через пару минут, и посмотрите, сработало ли действие.</li>
+      </ol>
+
+      <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+        <b>Как это работает:</b> в назначенный момент (восход или закат плюс смещение) устройство один раз проверяет условие каждого действия в строке. Условие верно - действие выполняется. Неверно - действие пропускается. Если условия нет, действие выполняется всегда.
+      </div>
+
+      <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+        <b>Важно:</b> условие проверяется ОДИН РАЗ - в момент срабатывания. Если оно оказалось неверным, действие в этот день уже не повторится, даже если через минуту условие станет верным.
+      </div>
+
+      <div class="mt-4">
+        <b>Пример.</b> На крыльце лампа с ID 6, у входа гирлянда с ID 12. ID здесь условные, у вас будут свои.
+        <ul class="list-disc ml-6 mt-1">
+          <li>На закате включить обе: в поле <b>Sunset</b> пишем <code>${'0/6:1,12:1'}</code></li>
+          <li>На рассвете выключить обе: в поле <b>Sunrise</b> пишем <code>${'0/6:0,12:0'}</code></li>
+          <li>Лампа должна загораться за 10 минут до заката: в поле <b>Sunset</b> пишем <code>${'-600/6:1,12:1'}</code> (смещение одно на всю строку, поэтому гирлянда тоже включится на 10 минут раньше)</li>
+        </ul>
+      </div>
+    `,
+    lifeTitle: 'Примеры из жизни: что на самом деле умеет эта страница',
+    lifeIntro: 'Четыре истории о том, как одна строка в поле Sunrise или Sunset заботится о доме вместо вас. ID, пины и номера датчиков в них условные: подставьте свои.',
+    storiesView: html`
+      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+        <p class="text-lg font-bold text-black mb-1">Иней на рассаде</p>
+        <p class="mb-1">Апрель, днём плюс двадцать, и вы спокойно уходите с участка. А вечером в приложении погоды вдруг минус. В теплице рассада, которую вы растили два месяца. Сердце ёкает.</p>
+        <p class="mb-1">Спокойно! Обогреватель в теплице имеет ID 6, уличный датчик - ID 3. В поле <b>Sunset</b> записано <code>${'0/6:1?T3<10'}</code>, в поле <b>Sunrise</b> - <code>${'0/6:0'}</code>. На закате Zagotovka-M смотрит на датчик: холодно - включает обогреватель, тепло - оставляет выключенным.</p>
+        <p class="mb-1"><b>Результат:</b> тёплым вечером обогреватель стоит, холодным включается сам, а на рассвете выключается в любом случае. Проверка одна, на закате.</p>
+      </div>
+
+      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+        <p class="text-lg font-bold text-black mb-1">Подвал пахнет сыростью</p>
+        <p class="mb-1">Вы вернулись на дачу после дождливой недели и открыли подвал. Запах, на стенах тёмные пятна. Опять придётся всё перебирать.</p>
+        <p class="mb-1">Спокойно! Вытяжной вентилятор имеет ID 7, датчик влажности - ID 4. В поле <b>Sunset</b> записано <code>${'1800/7:1?H4>70'}</code>, в поле <b>Sunrise</b> - <code>${'0/7:0'}</code>. Через 30 минут после заката вентилятор включится, но только если влажность выше 70 процентов.</p>
+        <p class="mb-1"><b>Результат:</b> в сухие вечера вентилятор молчит, в сырые сам проветривает подвал до рассвета.</p>
+      </div>
+
+      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+        <p class="text-lg font-bold text-black mb-1">Дом притворяется жилым</p>
+        <p class="mb-1">Вы уезжаете в отпуск на две недели. Вечером окна тёмные, и вы представляете, как это видно с улицы.</p>
+        <p class="mb-1">Спокойно! Лампа на крыльце имеет ID 6, лампа в гостиной - ID 12, а ID 1 - это устройство-переключатель «Отпуск». В поле <b>Sunset</b> записано <code>${'0/6:1,12:1?D1'}</code>, в поле <b>Sunrise</b> - <code>${'0/6:0,12:0'}</code>. Крыльцо светит каждый вечер, а гостиная - только когда режим «Отпуск» включён.</p>
+        <p class="mb-1"><b>Результат:</b> уезжая, включаете устройство 1 - и вечером дом выглядит обитаемым. Вернулись, выключили - гостиная больше не загорается сама.</p>
+      </div>
+
+      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+        <p class="text-lg font-bold text-black mb-1">Порог нужно поменять в десяти местах</p>
+        <p class="mb-1">Наступила осень. Порог «холодно» теперь не 5, а 8 градусов, а он записан в нескольких действиях. Править всё вручную и ничего не пропустить - вот это нервы.</p>
+        <p class="mb-1">Спокойно! В строке <b>Conditions</b> этой страницы в ячейку <b>C1</b> записано <code>${'T3<5|H4>70'}</code>, а в действиях стоят короткие ссылки: в поле <b>Sunset</b> - <code>${'0/6:1?C1,7:1?C1'}</code>. Меняете одну ячейку C1 на <code>${'T3<8|H4>70'}</code>, и все места, где есть ссылка, сразу работают по-новому.</p>
+        <p class="mb-1"><b>Результат:</b> одна правка вместо десяти. Число рядом с ячейкой показывает, сколько мест её используют.</p>
+      </div>
+    `,
+    checkTitle: 'Не работает? Проверьте',
+    check: [
+      'Включён ли ползунок рядом с нужным полем (Sunrise или Sunset).',
+      'Нажато ли Save changes и нет ли в поле красной ошибки.',
+      'Тот ли ID указан в действии: проверьте его в таблице на странице нужного устройства.',
+      'Не оказалось ли условие неверным в момент срабатывания (датчик молчит, устройство в другом состоянии): проверка одна, повторов в этот день нет.',
+      'Не было ли устройство выключено или перезагружалось в момент срабатывания: окно около 5 минут.',
+      'Верны ли Longitude и Latitude: от них зависят время восхода и заката.',
     ],
-    lifeTitle: 'Пример из жизни: обогрев теплицы',
-    life: 'Вечером нужно включать обогреватель (пин 6) только если на уличном датчике 3 холоднее 10 градусов, а утром - выключать. В поле Sunset пишем: 0/6:1?T3<10. В поле Sunrise пишем: 0/6:0. Результат: в тёплый вечер обогреватель остаётся выключенным, в холодный включается на закате, а на рассвете выключается в любом случае.',
     buildTitle: 'Как составить своё условие: 4 простых шага',
     build: [
       'Решите, ЗА ЧЕМ следить. Буква подсказывает: D - устройство (включено или нет), B - кнопка, T - температура, H - влажность, Sr - день, Ss - ночь.',
@@ -346,7 +411,6 @@ const SUN_HELP = {
       'The Sunrise and Sunset fields run actions at sunrise and at sunset: for example, turn a light on at sunset and off at dawn. You can add a "check" (a condition) to any action: "do this, but ONLY IF ...".',
       'It is like a guard at a door. At the moment of sunrise (or sunset) the guard comes and checks the condition. If it is true, the action is performed. If it is false, the action is skipped and will not be repeated until tomorrow.',
     ],
-    onceNote: 'The main point: the condition is checked ONCE, at the moment of triggering (sunrise or sunset plus the offset). After that nobody watches it.',
     formatTitle: 'How the line is built',
     formatIntro: 'The line consists of several parts. Example: -600/6:1?T3<10,12:0',
     colPart: 'Part',
@@ -359,15 +423,74 @@ const SUN_HELP = {
       [',', 'A comma separates one action from another. Every action has its own condition (or none at all).'],
     ],
     formatRead: 'How to read the example: 10 minutes before the event turn pin 6 on, but only if sensor 3 is below 10 degrees; and turn pin 12 off (no condition, always).',
-    stepsTitle: 'How to set it up: 4 steps',
-    steps: [
-      'Turn on the switch next to the field you need (Sunrise or Sunset). While it is off, the actions of that field are not performed.',
-      'First type the action without a condition and make sure it works. For example: 0/6:1',
-      'Then add the ? sign and the condition after the action: 0/6:1?D2. What to build the condition from is in the tables below.',
-      'Press "Save changes". If the field turned red, the page tells you what is wrong. But if the field stayed white, it does not yet mean the condition is correct: the page checks only the allowed characters and the format, not the meaning (see "Common mistakes").',
+    stepsTitle: 'How to set up sunrise and sunset (step by step)',
+    stepsView: html`
+      <ol class="list-decimal ml-6 space-y-3">
+        <li><b>Check the coordinates.</b> The device calculates sunrise and sunset from <b>Longitude</b> and <b>Latitude</b> (the rows above on this page). If the coordinates are wrong, the action will fire at the wrong time.</li>
+        <li><b>Turn on the switch</b> next to the <b>Sunrise</b> or <b>Sunset</b> field. While it is off, the actions of that field are not performed.</li>
+        <li><b>Type an action without a condition</b> and make sure it works. For example: <code>${'0/6:1'}</code> (offset 0, a slash, device ID 6, a colon, command 1 - turn on).</li>
+        <li><b>Add the condition.</b> After the action put the <code>${'?'}</code> sign and a check: <code>${'0/6:1?D2'}</code>. What to build the check from is in the tables below.</li>
+        <li><b>Press Save changes.</b> If the field turned red, the page tells you what is wrong. A white field does not yet mean the condition is correct: the page checks only the allowed characters and the format, not the meaning (see the "Common mistakes" block).</li>
+        <li><b>Test it for real.</b> Temporarily set the offset so that the trigger time comes in a couple of minutes, and see whether the action runs.</li>
+      </ol>
+
+      <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+        <b>How it works:</b> at the scheduled moment (sunrise or sunset plus the offset) the device checks the condition of each action in the line, once. Condition true - the action is performed. False - the action is skipped. With no condition the action always runs.
+      </div>
+
+      <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+        <b>Important:</b> the condition is checked ONCE, at the moment of triggering. If it turns out false, the action is not repeated that day, even if the condition becomes true a minute later.
+      </div>
+
+      <div class="mt-4">
+        <b>Example.</b> A porch lamp has ID 6, a garland by the entrance has ID 12. The IDs here are made up, yours will differ.
+        <ul class="list-disc ml-6 mt-1">
+          <li>Turn both on at sunset: in the <b>Sunset</b> field type <code>${'0/6:1,12:1'}</code></li>
+          <li>Turn both off at dawn: in the <b>Sunrise</b> field type <code>${'0/6:0,12:0'}</code></li>
+          <li>Light the lamp 10 minutes before sunset: in the <b>Sunset</b> field type <code>${'-600/6:1,12:1'}</code> (the offset is one for the whole line, so the garland also turns on 10 minutes earlier)</li>
+        </ul>
+      </div>
+    `,
+    lifeTitle: 'Real-life examples: what this page can really do',
+    lifeIntro: 'Four stories about how one line in the Sunrise or Sunset field looks after your home for you. The IDs, pins and sensor numbers in them are made up: use your own.',
+    storiesView: html`
+      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+        <p class="text-lg font-bold text-black mb-1">Frost on the seedlings</p>
+        <p class="mb-1">April, plus twenty at noon, and you leave the plot without a worry. In the evening the weather app suddenly shows minus. The greenhouse holds seedlings you have grown for two months. Your heart skips.</p>
+        <p class="mb-1">Relax! The greenhouse heater has ID 6, the outdoor sensor has ID 3. The <b>Sunset</b> field holds <code>${'0/6:1?T3<10'}</code>, the <b>Sunrise</b> field holds <code>${'0/6:0'}</code>. At sunset Zagotovka-M looks at the sensor: cold - it turns the heater on, warm - it leaves it off.</p>
+        <p class="mb-1"><b>Result:</b> on a warm evening the heater stays off, on a cold one it turns on by itself, and at dawn it turns off in any case. There is one check, at sunset.</p>
+      </div>
+
+      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+        <p class="text-lg font-bold text-black mb-1">The cellar smells damp</p>
+        <p class="mb-1">You come back to the cottage after a rainy week and open the cellar. The smell, dark spots on the walls. Now everything has to be sorted out again.</p>
+        <p class="mb-1">Relax! The exhaust fan has ID 7, the humidity sensor has ID 4. The <b>Sunset</b> field holds <code>${'1800/7:1?H4>70'}</code>, the <b>Sunrise</b> field holds <code>${'0/7:0'}</code>. 30 minutes after sunset the fan turns on, but only if humidity is above 70 percent.</p>
+        <p class="mb-1"><b>Result:</b> on dry evenings the fan stays quiet, on damp ones it airs the cellar until dawn.</p>
+      </div>
+
+      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+        <p class="text-lg font-bold text-black mb-1">The house pretends someone is home</p>
+        <p class="mb-1">You leave for a two-week vacation. In the evening the windows are dark, and you picture how it looks from the street.</p>
+        <p class="mb-1">Relax! The porch lamp has ID 6, the living room lamp has ID 12, and ID 1 is a switch device called "Vacation". The <b>Sunset</b> field holds <code>${'0/6:1,12:1?D1'}</code>, the <b>Sunrise</b> field holds <code>${'0/6:0,12:0'}</code>. The porch lights up every evening, and the living room only when "Vacation" mode is on.</p>
+        <p class="mb-1"><b>Result:</b> when you leave, turn on device 1 - and in the evening the house looks lived in. When you are back, turn it off - the living room no longer lights up by itself.</p>
+      </div>
+
+      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+        <p class="text-lg font-bold text-black mb-1">One threshold to change in ten places</p>
+        <p class="mb-1">Autumn has come. "Cold" is now 8 degrees, not 5, and the number is written in several actions. Editing everything by hand without missing one is a nerve-wracking job.</p>
+        <p class="mb-1">Relax! In the <b>Conditions</b> row of this page, cell <b>C1</b> holds <code>${'T3<5|H4>70'}</code>, and the actions use short references: in the <b>Sunset</b> field - <code>${'0/6:1?C1,7:1?C1'}</code>. Change one cell C1 to <code>${'T3<8|H4>70'}</code>, and every place with a reference immediately works the new way.</p>
+        <p class="mb-1"><b>Result:</b> one edit instead of ten. The number next to a cell shows how many places use it.</p>
+      </div>
+    `,
+    checkTitle: 'Not working? Check these',
+    check: [
+      'Is the switch next to the field you need turned on (Sunrise or Sunset)?',
+      'Did you press Save changes, and is there no red error in the field?',
+      'Is the ID in the action the right one? Check it in the table on that device page.',
+      'Was the condition false at the moment of triggering (a silent sensor, a device in another state)? There is one check and no retries that day.',
+      'Was the device off or rebooting at the moment of triggering? The window is about 5 minutes.',
+      'Are Longitude and Latitude correct? Sunrise and sunset times depend on them.',
     ],
-    lifeTitle: 'Real-life example: greenhouse heating',
-    life: 'In the evening the heater (pin 6) must turn on only if the outdoor sensor 3 shows below 10 degrees, and in the morning it must turn off. In the Sunset field type: 0/6:1?T3<10. In the Sunrise field type: 0/6:0. Result: on a warm evening the heater stays off, on a cold one it turns on at sunset, and at dawn it turns off in any case.',
     buildTitle: 'How to write your own condition: 4 simple steps',
     build: [
       'Decide WHAT to watch. The letter tells it: D - device (on or off), B - button, T - temperature, H - humidity, Sr - daytime, Ss - night.',
@@ -572,30 +695,23 @@ function SunCondHelp({ isRu }) {
   return html`
     <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
 
+      <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">${X.stepsTitle}</h2>
+        <div class="space-y-3">
+          ${X.stepsView}
+        </div>
+      </section>
+
       <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">${X.whatTitle}</h2>
         <div class="space-y-3">
           ${X.what.map((t) => html`<p>${t}</p>`)}
-          <div class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">${X.onceNote}</div>
 
           <h4 class="text-lg font-bold text-black mt-4 mb-2">${X.formatTitle}</h4>
           <p class="mb-2">${X.formatIntro}</p>
           ${sunTable2(X.colPart, X.colMeaning, X.format)}
           <div class="p-4 rounded-xl bg-white/80 border border-sky-300 mb-3">
             <p>${X.formatRead}</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
-        <h2 class="text-xl font-bold text-black">${X.stepsTitle}</h2>
-        <div class="space-y-3">
-          <ol class="list-decimal ml-6 mb-3 space-y-1">
-            ${X.steps.map((t) => html`<li>${t}</li>`)}
-          </ol>
-          <div class="p-4 rounded-xl bg-white/80 border border-emerald-300 mb-3">
-            <p class="text-lg font-bold text-black mb-1">${X.lifeTitle}</p>
-            <p>${X.life}</p>
           </div>
         </div>
       </section>
@@ -628,6 +744,14 @@ function SunCondHelp({ isRu }) {
         </div>
       </section>
 
+      <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">${X.lifeTitle}</h2>
+        <div class="space-y-3">
+          <p class="mb-2">${X.lifeIntro}</p>
+          ${X.storiesView}
+        </div>
+      </section>
+
       <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">${X.mistakesTitle}</h2>
         <div class="space-y-3">
@@ -636,11 +760,20 @@ function SunCondHelp({ isRu }) {
         </div>
       </section>
 
-      <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+      <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">${X.rulesTitle}</h2>
         <div class="space-y-3">
           <ul class="list-disc ml-6 mb-3 space-y-1">
             ${X.rules.map((t) => html`<li>${t}</li>`)}
+          </ul>
+        </div>
+      </section>
+
+      <section class="rounded-2xl border-2 bg-orange-50 border-orange-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">${X.checkTitle}</h2>
+        <div class="space-y-3">
+          <ul class="list-disc ml-6 mb-3 space-y-1">
+            ${X.check.map((t) => html`<li>${t}</li>`)}
           </ul>
         </div>
       </section>
@@ -1290,7 +1423,7 @@ function Settings({ }) {
           </select>
         </div>
         <div class="w-full px-2">
-          <p class="text-sm text-slate-600 mb-6 max-w-3xl">${(settings.lang || 'ru') === 'ru' ? 'Общие настройки контроллера: язык, логин и пароль, часовой пояс, восход и закат, сеть, MQTT. Достаточно настроить один раз.' : 'General controller settings: language, login and password, time zone, sunrise and sunset, network, MQTT. Set them up once.'}</p>
+          <p class="text-sm text-slate-600 mb-6 max-w-3xl">${(settings.lang || 'ru') === 'ru' ? 'Лампа на крыльце сама загорается на закате, а вы даже не встали с дивана. Здесь настраивается всё общее: язык, логин и пароль, часовой пояс, восход и закат, сеть, MQTT. Достаточно один раз.' : 'The porch lamp lights up at sunset and you never leave the sofa. Everything shared lives here: language, login and password, time zone, sunrise and sunset, network, MQTT. Set it up once.'}</p>
         </div>
 
         ${topNotification && html`

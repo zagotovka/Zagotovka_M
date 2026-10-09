@@ -125,30 +125,6 @@ const ActionBadge = ({ isUpper, isHumid, value, unit, str }) => {
 const HELP_CONTENT = {
   ru: html`
 <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
-<section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
-<h2 class="text-xl font-bold text-black">Управление по SMS и DTMF</h2>
-<div>
-<h3 class="text-lg font-bold text-black mb-2">Рубильник On/Off по SMS и DTMF</h3>
-<p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки. Здесь команда переключает ползунок всего пина, то есть сразу всех его датчиков.</p>
-<table class="w-full mb-3 bg-white/70">
-<thead>
-<tr>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Действие</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">SMS</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th>
-</tr>
-</thead>
-<tbody>
-<tr><td class="border px-4 py-2">Отключить строку (ползунок Off)</td><td class="border px-4 py-2"><code>${'5#00*'}</code></td><td class="border px-4 py-2"><code>${'5#00*#'}</code></td></tr>
-<tr><td class="border px-4 py-2">Включить строку (ползунок On)</td><td class="border px-4 py-2"><code>${'5#11*'}</code></td><td class="border px-4 py-2"><code>${'5#11*#'}</code></td></tr>
-</tbody>
-</table>
-<p class="mb-2">В таблице ID = 5 - это пример, подставьте ID своей строки.</p>
-<p class="mb-2">Несколько команд подряд: <code>${'5#00*7#11*'}</code> (SMS) и <code>${'5#00*7#11*#'}</code> (звонок). Ввод во время звонка всегда завершается символами <code>${'*#'}</code>: последняя команда уже заканчивается на <code>${'*'}</code>, поэтому в конце добавляется только <code>${'#'}</code>.</p>
-<p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p>
-<p class="mb-2">В ответ приходит SMS-отчёт, например <code>${'OnOff: Pin5=OFF'}</code> (отчёт отправляется, только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.</p>
-</div>
-</section>
 <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
 <h2 class="text-xl font-bold text-black">Как подключить датчик (пошагово)</h2>
 <ol class="list-decimal ml-6 space-y-3">
@@ -174,6 +150,9 @@ const HELP_CONTENT = {
 </tbody>
 </table>
 <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+<b>Как это работает:</b> прошивка регулярно опрашивает датчик. Когда показание доходит до верхнего или нижнего предела, выполняется действие из соответствующего поля <b>Action</b>. Чтобы устройство не «дёргалось» на границе, используется гистерезис: примерно 0.5 градуса, у влажности 2 процента. Если ползунок <b>On/Off</b> пина выключен, датчик игнорируется целиком.
+</div>
+<div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
 <b>Важно:</b> в полях действий пишется <b>ID устройства, которым вы хотите управлять</b> (светодиод, реле, Zigbee-устройство), а <b>не</b> ID самого пина с датчиком.
 </div>
 <div class="p-4 rounded-xl bg-white/80 border border-indigo-300 mb-3">
@@ -184,6 +163,30 @@ const HELP_CONTENT = {
 <p class="mb-1">Чтобы управлять несколькими устройствами сразу, перечислите их через запятую.</p>
 </div>
 <p class="mb-2">Кнопка «copy SN» рядом с серийным номером DS18B20 копирует его в буфер обмена. Номер нужен для привязки датчика к PID-контроллеру на странице «PID controller».</p>
+</section>
+<section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+<h2 class="text-xl font-bold text-black">Управление по SMS и DTMF</h2>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Рубильник On/Off по SMS и DTMF</h3>
+<p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки. Здесь команда переключает ползунок всего пина, то есть сразу всех его датчиков.</p>
+<table class="w-full mb-3 bg-white/70">
+<thead>
+<tr>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Действие</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">SMS</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th>
+</tr>
+</thead>
+<tbody>
+<tr><td class="border px-4 py-2">Отключить строку (ползунок Off)</td><td class="border px-4 py-2"><code>${'5#00*'}</code></td><td class="border px-4 py-2"><code>${'5#00*#'}</code></td></tr>
+<tr><td class="border px-4 py-2">Включить строку (ползунок On)</td><td class="border px-4 py-2"><code>${'5#11*'}</code></td><td class="border px-4 py-2"><code>${'5#11*#'}</code></td></tr>
+</tbody>
+</table>
+<p class="mb-2">В таблице ID = 5 - это пример, подставьте ID своей строки.</p>
+<p class="mb-2">Несколько команд подряд: <code>${'5#00*7#11*'}</code> (SMS) и <code>${'5#00*7#11*#'}</code> (звонок). Ввод во время звонка всегда завершается символами <code>${'*#'}</code>: последняя команда уже заканчивается на <code>${'*'}</code>, поэтому в конце добавляется только <code>${'#'}</code>.</p>
+<p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p>
+<p class="mb-2">В ответ приходит SMS-отчёт, например <code>${'OnOff: Pin5=OFF'}</code> Он подтверждает, что команда выполнена и ползунок пина переключён, а не перепроверяет показания датчика. Отчёт отправляется, только если включён общий ползунок SIM800L. Неверные команды (в том числе для пина, на котором не выбран датчик) попадают в список Invld pins/cmd.</p>
+</div>
 </section>
 <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
 <h2 class="text-xl font-bold text-black">MQTT: отслеживание изменений</h2>
@@ -226,50 +229,6 @@ const HELP_CONTENT = {
 </ul>
 </div>
 </section>
-<section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
-<h2 class="text-xl font-bold text-black">Поля действий: пределы температуры и влажности</h2>
-<div>
-<h3 class="text-lg font-bold text-black mb-2">Сколько датчиков можно подключить</h3>
-<table class="w-full mb-3 bg-white/70">
-<thead>
-<tr>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Тип датчика</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Датчиков на один пин</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Пинов под этот тип</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Всего</th>
-</tr>
-</thead>
-<tbody>
-<tr><td class="border px-4 py-2">DS18B20</td><td class="border px-4 py-2">до 10</td><td class="border px-4 py-2">до 2</td><td class="border px-4 py-2">до 20</td></tr>
-<tr><td class="border px-4 py-2">DHT22</td><td class="border px-4 py-2">1</td><td class="border px-4 py-2">до 20</td><td class="border px-4 py-2">до 20</td></tr>
-</tbody>
-</table>
-<p class="mb-2">DS18B20 - цифровая шина с адресацией по серийному номеру, поэтому на один пин можно повесить несколько датчиков. У DHT22 адреса на шине нет, поэтому каждому DHT22 нужен отдельный пин.</p>
-</div>
-<div>
-<h3 class="text-lg font-bold text-black mb-2">Формат полей Action</h3>
-<p class="mb-2">Поля <b>Action for Upper Temperature</b>, <b>Action for Lower Temperature</b> (у DHT22 ещё <b>Action for upper H</b> и <b>Action for lower H</b>) содержат записи формата <code>${'ID:Action'}</code> с разделителем <code>${','}</code>. Длина поля - не больше <b>29 символов</b> вместе с условиями после знака ?. Под полем показан счётчик, а прошивка отклоняет более длинную строку целиком, без обрезки.</p>
-<p class="mb-2">Примеры записи: <code>${'6:1'}</code> (пин 6 - ON), <code>${'93:2'}</code> (пин 93 - TOGGLE), <code>${'93.1:0'}</code> (Zigbee слот 93, sub-action 1 - OFF).</p>
-<table class="w-full mb-3 bg-white/70">
-<thead>
-<tr>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Длина ID</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Пример</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Байт на запись</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Записей в строке</th>
-</tr>
-</thead>
-<tbody>
-<tr><td class="border px-4 py-2">1 знак</td><td class="border px-4 py-2"><code>${'5:1'}</code></td><td class="border px-4 py-2">3 + запятая = 4</td><td class="border px-4 py-2">до 7</td></tr>
-<tr><td class="border px-4 py-2">2 знака</td><td class="border px-4 py-2"><code>${'15:1'}</code></td><td class="border px-4 py-2">4 + запятая = 5</td><td class="border px-4 py-2">до 6</td></tr>
-<tr><td class="border px-4 py-2">3 знака</td><td class="border px-4 py-2"><code>${'155:1'}</code></td><td class="border px-4 py-2">5 + запятая = 6</td><td class="border px-4 py-2">до 5</td></tr>
-</tbody>
-</table>
-<div class="mt-2 text-slate-700">
-Цифры в таблице верны для записей без условий.
-</div>
-</div>
-</section>
 <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
 <h2 class="text-xl font-bold text-black">${condHelpTitle(true)}</h2>
 <div class="space-y-3">
@@ -284,33 +243,9 @@ const HELP_CONTENT = {
 </ol>
 <p class="mb-3">Общий вид: <code>${'ID:команда?условие'}</code>. Команда: <b>0</b> - выключить, <b>1</b> - включить, <b>2</b> - переключить на противоположное. Несколько действий пишутся через запятую без пробелов, и у каждого может быть своё условие или не быть никакого. Предел температуры, при котором всё это срабатывает, по-прежнему задаётся в полях Upper/Lower Temperature, условие его не заменяет.</p>
 <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-<p class="text-lg font-bold text-black mb-1">Пример из жизни: вентилятор в теплице только днём</p>
-<p class="mb-1">В теплице стоит датчик, верхний предел температуры - 28 градусов. Вентилятор подключён к пину 6. Ночью шуметь не нужно.</p>
-<p class="mb-1">В поле <b>Action for Upper Temperature</b> пишем: <code>${'6:1?Sr'}</code></p>
-<p class="mb-1">Результат: если температура дошла до 28 днём - вентилятор включится. Если дошла ночью - действие будет пропущено. Чтобы Sr и Ss работали, на странице «Global Settings» должно быть настроено время восхода и заката. Что будет утром, когда станет день, читайте в правиле 1 ниже.</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-<p class="text-lg font-bold text-black mb-1">Пример из жизни: обогрев не включать при открытой форточке</p>
-<p class="mb-1">Нижний предел температуры - 18 градусов. Обогреватель подключён к пину 7. Форточка открывается реле с ID 9 (реле включено - форточка открыта).</p>
-<p class="mb-1">В поле <b>Action for Lower Temperature</b> пишем: <code>${'7:1?!D9'}</code></p>
-<p class="mb-1">Читаем: «включить обогреватель, но только если устройство 9 выключено, то есть форточка закрыта». Если форточка открыта, действие пропускается и тепло не уходит на улицу.</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-<p class="text-lg font-bold text-black mb-1">Пример из жизни: два действия, у каждого свой «замок»</p>
+<p class="text-lg font-bold text-black mb-1">Пример записи: два действия, у каждого свой «замок»</p>
 <p class="mb-1">В поле <b>Action for Lower Temperature</b> пишем: <code>${'7:1,8:0?D2'}</code></p>
 <p class="mb-1">Читаем: «включить 7 - всегда; выключить 8 - только если включено устройство 2». Условие относится только к тому действию, после которого стоит знак ?.</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-<p class="text-lg font-bold text-black mb-1">Пример из жизни: вытяжка по влажности (DHT22)</p>
-<p class="mb-1">Датчик DHT22 подключён к пину с ID 4, верхний предел влажности - 70 процентов. Вытяжка подключена к пину 8. Нужно, чтобы она включалась при высокой влажности, но не в мороз.</p>
-<p class="mb-1">В поле <b>Action for upper H</b> пишем: <code>${'8:1?T4>5'}</code></p>
-<p class="mb-1">Читаем: «включить вытяжку, но только если температура на датчике 4 выше 5 градусов». В условии можно ссылаться и на этот же датчик, и на любой другой пин OneWire.</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-<p class="text-lg font-bold text-black mb-1">Пример из жизни: обогрев погреба только в сильный мороз</p>
-<p class="mb-1">Датчик в погребе, нижний предел температуры - 2 градуса. Обогреватель подключён к пину 7. Уличный датчик - пин OneWire с ID 6. Нужно греть погреб, только если на улице холоднее минус 5.</p>
-<p class="mb-1">В поле <b>Action for Lower Temperature</b> пишем: <code>${'7:1?T6<-5'}</code></p>
-<p class="mb-1">Читаем: «включить обогреватель, но только если на уличном датчике 6 холоднее минус 5». В оттепель действие будет пропущено. Помните правило 1: условие проверяется один раз, когда в погребе дошло до 2 градусов.</p>
 </div>
 <h4 class="text-lg font-bold text-black mt-4 mb-2">Из чего строится условие (слова)</h4>
 <p class="mb-2">Число после буквы - это <b>ID</b> устройства из таблицы на соответствующей странице. Для температуры и влажности (T и H) это ID пина OneWire из первого столбца таблицы на этой странице. Регистр букв не важен: D2 и r2 - одно и то же.</p>
@@ -429,6 +364,7 @@ const HELP_CONTENT = {
 <li><b>Условие проверяется один раз - в момент, когда показание дошло до предела.</b> Если в этот момент было НЕТ, действие пропущено и само потом не выполнится, даже когда условие станет ДА. Датчик «сработает» заново только после того, как показание отойдёт от предела назад (примерно на 0.5 градуса, у влажности - на 2 процента) и дойдёт до него снова. Если условие нужно проверять постоянно, используйте таймер на странице «Timers (cron)»: в поле Cron пишем <code>${'0 * * * * * *'}</code> (каждую минуту), в поле Script пишем, например, <code>${'6:1?T5>28&Sr'}</code>. Тогда каждую минуту прошивка сама смотрит на температуру и условие.</li>
 <li><b>Главный ползунок On/Off в строке пина сильнее любого условия.</b> Если он выключен, датчик игнорируется целиком и никакие действия не выполняются.</li>
 <li><b>Длина поля Action у датчиков OneWire - не больше 29 символов</b> вместе с условием (поле не даст ввести больше, а прошивка отклонит более длинную строку целиком). Если условие длинное, запишите его один раз в ячейку на странице «Global Settings» (строка Conditions, 12 ячеек, до 46 символов в каждой) и пишите в действии коротко: <code>${'6:1?C3'}</code>. В ячейку пишется только условие, без знака ?, например <code>${'Ss&T5>25&!D7'}</code>. Пустая или сброшенная ячейка считается НЕТ (действие блокируется). Правка ячейки сразу меняет все места, где она используется.</li>
+<li><b>Условие проверяется для любой команды, в том числе для выключения.</b> Запись <code>${'6:0?Sr'}</code> не выключит устройство 6 ночью: условие даёт НЕТ.</li>
 <li><b>Условие работает только в полях Action.</b> Прямое управление устройством (ползунок On/Off у самого реле, команда API или MQTT прямо на реле) условия не проверяет.</li>
 <li><b>Числа и минус.</b> После знака сравнения можно писать и отрицательные числа: <code>${'T5<-5'}</code> - «температура ниже минус 5 градусов», <code>${'T5>-0.5'}</code>, <code>${'T5g-12.3'}</code>. Минус пишется сразу перед цифрами, без пробела, и только справа от знака сравнения (запись <code>${'-5<T5'}</code> - ошибка). После точки допустима одна цифра: <code>${'T5>25.55'}</code> - ошибка. Помните, что условие только «смотрит» на температуру. Сам предел, при котором срабатывает датчик, по-прежнему задаётся в полях Upper/Lower Temperature, там тоже можно писать отрицательные значения.</li>
 <li><b>Номер датчика на пине:</b> <code>${'T5.2'}</code> - второй датчик DS18B20 на пине 5 (по порядку в списке датчиков этого пина). Номер - одна цифра от 1 до 9. Без номера берётся первый исправный датчик.</li>
@@ -440,34 +376,102 @@ const HELP_CONTENT = {
 </ol>
 </div>
 </section>
+<section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+<h2 class="text-xl font-bold text-black">Примеры из жизни</h2>
+<p class="text-slate-600 italic mb-2">Все ID, пины и номера в примерах условные: подставьте свои.</p>
+<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+<h3 class="text-lg font-bold text-black mb-2">Вентилятор будит весь дом</h3>
+<p class="mb-1">Ночью в теплице стало жарко, и вентилятор загудел так, что проснулась вся семья. Вот это сюрприз!</p>
+<p class="mb-1"><b>Спокойно!</b> Разрешите вентилятору включаться только днём. Верхний предел температуры датчика - 28 градусов, вентилятор подключён к пину 6.</p>
+<p class="mb-1">В поле <b>Action for Upper Temperature</b> пишем: <code>${'6:1?Sr'}</code></p>
+<p>Результат: если температура дошла до 28 днём, вентилятор включится; если ночью, действие будет пропущено. Чтобы Sr работало, на странице «Global Settings» должно быть настроено время восхода и заката. Условие проверяется один раз, в момент достижения предела (см. правило 1 ниже).</p>
+</div>
+<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+<h3 class="text-lg font-bold text-black mb-2">Тепло уходит в форточку</h3>
+<p class="mb-1">Вы вернулись домой: форточка нараспашку, а обогреватель честно греет улицу. Обидно за счёт!</p>
+<p class="mb-1"><b>Спокойно!</b> Пусть обогреватель включается, только если форточка закрыта. Нижний предел - 18 градусов, обогреватель на пине 7, форточку открывает реле с ID 9 (включено - форточка открыта).</p>
+<p class="mb-1">В поле <b>Action for Lower Temperature</b> пишем: <code>${'7:1?!D9'}</code></p>
+<p>Результат: при холоде и закрытой форточке обогреватель включится; при открытой действие пропускается, и тепло не уходит на улицу.</p>
+</div>
+<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+<h3 class="text-lg font-bold text-black mb-2">Картошка в погребе в опасности</h3>
+<p class="mb-1">Зимой в погребе температура ползёт вниз, и сердце уходит в пятки: заготовки под угрозой. Но греть погреб каждый раз, даже в оттепель, незачем.</p>
+<p class="mb-1"><b>Спокойно!</b> Греем, только если на улице действительно мороз. Нижний предел в погребе - 2 градуса, обогреватель на пине 7, уличный датчик - OneWire пин с ID 6.</p>
+<p class="mb-1">В поле <b>Action for Lower Temperature</b> пишем: <code>${'7:1?T6<-5'}</code></p>
+<p>Результат: обогреватель включится, только если на уличном датчике 6 холоднее минус 5. В оттепель действие пропускается. Условие проверяется один раз, когда в погребе дошло до 2 градусов.</p>
+</div>
+<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+<h3 class="text-lg font-bold text-black mb-2">Вытяжка выстужает кладовку</h3>
+<p class="mb-1">В кладовке влажность подскочила, вытяжка включилась и вместе с сыростью выдула всё тепло. Зимой это не лечение, а наказание.</p>
+<p class="mb-1"><b>Спокойно!</b> Датчик DHT22 стоит на пине с ID 4, верхний предел влажности - 70 процентов, вытяжка подключена к пину 8. Пусть она включается, только если на улице не мороз.</p>
+<p class="mb-1">В поле <b>Action for upper H</b> пишем: <code>${'8:1?T4>5'}</code></p>
+<p>Результат: вытяжка включится при влажности выше предела, но только если температура на датчике 4 выше 5 градусов. В условии можно ссылаться и на этот же датчик, и на любой другой пин OneWire.</p>
+</div>
+</section>
+<section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
+<h2 class="text-xl font-bold text-black">Лимиты и «Не работает? Проверьте»</h2>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Сколько датчиков можно подключить</h3>
+<table class="w-full mb-3 bg-white/70">
+<thead>
+<tr>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Тип датчика</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Датчиков на один пин</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Пинов под этот тип</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Всего</th>
+</tr>
+</thead>
+<tbody>
+<tr><td class="border px-4 py-2">DS18B20</td><td class="border px-4 py-2">до 10</td><td class="border px-4 py-2">до 2</td><td class="border px-4 py-2">до 20</td></tr>
+<tr><td class="border px-4 py-2">DHT22</td><td class="border px-4 py-2">1</td><td class="border px-4 py-2">до 20</td><td class="border px-4 py-2">до 20</td></tr>
+</tbody>
+</table>
+<p class="mb-2">DS18B20 - цифровая шина с адресацией по серийному номеру, поэтому на один пин можно повесить несколько датчиков. У DHT22 адреса на шине нет, поэтому каждому DHT22 нужен отдельный пин.</p>
+</div>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Формат полей Action</h3>
+<p class="mb-2">Поля <b>Action for Upper Temperature</b>, <b>Action for Lower Temperature</b> (у DHT22 ещё <b>Action for upper H</b> и <b>Action for lower H</b>) содержат записи формата <code>${'ID:Action'}</code> с разделителем <code>${','}</code>. Длина поля - не больше <b>29 символов</b> вместе с условиями после знака ?. Под полем показан счётчик, а прошивка отклоняет более длинную строку целиком, без обрезки.</p>
+<p class="mb-2">Примеры записи: <code>${'6:1'}</code> (пин 6 - ON), <code>${'93:2'}</code> (пин 93 - TOGGLE), <code>${'93.1:0'}</code> (Zigbee слот 93, sub-action 1 - OFF).</p>
+<table class="w-full mb-3 bg-white/70">
+<thead>
+<tr>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Длина ID</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Пример</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Байт на запись</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Записей в строке</th>
+</tr>
+</thead>
+<tbody>
+<tr><td class="border px-4 py-2">1 знак</td><td class="border px-4 py-2"><code>${'5:1'}</code></td><td class="border px-4 py-2">3 + запятая = 4</td><td class="border px-4 py-2">до 7</td></tr>
+<tr><td class="border px-4 py-2">2 знака</td><td class="border px-4 py-2"><code>${'15:1'}</code></td><td class="border px-4 py-2">4 + запятая = 5</td><td class="border px-4 py-2">до 6</td></tr>
+<tr><td class="border px-4 py-2">3 знака</td><td class="border px-4 py-2"><code>${'155:1'}</code></td><td class="border px-4 py-2">5 + запятая = 6</td><td class="border px-4 py-2">до 5</td></tr>
+</tbody>
+</table>
+<div class="mt-2 text-slate-700">
+Цифры в таблице верны для записей без условий.
+</div>
+</div>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Пределы значений</h3>
+<ul class="list-disc ml-6 mb-3 space-y-1">
+<li><b>Upper Temperature</b> и <b>Lower Temperature</b> - от -55 до 125 градусов.</li>
+<li><b>Humidity upper limit</b> и <b>Humidity lower limit</b> (только DHT22) - от 0 до 100 процентов.</li>
+<li>Каждое поле <b>Action</b> - до 29 символов вместе с условием.</li>
+</ul>
+<h3 class="text-lg font-bold text-black mt-4 mb-2">Не работает? Проверьте</h3>
+<ul class="list-disc ml-6 space-y-1">
+<li>Включён ли ползунок <b>On/Off</b> в строке пина: выключенный пин игнорируется целиком.</li>
+<li>Перезагружали ли вы контроллер после смены типа датчика: поиск датчиков на шине выполняется только при загрузке.</li>
+<li>Не равно ли нулю «Кол-во сенсоров»: проверьте провода и подтягивающий резистор около 4,7 кОм между линией данных и +3,3 В.</li>
+<li>Стоит ли в <b>Action</b> ID устройства, а не ID пина с датчиком.</li>
+<li>Не даёт ли условие ответ НЕТ: действие тогда молча пропускается, а проверка делается один раз при достижении предела. Для Sr и Ss должно быть настроено время восхода и заката в «Global Settings».</li>
+</ul>
+</div>
+</section>
 </div>
   `,
   en: html`
 <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
-<section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
-<h2 class="text-xl font-bold text-black">Control by SMS and DTMF</h2>
-<div>
-<h3 class="text-lg font-bold text-black mb-2">On/Off switch by SMS and DTMF</h3>
-<p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row. Here the command switches the slider of the whole pin, that is of all its sensors at once.</p>
-<table class="w-full mb-3 bg-white/70">
-<thead>
-<tr>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Action</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">SMS</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">DTMF (during a call)</th>
-</tr>
-</thead>
-<tbody>
-<tr><td class="border px-4 py-2">Turn the row off (slider Off)</td><td class="border px-4 py-2"><code>${'5#00*'}</code></td><td class="border px-4 py-2"><code>${'5#00*#'}</code></td></tr>
-<tr><td class="border px-4 py-2">Turn the row on (slider On)</td><td class="border px-4 py-2"><code>${'5#11*'}</code></td><td class="border px-4 py-2"><code>${'5#11*#'}</code></td></tr>
-</tbody>
-</table>
-<p class="mb-2">In the table ID = 5 is an example, use the ID of your own row.</p>
-<p class="mb-2">Several commands in a row: <code>${'5#00*7#11*'}</code> (SMS) and <code>${'5#00*7#11*#'}</code> (call). Input during a call always ends with the characters <code>${'*#'}</code>: the last command already ends with <code>${'*'}</code>, so only <code>${'#'}</code> is added at the end.</p>
-<p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p>
-<p class="mb-2">A report SMS comes back in reply, for example <code>${'OnOff: Pin5=OFF'}</code> (the report is sent only if the main SIM800L slider is on). Wrong commands go to the Invld pins/cmd list.</p>
-</div>
-</section>
 <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
 <h2 class="text-xl font-bold text-black">How to connect a sensor (step by step)</h2>
 <ol class="list-decimal ml-6 space-y-3">
@@ -493,6 +497,9 @@ const HELP_CONTENT = {
 </tbody>
 </table>
 <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+<b>How it works:</b> the firmware polls the sensor regularly. When a reading reaches the upper or lower limit, the action from the matching <b>Action</b> field runs. To keep the device from twitching at the border, a hysteresis is used: about 0.5 degrees, 2 percent for humidity. If the <b>On/Off</b> slider of the pin is off, the sensor is ignored entirely.
+</div>
+<div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
 <b>Important:</b> the action fields take the <b>ID of the device you want to control</b> (LED, relay, Zigbee device), <b>not</b> the ID of the sensor pin itself.
 </div>
 <div class="p-4 rounded-xl bg-white/80 border border-indigo-300 mb-3">
@@ -503,6 +510,30 @@ const HELP_CONTENT = {
 <p class="mb-1">To control several devices at once, list them separated by commas.</p>
 </div>
 <p class="mb-2">The "copy SN" button next to the DS18B20 serial number copies it to the clipboard. The number is needed to link the sensor to a PID controller on the "PID controller" page.</p>
+</section>
+<section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
+<h2 class="text-xl font-bold text-black">Control by SMS and DTMF</h2>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">On/Off switch by SMS and DTMF</h3>
+<p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row. Here the command switches the slider of the whole pin, that is of all its sensors at once.</p>
+<table class="w-full mb-3 bg-white/70">
+<thead>
+<tr>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Action</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">SMS</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">DTMF (during a call)</th>
+</tr>
+</thead>
+<tbody>
+<tr><td class="border px-4 py-2">Turn the row off (slider Off)</td><td class="border px-4 py-2"><code>${'5#00*'}</code></td><td class="border px-4 py-2"><code>${'5#00*#'}</code></td></tr>
+<tr><td class="border px-4 py-2">Turn the row on (slider On)</td><td class="border px-4 py-2"><code>${'5#11*'}</code></td><td class="border px-4 py-2"><code>${'5#11*#'}</code></td></tr>
+</tbody>
+</table>
+<p class="mb-2">In the table ID = 5 is an example, use the ID of your own row.</p>
+<p class="mb-2">Several commands in a row: <code>${'5#00*7#11*'}</code> (SMS) and <code>${'5#00*7#11*#'}</code> (call). Input during a call always ends with the characters <code>${'*#'}</code>: the last command already ends with <code>${'*'}</code>, so only <code>${'#'}</code> is added at the end.</p>
+<p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p>
+<p class="mb-2">A report SMS comes back in reply, for example <code>${'OnOff: Pin5=OFF'}</code> It confirms that the command was executed and the pin slider was switched; it does not re-check the sensor readings. The report is sent only if the main SIM800L slider is on. Wrong commands (including a pin with no sensor selected) go to the Invld pins/cmd list.</p>
+</div>
 </section>
 <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
 <h2 class="text-xl font-bold text-black">MQTT: change tracking</h2>
@@ -545,50 +576,6 @@ const HELP_CONTENT = {
 </ul>
 </div>
 </section>
-<section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
-<h2 class="text-xl font-bold text-black">Action fields: temperature and humidity limits</h2>
-<div>
-<h3 class="text-lg font-bold text-black mb-2">How many sensors can be connected</h3>
-<table class="w-full mb-3 bg-white/70">
-<thead>
-<tr>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Sensor type</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Sensors per pin</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Pins for this type</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Total</th>
-</tr>
-</thead>
-<tbody>
-<tr><td class="border px-4 py-2">DS18B20</td><td class="border px-4 py-2">up to 10</td><td class="border px-4 py-2">up to 2</td><td class="border px-4 py-2">up to 20</td></tr>
-<tr><td class="border px-4 py-2">DHT22</td><td class="border px-4 py-2">1</td><td class="border px-4 py-2">up to 20</td><td class="border px-4 py-2">up to 20</td></tr>
-</tbody>
-</table>
-<p class="mb-2">DS18B20 is a digital bus addressed by serial number, so several sensors can share one pin. DHT22 has no bus address, so each DHT22 needs its own pin.</p>
-</div>
-<div>
-<h3 class="text-lg font-bold text-black mb-2">Action field format</h3>
-<p class="mb-2">The fields <b>Action for Upper Temperature</b>, <b>Action for Lower Temperature</b> (DHT22 also <b>Action for upper H</b> and <b>Action for lower H</b>) hold entries in the <code>${'ID:Action'}</code> format with the <code>${','}</code> separator. The field length is no more than <b>29 characters</b> including the conditions after the ? sign. A counter is shown under the field, and the firmware rejects a longer string as a whole, without truncating it.</p>
-<p class="mb-2">Entry examples: <code>${'6:1'}</code> (pin 6 - ON), <code>${'93:2'}</code> (pin 93 - TOGGLE), <code>${'93.1:0'}</code> (Zigbee slot 93, sub-action 1 - OFF).</p>
-<table class="w-full mb-3 bg-white/70">
-<thead>
-<tr>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">ID length</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Example</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Bytes per entry</th>
-<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Entries in the string</th>
-</tr>
-</thead>
-<tbody>
-<tr><td class="border px-4 py-2">1 digit</td><td class="border px-4 py-2"><code>${'5:1'}</code></td><td class="border px-4 py-2">3 + comma = 4</td><td class="border px-4 py-2">up to 7</td></tr>
-<tr><td class="border px-4 py-2">2 digits</td><td class="border px-4 py-2"><code>${'15:1'}</code></td><td class="border px-4 py-2">4 + comma = 5</td><td class="border px-4 py-2">up to 6</td></tr>
-<tr><td class="border px-4 py-2">3 digits</td><td class="border px-4 py-2"><code>${'155:1'}</code></td><td class="border px-4 py-2">5 + comma = 6</td><td class="border px-4 py-2">up to 5</td></tr>
-</tbody>
-</table>
-<div class="mt-2 text-slate-700">
-The numbers in the table are valid for entries without conditions.
-</div>
-</div>
-</section>
 <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
 <h2 class="text-xl font-bold text-black">${condHelpTitle(false)}</h2>
 <div class="space-y-3">
@@ -603,33 +590,9 @@ The numbers in the table are valid for entries without conditions.
 </ol>
 <p class="mb-3">General form: <code>${'ID:command?condition'}</code>. Command: <b>0</b> - turn off, <b>1</b> - turn on, <b>2</b> - toggle to the opposite. Several actions are separated by a comma, without spaces, and each one may have its own condition or none. The temperature limit that triggers all this is still set in the Upper/Lower Temperature fields, the condition does not replace it.</p>
 <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-<p class="text-lg font-bold text-black mb-1">Real-life example: greenhouse fan only in the daytime</p>
-<p class="mb-1">A sensor is in the greenhouse, the upper temperature limit is 28 degrees. The fan is connected to pin 6. You do not want noise at night.</p>
-<p class="mb-1">In <b>Action for Upper Temperature</b> write: <code>${'6:1?Sr'}</code></p>
-<p class="mb-1">Result: if the temperature reached 28 in the daytime - the fan turns on. If it reached 28 at night - the action is skipped. For Sr and Ss to work, the sunrise and sunset times must be set on the Global Settings page. What happens in the morning when the day comes - see rule 1 below.</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-<p class="text-lg font-bold text-black mb-1">Real-life example: no heating while the window is open</p>
-<p class="mb-1">The lower temperature limit is 18 degrees. The heater is connected to pin 7. The window is opened by the relay with ID 9 (relay on = window open).</p>
-<p class="mb-1">In <b>Action for Lower Temperature</b> write: <code>${'7:1?!D9'}</code></p>
-<p class="mb-1">Read it as: "turn on the heater, but only if device 9 is off, that is the window is closed". If the window is open, the action is skipped and the heat does not go outside.</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-<p class="text-lg font-bold text-black mb-1">Real-life example: two actions, each with its own "lock"</p>
+<p class="text-lg font-bold text-black mb-1">Writing example: two actions, each with its own "lock"</p>
 <p class="mb-1">In <b>Action for Lower Temperature</b> write: <code>${'7:1,8:0?D2'}</code></p>
 <p class="mb-1">Read it as: "turn on 7 - always; turn off 8 - only if device 2 is on". A condition belongs only to the action it follows after the ? sign.</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-<p class="text-lg font-bold text-black mb-1">Real-life example: exhaust fan by humidity (DHT22)</p>
-<p class="mb-1">A DHT22 sensor is on the pin with ID 4, the upper humidity limit is 70 percent. The exhaust fan is connected to pin 8. It should turn on at high humidity, but not in frost.</p>
-<p class="mb-1">In <b>Action for upper H</b> write: <code>${'8:1?T4>5'}</code></p>
-<p class="mb-1">Read it as: "turn on the exhaust fan, but only if the temperature on sensor 4 is above 5 degrees". A condition may refer to the same sensor or to any other OneWire pin.</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-<p class="text-lg font-bold text-black mb-1">Real-life example: cellar heating only in hard frost</p>
-<p class="mb-1">A sensor is in the cellar, the lower temperature limit is 2 degrees. The heater is connected to pin 7. The outdoor sensor is the OneWire pin with ID 6. You want to heat the cellar only if it is colder than minus 5 outside.</p>
-<p class="mb-1">In <b>Action for Lower Temperature</b> write: <code>${'7:1?T6<-5'}</code></p>
-<p class="mb-1">Read it as: "turn on the heater, but only if the outdoor sensor 6 reads colder than minus 5". In a thaw the action is skipped. Remember rule 1: the condition is checked once, when the cellar reaches 2 degrees.</p>
 </div>
 <h4 class="text-lg font-bold text-black mt-4 mb-2">What a condition is made of (words)</h4>
 <p class="mb-2">The number after the letter is the <b>ID</b> of the device from the table on the corresponding page. For temperature and humidity (T and H) it is the ID of the OneWire pin from the first column of the table on this page. Letter case does not matter: D2 and r2 are the same.</p>
@@ -748,6 +711,7 @@ The numbers in the table are valid for entries without conditions.
 <li><b>The condition is checked once - at the moment the reading reaches the limit.</b> If it was NO at that moment, the action is skipped and will not run later by itself, even when the condition becomes YES. The sensor will "fire" again only after the reading moves back from the limit (by about 0.5 degrees, for humidity - 2 percent) and reaches it again. If the condition must be checked all the time, use a timer on the "Timers (cron)" page: in the Cron field write <code>${'0 * * * * * *'}</code> (every minute), in the Script field write, for example, <code>${'6:1?T5>28&Sr'}</code>. Then every minute the firmware looks at the temperature and the condition by itself.</li>
 <li><b>The main On/Off slider in the pin row is stronger than any condition.</b> If it is off, the sensor is ignored completely and no actions are executed.</li>
 <li><b>The length of the Action field of OneWire sensors is no more than 29 characters</b> including the condition (the field will not let you type more, and the firmware rejects a longer string as a whole). If the condition is long, write it once into a cell on the "Global Settings" page (the Conditions row, 12 cells, up to 46 characters each) and write it short in the action: <code>${'6:1?C3'}</code>. Only the condition goes into the cell, without the ? sign, for example <code>${'Ss&T5>25&!D7'}</code>. An empty or reset cell counts as NO (the action is blocked). Editing a cell immediately changes every place where it is used.</li>
+<li><b>The condition is checked for any command, including turning off.</b> The entry <code>${'6:0?Sr'}</code> will not turn device 6 off at night: the condition gives NO.</li>
 <li><b>A condition works only in the Action fields.</b> Direct control of a device (the On/Off slider of the relay itself, an API or MQTT command straight to the relay) does not check conditions.</li>
 <li><b>Numbers and minus.</b> After the comparison sign you can also write negative numbers: <code>${'T5<-5'}</code> - "temperature below minus 5 degrees", <code>${'T5>-0.5'}</code>, <code>${'T5g-12.3'}</code>. The minus goes right before the digits, without a space, and only to the right of the comparison sign (the entry <code>${'-5<T5'}</code> is an error). Only one digit is allowed after the point: <code>${'T5>25.55'}</code> is an error. Remember that the condition only "looks" at the temperature. The limit at which the sensor fires is still set in the Upper/Lower Temperature fields, where negative values are allowed too.</li>
 <li><b>Sensor number on the pin:</b> <code>${'T5.2'}</code> - the second DS18B20 sensor on pin 5 (in the order of the sensor list of this pin). The number is one digit from 1 to 9. Without a number the first working sensor is used.</li>
@@ -757,6 +721,98 @@ The numbers in the table are valid for entries without conditions.
 <li><b>If you delete a device</b> that a condition refers to, the firmware replaces such a condition with the always-false <code>${'?0'}</code>. The action stops firing but does not become unconditional. Set a new condition.</li>
 <li><b>If the upper and lower limits are equal</b>, the sensor works as a one-point thermostat: the upper action fires at a reading of the limit plus 0.5 and above, the lower one at the limit minus 0.5 and below (for humidity - plus and minus 2 percent).</li>
 </ol>
+</div>
+</section>
+<section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+<h2 class="text-xl font-bold text-black">Real-life examples</h2>
+<p class="text-slate-600 italic mb-2">All IDs, pins and numbers in the examples are made up: use your own.</p>
+<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+<h3 class="text-lg font-bold text-black mb-2">The fan that wakes the whole house</h3>
+<p class="mb-1">It got hot in the greenhouse at night, and the fan roared so loud that the whole family woke up. Surprise!</p>
+<p class="mb-1"><b>Easy!</b> Let the fan turn on only in the daytime. The upper temperature limit of the sensor is 28 degrees, the fan is connected to pin 6.</p>
+<p class="mb-1">In <b>Action for Upper Temperature</b> write: <code>${'6:1?Sr'}</code></p>
+<p>Result: if the temperature reached 28 in the daytime, the fan turns on; if at night, the action is skipped. For Sr to work, the sunrise and sunset times must be set on the "Global Settings" page. The condition is checked once, when the limit is reached (see rule 1 below).</p>
+</div>
+<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+<h3 class="text-lg font-bold text-black mb-2">Heat escaping through the window</h3>
+<p class="mb-1">You get home: the window is wide open, and the heater is honestly warming the street. Think of the bill!</p>
+<p class="mb-1"><b>Easy!</b> Let the heater turn on only if the window is closed. The lower limit is 18 degrees, the heater is on pin 7, the window is opened by the relay with ID 9 (on = window open).</p>
+<p class="mb-1">In <b>Action for Lower Temperature</b> write: <code>${'7:1?!D9'}</code></p>
+<p>Result: when it is cold and the window is closed, the heater turns on; if the window is open, the action is skipped and the heat does not go outside.</p>
+</div>
+<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+<h3 class="text-lg font-bold text-black mb-2">The potatoes in the cellar are in danger</h3>
+<p class="mb-1">In winter the cellar temperature keeps sliding down, and your heart sinks: the whole harvest is at risk. But heating the cellar every time, even in a thaw, makes no sense.</p>
+<p class="mb-1"><b>Easy!</b> Heat only if it is really freezing outside. The lower limit in the cellar is 2 degrees, the heater is on pin 7, the outdoor sensor is the OneWire pin with ID 6.</p>
+<p class="mb-1">In <b>Action for Lower Temperature</b> write: <code>${'7:1?T6<-5'}</code></p>
+<p>Result: the heater turns on only if the outdoor sensor 6 reads colder than minus 5. In a thaw the action is skipped. The condition is checked once, when the cellar reaches 2 degrees.</p>
+</div>
+<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+<h3 class="text-lg font-bold text-black mb-2">The exhaust fan chills the pantry</h3>
+<p class="mb-1">Humidity in the pantry jumped, the exhaust fan turned on and blew out all the warmth together with the damp. In winter that is a punishment, not a cure.</p>
+<p class="mb-1"><b>Easy!</b> A DHT22 sensor is on the pin with ID 4, the upper humidity limit is 70 percent, the exhaust fan is on pin 8. Let it turn on only if it is not freezing outside.</p>
+<p class="mb-1">In <b>Action for upper H</b> write: <code>${'8:1?T4>5'}</code></p>
+<p>Result: the fan turns on when humidity is above the limit, but only if the temperature on sensor 4 is above 5 degrees. A condition may refer to the same sensor or to any other OneWire pin.</p>
+</div>
+</section>
+<section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
+<h2 class="text-xl font-bold text-black">Limits and "Not working? Check"</h2>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">How many sensors can be connected</h3>
+<table class="w-full mb-3 bg-white/70">
+<thead>
+<tr>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Sensor type</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Sensors per pin</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Pins for this type</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Total</th>
+</tr>
+</thead>
+<tbody>
+<tr><td class="border px-4 py-2">DS18B20</td><td class="border px-4 py-2">up to 10</td><td class="border px-4 py-2">up to 2</td><td class="border px-4 py-2">up to 20</td></tr>
+<tr><td class="border px-4 py-2">DHT22</td><td class="border px-4 py-2">1</td><td class="border px-4 py-2">up to 20</td><td class="border px-4 py-2">up to 20</td></tr>
+</tbody>
+</table>
+<p class="mb-2">DS18B20 is a digital bus addressed by serial number, so several sensors can share one pin. DHT22 has no bus address, so each DHT22 needs its own pin.</p>
+</div>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Action field format</h3>
+<p class="mb-2">The fields <b>Action for Upper Temperature</b>, <b>Action for Lower Temperature</b> (DHT22 also <b>Action for upper H</b> and <b>Action for lower H</b>) hold entries in the <code>${'ID:Action'}</code> format with the <code>${','}</code> separator. The field length is no more than <b>29 characters</b> including the conditions after the ? sign. A counter is shown under the field, and the firmware rejects a longer string as a whole, without truncating it.</p>
+<p class="mb-2">Entry examples: <code>${'6:1'}</code> (pin 6 - ON), <code>${'93:2'}</code> (pin 93 - TOGGLE), <code>${'93.1:0'}</code> (Zigbee slot 93, sub-action 1 - OFF).</p>
+<table class="w-full mb-3 bg-white/70">
+<thead>
+<tr>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">ID length</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Example</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Bytes per entry</th>
+<th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Entries in the string</th>
+</tr>
+</thead>
+<tbody>
+<tr><td class="border px-4 py-2">1 digit</td><td class="border px-4 py-2"><code>${'5:1'}</code></td><td class="border px-4 py-2">3 + comma = 4</td><td class="border px-4 py-2">up to 7</td></tr>
+<tr><td class="border px-4 py-2">2 digits</td><td class="border px-4 py-2"><code>${'15:1'}</code></td><td class="border px-4 py-2">4 + comma = 5</td><td class="border px-4 py-2">up to 6</td></tr>
+<tr><td class="border px-4 py-2">3 digits</td><td class="border px-4 py-2"><code>${'155:1'}</code></td><td class="border px-4 py-2">5 + comma = 6</td><td class="border px-4 py-2">up to 5</td></tr>
+</tbody>
+</table>
+<div class="mt-2 text-slate-700">
+The numbers in the table are valid for entries without conditions.
+</div>
+</div>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Value ranges</h3>
+<ul class="list-disc ml-6 mb-3 space-y-1">
+<li><b>Upper Temperature</b> and <b>Lower Temperature</b> - from -55 to 125 degrees.</li>
+<li><b>Humidity upper limit</b> and <b>Humidity lower limit</b> (DHT22 only) - from 0 to 100 percent.</li>
+<li>Each <b>Action</b> field - up to 29 characters including the condition.</li>
+</ul>
+<h3 class="text-lg font-bold text-black mt-4 mb-2">Not working? Check</h3>
+<ul class="list-disc ml-6 space-y-1">
+<li>Is the <b>On/Off</b> slider in the pin row on: a switched-off pin is ignored entirely.</li>
+<li>Did you reboot the controller after changing the sensor type: sensors on the bus are searched only at boot.</li>
+<li>Is "Count of sensors" zero: check the wiring and the pull-up resistor of about 4.7 kOhm between the data line and +3.3 V.</li>
+<li>Does <b>Action</b> hold the device ID and not the ID of the sensor pin.</li>
+<li>Does the condition give NO: the action is then silently skipped, and the check is made once when the limit is reached. For Sr and Ss the sunrise and sunset times must be set in "Global Settings".</li>
+</ul>
 </div>
 </section>
 </div>
@@ -792,7 +848,7 @@ const TabOneWire = () => {
       showHelp:    'Показать справку',
       hideHelp:    'Скрыть справку',
       title:       'OneWire(s) pin(s)',
-      subtitle:    'Здесь настраиваются датчики температуры (DS18B20) и температуры/влажности (DHT22), подключённые к контроллеру, и действия при выходе показаний за заданные пределы.',
+      subtitle:    'В теплице стало жарко, пока вы были на работе, а вентилятор уже включился сам. Подключите датчик DS18B20 или DHT22, задайте пределы температуры и влажности, и дом сам отреагирует, когда показания выйдут за них.',
       expandHint:  'Нажмите на строку, чтобы посмотреть список датчиков на этом пине',
     },
     en: {
@@ -810,7 +866,7 @@ const TabOneWire = () => {
       showHelp:    'Show Help',
       hideHelp:    'Hide Help',
       title:       'OneWire(s) pin(s)',
-      subtitle:    'Configure temperature (DS18B20) and temperature/humidity (DHT22) sensors connected to the controller, and the actions to run when readings go outside the set limits.',
+      subtitle:    'The greenhouse got hot while you were at work, and the fan has already turned on by itself. Connect a DS18B20 or DHT22 sensor, set the temperature and humidity limits, and the house reacts on its own when readings cross them.',
       expandHint:  'Click the row to see the list of sensors on this pin',
     },
   };

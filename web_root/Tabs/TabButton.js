@@ -203,6 +203,67 @@ const TabButton = () => {
   const helpContent = {
     ru: html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Как подключить кнопку (пошагово)</h2>
+
+          <ol class="list-decimal ml-6 space-y-3">
+            <li>
+              <b>Выберите пин.</b> Откройте страницу <b>"Select pin(s)"</b>, найдите нужный пин
+              (например, <b>PA15</b>), выберите для него режим <b>"BUTTON"</b> и нажмите <b>"Submit"</b>. После этого пин сам появится в таблице на этой странице.
+            </li>
+            <li>
+              <b>Выберите подтяжку</b> (столбец "Pullup type"), нажав <b>Edit</b>:
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>GPIO_PULLUP</b> — если при нажатии кнопка соединяет пин с <b>землёй (GND)</b>. Это самый частый вариант.</li>
+                <li><b>GPIO_PULLDOWN</b> — если при нажатии кнопка соединяет пин с <b>плюсом питания (3.3V)</b>.</li>
+              </ul>
+              Не уверены — начните с GPIO_PULLUP. Если кнопка срабатывает сама или не срабатывает вообще, попробуйте другой вариант.
+            </li>
+            <li>
+              <b>Скажите, что делать.</b> В полях <b>SINGLE CLICK</b> (одно нажатие), <b>DOUBLE CLICK</b>
+              (два быстрых нажатия) и <b>LONG PRESS</b> (удержание) впишите, каким устройством управлять.
+              Пишется так: <b>ID устройства, двоеточие, команда</b>. Без пробелов!
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>1</b> — включить</li>
+                <li><b>0</b> — выключить</li>
+                <li><b>2</b> — переключить (было выключено — включится, было включено — выключится; это TOGGLE)</li>
+              </ul>
+            </li>
+            <li>
+              <b>Включите ползунок On/Off</b> в строке кнопки. Если он выключен, кнопка будет проигнорирована.
+            </li>
+            <li>
+              <b>Проверьте:</b> нажмите физическую кнопку — устройство должно сработать.
+            </li>
+          </ol>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Как это работает:</b> кнопка распознаёт три жеста: одно нажатие (SINGLE CLICK), два быстрых нажатия подряд (DOUBLE CLICK)
+            и удержание (LONG PRESS). На каждый жест можно повесить своё действие или оставить поле пустым. Дребезг контактов прошивка отсеивает сама.
+          </div>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Важно:</b> в полях действий пишется <b>ID устройства, которым вы хотите управлять</b>
+            (светодиод, реле, Zigbee-устройство), а <b>не</b> ID самой кнопки.
+          </div>
+
+          <div class="mt-4">
+            <b>Пример.</b> Кнопка подключена к пину <b>PA15</b>. На плате есть светодиоды:
+            <ul class="list-disc ml-6 mt-1">
+              <li><b>ID = 6</b> — зелёный светодиод</li>
+              <li><b>ID = 12</b> — синий светодиод</li>
+              <li><b>ID = 18</b> — красный светодиод</li>
+            </ul>
+            <div class="mt-2">Хотим, чтобы:</div>
+            <ul class="list-disc ml-6 mt-1">
+              <li>одно нажатие — переключало зелёный светодиод: в SINGLE CLICK пишем <code>6:2</code></li>
+              <li>двойное нажатие — включало синий светодиод: в DOUBLE CLICK пишем <code>12:1</code></li>
+              <li>долгое нажатие — выключало все три светодиода: в LONG PRESS пишем <code>6:0,12:0,18:0</code></li>
+            </ul>
+            Чтобы управлять несколькими устройствами сразу, перечислите их через запятую:
+            <code>6:1,12:1,18:0</code> (включить зелёный и синий, выключить красный).
+          </div>
+        </section>
         <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Управление по SMS и DTMF</h2>
 <div><h4 class="text-lg font-bold text-black mt-4 mb-2">Рубильник On/Off по SMS и DTMF</h4><p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Действие</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Отключить строку (ползунок Off)</td><td class="border px-3 py-1"><code>5#00*</code></td><td class="border px-3 py-1"><code>5#00*#</code></td></tr><tr><td class="border px-3 py-1">Включить строку (ползунок On)</td><td class="border px-3 py-1"><code>5#11*</code></td><td class="border px-3 py-1"><code>5#11*#</code></td></tr></tbody></table><p class="mb-2">В таблице ID = 5 - это пример, подставьте ID своей строки.</p><p class="mb-2">Несколько команд подряд: <code>5#00*7#11*</code> (SMS) и <code>5#00*7#11*#</code> (звонок). Ввод во время звонка всегда завершается символами <code>*#</code>: последняя команда уже заканчивается на <code>*</code>, поэтому в конце добавляется только <code>#</code>.</p><p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p><p class="mb-2">В ответ приходит SMS-отчёт, например <code>OnOff: Pin5=OFF</code> (отчёт отправляется, только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.</p><p class="mb-2">Не путайте: <code>ID#SC*</code>, <code>ID#DC*</code> и <code>ID#LP*</code> - это нажатие кнопки (клик, двойной клик, долгое нажатие), а <code>ID#00*</code> и <code>ID#11*</code> - ползунок On/Off. Пока ползунок Off, клики этой кнопки блокируются.</p></div>
@@ -263,62 +324,6 @@ const TabButton = () => {
             Примечание: При желании, вы можете использовать цифровые команды (30#3*#, 30#4*#, 30#5*#) в том числе и в SMS-сообщениях.
           </div>
         </div>
-        </section>
-        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">Как подключить кнопку (пошагово)</h2>
-
-          <ol class="list-decimal ml-6 space-y-3">
-            <li>
-              <b>Выберите пин.</b> Откройте страницу <b>"Select pin(s)"</b>, найдите нужный пин
-              (например, <b>PA15</b>), выберите для него режим <b>"BUTTON"</b> и нажмите <b>"Submit"</b>. После этого пин сам появится в таблице на этой странице.
-            </li>
-            <li>
-              <b>Выберите подтяжку</b> (столбец "Pullup type"), нажав <b>Edit</b>:
-              <ul class="list-disc ml-6 mt-1">
-                <li><b>GPIO_PULLUP</b> — если при нажатии кнопка соединяет пин с <b>землёй (GND)</b>. Это самый частый вариант.</li>
-                <li><b>GPIO_PULLDOWN</b> — если при нажатии кнопка соединяет пин с <b>плюсом питания (3.3V)</b>.</li>
-              </ul>
-              Не уверены — начните с GPIO_PULLUP. Если кнопка срабатывает сама или не срабатывает вообще, попробуйте другой вариант.
-            </li>
-            <li>
-              <b>Скажите, что делать.</b> В полях <b>SINGLE CLICK</b> (одно нажатие), <b>DOUBLE CLICK</b>
-              (два быстрых нажатия) и <b>LONG PRESS</b> (удержание) впишите, каким устройством управлять.
-              Пишется так: <b>ID устройства, двоеточие, команда</b>. Без пробелов!
-              <ul class="list-disc ml-6 mt-1">
-                <li><b>1</b> — включить</li>
-                <li><b>0</b> — выключить</li>
-                <li><b>2</b> — переключить (было выключено — включится, было включено — выключится; это TOGGLE)</li>
-              </ul>
-            </li>
-            <li>
-              <b>Включите ползунок On/Off</b> в строке кнопки. Если он выключен, кнопка будет проигнорирована.
-            </li>
-            <li>
-              <b>Проверьте:</b> нажмите физическую кнопку — устройство должно сработать.
-            </li>
-          </ol>
-
-          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
-            <b>Важно:</b> в полях действий пишется <b>ID устройства, которым вы хотите управлять</b>
-            (светодиод, реле, Zigbee-устройство), а <b>не</b> ID самой кнопки.
-          </div>
-
-          <div class="mt-4">
-            <b>Пример.</b> Кнопка подключена к пину <b>PA15</b>. На плате есть светодиоды:
-            <ul class="list-disc ml-6 mt-1">
-              <li><b>ID = 6</b> — зелёный светодиод</li>
-              <li><b>ID = 12</b> — синий светодиод</li>
-              <li><b>ID = 18</b> — красный светодиод</li>
-            </ul>
-            <div class="mt-2">Хотим, чтобы:</div>
-            <ul class="list-disc ml-6 mt-1">
-              <li>одно нажатие — переключало зелёный светодиод: в SINGLE CLICK пишем <code>6:2</code></li>
-              <li>двойное нажатие — включало синий светодиод: в DOUBLE CLICK пишем <code>12:1</code></li>
-              <li>долгое нажатие — выключало все три светодиода: в LONG PRESS пишем <code>6:0,12:0,18:0</code></li>
-            </ul>
-            Чтобы управлять несколькими устройствами сразу, перечислите их через запятую:
-            <code>6:1,12:1,18:0</code> (включить зелёный и синий, выключить красный).
-          </div>
         </section>
         <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Управление по API (локальная сеть)</h2>
@@ -476,10 +481,10 @@ const TabButton = () => {
           <p class="mb-3">Общий вид: <code>${'ID:команда?условие'}</code>. Команда: <b>0</b> - выключить, <b>1</b> - включить, <b>2</b> - переключить на противоположное. Несколько действий пишутся через запятую, и у каждого может быть своё условие или не быть никакого.</p>
 
           <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-            <p class="text-lg font-bold text-black mb-1">Пример из жизни</p>
-            <p class="mb-1">Кнопка на стене управляет светом (пин 6) и вентилятором (пин 7, он подключён к устройство 7). Хотим, чтобы одно нажатие включало свет, а вентилятор включало только если он ещё выключен.</p>
-            <p class="mb-1">В поле SINGLE CLICK пишем: <code>${'6:1,7:1?!D7'}</code></p>
-            <p>Результат: свет включается всегда. Вентилятор включается, только если он сейчас выключен (!D7). Если вентилятор уже работает - эта часть просто пропускается.</p>
+            <p class="text-lg font-bold text-black mb-1">Пример из жизни: малыш и кнопка обогревателя</p>
+            <p class="mb-1">Малыш обожает нажимать все кнопки подряд. Кнопка обогревателя в гостиной - не исключение, а на улице +30. Перегрев? Только не в этом доме.</p>
+            <p class="mb-1">Спокойно! В поле SINGLE CLICK пишем <code>${'9:1?T5<18'}</code>: обогреватель (устройство 9) включится, только если датчик 5 показывает ниже 18 градусов.</p>
+            <p class="mb-1">Результат: в жару нажатие тихо игнорируется, в холод обогреватель включается. Условие проверяется в момент нажатия.</p>
           </div>
 
           <h4 class="text-lg font-bold text-black mt-4 mb-2">Из чего строится условие (слова)</h4>
@@ -601,10 +606,99 @@ const TabButton = () => {
           </ul>
         </div>
         </section>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Примеры из жизни: что на самом деле умеет эта страница</h2>
+          <p class="mb-2">Четыре истории о том, как одна кнопка превращается в пульт управления домом.</p>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Руки заняты, а свет горит везде</p>
+            <p class="mb-1">Утро, вы опаздываете. В одной руке чемодан, в другой пакет с завтраком, ключи уже в двери. И тут понимаете: свет горит во всех комнатах. Возвращаться - потерять десять минут и нервы.</p>
+            <p class="mb-1">Спокойно! В поле LONG PRESS кнопки у двери записано <code>${'6:0,12:0,18:0,93:0'}</code> (три лампы и Zigbee-лампа 93). Удержали кнопку локтем - и Zagotovka-M гасит всё сразу. Пакет не уронили.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Одна кнопка у кровати - три сценария</p>
+            <p class="mb-1">Вы почти уснули, и тут вспоминаете: лампа ещё горит, а вставать совсем не хочется.</p>
+            <p class="mb-1">Спокойно! Кнопка у кровати знает три жеста. SINGLE CLICK <code>${'6:2'}</code> - переключает лампу. DOUBLE CLICK <code>${'12:1,6:0'}</code> - гасит лампу и включает мягкий ночник. LONG PRESS <code>${'6:0,12:0,18:0'}</code> - гасит всё. Один палец, три сценария.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Звонит сосед: «У вас во всех окнах свет!»</p>
+            <p class="mb-1">Вы в отпуске за тысячу километров. Звонит сосед: «У вас в каждом окне горит свет, всё в порядке?» Сердце ёкает...</p>
+            <p class="mb-1">Спокойно! Отправьте SMS <code>${'30#LP*#'}</code> (с номера, указанного в настройках SIM800L), где 30 - кнопка у двери. Zagotovka-M выполнит её LONG PRESS, «выключить всё», как будто вы держите кнопку в прихожей. То же умеют API (long_press) и MQTT.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Бабушка стесняется звать на помощь</p>
+            <p class="mb-1">Бабушка живёт одна и не хочет вас беспокоить. А вам по ночам не спится: вдруг ей станет плохо?</p>
+            <p class="mb-1">Спокойно! Поставьте кнопку у её кровати. Долгое нажатие (LONG PRESS <code>${'6:1'}</code>) включает свет в коридоре, а Zagotovka-M сама отправляет событие кнопки по MQTT в топик <b>Swarm/button/</b> (где Swarm - ваш 'TX topic'). Подключите топик к серверу умного дома или MQTT-приложению на телефоне - и вы узнаете о нажатии сразу, даже из другого города.</p>
+          </div>
+        </section>
       </div>
     `,
     en: html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
+        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">How to connect a button (step by step)</h2>
+
+          <ol class="list-decimal ml-6 space-y-3">
+            <li>
+              <b>Choose a pin.</b> Open the <b>"Select pin(s)"</b> page, find the pin you need
+              (for example, <b>PA15</b>), set its mode to <b>"BUTTON"</b> and press <b>"Submit"</b>. After that the pin appears in the table on this page by itself.
+            </li>
+            <li>
+              <b>Choose the pull type</b> ("Pullup type" column) by pressing <b>Edit</b>:
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>GPIO_PULLUP</b> — if pressing the button connects the pin to <b>ground (GND)</b>. This is the most common case.</li>
+                <li><b>GPIO_PULLDOWN</b> — if pressing the button connects the pin to <b>the supply voltage (3.3V)</b>.</li>
+              </ul>
+              Not sure? Start with GPIO_PULLUP. If the button triggers by itself or does not trigger at all, try the other option.
+            </li>
+            <li>
+              <b>Tell it what to do.</b> In the <b>SINGLE CLICK</b> (one press), <b>DOUBLE CLICK</b>
+              (two quick presses) and <b>LONG PRESS</b> (hold) fields, write which device to control.
+              Format: <b>device ID, colon, command</b>. No spaces!
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>1</b> — turn on</li>
+                <li><b>0</b> — turn off</li>
+                <li><b>2</b> — toggle (if it was off it turns on, if it was on it turns off; this is TOGGLE)</li>
+              </ul>
+            </li>
+            <li>
+              <b>Turn on the On/Off slider</b> in the button's row. If it is off, the button is ignored.
+            </li>
+            <li>
+              <b>Test it:</b> press the physical button — the device should react.
+            </li>
+          </ol>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>How it works:</b> the button recognizes three gestures: a single press (SINGLE CLICK), two quick presses in a row (DOUBLE CLICK)
+            and a hold (LONG PRESS). Each gesture can have its own action, or the field can stay empty. The firmware filters out contact bounce by itself.
+          </div>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Important:</b> the action fields take the <b>ID of the device you want to control</b>
+            (LED, relay, Zigbee device), <b>not</b> the ID of the button itself.
+          </div>
+
+          <div class="mt-4">
+            <b>Example.</b> A button is connected to pin <b>PA15</b>. The board has these LEDs:
+            <ul class="list-disc ml-6 mt-1">
+              <li><b>ID = 6</b> — green LED</li>
+              <li><b>ID = 12</b> — blue LED</li>
+              <li><b>ID = 18</b> — red LED</li>
+            </ul>
+            <div class="mt-2">We want:</div>
+            <ul class="list-disc ml-6 mt-1">
+              <li>one press to toggle the green LED: in SINGLE CLICK write <code>6:2</code></li>
+              <li>a double press to turn the blue LED on: in DOUBLE CLICK write <code>12:1</code></li>
+              <li>a long press to turn all three LEDs off: in LONG PRESS write <code>6:0,12:0,18:0</code></li>
+            </ul>
+            To control several devices at once, list them separated by commas:
+            <code>6:1,12:1,18:0</code> (turn on green and blue, turn off red).
+          </div>
+        </section>
         <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Control by SMS and DTMF</h2>
 <div><h4 class="text-lg font-bold text-black mt-4 mb-2">On/Off switch by SMS and DTMF</h4><p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Action</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (during a call)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Turn the row off (slider Off)</td><td class="border px-3 py-1"><code>5#00*</code></td><td class="border px-3 py-1"><code>5#00*#</code></td></tr><tr><td class="border px-3 py-1">Turn the row on (slider On)</td><td class="border px-3 py-1"><code>5#11*</code></td><td class="border px-3 py-1"><code>5#11*#</code></td></tr></tbody></table><p class="mb-2">In the table ID = 5 is an example, use the ID of your own row.</p><p class="mb-2">Several commands in a row: <code>5#00*7#11*</code> (SMS) and <code>5#00*7#11*#</code> (call). Input during a call always ends with <code>*#</code>: the last command already ends with <code>*</code>, so only <code>#</code> is added at the end.</p><p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p><p class="mb-2">An SMS report is sent back, for example <code>OnOff: Pin5=OFF</code> (the report is sent only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.</p><p class="mb-2">Do not confuse them: <code>ID#SC*</code>, <code>ID#DC*</code> and <code>ID#LP*</code> press the button (click, double click, long press), while <code>ID#00*</code> and <code>ID#11*</code> change the On/Off slider. While the slider is Off, clicks of this button are blocked.</p></div>
@@ -665,62 +759,6 @@ const TabButton = () => {
             Note: You can also use the digital commands (30#3*#, 30#4*#, 30#5*#) natively via SMS.
           </div>
         </div>
-        </section>
-        <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">How to connect a button (step by step)</h2>
-
-          <ol class="list-decimal ml-6 space-y-3">
-            <li>
-              <b>Choose a pin.</b> Open the <b>"Select pin(s)"</b> page, find the pin you need
-              (for example, <b>PA15</b>), set its mode to <b>"BUTTON"</b> and press <b>"Submit"</b>. After that the pin appears in the table on this page by itself.
-            </li>
-            <li>
-              <b>Choose the pull type</b> ("Pullup type" column) by pressing <b>Edit</b>:
-              <ul class="list-disc ml-6 mt-1">
-                <li><b>GPIO_PULLUP</b> — if pressing the button connects the pin to <b>ground (GND)</b>. This is the most common case.</li>
-                <li><b>GPIO_PULLDOWN</b> — if pressing the button connects the pin to <b>the supply voltage (3.3V)</b>.</li>
-              </ul>
-              Not sure? Start with GPIO_PULLUP. If the button triggers by itself or does not trigger at all, try the other option.
-            </li>
-            <li>
-              <b>Tell it what to do.</b> In the <b>SINGLE CLICK</b> (one press), <b>DOUBLE CLICK</b>
-              (two quick presses) and <b>LONG PRESS</b> (hold) fields, write which device to control.
-              Format: <b>device ID, colon, command</b>. No spaces!
-              <ul class="list-disc ml-6 mt-1">
-                <li><b>1</b> — turn on</li>
-                <li><b>0</b> — turn off</li>
-                <li><b>2</b> — toggle (if it was off it turns on, if it was on it turns off; this is TOGGLE)</li>
-              </ul>
-            </li>
-            <li>
-              <b>Turn on the On/Off slider</b> in the button's row. If it is off, the button is ignored.
-            </li>
-            <li>
-              <b>Test it:</b> press the physical button — the device should react.
-            </li>
-          </ol>
-
-          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
-            <b>Important:</b> the action fields take the <b>ID of the device you want to control</b>
-            (LED, relay, Zigbee device), <b>not</b> the ID of the button itself.
-          </div>
-
-          <div class="mt-4">
-            <b>Example.</b> A button is connected to pin <b>PA15</b>. The board has these LEDs:
-            <ul class="list-disc ml-6 mt-1">
-              <li><b>ID = 6</b> — green LED</li>
-              <li><b>ID = 12</b> — blue LED</li>
-              <li><b>ID = 18</b> — red LED</li>
-            </ul>
-            <div class="mt-2">We want:</div>
-            <ul class="list-disc ml-6 mt-1">
-              <li>one press to toggle the green LED: in SINGLE CLICK write <code>6:2</code></li>
-              <li>a double press to turn the blue LED on: in DOUBLE CLICK write <code>12:1</code></li>
-              <li>a long press to turn all three LEDs off: in LONG PRESS write <code>6:0,12:0,18:0</code></li>
-            </ul>
-            To control several devices at once, list them separated by commas:
-            <code>6:1,12:1,18:0</code> (turn on green and blue, turn off red).
-          </div>
         </section>
         <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">API control (local network)</h2>
@@ -877,10 +915,10 @@ const TabButton = () => {
           <p class="mb-3">General form: <code>${'ID:command?condition'}</code>. Command: <b>0</b> - turn off, <b>1</b> - turn on, <b>2</b> - toggle to the opposite. Several actions are separated by commas, and each one may have its own condition or none at all.</p>
 
           <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-            <p class="text-lg font-bold text-black mb-1">Real-life example</p>
-            <p class="mb-1">A wall button controls a light (pin 6) and a fan (pin 7, connected to device 7). We want one press to turn the light on, and to turn the fan on only if it is still off.</p>
-            <p class="mb-1">In the SINGLE CLICK field type: <code>${'6:1,7:1?!D7'}</code></p>
-            <p>Result: the light always turns on. The fan turns on only if it is off right now (!D7). If the fan is already running, that part is simply skipped.</p>
+            <p class="text-lg font-bold text-black mb-1">Real-life example: a toddler and the heater button</p>
+            <p class="mb-1">A toddler loves pressing every button. The heater button in the living room is no exception, and it is +30 outside. Overheating? Not in this house.</p>
+            <p class="mb-1">Calm down! In the SINGLE CLICK field type <code>${'9:1?T5<18'}</code>: the heater (device 9) turns on only if sensor 5 shows below 18 degrees.</p>
+            <p class="mb-1">Result: in the heat the press is quietly ignored, in the cold the heater turns on. The condition is checked at the moment of the press.</p>
           </div>
 
           <h4 class="text-lg font-bold text-black mt-4 mb-2">Building blocks (words)</h4>
@@ -1002,6 +1040,34 @@ const TabButton = () => {
           </ul>
         </div>
         </section>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Real-life examples: what this page can really do</h2>
+          <p class="mb-2">Four stories about how one button turns into a remote control for your home.</p>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Hands full, and the lights are on everywhere</p>
+            <p class="mb-1">Morning, you are late. A suitcase in one hand, a bag with breakfast in the other, the keys already in the door. And then you realize: the lights are on in every room. Going back means losing ten minutes and your nerves.</p>
+            <p class="mb-1">Calm down! The LONG PRESS field of the button by the door contains <code>${'6:0,12:0,18:0,93:0'}</code> (three lamps and the Zigbee lamp 93). Hold the button with your elbow - and Zagotovka-M turns everything off at once. The bag stays in your hand.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">One bedside button - three scenarios</p>
+            <p class="mb-1">You are almost asleep, and then you remember: the lamp is still on, and you really do not want to get up.</p>
+            <p class="mb-1">Calm down! The bedside button knows three gestures. SINGLE CLICK <code>${'6:2'}</code> toggles the lamp. DOUBLE CLICK <code>${'12:1,6:0'}</code> turns the lamp off and a soft night light on. LONG PRESS <code>${'6:0,12:0,18:0'}</code> turns everything off. One finger, three scenarios.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">The neighbor calls: "Every window of yours is lit!"</p>
+            <p class="mb-1">You are on vacation a thousand kilometers away. The neighbor calls: "The lights are on in every window of your house, is everything all right?" Your heart skips a beat...</p>
+            <p class="mb-1">Calm down! Send an SMS <code>${'30#LP*#'}</code> (from the number set in the SIM800L settings), where 30 is the button by the door. Zagotovka-M runs its LONG PRESS, "turn everything off", as if you were holding the button in your hallway. API (long_press) and MQTT can do the same.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
+            <p class="text-lg font-bold text-black mb-1">Grandma is too shy to ask for help</p>
+            <p class="mb-1">Grandma lives alone and does not want to bother you. And you cannot sleep at night: what if she feels unwell?</p>
+            <p class="mb-1">Calm down! Put a button by her bed. A long press (LONG PRESS <code>${'6:1'}</code>) turns on the hallway light, and Zagotovka-M itself sends the button event via MQTT to the topic <b>Swarm/button/</b> (where Swarm is your 'TX topic'). Connect the topic to a smart-home server or an MQTT app on your phone - and you learn about the press right away, even from another city.</p>
+          </div>
+        </section>
       </div>
     `,
   };
@@ -1105,7 +1171,7 @@ const TabButton = () => {
         <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           Button(s) pin(s)
         </div>
-        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь настраиваются кнопки: что произойдёт при одном нажатии, при двойном и при удержании, например включится свет или отопление.' : 'Set up buttons: what happens on a single press, a double press and a long press, for example the light or the heating turns on.'}</p>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Утро, вы опаздываете, руки заняты — одно долгое нажатие кнопки, и весь дом выключен! А вечером двойное нажатие встретит вас светом и теплом. Три жеста одной кнопки — три сценария вашей жизни!' : 'Morning, you are late, your hands are full - one long press of a button and the whole house is off! In the evening a double press greets you with light and warmth. Three gestures of one button - three scenarios of your life!'}</p>
 
         <div class="flex-grow flex flex-col justify-center items-center w-full">
           <div class="w-full">

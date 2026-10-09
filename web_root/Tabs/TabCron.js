@@ -168,11 +168,63 @@ function TabCron({ }) {
   const helpContent = {
     ru: html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
-        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">Управление по SMS и DTMF</h2>
-          <div><h4 class="text-lg font-bold text-black mt-4 mb-2">Рубильник On/Off по SMS и DTMF</h4><p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - число из колонки ID нужной строки.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Действие</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Отключить строку (ползунок Off)</td><td class="border px-3 py-1"><code>5#33*</code></td><td class="border px-3 py-1"><code>5#33*#</code></td></tr><tr><td class="border px-3 py-1">Включить строку (ползунок On)</td><td class="border px-3 py-1"><code>5#44*</code></td><td class="border px-3 py-1"><code>5#44*#</code></td></tr></tbody></table><p class="mb-2">В таблице ID = 5 - это пример, подставьте ID своей строки.</p><p class="mb-2">Несколько команд подряд: <code>5#33*7#44*</code> (SMS) и <code>5#33*7#44*#</code> (звонок). Ввод во время звонка всегда завершается символами <code>*#</code>: последняя команда уже заканчивается на <code>*</code>, поэтому в конце добавляется только <code>#</code>.</p><p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p><p class="mb-2">В ответ приходит SMS-отчёт, например <code>OnOff: Cron5=OFF</code> (отчёт отправляется, только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.</p><p class="mb-2">Нумерация строк Cron в колонке ID начинается с 0. Доступны только строки, видимые на странице (в пределах заданного количества строк).</p></div>
-        </section>
         <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Как подключить таймер (пошагово)</h2>
+
+          <ol class="list-decimal ml-6 space-y-3">
+            <li>
+              <b>Найдите свободную строку.</b> На странице <b>Timer(s)</b> найдите строку с пустыми полями <b>Cron</b> и <b>Script</b>.
+              Если строк не хватает, нажмите зелёную кнопку <b>+</b> под таблицей (подсказка «Добавить таймер»): появится ещё одна строка. Красная кнопка <b>-</b> убирает последнюю строку.
+            </li>
+            <li>
+              <b>Нажмите Edit</b> в колонке <b>Action</b> нужной строки. Откроется окно <b>Edit Timer(s)</b>.
+            </li>
+            <li>
+              <b>Задайте время.</b> В поле <b>Cron</b> впишите семь полей через пробел: секунда, минута, час, день месяца, месяц, день недели, год.
+              Например, <code>${'0 0 18 * * * *'}</code> - каждый день ровно в 18:00:00. Звёздочка означает «любое значение».
+            </li>
+            <li>
+              <b>Скажите, что делать.</b> В поле <b>Script</b> впишите <b>ID устройства, двоеточие, команду</b>, без пробелов: <code>${'18:1'}</code>.
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>1</b> - включить, <b>0</b> - выключить, <b>2</b> - переключить (TOGGLE)</li>
+                <li>Несколько действий пишутся через запятую, пауза - это <b>p</b> и секунды: <code>${'18:1,p600,18:0'}</code> - включить и через 10 минут выключить</li>
+              </ul>
+            </li>
+            <li>
+              <b>Назовите и включите.</b> В поле <b>INFO</b> напишите название (до 30 символов, например «Свет на крыльце»), включите ползунок <b>On/Off</b> и нажмите <b>Save changes</b>.
+              Если ползунок выключен, строка будет проигнорирована целиком.
+            </li>
+            <li>
+              <b>Проверьте.</b> Задайте ближайшую минуту: если сейчас 14:07, впишите <code>${'0 8 14 * * * *'}</code>, и через минуту устройство должно сработать. Потом верните нужное расписание.
+            </li>
+          </ol>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Как это работает:</b> прошивка сверяет текущее время с полем <b>Cron</b> каждой включённой строки. Когда время совпало, она выполняет <b>Script</b> слева направо:
+            действия идут по очереди, а пауза <b>p</b> задерживает всё, что стоит после неё. Строки с выключенным <b>On/Off</b> пропускаются.
+          </div>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Важно:</b> в поле <b>Script</b> пишется <b>ID устройства, которым вы управляете</b> (светодиод, реле, Zigbee-устройство), а <b>не</b> номер самой строки таймера из колонки <b>No</b>.
+          </div>
+
+          <div class="mt-4">
+            <b>Пример.</b> На плате есть светодиоды (ID условные, подставьте свои):
+            <ul class="list-disc ml-6 mt-1">
+              <li><b>ID = 6</b> - зелёный светодиод</li>
+              <li><b>ID = 12</b> - синий светодиод</li>
+              <li><b>ID = 18</b> - красный светодиод</li>
+            </ul>
+            <div class="mt-2">Хотим, чтобы:</div>
+            <ul class="list-disc ml-6 mt-1">
+              <li>каждый день в 18:00 зелёный светодиод горел 10 секунд: в <b>Cron</b> пишем <code>${'0 0 18 * * * *'}</code>, в <b>Script</b> пишем <code>${'6:1,p10,6:0'}</code></li>
+              <li>по будням в 7:00 включался синий: <b>Cron</b> <code>${'0 0 7 * * 1-5 *'}</code>, <b>Script</b> <code>${'12:1'}</code></li>
+              <li>каждую субботу в полночь выключались все три: <b>Cron</b> <code>${'0 0 0 * * 6 *'}</code>, <b>Script</b> <code>${'6:0,12:0,18:0'}</code></li>
+            </ul>
+            Каждое расписание - отдельная строка таймера.
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Формат CRON</h2>
           <p>Шаблон Cron состоит из семи полей, разделённых пробелами. Длина поля Cron - до 34 символов.</p>
         <div>
@@ -396,6 +448,27 @@ function TabCron({ }) {
           </table>
         </div>
         </section>
+        <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Управление: SMS, DTMF и MQTT</h2>
+          <div><h4 class="text-lg font-bold text-black mt-4 mb-2">Рубильник On/Off по SMS и DTMF</h4><p class="mb-2">Ползунок On/Off любой строки этой страницы можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды одинаков на всех страницах: <b>ID#КОД*</b>, где ID - номер строки из колонки <b>No</b> (в окне <b>Edit Timer(s)</b> это поле ID).</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Действие</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (во время звонка)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Отключить строку (ползунок Off)</td><td class="border px-3 py-1"><code>5#33*</code></td><td class="border px-3 py-1"><code>5#33*#</code></td></tr><tr><td class="border px-3 py-1">Включить строку (ползунок On)</td><td class="border px-3 py-1"><code>5#44*</code></td><td class="border px-3 py-1"><code>5#44*#</code></td></tr></tbody></table><p class="mb-2">В таблице ID = 5 - это пример, подставьте ID своей строки.</p><p class="mb-2">Несколько команд подряд: <code>5#33*7#44*</code> (SMS) и <code>5#33*7#44*#</code> (звонок). Ввод во время звонка всегда завершается символами <code>*#</code>: последняя команда уже заканчивается на <code>*</code>, поэтому в конце добавляется только <code>#</code>.</p><p class="mb-2">Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (выкл) и <b>11</b> (вкл); Cron - <b>33</b> и <b>44</b>; PID - <b>55</b> и <b>66</b>.</p><p class="mb-2">В ответ приходит SMS-отчёт, например <code>OnOff: Cron5=OFF</code>. Он подтверждает, что команда выполнена и ползунок строки переключён; работу самого таймера он не проверяет. Отчёт отправляется, только если включён общий ползунок SIM800L. Неверные команды попадают в список Invld pins/cmd.</p><p class="mb-2">Нумерация строк в колонке <b>No</b> начинается с 0. Доступны только строки, видимые на странице (в пределах заданного количества строк).</p></div>
+        <div>
+          <h3 class="text-lg font-bold text-black mt-4 mb-2">MQTT: отслеживание изменений</h3>
+          <table class="w-full bg-white/70">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Топик</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Описание</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="border px-4 py-2 whitespace-nowrap font-semibold">Swarm/timer/</td>
+                <td class="border px-4 py-2">Данная страница отслеживает изменения таймеров и автоматически отправляет каждое изменение по MQTT на топик: Swarm/timer/. Где "Swarm" это Ваш 'TX topic'.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        </section>
         <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">${condHelpTitle(true)}</h2>
           <div class="space-y-3">
@@ -411,21 +484,6 @@ function TabCron({ }) {
           </ol>
           <p class="mb-3">Общий вид: <code>${'ID:команда?условие'}</code>. Команда: <b>0</b> - выключить, <b>1</b> - включить, <b>2</b> - переключить на противоположное. Несколько действий пишутся через <b>запятую</b> (не через точку с запятой и без пробелов), и у каждого может быть своё условие или не быть никакого. Время срабатывания по-прежнему задаётся в поле <b>Cron</b>, условие его не заменяет.</p>
 
-          <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-            <p class="font-bold mb-1">Пример из жизни: свет в саду</p>
-            <p class="mb-1">Хотим, чтобы каждый день в 18:00 включался садовый светильник (пин 18). Но летом в 18:00 ещё светло, и лампа горела бы зря. Поэтому добавляем условие «только если уже темно».</p>
-            <p class="mb-1">В поле Cron пишем: <code>${'0 0 18 * * * *'}</code></p>
-            <p class="mb-1">В поле Script пишем: <code>${'18:1?Ss'}</code></p>
-            <p>Результат: зимой, когда в 18:00 уже темно (Ss), свет включится. Летом, когда ещё светло, действие будет пропущено. Чтобы Sr и Ss работали, на странице «Global Settings» должно быть настроено время восхода и заката.</p>
-          </div>
-
-          <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-            <p class="font-bold mb-1">Пример из жизни: обогреватель сам следит за температурой</p>
-            <p class="mb-1">Берём две строки таймера, обе срабатывают каждую минуту (Cron: <code>${'0 * * * * * *'}</code>).</p>
-            <p class="mb-1">Первая строка, Script: <code>${'7:1?T5<18'}</code> - если на датчике 5 холоднее 18 градусов, включить обогреватель (пин 7).</p>
-            <p class="mb-1">Вторая строка, Script: <code>${'7:0?T5>22'}</code> - если теплее 22 градусов, выключить обогреватель.</p>
-            <p>Результат: таймер каждую минуту «смотрит» на температуру и сам включает и выключает обогреватель. Между 18 и 22 градусами ничего не происходит. Для таких частых таймеров используйте команды 0 и 1, а команду 2 (переключить) не используйте: она будет переключать устройство при каждом срабатывании.</p>
-          </div>
 
           <h4 class="text-lg font-bold text-black mt-4 mb-2">Из чего строится условие (слова)</h4>
           <p class="mb-2">Число после буквы - это <b>ID</b> устройства из таблицы на соответствующей странице.</p>
@@ -565,6 +623,7 @@ function TabCron({ }) {
           <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700 mb-3">Не ставьте знак ? на паузу. Запись <code>${'p600?D2'}</code> неверна: если условие даст НЕТ, пауза не запустится, и все действия после неё выполнятся сразу. Условия пишите только на действиях.</p>
           <ul class="list-disc ml-6 mb-3 space-y-1">
             <li><b>Условие проверяется в момент срабатывания таймера</b> (по полю Cron) и для каждого действия отдельно. Если в этот момент было НЕТ - действие пропущено. Когда условие потом станет ДА, само по себе ничего не произойдёт: нужно дождаться следующего срабатывания таймера. Если условие нужно проверять почти постоянно, сделайте таймер частым, например каждую минуту (<code>${'0 * * * * * *'}</code>).</li>
+            <li><b>Условие проверяется для любой команды, в том числе для выключения.</b> Запись <code>${'7:0?T5>22'}</code> не выключит обогреватель, пока условие даёт НЕТ.</li>
             <li><b>Для действий после паузы</b> условие проверяется в момент окончания паузы, а не в момент старта таймера.</li>
             <li><b>Главный ползунок On/Off в строке таймера</b> сильнее любого условия: если он выключен, таймер игнорируется целиком.</li>
             <li><b>Условие работает только в поле Script.</b> Прямое управление устройством (ползунок On/Off у самого реле, команда API или MQTT прямо на реле) условия не проверяет.</li>
@@ -579,35 +638,122 @@ function TabCron({ }) {
           </ul>
           </div>
         </section>
-        <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">MQTT: отслеживание изменений</h2>
-        <div>
-          <h3 class="text-lg font-bold text-black mb-2">Swarm/timer/</h3>
-          <table class="w-full bg-white/70">
-            <thead>
-              <tr>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Топик</th>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Описание</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="border px-4 py-2 whitespace-nowrap font-semibold">Swarm/timer/</td>
-                <td class="border px-4 py-2">Данная страница отслеживает изменения таймеров и автоматически отправляет каждое изменение по MQTT на топик: Swarm/timer/. Где "Swarm" это Ваш 'TX topic'.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Примеры из жизни</h2>
+          <p class="text-slate-600 italic mb-2">Все ID, пины и номера в примерах условные: подставьте свои.</p>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+            <h3 class="text-lg font-bold text-black mb-2">Лампа горит среди бела дня</h3>
+            <p class="mb-1">Лето, вы вернулись с работы в семь вечера, а садовая лампа уже час жжёт электричество при ярком солнце. Обидно, правда?</p>
+            <p class="mb-1"><b>Спокойно!</b> Скажите таймеру: «включи, но только если уже стемнело».</p>
+            <p class="mb-1">В поле <b>Cron</b>: <code>${'0 0 18 * * * *'}</code></p>
+            <p class="mb-1">В поле <b>Script</b>: <code>${'18:1?Ss'}</code></p>
+            <p>Результат: зимой в 18:00 уже темно, и лампа (пин 18) включится; летом действие будет пропущено. Чтобы Sr и Ss работали, на странице «Global Settings» должно быть настроено время восхода и заката. Повторите у себя, подставив ID своей лампы.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+            <h3 class="text-lg font-bold text-black mb-2">Дом выстыл, пока вас не было</h3>
+            <p class="mb-1">Вы пришли домой, а в комнате холодно, как в погребе. Обогреватель включить забыли, и настроение ниже плинтуса.</p>
+            <p class="mb-1"><b>Спокойно!</b> Две строки таймера сами следят за температурой. В обеих строках в поле <b>Cron</b>: <code>${'0 * * * * * *'}</code> (каждую минуту).</p>
+            <p class="mb-1">Строка 1, <b>Script</b>: <code>${'7:1?T5<18'}</code> - холоднее 18 градусов, включить обогреватель (пин 7).</p>
+            <p class="mb-1">Строка 2, <b>Script</b>: <code>${'7:0?T5>22'}</code> - теплее 22 градусов, выключить.</p>
+            <p>Результат: каждую минуту таймер смотрит на датчик 5 и сам включает и выключает обогреватель. Между 18 и 22 градусами ничего не происходит, и обогреватель не «дёргается». В таких частых таймерах используйте команды 0 и 1, а не 2.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+            <h3 class="text-lg font-bold text-black mb-2">Рассвет вместо будильника</h3>
+            <p class="mb-1">Будильник орёт в 6:30, вы вскакиваете с колотящимся сердцем и уже ненавидите понедельник.</p>
+            <p class="mb-1"><b>Спокойно!</b> Пусть свет в спальне разгорается сам, как настоящий рассвет.</p>
+            <p class="mb-1">Нажмите <b>PWM</b> в колонке <b>Action</b> нужной строки. В окне выберите <b>PWM Pin</b> (диммер, например ID 5), в <b>Cron Pattern</b> впишите <code>${'0 30 6 * * 1-5 *'}</code>.</p>
+            <p class="mb-1"><b>Duration (Sec)</b> = 900, <b>Start Duty (0-100)</b> = 0, <b>End Duty (0-100)</b> = 100. Нажмите <b>Save PWM Cron</b>.</p>
+            <p>Результат: по будням с 6:30 яркость плавно растёт от 0 до 100 процентов за 15 минут. Для заката поменяйте Start Duty и End Duty местами.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+            <h3 class="text-lg font-bold text-black mb-2">Сердце ёкнуло в аэропорту</h3>
+            <p class="mb-1">Вы стоите в очереди на посадку и вдруг понимаете: дома все окна тёмные, а «имитация присутствия» не включена. Квартира выглядит пустой!</p>
+            <p class="mb-1"><b>Спокойно!</b> Заранее заведите строку таймера, например No = 4, <b>Cron</b> <code>${'0 0 19 * * * *'}</code>, <b>Script</b> <code>${'6:1,12:1'}</code>, и оставьте её с выключенным ползунком <b>On/Off</b>. Теперь отправьте SMS с номера, указанного в настройках SIM800L:</p>
+            <p class="mb-1">SMS: <code>${'4#44*'}</code></p>
+            <p>Результат: в ответ придёт <code>OnOff: Cron4=ON</code>: команда выполнена, строка включена, и с этого вечера свет будет зажигаться сам. Чтобы выключить, отправьте <code>${'4#33*'}</code>. SMS-ответ приходит, только если включён общий ползунок SIM800L.</p>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-orange-50 border-orange-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Лимиты и «Не работает? Проверьте»</h2>
+          <h3 class="text-lg font-bold text-black mt-2 mb-2">Лимиты</h3>
+          <ul class="list-disc ml-6 mb-3 space-y-1">
+            <li>Поле <b>Cron</b> - до 34 символов, семь полей через пробел.</li>
+            <li>Поле <b>Script</b> - до 254 символов вместе с условиями.</li>
+            <li>Поле <b>INFO</b> - до 30 символов.</li>
+            <li><b>Duration (Sec)</b> в окне PWM - от 1 до 864000 секунд.</li>
+            <li>Число строк ограничено: сколько ещё можно добавить, показывает надпись под таблицей.</li>
+            <li>Готовых условий на странице «Global Settings» (строка Conditions) - 12 ячеек.</li>
+          </ul>
+          <h3 class="text-lg font-bold text-black mt-2 mb-2">Не работает? Проверьте</h3>
+          <ul class="list-disc ml-6 space-y-1">
+            <li>Включён ли ползунок <b>On/Off</b> у строки: выключенная строка игнорируется целиком.</li>
+            <li>Стоит ли в <b>Script</b> ID устройства, а не номер строки таймера из колонки <b>No</b>.</li>
+            <li>Не даёт ли условие ответ НЕТ: тогда действие молча пропускается, и для команды выключения тоже. Для Sr и Ss должно быть настроено время восхода и заката в «Global Settings».</li>
+            <li>Верно ли время: сверьте время устройства и Time zone UTC на странице «Global Settings», а в <b>Cron</b> помните, что первое поле - секунды.</li>
+            <li>Нет SMS-ответа: включите общий ползунок SIM800L.</li>
+          </ul>
         </section>
       </div>
     `,
     en: html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
-        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">Control by SMS and DTMF</h2>
-          <div><h4 class="text-lg font-bold text-black mt-4 mb-2">On/Off switch by SMS and DTMF</h4><p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the number from the ID column of the needed row.</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Action</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (during a call)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Turn the row off (slider Off)</td><td class="border px-3 py-1"><code>5#33*</code></td><td class="border px-3 py-1"><code>5#33*#</code></td></tr><tr><td class="border px-3 py-1">Turn the row on (slider On)</td><td class="border px-3 py-1"><code>5#44*</code></td><td class="border px-3 py-1"><code>5#44*#</code></td></tr></tbody></table><p class="mb-2">In the table ID = 5 is an example, use the ID of your own row.</p><p class="mb-2">Several commands in a row: <code>5#33*7#44*</code> (SMS) and <code>5#33*7#44*#</code> (call). Input during a call always ends with <code>*#</code>: the last command already ends with <code>*</code>, so only <code>#</code> is added at the end.</p><p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p><p class="mb-2">An SMS report is sent back, for example <code>OnOff: Cron5=OFF</code> (the report is sent only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.</p><p class="mb-2">Cron rows in the ID column are numbered from 0. Only rows visible on the page are available (within the configured number of lines).</p></div>
-        </section>
         <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">How to connect a timer (step by step)</h2>
+
+          <ol class="list-decimal ml-6 space-y-3">
+            <li>
+              <b>Find a free row.</b> On the <b>Timer(s)</b> page find a row with empty <b>Cron</b> and <b>Script</b> fields.
+              If you run out of rows, press the green <b>+</b> button under the table (tooltip "Add Cron"): one more row appears. The red <b>-</b> button removes the last row.
+            </li>
+            <li>
+              <b>Press Edit</b> in the <b>Action</b> column of the row. The <b>Edit Timer(s)</b> window opens.
+            </li>
+            <li>
+              <b>Set the time.</b> In the <b>Cron</b> field write seven fields separated by spaces: second, minute, hour, day of month, month, day of week, year.
+              For example, <code>${'0 0 18 * * * *'}</code> - every day at exactly 18:00:00. The star means "any value".
+            </li>
+            <li>
+              <b>Say what to do.</b> In the <b>Script</b> field write <b>device ID, colon, command</b>, no spaces: <code>${'18:1'}</code>.
+              <ul class="list-disc ml-6 mt-1">
+                <li><b>1</b> - turn on, <b>0</b> - turn off, <b>2</b> - toggle (TOGGLE)</li>
+                <li>Several actions are separated by commas, a pause is <b>p</b> plus seconds: <code>${'18:1,p600,18:0'}</code> - turn on, then turn off after 10 minutes</li>
+              </ul>
+            </li>
+            <li>
+              <b>Name it and enable it.</b> In the <b>INFO</b> field write a name (up to 30 characters, for example "Porch light"), turn the <b>On/Off</b> slider on and press <b>Save changes</b>.
+              If the slider is off, the whole row is ignored.
+            </li>
+            <li>
+              <b>Check it.</b> Set the nearest minute: if it is 14:07 now, write <code>${'0 8 14 * * * *'}</code>, and in a minute the device should react. Then put back the schedule you need.
+            </li>
+          </ol>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>How it works:</b> the firmware compares the current time with the <b>Cron</b> field of every enabled row. When the time matches, it runs <b>Script</b> from left to right:
+            actions go one after another, and the pause <b>p</b> delays everything that follows it. Rows with <b>On/Off</b> switched off are skipped.
+          </div>
+
+          <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
+            <b>Important:</b> the <b>Script</b> field takes the <b>ID of the device you control</b> (LED, relay, Zigbee device), <b>not</b> the number of the timer row itself from the <b>No</b> column.
+          </div>
+
+          <div class="mt-4">
+            <b>Example.</b> The board has LEDs (the IDs are made up, use your own):
+            <ul class="list-disc ml-6 mt-1">
+              <li><b>ID = 6</b> - green LED</li>
+              <li><b>ID = 12</b> - blue LED</li>
+              <li><b>ID = 18</b> - red LED</li>
+            </ul>
+            <div class="mt-2">We want:</div>
+            <ul class="list-disc ml-6 mt-1">
+              <li>every day at 18:00 the green LED stays on for 10 seconds: in <b>Cron</b> type <code>${'0 0 18 * * * *'}</code>, in <b>Script</b> type <code>${'6:1,p10,6:0'}</code></li>
+              <li>on weekdays at 7:00 the blue one turns on: <b>Cron</b> <code>${'0 0 7 * * 1-5 *'}</code>, <b>Script</b> <code>${'12:1'}</code></li>
+              <li>every Saturday at midnight all three turn off: <b>Cron</b> <code>${'0 0 0 * * 6 *'}</code>, <b>Script</b> <code>${'6:0,12:0,18:0'}</code></li>
+            </ul>
+            Each schedule is a separate timer row.
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-sky-50 border-sky-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">CRON format</h2>
           <p>The Cron pattern consists of seven space-separated fields. The Cron field length is up to 34 characters.</p>
         <div>
@@ -831,6 +977,27 @@ function TabCron({ }) {
           </table>
         </div>
         </section>
+        <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Control: SMS, DTMF and MQTT</h2>
+          <div><h4 class="text-lg font-bold text-black mt-4 mb-2">On/Off switch by SMS and DTMF</h4><p class="mb-2">The On/Off slider of any row on this page can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). The command format is the same on every page: <b>ID#CODE*</b>, where ID is the row number from the <b>No</b> column (it is the ID field in the <b>Edit Timer(s)</b> window).</p><table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Action</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">SMS</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">DTMF (during a call)</th></tr></thead><tbody><tr><td class="border px-3 py-1">Turn the row off (slider Off)</td><td class="border px-3 py-1"><code>5#33*</code></td><td class="border px-3 py-1"><code>5#33*#</code></td></tr><tr><td class="border px-3 py-1">Turn the row on (slider On)</td><td class="border px-3 py-1"><code>5#44*</code></td><td class="border px-3 py-1"><code>5#44*#</code></td></tr></tbody></table><p class="mb-2">In the table ID = 5 is an example, use the ID of your own row.</p><p class="mb-2">Several commands in a row: <code>5#33*7#44*</code> (SMS) and <code>5#33*7#44*#</code> (call). Input during a call always ends with <code>*#</code>: the last command already ends with <code>*</code>, so only <code>#</code> is added at the end.</p><p class="mb-2">Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - <b>00</b> (off) and <b>11</b> (on); Cron - <b>33</b> and <b>44</b>; PID - <b>55</b> and <b>66</b>.</p><p class="mb-2">An SMS report is sent back, for example <code>OnOff: Cron5=OFF</code>. It confirms that the command was executed and the row slider was switched; it does not check how the timer itself works. The report is sent only if the common SIM800L slider is On. Wrong commands are listed in Invld pins/cmd.</p><p class="mb-2">Rows in the <b>No</b> column are numbered from 0. Only rows visible on the page are available (within the configured number of lines).</p></div>
+        <div>
+          <h3 class="text-lg font-bold text-black mt-4 mb-2">MQTT: change tracking</h3>
+          <table class="w-full bg-white/70">
+            <thead>
+              <tr>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Topic</th>
+                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="border px-4 py-2 whitespace-nowrap font-semibold">Swarm/timer/</td>
+                <td class="border px-4 py-2">This page tracks changes of timers and automatically sends each change via MQTT to the topic: Swarm/timer/. Where "Swarm" is your 'TX topic'.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        </section>
         <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">${condHelpTitle(false)}</h2>
           <div class="space-y-3">
@@ -846,21 +1013,6 @@ function TabCron({ }) {
           </ol>
           <p class="mb-3">General form: <code>${'ID:command?condition'}</code>. Command: <b>0</b> - turn off, <b>1</b> - turn on, <b>2</b> - toggle to the opposite. Several actions are separated by <b>commas</b> (not semicolons, and without spaces), and each one may have its own condition or none at all. The time of the run is still set in the <b>Cron</b> field; the condition does not replace it.</p>
 
-          <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-            <p class="font-bold mb-1">Real-life example: a garden light</p>
-            <p class="mb-1">We want the garden lamp (pin 18) to turn on every day at 18:00. But in summer it is still light at 18:00, and the lamp would burn for nothing. So we add the condition "only if it is already dark".</p>
-            <p class="mb-1">In the Cron field type: <code>${'0 0 18 * * * *'}</code></p>
-            <p class="mb-1">In the Script field type: <code>${'18:1?Ss'}</code></p>
-            <p>Result: in winter, when it is already dark at 18:00 (Ss), the light turns on. In summer, when it is still light, the action is skipped. For Sr and Ss to work, the sunrise and sunset times must be set on the "Global Settings" page.</p>
-          </div>
-
-          <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-            <p class="font-bold mb-1">Real-life example: a heater that watches the temperature itself</p>
-            <p class="mb-1">We take two timer rows, both firing every minute (Cron: <code>${'0 * * * * * *'}</code>).</p>
-            <p class="mb-1">First row, Script: <code>${'7:1?T5<18'}</code> - if sensor 5 reads below 18 degrees, turn on the heater (pin 7).</p>
-            <p class="mb-1">Second row, Script: <code>${'7:0?T5>22'}</code> - if it reads above 22 degrees, turn the heater off.</p>
-            <p>Result: every minute the timer "looks" at the temperature and switches the heater on and off by itself. Between 18 and 22 degrees nothing happens. For such frequent timers use commands 0 and 1, and do not use command 2 (toggle): it would flip the device at every run.</p>
-          </div>
 
           <h4 class="text-lg font-bold text-black mt-4 mb-2">What a condition is made of (words)</h4>
           <p class="mb-2">The number after the letter is the <b>ID</b> of the device from the table on the corresponding page.</p>
@@ -1000,6 +1152,7 @@ function TabCron({ }) {
           <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700 mb-3">Do not put the ? sign on a pause. The entry <code>${'p600?D2'}</code> is wrong: if the condition gives NO, the pause does not start, and all actions after it run immediately. Write conditions on actions only.</p>
           <ul class="list-disc ml-6 mb-3 space-y-1">
             <li><b>The condition is checked at the moment the timer fires</b> (by the Cron field), separately for each action. If it was NO at that moment, the action is skipped. When the condition later becomes YES, nothing happens by itself: wait for the next run of the timer. If the condition has to be checked almost all the time, make the timer frequent, for example every minute (<code>${'0 * * * * * *'}</code>).</li>
+            <li><b>The condition is checked for any command, including turning off.</b> The entry <code>${'7:0?T5>22'}</code> will not turn the heater off while the condition gives NO.</li>
             <li><b>For actions after a pause</b> the condition is checked at the moment the pause ends, not when the timer starts.</li>
             <li><b>The master On/Off slider in the timer row</b> is stronger than any condition: if it is off, the timer is ignored entirely.</li>
             <li><b>The condition works only in the Script field.</b> Direct control of a device (the On/Off slider of the relay itself, an API or MQTT command sent straight to the relay) does not check conditions.</li>
@@ -1014,25 +1167,60 @@ function TabCron({ }) {
           </ul>
           </div>
         </section>
-        <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
-          <h2 class="text-xl font-bold text-black">MQTT: change tracking</h2>
-        <div>
-          <h3 class="text-lg font-bold text-black mb-2">Swarm/timer/</h3>
-          <table class="w-full bg-white/70">
-            <thead>
-              <tr>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Topic</th>
-                <th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="border px-4 py-2 whitespace-nowrap font-semibold">Swarm/timer/</td>
-                <td class="border px-4 py-2">This page tracks changes of timers and automatically sends each change via MQTT to the topic: Swarm/timer/. Where "Swarm" is your 'TX topic'.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Real-life examples</h2>
+          <p class="text-slate-600 italic mb-2">All IDs, pins and numbers in the examples are made up: use your own.</p>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+            <h3 class="text-lg font-bold text-black mb-2">The lamp that burns at noon</h3>
+            <p class="mb-1">It is summer, you get home at seven in the evening, and the garden lamp has been burning for an hour in broad sunlight. Annoying, isn't it?</p>
+            <p class="mb-1"><b>Easy!</b> Tell the timer: "turn on, but only if it is already dark".</p>
+            <p class="mb-1">In the <b>Cron</b> field: <code>${'0 0 18 * * * *'}</code></p>
+            <p class="mb-1">In the <b>Script</b> field: <code>${'18:1?Ss'}</code></p>
+            <p>Result: in winter it is already dark at 18:00, so the lamp (pin 18) turns on; in summer the action is skipped. For Sr and Ss to work, the sunrise and sunset times must be set on the "Global Settings" page. Repeat it at home with the ID of your own lamp.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+            <h3 class="text-lg font-bold text-black mb-2">The house went cold while you were out</h3>
+            <p class="mb-1">You come home and the room is as cold as a cellar. Nobody turned the heater on, and your mood is below zero.</p>
+            <p class="mb-1"><b>Easy!</b> Two timer rows watch the temperature for you. In both rows the <b>Cron</b> field is <code>${'0 * * * * * *'}</code> (every minute).</p>
+            <p class="mb-1">Row 1, <b>Script</b>: <code>${'7:1?T5<18'}</code> - below 18 degrees, turn on the heater (pin 7).</p>
+            <p class="mb-1">Row 2, <b>Script</b>: <code>${'7:0?T5>22'}</code> - above 22 degrees, turn it off.</p>
+            <p>Result: every minute the timer looks at sensor 5 and switches the heater on and off by itself. Between 18 and 22 degrees nothing happens, so the heater does not twitch. In such frequent timers use commands 0 and 1, not 2.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+            <h3 class="text-lg font-bold text-black mb-2">A sunrise instead of an alarm clock</h3>
+            <p class="mb-1">The alarm screams at 6:30, you jump up with a pounding heart and already hate Monday.</p>
+            <p class="mb-1"><b>Easy!</b> Let the bedroom light grow by itself, like a real sunrise.</p>
+            <p class="mb-1">Press <b>PWM</b> in the <b>Action</b> column of the row. In the window choose <b>PWM Pin</b> (a dimmer, for example ID 5) and in <b>Cron Pattern</b> type <code>${'0 30 6 * * 1-5 *'}</code>.</p>
+            <p class="mb-1"><b>Duration (Sec)</b> = 900, <b>Start Duty (0-100)</b> = 0, <b>End Duty (0-100)</b> = 100. Press <b>Save PWM Cron</b>.</p>
+            <p>Result: on weekdays from 6:30 the brightness smoothly grows from 0 to 100 percent over 15 minutes. For a sunset swap Start Duty and End Duty.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
+            <h3 class="text-lg font-bold text-black mb-2">Heart sank at the airport</h3>
+            <p class="mb-1">You stand in the boarding queue and suddenly realize: all the windows at home are dark and the "presence simulation" is not on. The flat looks empty!</p>
+            <p class="mb-1"><b>Easy!</b> Prepare a timer row in advance, for example No = 4, <b>Cron</b> <code>${'0 0 19 * * * *'}</code>, <b>Script</b> <code>${'6:1,12:1'}</code>, and leave its <b>On/Off</b> slider off. Now send an SMS from the number set in the SIM800L settings:</p>
+            <p class="mb-1">SMS: <code>${'4#44*'}</code></p>
+            <p>Result: the reply <code>OnOff: Cron4=ON</code> arrives: the command was executed, the row is on, and from this evening the lights switch on by themselves. To turn it off send <code>${'4#33*'}</code>. The SMS reply arrives only if the common SIM800L slider is On.</p>
+          </div>
+        </section>
+        <section class="rounded-2xl border-2 bg-orange-50 border-orange-300 p-5 space-y-4">
+          <h2 class="text-xl font-bold text-black">Limits and "Not working? Check"</h2>
+          <h3 class="text-lg font-bold text-black mt-2 mb-2">Limits</h3>
+          <ul class="list-disc ml-6 mb-3 space-y-1">
+            <li>The <b>Cron</b> field - up to 34 characters, seven fields separated by spaces.</li>
+            <li>The <b>Script</b> field - up to 254 characters including conditions.</li>
+            <li>The <b>INFO</b> field - up to 30 characters.</li>
+            <li><b>Duration (Sec)</b> in the PWM window - from 1 to 864000 seconds.</li>
+            <li>The number of rows is limited: the label under the table shows how many more can be added.</li>
+            <li>Ready-made conditions on the "Global Settings" page (the Conditions row) - 12 cells.</li>
+          </ul>
+          <h3 class="text-lg font-bold text-black mt-2 mb-2">Not working? Check</h3>
+          <ul class="list-disc ml-6 space-y-1">
+            <li>Is the <b>On/Off</b> slider of the row on: a switched-off row is ignored entirely.</li>
+            <li>Does <b>Script</b> hold the device ID and not the timer row number from the <b>No</b> column.</li>
+            <li>Does the condition give NO: then the action is silently skipped, the turn-off command too. For Sr and Ss the sunrise and sunset times must be set in "Global Settings".</li>
+            <li>Is the time right: compare the device time and Time zone UTC on the "Global Settings" page, and in <b>Cron</b> remember that the first field is seconds.</li>
+            <li>No SMS reply: turn on the common SIM800L slider.</li>
+          </ul>
         </section>
       </div>
     `,
@@ -1169,7 +1357,7 @@ const ArrayCron = ({ d, index }) => {
         <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           Timer(s)
         </div>
-        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь задаётся расписание: что и когда включать или выключать само, например свет каждый вечер в 18:00 или полив по утрам.' : 'Set a schedule: what turns on or off by itself and when, for example the light every evening at 18:00 or watering every morning.'}</p>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Вы вернулись затемно, а на крыльце уже горит свет. Утром в доме тепло ещё до будильника. Это не магия, а расписание: задайте его один раз, и Zagotovka-M сама помнит, что и когда включать, и даже умеет решать «сделай, но только если...».' : 'You come home after dark and the porch light is already on. In the morning the house is warm before your alarm. It is not magic, just a schedule: set it once, and Zagotovka-M remembers what to switch and when, and even decides "do it, but only if...".'}</p>
         <div class="w-full mb-6 relative">
           ${varcron && varcron.length > 0
       ? html`

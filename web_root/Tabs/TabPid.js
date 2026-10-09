@@ -389,20 +389,11 @@ function PresetHint({ lang, presetId, tmpset, sensor, changed }) {
  * ------------------------------------------------------------------------- */
 const HELP = {
   ru: {
-    whatTitle: 'Что это такое и зачем',
     what: [
       'PID-регулятор — это «умный термостат». Вы говорите, какую температуру держать, например 28 °C на тёплом полу или 37,5 °C в инкубаторе. Дальше устройство всё делает само: смотрит на датчик и решает, насколько сильно включить нагреватель (или вентилятор), чтобы нужная температура установилась и держалась ровно.',
       'Это похоже на круиз-контроль в машине: вы называете скорость, а он сам плавно добавляет и убавляет газ. Обычный термостат только включает и выключает нагрев, поэтому температура качается вверх-вниз. PID-регулятор подбирает мощность в процентах (например, 35 %), поэтому температура держится ровнее и не перегревается.',
       'Подходит для тёплого пола, аквариума, инкубатора, теплицы, бойлера, вентилятора охлаждения, холодильника.',
     ],
-
-    needTitle: 'Что нужно заранее',
-    need: [
-      ['Нагреватель или вентилятор', 'Он подключается к выводу (пину), который настроен как PWM. Пин настраивается на странице «Select pin».'],
-      ['Датчик температуры', 'DS18B20 (щуп на проводе: подходит для воды, пола, металла) или DHT‑22 (измеряет воздух и влажность). Датчик добавляется на странице «OneWire pin».'],
-      ['Эта страница', 'Здесь вы говорите регулятору, какую температуру держать.'],
-    ],
-    needNote: 'Если первого или второго ещё нет, сначала настройте их: без нагревателя нечем греть, а без датчика нечем мерить.',
 
     pageTitle: 'Что есть на этой странице',
     page: [
@@ -414,25 +405,13 @@ const HELP = {
       ['T set.', 'Температура, которую вы хотите получить. Её задаёте вы.'],
       ['T cur.', 'Температура прямо сейчас, её показывает датчик. Если тут пусто или число странное, значит датчик не работает или выбран не тот.'],
       ['Duty', 'Сколько мощности регулятор выдаёт сейчас, в процентах: 0 — не греет, 100 — на полную. Надпись OFF означает, что регулятор выключен.'],
+      ['Condition', 'Условие работы (необязательно). Если оно сейчас неверно, регулятор не греет. Подробно - в блоке про условия ниже.'],
       ['Info', 'Ваше название, например «Тёплый пол в детской».'],
       ['On/Off', 'Включатель регулятора. Пока он выключен, регулятор ничего не греет.'],
       ['Edit', 'Открывает окно настроек этого регулятора.'],
       ['Run tune', 'Автоподбор: устройство само выясняет, как быстро ваш нагреватель греет, и подстраивается под него. Красная кнопка — подбор ещё не делали, полоса — идёт подбор, зелёная — готово, мигающая «Error!» — ошибка.'],
       ['«+» и «−» внизу', 'Добавить регулятор или убрать последний.'],
     ],
-
-    stepsTitle: 'Как настроить по шагам',
-    steps: [
-      'Нажмите зелёную кнопку «+» под таблицей. Появится новая строка — это ваш регулятор. Если строка уже есть, этот шаг пропустите.',
-      'Нажмите «Edit» в этой строке. Это безопасно: окно только открывается, и пока вы не нажали «Save changes», ничего не меняется. Закрыть окно можно кнопкой «Close».',
-      'В «PWM Pin» выберите вывод, к которому подключён ваш нагреватель или вентилятор.',
-      'В «Selected sensor» выберите тип датчика. Для DS18B20 вставьте в «Dev. ser. number» его серийный номер (скопируйте на странице «OneWire pin»). Для DHT‑22 номер не нужен.',
-      'В «Presets» выберите готовый вариант под своё устройство (как выбрать — в следующем разделе). Под списком появится подсказка.',
-      'В «t_set» впишите температуру, которую надо держать. Подсказка под пресетом сразу покажет, если число не подходит.',
-      'Включите ползунок «On/Off» и нажмите «Save changes». Теперь в таблице должна появиться температура в «T cur.»: значит, датчик работает.',
-      'Нажмите красную кнопку «Run tune». Во время автоподбора устройство само включает нагреватель, даже если «On/Off» выключен, поэтому не уходите, пока не убедитесь, что всё греется безопасно. Когда кнопка станет зелёной, регулятор готов.',
-    ],
-    stepsNote: 'Сменили пресет или температуру? Нажмите «Run tune» заново.',
 
     chooseTitle: 'Какой пресет выбрать',
     rules: [
@@ -637,20 +616,11 @@ const HELP = {
   },
 
   en: {
-    whatTitle: 'What is this and what is it for',
     what: [
       'A PID controller is a "smart thermostat". You tell it which temperature to keep, for example 28 °C on a warm floor or 37.5 °C in an incubator. The device does the rest: it watches the sensor and decides how hard to run the heater (or fan) so the temperature reaches the target and stays steady.',
       'It is like cruise control in a car: you name the speed and it smoothly adds and lifts the throttle. An ordinary thermostat only switches heating on and off, so the temperature swings up and down. A PID controller picks the power in percent (say, 35 %), so the temperature stays steadier and does not overshoot.',
       'Good for underfloor heating, aquariums, incubators, greenhouses, boilers, cooling fans and refrigerators.',
     ],
-
-    needTitle: 'What you need first',
-    need: [
-      ['A heater or a fan', 'It is connected to a pin that is set up as PWM. Pins are set up on the "Select pin" page.'],
-      ['A temperature sensor', 'DS18B20 (a probe on a wire: good for water, floors, metal) or DHT‑22 (measures air and humidity). Sensors are added on the "OneWire pin" page.'],
-      ['This page', 'Here you tell the controller which temperature to keep.'],
-    ],
-    needNote: 'If the first or second is missing, set them up first: without a heater there is nothing to heat with, and without a sensor there is nothing to measure with.',
 
     pageTitle: 'What is on this page',
     page: [
@@ -662,25 +632,13 @@ const HELP = {
       ['T set.', 'The temperature you want to get. You set it.'],
       ['T cur.', 'The temperature right now, shown by the sensor. If it is empty or looks odd, the sensor does not work or the wrong one is selected.'],
       ['Duty', 'How much power the controller outputs now, in percent: 0 — not heating, 100 — full power. OFF means the controller is switched off.'],
+      ['Condition', 'The optional working condition. While it is false the controller does not heat. Details - in the conditions block below.'],
       ['Info', 'Your own name, for example "Kids room warm floor".'],
       ['On/Off', 'The controller switch. While it is off, the controller heats nothing.'],
       ['Edit', 'Opens the settings window of this controller.'],
       ['Run tune', 'Auto tuning: the device works out how fast your heater warms things up and adapts to it. Red button — not tuned yet, progress bar — tuning is running, green — done, blinking "Error!" — an error.'],
       ['"+" and "−" at the bottom', 'Add a controller or remove the last one.'],
     ],
-
-    stepsTitle: 'Step-by-step setup',
-    steps: [
-      'Click the green "+" button under the table. A new row appears — this is your controller. If a row already exists, skip this step.',
-      'Click "Edit" in that row. It is safe: the window just opens, and nothing changes until you click "Save changes". You can close the window with the "Close" button.',
-      'In "PWM Pin" choose the pin your heater or fan is connected to.',
-      'In "Selected sensor" choose the sensor type. For DS18B20 paste its serial number into "Dev. ser. number" (copy it from the "OneWire pin" page). DHT‑22 needs no number.',
-      'In "Presets" choose a ready-made option for your device (how to choose is in the next section). A hint appears under the list.',
-      'In "t_set" type the temperature to keep. The hint under the preset immediately tells you if the number does not fit.',
-      'Turn the "On/Off" switch on and click "Save changes". The table should now show a temperature in "T cur.": that means the sensor works.',
-      'Click the red "Run tune" button. During auto tuning the device switches the heater on by itself, even if "On/Off" is off, so stay nearby until you are sure everything heats safely. When the button turns green, the controller is ready.',
-    ],
-    stepsNote: 'Changed the preset or the temperature? Press "Run tune" again.',
 
     chooseTitle: 'Which preset to choose',
     rules: [
@@ -892,6 +850,9 @@ const TONES_CSS = {
   amber: ['#fffbeb', '#fcd34d'],
   violet: ['#f5f3ff', '#c4b5fd'],
   rose: ['#fff1f2', '#fda4af'],
+  emerald: ['#ecfdf5', '#6ee7b7'],
+  orange: ['#fff7ed', '#fdba74'],
+  cyan: ['#ecfeff', '#67e8f9'],
 };
 const SUM_STYLE = 'font-size:20px;font-weight:700;color:#000;cursor:pointer;';
 
@@ -979,13 +940,156 @@ const condTable3 = (h1, h2, h3, rows) => html`
   </div>
 `;
 
+/* ---------------------------------------------------------------------------
+ * Новые блоки справки (порядок по HELP_GUIDELINES): пошаговая инструкция,
+ * примеры из жизни, лимиты, «Не работает? Проверьте».
+ * Функции, а не готовые шаблоны: codeEl определён выше по файлу.
+ * ------------------------------------------------------------------------- */
+const HOW = {
+  ru: {
+    title: 'Как подключить регулятор (пошагово)',
+    steps: () => html`
+      <ol style=${OL}>
+        <li style="margin-bottom:8px;"><b>Подготовьте нагреватель и датчик.</b> На странице <b>"Select pin(s)"</b> выберите для пина нагревателя (или вентилятора) режим <b>"PWM"</b> и нажмите <b>"Submit"</b>. Датчик (DS18B20 или DHT-22) добавьте на странице <b>"OneWire(s) pin(s)"</b>. Серийный номер DS18B20 понадобится в шаге 3.</li>
+        <li style="margin-bottom:8px;"><b>Добавьте регулятор.</b> Нажмите зелёную кнопку <b>"+"</b> под таблицей. Появится новая строка. Если строка уже есть, пропустите этот шаг.</li>
+        <li style="margin-bottom:8px;"><b>Заполните настройки.</b> Нажмите <b>Edit</b> в строке регулятора (пока вы не нажали <b>Save changes</b>, ничего не меняется, закрыть окно можно кнопкой <b>Close</b>). В <b>PWM Pin</b> выберите пин нагревателя, в <b>Selected sensor</b> - тип датчика (для DS18B20 вставьте серийный номер в <b>Dev. ser. number</b>), в <b>Presets</b> - готовый вариант под своё устройство, в <b>t_set</b> - температуру, которую надо держать.</li>
+        <li style="margin-bottom:8px;"><b>Включите регулятор.</b> Включите ползунок <b>On/Off</b> и нажмите <b>Save changes</b>. В колонке <b>T cur.</b> должна появиться температура: значит, датчик работает.</li>
+        <li style="margin-bottom:8px;"><b>Запустите автоподбор.</b> Нажмите красную кнопку <b>Run tune</b> и дождитесь, когда она станет зелёной: регулятор подобрал коэффициенты и готов к работе.</li>
+        <li style="margin-bottom:8px;"><b>Если нужно - добавьте условие.</b> Хотите, чтобы регулятор работал только ночью или пока на улице холодно? Впишите правило в поле <b>Condition</b> окна <b>Edit</b> (как это сделать - в блоке про условия ниже).</li>
+      </ol>
+    `,
+    how: 'Регулятор через равные промежутки (от 1 до 5 секунд, зависит от пресета) сравнивает температуру датчика («T cur.») с заданной («T set.») и выдаёт мощность в процентах (колонка Duty): далеко от цели - побольше, близко - поменьше.',
+    important: html`<b>Важно:</b> во время автоподбора (<b>Run tune</b>) устройство само включает нагреватель, даже если ползунок <b>On/Off</b> выключен, и не проверяет условие. Не уходите, пока не убедитесь, что греть безопасно. Сменили пресет или температуру - нажмите <b>Run tune</b> заново.`,
+    exampleLead: 'Тёплый пол в детской. Нагревательный кабель подключён через силовой модуль к пину PE9, датчик DS18B20 с серийным номером 28B63A75D0013C7B лежит под покрытием. Пин, номер датчика и ID в этом примере условные, свои смотрите в таблицах.',
+    exampleItems: () => html`
+      <li>В <b>Select pin(s)</b>: PE9 - режим <b>PWM</b>, затем <b>Submit</b>. Датчик добавляем на <b>OneWire(s) pin(s)</b></li>
+      <li>Под таблицей нажимаем <b>"+"</b>: появляется строка <b>No = 1</b></li>
+      <li>В <b>Edit</b> этой строки: <b>PWM Pin</b> = PE9, <b>Selected sensor</b> = DS18B20, <b>Dev. ser. number</b> = 28B63A75D0013C7B, <b>Presets</b> = 5 Тёплый пол, <b>t_set</b> = 28</li>
+      <li>Включаем <b>On/Off</b>, жмём <b>Save changes</b>, затем <b>Run tune</b> и ждём зелёную кнопку</li>
+      <li>Выключить регулятор с телефона: SMS ${codeEl('1#55*')}, включить обратно: ${codeEl('1#66*')} (здесь 1 - номер из колонки No)</li>
+    `,
+    exTitle: 'Примеры из жизни: что на самом деле умеет эта страница',
+    exIntro: 'Четыре истории о том, как температура перестаёт быть вашей головной болью. Номера, датчики и градусы в примерах условные.',
+    examples: () => [
+      {
+        t: 'Три часа ночи: не остыл ли инкубатор?',
+        s: 'Вы проснулись от мысли об яйцах: вдруг нагреватель отключился и зародыши стынут? Вставать и проверять термометр не хочется, а не проверить - нельзя.',
+        c: 'Спокойно! Выберите пресет 8 «Инкубатор», задайте в t_set 37.5 и нажмите Run tune. Регулятор сам подбирает мощность, держит температуру ровно, а при потере датчика (5 циклов без показаний) или при подъёме до аварийного потолка 40 °C сам глушит нагрев.',
+        r: 'Результат: Presets = 8, t_set = 37.5, On/Off включён, Run tune - и можно спать.',
+      },
+      {
+        t: 'Пробка на выезде, а дом ледяной',
+        s: 'Пятница, вы едете на дачу и вспоминаете: тёплый пол так и не включили. Приедете в холодный дом, а греться он будет полдня.',
+        c: 'Спокойно! С номера из настроек SIM800L отправьте SMS 1#66*, где 1 - номер регулятора в колонке No. Регулятор включится и начнёт греть, а в ответ придёт OnOff: PID1=ON (если включён общий ползунок SIM800L). Выключить - 1#55*.',
+        r: 'Результат: тёплый дом к вашему приезду и одна короткая SMS вместо тревожных мыслей.',
+      },
+      {
+        t: 'Вентилятор шумит как самолёт',
+        s: 'Блок питания греется, и вентилятор ревёт на полных оборотах даже тогда, когда температура давно в норме. По ночам это просто невыносимо.',
+        c: 'Спокойно! Подключите вентилятор к PWM-пину, добавьте регулятор с пресетом 2 «Кулер / вентилятор» и задайте в t_set 45. Чем горячее объект, тем быстрее крутится вентилятор, а остыл - обороты падают.',
+        r: 'Результат: тишина, пока всё прохладно, и мощный обдув только когда он действительно нужен.',
+      },
+      {
+        t: 'Весна пришла, а пол всё греет',
+        s: 'На улице уже плюс пятнадцать, окна нараспашку, а тёплый пол в прихожей упрямо греет и вы платите за каждый градус.',
+        c: 'Спокойно! В окне Edit регулятора в поле Condition впишите T3<10, где 3 - ID уличного датчика. Пока на улице холоднее 10 градусов, пол греет как обычно. Потеплело - выход становится 0 %, а накопленная поправка сбрасывается. Похолодало снова - регулятор стартует с нуля плавно, без рывка.',
+        r: 'Результат: пол сам перестаёт греть, когда улица тёплая, без единого нажатия.',
+      },
+    ],
+    limTitle: 'Лимиты: сколько регуляторов и условий можно добавить',
+    limits: [
+      'Всего можно добавить 24 ПИД-регулятора. Под таблицей написано, сколько ещё доступно; когда места не осталось, кнопка «+» пропадает. Кнопка «−» убирает последний регулятор.',
+      'Один регулятор управляет одним PWM-выходом (поле PWM Pin) и слушает один датчик (поле Selected sensor).',
+      'Условия: 12 общих ячеек C1..C12 и 48 свободных выражений на Switch, Encoder и PID вместе. Одинаковые условия хранятся один раз. Если свободные выражения закончились, прошивка не сохранит условие (ошибка Condition pool is full): используйте существующее или удалите ненужные.',
+      'Для пресетов 1, 2 и 3 нужен датчик DS18B20: DHT-22 для них слишком медленный. DS18B20 не измеряет выше +125 °C.',
+      'Если PWM-выходом управляет PID, значение, заданное по API или MQTT, регулятор перезапишет на следующем цикле.',
+      'Для PID нет отдельных команд API и MQTT: регулятор включается и выключается ползунком On/Off, по SMS или звонком.',
+    ],
+    chkTitle: 'Не работает? Проверьте',
+    chk: [
+      'Ползунок On/Off выключен: в колонке Duty написано OFF. Включите его и нажмите Save changes.',
+      'Условие сейчас неверно (колонка Condition): при НЕТ выход регулятора 0 %. Проверьте, все ли устройства и датчики из условия в нужном состоянии, нет ли опечатки или пустой ячейки.',
+      'В «T cur.» пусто или число странное: проверьте датчик, провода и серийный номер. Если датчик не отвечает 5 циклов подряд, прошивка сама выключает нагрев.',
+      'Пин нагревателя не в режиме PWM: настройте его на странице Select pin(s).',
+    ],
+  },
+  en: {
+    title: 'How to connect a controller (step by step)',
+    steps: () => html`
+      <ol style=${OL}>
+        <li style="margin-bottom:8px;"><b>Prepare the heater and the sensor.</b> On the <b>"Select pin(s)"</b> page choose the <b>"PWM"</b> mode for the heater (or fan) pin and press <b>"Submit"</b>. Add the sensor (DS18B20 or DHT-22) on the <b>"OneWire(s) pin(s)"</b> page. You will need the DS18B20 serial number in step 3.</li>
+        <li style="margin-bottom:8px;"><b>Add a controller.</b> Press the green <b>"+"</b> button under the table. A new row appears. If the row is already there, skip this step.</li>
+        <li style="margin-bottom:8px;"><b>Fill in the settings.</b> Press <b>Edit</b> in the controller row (nothing changes until you press <b>Save changes</b>, and the window can be closed with <b>Close</b>). In <b>PWM Pin</b> choose the heater pin, in <b>Selected sensor</b> the sensor type (for DS18B20 paste the serial number into <b>Dev. ser. number</b>), in <b>Presets</b> a ready-made option for your device, in <b>t_set</b> the temperature to keep.</li>
+        <li style="margin-bottom:8px;"><b>Turn the controller on.</b> Turn on the <b>On/Off</b> slider and press <b>Save changes</b>. A temperature should appear in the <b>T cur.</b> column: it means the sensor works.</li>
+        <li style="margin-bottom:8px;"><b>Start auto tuning.</b> Press the red <b>Run tune</b> button and wait until it turns green: the controller has found its coefficients and is ready.</li>
+        <li style="margin-bottom:8px;"><b>If needed - add a condition.</b> Want the controller to work only at night or while it is cold outside? Type a rule into the <b>Condition</b> field of the <b>Edit</b> window (how - in the conditions block below).</li>
+      </ol>
+    `,
+    how: 'At equal intervals (1 to 5 seconds, depending on the preset) the controller compares the sensor temperature ("T cur.") with the target ("T set.") and outputs power in percent (the Duty column): more power when far from the target, less when close.',
+    important: html`<b>Important:</b> during auto tuning (<b>Run tune</b>) the device switches the heater on by itself, even if the <b>On/Off</b> slider is off, and does not check the condition. Do not leave until you are sure heating is safe. Changed the preset or the temperature - press <b>Run tune</b> again.`,
+    exampleLead: 'Warm floor in a kids room. The heating cable is connected through a power module to pin PE9, and a DS18B20 sensor with serial number 28B63A75D0013C7B lies under the floor covering. The pin, the sensor number and the IDs in this example are made up, look up your own in the tables.',
+    exampleItems: () => html`
+      <li>In <b>Select pin(s)</b>: PE9 - the <b>PWM</b> mode, then <b>Submit</b>. Add the sensor on <b>OneWire(s) pin(s)</b></li>
+      <li>Press <b>"+"</b> under the table: a row with <b>No = 1</b> appears</li>
+      <li>In <b>Edit</b> of that row: <b>PWM Pin</b> = PE9, <b>Selected sensor</b> = DS18B20, <b>Dev. ser. number</b> = 28B63A75D0013C7B, <b>Presets</b> = 5 Warm floor, <b>t_set</b> = 28</li>
+      <li>Turn on <b>On/Off</b>, press <b>Save changes</b>, then <b>Run tune</b> and wait for the green button</li>
+      <li>Turn the controller off from your phone: SMS ${codeEl('1#55*')}, back on: ${codeEl('1#66*')} (here 1 is the number from the No column)</li>
+    `,
+    exTitle: 'Real-life examples: what this page can really do',
+    exIntro: 'Four stories about how temperature stops being your headache. Numbers, sensors and degrees in the examples are made up.',
+    examples: () => [
+      {
+        t: 'Three a.m.: has the incubator gone cold?',
+        s: 'You woke up thinking about the eggs: what if the heater switched off and the embryos are getting cold? You do not want to get up and check the thermometer, but you cannot just not check.',
+        c: 'Relax! Choose preset 8 "Incubator", set t_set to 37.5 and press Run tune. The controller picks the power by itself and keeps the temperature steady, and if the sensor is lost (5 cycles without readings) or the temperature reaches the emergency ceiling of 40 °C, it shuts the heating off by itself.',
+        r: 'Result: Presets = 8, t_set = 37.5, On/Off on, Run tune - and you can sleep.',
+      },
+      {
+        t: 'Stuck in traffic and the house is ice cold',
+        s: 'Friday, you are driving to the country house and remember: the warm floor was never switched on. You will arrive at a cold house, and it will take half a day to warm up.',
+        c: 'Relax! From the number set in the SIM800L settings send the SMS 1#66*, where 1 is the controller number in the No column. The controller turns on and starts heating, and you get the reply OnOff: PID1=ON (if the common SIM800L slider is On). To turn it off - 1#55*.',
+        r: 'Result: a warm house by the time you arrive and one short SMS instead of anxious thoughts.',
+      },
+      {
+        t: 'The fan roars like an airplane',
+        s: 'The power supply gets warm and the fan roars at full speed even when the temperature has been fine for ages. At night it is simply unbearable.',
+        c: 'Relax! Connect the fan to a PWM pin, add a controller with preset 2 "Cooler / fan" and set t_set to 45. The hotter the object, the faster the fan spins, and when it cools down the speed drops.',
+        r: 'Result: silence while everything is cool, and strong airflow only when it is really needed.',
+      },
+      {
+        t: 'Spring is here and the floor is still heating',
+        s: 'It is already plus fifteen outside, the windows are wide open, and the warm floor in the hallway stubbornly heats while you pay for every degree.',
+        c: 'Relax! In the controller Edit window type T3<10 into the Condition field, where 3 is the ID of the outdoor sensor. While it is colder than 10 degrees outside, the floor heats as usual. It got warmer - the output becomes 0 % and the accumulated correction is reset. Cold again - the controller restarts from zero smoothly, with no jerk.',
+        r: 'Result: the floor stops heating by itself when it is warm outside, without a single press.',
+      },
+    ],
+    limTitle: 'Limits: how many controllers and conditions you can add',
+    limits: [
+      'You can add up to 24 PID controllers. The line under the table shows how many are still available; when none are left, the "+" button disappears. The "-" button removes the last controller.',
+      'One controller drives one PWM output (the PWM Pin field) and listens to one sensor (the Selected sensor field).',
+      'Conditions: 12 shared cells C1..C12 and 48 free expressions for Switch, Encoder and PID together. Identical conditions are stored once. If the free expressions run out, the firmware will not save the condition (error Condition pool is full): use an existing one or delete unneeded ones.',
+      'Presets 1, 2 and 3 need a DS18B20 sensor: DHT-22 is too slow for them. DS18B20 cannot measure above +125 °C.',
+      'If a PWM output is controlled by PID, a value set via API or MQTT is overwritten by the controller on the next cycle.',
+      'PID has no separate API and MQTT commands: the controller is switched on and off with the On/Off slider, by SMS or by a call.',
+    ],
+    chkTitle: 'Not working? Check this',
+    chk: [
+      'The On/Off slider is off: the Duty column says OFF. Turn it on and press Save changes.',
+      'The condition is false right now (the Condition column): when it is NO, the controller output is 0 %. Check that all devices and sensors in the condition are in the needed state and that there is no typo or empty cell.',
+      '"T cur." is empty or the number looks odd: check the sensor, the wires and the serial number. If the sensor does not answer for 5 cycles in a row, the firmware switches the heating off by itself.',
+      'The heater pin is not in the PWM mode: set it up on the Select pin(s) page.',
+    ],
+  },
+};
+
 function PidHelp({ lang }) {
   const L = langOf(lang);
   const X = HELP[L];
-  /* Цвета разделов по порядку: SMS, что это, что нужно, страница, шаги, пресеты, FAQ, условия, цифры, ошибки */
-  const TONES = ['sky', 'indigo', 'indigo', 'indigo', 'teal', 'teal', 'teal', 'amber', 'violet', 'rose'];
+  /* Цвета разделов по порядку: шаги, SMS, колонки, пресеты, условия, примеры, лимиты, проверка */
+  const TONES = ['indigo', 'sky', 'teal', 'emerald', 'amber', 'rose', 'orange', 'cyan'];
   let secIdx = 0;
   const sec2 = (title, open, body) => sec(title, open, body, TONES[secIdx++]);
+  const Y = HOW[L];
 
   const presetTable = html`
     <div style="overflow-x:auto;border-radius:12px;border:1px solid rgba(0,0,0,0.12);background:rgba(255,255,255,0.7);margin-top:12px;">
@@ -1026,12 +1130,28 @@ function PidHelp({ lang }) {
     <div class="mytext" style="display:flex;flex-direction:column;gap:14px;font-size:16px;font-family:inherit;line-height:1.6;color:#334155;">
 
       ${sec2(
+        Y.title,
+        true,
+        html`
+          ${Y.steps()}
+          <div style=${S.helpNote}>
+            <b>${L === 'ru' ? 'Как это работает:' : 'How it works:'}</b> ${X.what[0]} ${X.what[1]} ${Y.how}
+          </div>
+          <div style=${S.helpNote}>${Y.important}</div>
+          <div style=${S.helpEx}>
+            <b>${L === 'ru' ? 'Пример.' : 'Example.'}</b> ${Y.exampleLead}
+            <ul style=${UL + 'margin-top:6px;'}>${Y.exampleItems()}</ul>
+          </div>
+        `
+      )}
+
+      ${sec2(
         L === 'ru' ? 'Рубильник On/Off по SMS и DTMF' : 'On/Off switch by SMS and DTMF',
         true,
         html`
           <p style=${S.p}>${L === 'ru'
-            ? 'Ползунок On/Off любого PID-канала можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды: ID#КОД*, где ID - число из колонки ID нужной строки (нумерация с 1). Отключить: КОД = 55. Включить: КОД = 66.'
-            : 'The On/Off slider of any PID channel can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). Command format: ID#CODE*, where ID is the number from the ID column of the needed row (numbered from 1). Turn off: CODE = 55. Turn on: CODE = 66.'}</p>
+            ? 'Ползунок On/Off любого PID-канала можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды: ID#КОД*, где ID - число из колонки No нужного регулятора (нумерация с 1). Отключить: КОД = 55. Включить: КОД = 66.'
+            : 'The On/Off slider of any PID channel can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). Command format: ID#CODE*, where ID is the number from the No column of the needed controller (numbered from 1). Turn off: CODE = 55. Turn on: CODE = 66.'}</p>
           <ul style=${UL}>
             <li style="margin-bottom:4px;">${L === 'ru' ? 'Отключить PID 2: SMS 2#55*, звонок 2#55*#' : 'Turn PID 2 off: SMS 2#55*, call 2#55*#'}</li>
             <li style="margin-bottom:4px;">${L === 'ru' ? 'Включить PID 2: SMS 2#66*, звонок 2#66*#' : 'Turn PID 2 on: SMS 2#66*, call 2#66*#'}</li>
@@ -1042,53 +1162,19 @@ function PidHelp({ lang }) {
         `
       )}
 
-      ${sec2(
-        X.whatTitle,
-        true,
-        html`${X.what.map((t) => html`<p style=${S.p}>${t}</p>`)}`
-      )}
-
-      ${sec2(
-        X.needTitle,
-        true,
-        html`
-          <ol style=${OL}>
-            ${X.need.map(
-              (n) => html`<li style="margin-bottom:6px;"><b style="color:#0f172a;">${n[0]}.</b> ${n[1]}</li>`
-            )}
-          </ol>
-          <div style=${S.helpNote}>${X.needNote}</div>
-        `
-      )}
-
       ${sec2(X.pageTitle, true, glossary(X.page))}
 
       ${sec2(
-        X.stepsTitle,
-        true,
-        html`
-          <ol style=${OL}>
-            ${X.steps.map((t) => html`<li style="margin-bottom:8px;">${t}</li>`)}
-          </ol>
-          <div style=${S.helpNote}>${X.stepsNote}</div>
-        `
-      )}
-
-      ${sec2(
         X.chooseTitle,
-        true,
+        false,
         html`
           <ol style=${OL}>
             ${X.rules.map((t) => html`<li style="margin-bottom:4px;">${t}</li>`)}
           </ol>
           ${presetTable}
-        `
-      )}
-
-      ${sec2(
-        X.faqTitle,
-        true,
-        html`
+          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.numbersTitle}</h3>
+          ${glossary(X.numbers)}
+          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.faqTitle}</h3>
           <div style="display:flex;flex-direction:column;gap:10px;">
             ${X.faq.map(
               (f) => html`
@@ -1155,14 +1241,44 @@ function PidHelp({ lang }) {
         `
       )}
 
-      ${sec2(X.numbersTitle, false, glossary(X.numbers))}
+      ${sec2(
+        Y.exTitle,
+        true,
+        html`
+          <p style=${S.p}>${Y.exIntro}</p>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            ${Y.examples().map(
+              (e) => html`
+                <div style=${S.card}>
+                  <div style="font-size:18px;font-weight:700;color:#000;margin-bottom:4px;">${e.t}</div>
+                  <p style=${S.p}>${e.s}</p>
+                  <p style=${S.p}>${e.c}</p>
+                  <p style="margin:0;line-height:1.6;font-weight:600;">${e.r}</p>
+                </div>
+              `
+            )}
+          </div>
+        `
+      )}
 
       ${sec2(
-        X.errTitle,
+        Y.limTitle,
         false,
         html`
           <ul style=${UL}>
-            ${X.err.map((t) => html`<li style="margin-bottom:4px;">${t}</li>`)}
+            ${Y.limits.map((t) => html`<li style="margin-bottom:4px;">${t}</li>`)}
+          </ul>
+        `
+      )}
+
+      ${sec2(
+        Y.chkTitle,
+        false,
+        html`
+          <ul style=${UL}>
+            ${Y.chk.map((t) => html`<li style="margin-bottom:4px;">${t}</li>`)}
+            <li style="margin-bottom:4px;"><b>${X.errTitle}</b></li>
+            ${X.err.map((t) => html`<li style="margin-bottom:4px;margin-left:1rem;">${t}</li>`)}
           </ul>
         `
       )}
@@ -1545,7 +1661,7 @@ function TabPid({ }) {
         <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           PID Controller(s)
         </div>
-        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Здесь настраивается автоматическое поддержание температуры: датчик измеряет, а контроллер сам включает и выключает нагрев, чтобы держать нужные градусы.' : 'Automatic temperature keeping: a sensor measures, and the controller switches the heating on and off by itself to hold the temperature you set.'}</p>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Три часа ночи, вы проснулись с мыслью: а не остыл ли инкубатор? Здесь живёт «умный термостат»: вы называете градусы, а контроллер сам плавно подбирает мощность нагрева и держит температуру ровно, пока вы спите.' : 'Three a.m., you wake up wondering: has the incubator gone cold? This is where the "smart thermostat" lives: you name the degrees, and the controller smoothly picks the heating power by itself and keeps the temperature steady while you sleep.'}</p>
         <div class="w-full mb-6 relative">
           ${visiblePids > 0
             ? html`
