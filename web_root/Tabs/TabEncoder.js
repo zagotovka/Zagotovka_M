@@ -45,6 +45,11 @@ function initGlobalTooltip() {
   function show(el) {
     clearTimeout(hideTimer);
     tip.innerHTML = el.dataset.tip;
+    const darkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+    tip.style.background = darkTheme ? '#e6eef4' : '#1a2332';
+    tip.style.color      = darkTheme ? '#14202b' : '#e8f4f8';
+    tip.style.border     = darkTheme ? '1px solid rgba(0,160,170,0.65)' : '1px solid rgba(0,188,188,0.35)';
+    tip.style.boxShadow  = darkTheme ? '0 6px 22px rgba(0,0,0,0.65)' : '0 6px 20px rgba(0,0,0,0.45)';
     tip.style.display = 'block';
 
     tip.style.opacity = '0';
@@ -484,6 +489,14 @@ function TabEncoder({ }) {
               <li><b>[lock]</b> - идёт автотюн PID. Настройки этого выхода заблокированы до его окончания.</li>
             </ul>
           </div>
+          <div>
+            <h3 class="text-lg font-bold text-black mb-2">Значки рядом с частотой: OK, ~ и !</h3>
+            <p class="mb-2">В колонке PWM Frequency после частоты стоит значок. Он подсказывает, насколько удачно выбрана частота. Это только совет, а не ошибка: выход работает при любом значке, а менять частоту или нет - решаете вы.</p>
+            <table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Значок</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Частота</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Что это значит</th></tr></thead><tbody><tr><td class="border px-3 py-1 whitespace-nowrap"><b class="text-green-600">OK</b> (зелёный)</td><td class="border px-3 py-1">до 40 kHz</td><td class="border px-3 py-1">Всё хорошо. Яркость можно выставить плавно и точно. Для ламп, светодиодных лент и вентиляторов обычно хватает нескольких килогерц.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b class="text-yellow-600">~</b> (жёлтый)</td><td class="border px-3 py-1">от 40 до 200 kHz</td><td class="border px-3 py-1">Работает, но ступеней яркости становится меньше, и точность хуже. Для обычной нагрузки такая частота не нужна.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b class="text-red-600">!</b> (красный)</td><td class="border px-3 py-1">выше 200 kHz</td><td class="border px-3 py-1">Режим для опытных (в окне Edit у такого значка подпись «Expert mode: low precision»). Ступеней яркости совсем мало, поэтому точно выставить яркость нельзя, а транзисторы и драйверы сильно нагреваются. Лампа или вентилятор могут просто не успевать за такой скоростью.</td></tr></tbody></table>
+            <p class="mb-2"><b>Почему так.</b> ШИМ - это очень быстрое мигание: яркость равна доле времени, когда выход включён. Чем чаще мигает выход, тем на меньшее число «долек» можно поделить один такой цикл. Число долек показано в колонке Resolution (steps). Примеры: на частоте 1 MHz у таймера TIM8 всего 215 ступеней, а на частоте 2 kHz у таймера TIM14 - 53999 ступеней.</p>
+            <p class="mb-2"><b>Что делать, если увидели ~ или !.</b> Откройте Edit у этой строки и уменьшите PWM Frequency (milliHz). Частота вводится в миллигерцах: 2 kHz - это <code>${'2000000'}</code>, 20 kHz - это <code>${'20000000'}</code>. Если вы сами выбрали высокую частоту для особой схемы, значок можно просто игнорировать.</p>
+            <p class="mb-2"><b>Одинаковые значки у соседних строк - это нормально.</b> Пины одного таймера (например PC6 и PC7 на TIM8) работают на общей частоте, поэтому у них и значок один и тот же. Подробнее - в разделе про аппаратные таймеры ниже.</p>
+          </div>
         </section>
         <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">${condHelpTitle(true)}</h2>
@@ -680,11 +693,24 @@ function TabEncoder({ }) {
             </tbody>
           </table>
 
+            
+            <h4 class="text-lg font-bold text-black mt-4 mb-2">Как задать условие для PWM-выхода</h4>
+            <p class="mb-2">У PWM-выхода может быть один из трёх «хозяев». Условие пишется в том месте, где выходом управляют:</p>
+            <ul class="list-disc ml-6 mb-3 space-y-1">
+              <li><b>Выходом управляет ручка (энкодер).</b> Условие пишется на этой странице, в строке энкодера: нажмите <b>Connection</b>, впишите условие в поле <b>Condition</b> и нажмите <b>Save changes</b>. Условие станет «замком» на ручке.</li>
+              <li><b>Выход включается или плавно разгорается по расписанию.</b> Откройте страницу <b>Timer(s)</b> и впишите условие в самом конце записи в поле <b>Script</b>, после знака вопроса: <code>${'pwm:5,600,0,100?Ss'}</code>. Это значит: диммер 5 плавно разгорается от 0 до 100 процентов за 600 секунд, но только если сейчас ночь. Вводите такую запись обычной кнопкой Edit. Если потом открыть строку и сохранить через окно PWM, условие пропадёт - впишите его снова.</li>
+              <li><b>Выходом управляет PID-регулятор.</b> Откройте страницу <b>PID controller</b>, нажмите Edit у регулятора и впишите условие в поле <b>Condition</b>. Пока условие неверно, выход выключен (0%).</li>
+            </ul>
+            <p class="mb-2">Само условие составляется так же, как для энкодера: смотрите разделы «Из чего строится условие» и «Готовые примеры» ниже.</p>
+            <h4 class="text-lg font-bold text-black mt-4 mb-2">Почему у строки PWM нет поля Condition в таблице</h4>
+            <p class="mb-2">Представьте лампу, ручку-диммер и провод между ними. Условие - это замок на ручке. Прошивка хранит его в «проводе» (в связи «ручка - лампа») и проверяет только в тот момент, когда вы поворачиваете ручку.</p>
+            <p class="mb-2">Строка с меткой PWM - это лампа без ручки. Провода нет, замок вешать не на что, поэтому в колонке Condition стоит прочерк. Такими выходами управляют не поворотом ручки, а командами: ползунком на странице, через API, MQTT или Zigbee-диммером. Эти команды условие не проверяют.</p>
+            <p class="mb-2"><b>Если замок нужен именно на ручке,</b> подключите PWM к энкодеру: в Edit энкодера выберите его в поле PWM connection. Строка перейдёт в строку этого энкодера, и в ней появится поле Condition. Если выход должен работать по расписанию или под управлением PID, используйте один из способов выше.</p>
             <h4 class="text-lg font-bold text-black mt-4 mb-2">Важные правила</h4>
             <ul class="list-disc ml-6 mb-3 space-y-1">
               <li><b>Проверка идёт на каждый щелчок.</b> Если в момент щелчка условие НЕТ - этот щелчок пропущен: яркость и сохранённое значение не меняются. Когда условие станет ДА, ручка снова заработает сама.</li>
               <li><b>Главный ползунок On/Off энкодера</b> сильнее любого условия. Если он выключен, ручка не меняет яркость на лампе (запоминаемое значение меняется, только если условие ДА).</li>
-              <li><b>У строк PWM без энкодера условия нет.</b> Поле Condition есть только у энкодеров. PWM без энкодера управляется напрямую (Zigbee, API, MQTT, PID), а его рубильник On/Off действует так же, как главный ползунок энкодера.</li>
+              <li><b>У строк PWM без энкодера условия нет.</b> Поле Condition есть только у энкодеров. PWM без энкодера управляется напрямую (Zigbee, API, MQTT, PID), а его рубильник On/Off действует так же, как главный ползунок энкодера. Где условие для PWM всё же можно задать - в блоке «Как задать условие для PWM-выхода» выше.</li>
               <li><b>Прямое управление условие не проверяет:</b> ползунок диммера на странице, команда API или MQTT, а также обратная связь от Zigbee-диммера работают независимо от условия.</li>
               <li><b>Неисправный или молчащий датчик</b> даёт ответ «неизвестно», и ручка блокируется, даже если перед условием стоит !: <code>${'!(T5<25)'}</code> при мёртвом датчике НЕ откроет ручку. Исключение: явная правда через |, например <code>${'T5<25|D1'}</code>.</li>
               <li><b>Пустая ячейка и ячейка со значением 0 блокируют ручку.</b> Если условие энкодера ссылается на ячейку (например C3), а потом ячейку очистили - ручка перестанет работать (пустая ячейка считается НЕТ, а не «без условия»). Значение 0 появляется, например, после удаления устройства, которое было в условии. Впишите верное условие в ячейку в панели «Библиотека условий» или очистите поле Condition у энкодера. В таблице такая связь подсвечивается красным бейджем «C1: пусто» (или жёлтым, если пустая ячейка стоит внутри составного условия).</li>
@@ -960,6 +986,14 @@ function TabEncoder({ }) {
               <li><b>[lock]</b> - PID autotune is running. The settings of this output are locked until it finishes.</li>
             </ul>
           </div>
+          <div>
+            <h3 class="text-lg font-bold text-black mb-2">Marks next to the frequency: OK, ~ and !</h3>
+            <p class="mb-2">In the PWM Frequency column a mark follows the frequency. It hints how well the frequency is chosen. It is only advice, not an error: the output works with any mark, and it is up to you whether to change the frequency.</p>
+            <table class="w-full border-collapse my-2 bg-white/70"><thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Mark</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Frequency</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">What it means</th></tr></thead><tbody><tr><td class="border px-3 py-1 whitespace-nowrap"><b class="text-green-600">OK</b> (green)</td><td class="border px-3 py-1">up to 40 kHz</td><td class="border px-3 py-1">All good. Brightness can be set smoothly and precisely. For lamps, LED strips and fans a few kilohertz are usually enough.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b class="text-yellow-600">~</b> (yellow)</td><td class="border px-3 py-1">from 40 to 200 kHz</td><td class="border px-3 py-1">It works, but there are fewer brightness steps, so the precision is lower. An ordinary load does not need such a frequency.</td></tr><tr><td class="border px-3 py-1 whitespace-nowrap"><b class="text-red-600">!</b> (red)</td><td class="border px-3 py-1">above 200 kHz</td><td class="border px-3 py-1">Expert mode (in the Edit window this mark is captioned "Expert mode: low precision"). There are very few brightness steps, so the brightness cannot be set precisely, and transistors and drivers get very hot. A lamp or a fan may simply not keep up with such speed.</td></tr></tbody></table>
+            <p class="mb-2"><b>Why.</b> PWM is very fast blinking: the brightness equals the share of time the output is on. The more often the output blinks, the fewer "slices" one such cycle can be divided into. The number of slices is shown in the Resolution (steps) column. Examples: at 1 MHz the timer TIM8 has only 215 steps, while at 2 kHz the timer TIM14 has 53999 steps.</p>
+            <p class="mb-2"><b>What to do if you see ~ or !.</b> Open Edit of that row and lower PWM Frequency (milliHz). The frequency is entered in millihertz: 2 kHz is <code>$2000000</code>, 20 kHz is <code>$20000000</code>. If you chose a high frequency on purpose for a special circuit, you can simply ignore the mark.</p>
+            <p class="mb-2"><b>The same mark on neighbouring rows is normal.</b> Pins of one timer (for example PC6 and PC7 on TIM8) share one frequency, so they get the same mark. More in the hardware timers section below.</p>
+          </div>
         </section>
         <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">${condHelpTitle(false)}</h2>
@@ -1156,11 +1190,24 @@ function TabEncoder({ }) {
             </tbody>
           </table>
 
+            
+            <h4 class="text-lg font-bold text-black mt-4 mb-2">How to set a condition for a PWM output</h4>
+            <p class="mb-2">A PWM output can have one of three "owners". The condition is written where the output is controlled:</p>
+            <ul class="list-disc ml-6 mb-3 space-y-1">
+              <li><b>The output is controlled by a knob (encoder).</b> Write the condition on this page, in the encoder row: click <b>Connection</b>, type the condition into the <b>Condition</b> field and click <b>Save changes</b>. The condition becomes a "lock" on the knob.</li>
+              <li><b>The output turns on or fades in on a schedule.</b> Open the <b>Timer(s)</b> page and type the condition at the very end of the entry in the <b>Script</b> field, after the question mark: <code>${'pwm:5,600,0,100?Ss'}</code>. It means: dimmer 5 fades in from 0 to 100 percent over 600 seconds, but only if it is night now. Enter such an entry with the ordinary Edit button. If you later open the row and save it through the PWM window, the condition disappears - type it again.</li>
+              <li><b>The output is controlled by a PID regulator.</b> Open the <b>PID controller</b> page, click Edit of the regulator and type the condition into the <b>Condition</b> field. While the condition is false, the output is off (0%).</li>
+            </ul>
+            <p class="mb-2">The condition itself is built the same way as for an encoder: see the sections "What a condition is made of" and "Ready-made examples" below.</p>
+            <h4 class="text-lg font-bold text-black mt-4 mb-2">Why a PWM row has no Condition field in the table</h4>
+            <p class="mb-2">Imagine a lamp, a dimmer knob and a wire between them. A condition is a lock on the knob. The firmware keeps it in the "wire" (the knob-to-lamp link) and checks it only at the moment you turn the knob.</p>
+            <p class="mb-2">A row marked PWM is a lamp without a knob. There is no wire, nothing to hang a lock on, so the Condition column shows a dash. Such outputs are controlled not by turning a knob but by commands: the slider on the page, API, MQTT or a Zigbee dimmer. These commands do not check the condition.</p>
+            <p class="mb-2"><b>If you need the lock exactly on the knob,</b> connect the PWM to an encoder: in the encoder Edit window choose it in the PWM connection field. The row moves into that encoder row, and the Condition field appears there. If the output should work on a schedule or under PID control, use one of the ways above.</p>
             <h4 class="text-lg font-bold text-black mt-4 mb-2">Important rules</h4>
             <ul class="list-disc ml-6 mb-3 space-y-1">
               <li><b>The check happens on every click.</b> If the condition is NO at the moment of a click, that click is skipped: neither the brightness nor the stored value changes. When the condition becomes YES, the knob works again by itself.</li>
               <li><b>The encoder main On/Off slider</b> is stronger than any condition. If it is off, the knob does not change the lamp brightness (the remembered value changes only if the condition is YES).</li>
-              <li><b>Rows PWM without an encoder have no condition.</b> The Condition field exists only for encoders. A PWM without an encoder is controlled directly (Zigbee, API, MQTT, PID), and its On/Off switch acts like the main slider of an encoder.</li>
+              <li><b>Rows PWM without an encoder have no condition.</b> The Condition field exists only for encoders. A PWM without an encoder is controlled directly (Zigbee, API, MQTT, PID), and its On/Off switch acts like the main slider of an encoder. Where a condition for a PWM can still be set - see the block "How to set a condition for a PWM output" above.</li>
               <li><b>Direct control does not check the condition:</b> the dimmer slider on the page, an API or MQTT command, and feedback from a Zigbee dimmer all work regardless of the condition.</li>
               <li><b>A faulty or silent sensor</b> gives the answer "unknown", and the knob is blocked even if the condition starts with !: <code>${'!(T5<25)'}</code> with a dead sensor does NOT unlock the knob. Exception: explicit truth through |, for example <code>${'T5<25|D1'}</code>.</li>
               <li><b>An empty cell and a cell with the value 0 block the knob.</b> If the encoder condition refers to a cell (for example C3) and the cell is later cleared, the knob stops working (an empty cell counts as NO, not as "no condition"). The value 0 appears, for example, after a device used in the condition is deleted. Type a valid condition into the cell in the Conditions library panel, or clear the Condition field of the encoder. In the table such a link is shown with a red badge "C1: empty" (or a yellow one if the empty cell is inside a compound condition).</li>
@@ -1468,7 +1515,6 @@ function TabEncoder({ }) {
     return html`
       <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-start items-center" style="overflow-anchor:none;">
         <!-- Decorative background glow -->
-        <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
         <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
         <div class="w-full relative z-10">

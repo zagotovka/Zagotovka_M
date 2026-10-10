@@ -26,6 +26,11 @@ function initGlobalTooltip() {
   function show(el) {
     clearTimeout(hideTimer);
     tip.innerHTML = el.dataset.tip;
+    const darkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+    tip.style.background = darkTheme ? '#e6eef4' : '#1a2332';
+    tip.style.color      = darkTheme ? '#14202b' : '#e8f4f8';
+    tip.style.border     = darkTheme ? '1px solid rgba(0,160,170,0.65)' : '1px solid rgba(0,188,188,0.35)';
+    tip.style.boxShadow  = darkTheme ? '0 6px 22px rgba(0,0,0,0.65)' : '0 6px 20px rgba(0,0,0,0.45)';
     tip.style.display = 'block'; tip.style.opacity = '0';
     tip.style.left = '0px'; tip.style.top = '0px';
     requestAnimationFrame(() => {

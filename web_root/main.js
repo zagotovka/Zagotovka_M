@@ -1,3 +1,4 @@
+
 import { registerPoll, unregisterPoll, pauseAll, resumeAll } from './pollQueue.js';
 import { StateContext } from './context.js';
 
@@ -26,6 +27,9 @@ import {
   textSection
 } from './components.js';
 import './Modal.css';
+import './background.css';
+import './theme.css';
+import './theme.js';
 import { ruLangswitch } from './rulang.js';
 import { enLangswitch } from './enlang.js';
 import { LOGO_SRC } from './logoData.js';
@@ -683,7 +687,7 @@ const App = function ({ }) {
     />`; // If not logged in, show login screen
 
   return html`<${StateContext.Provider} value=${commonData}>
-   <div class="min-h-screen bg-slate-100" id="mains">
+   <div class="min-h-screen" id="mains">
     <${Sidebar} url=${url} show=${showSidebar} />
     ${showSidebar && html`<div class="fixed inset-0 z-[55] bg-black/30 lg:hidden" onclick=${() => setShowSidebar(false)}></div>`}
     <${Header}
@@ -722,4 +726,5 @@ const App = function ({ }) {
 };
 
 window.onload = () => render(h(App), document.body);
+
 

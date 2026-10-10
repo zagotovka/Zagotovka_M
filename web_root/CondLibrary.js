@@ -1,4 +1,3 @@
-
 // CondLibrary.js - панель "Библиотека условий (Conditions)": 12 общих ячеек C1..C12.
 //
 // Показывается на страницах Switch, Encoder и PID под таблицей и позволяет
@@ -149,7 +148,12 @@ const T = {
     confirmUsed: (n, c) => `Ячейка ${c} используется в ${n} местах. Изменение сразу поменяет их поведение. Сохранить?`,
     placeholder: 'Пусто. Например: D2&!D3 или T5>25.5 или Ss',
     legend: 'Буквы в условии: D - состояние устройства (выход на пине DEVICE, PWM или Zigbee-устройство), DV - значение диммера, B - кнопка (BU - не нажата, BH - удерживается), T - температурный датчик, H - датчик влажности, Sr / Ss - день / ночь, C - ссылка на ячейку библиотеки. Число после буквы - ID из первой колонки таблицы. Прежние буквы R и RV тоже работают.',
-    note: 'В поле Condition любой связи ячейка вставляется кнопкой C1..C12 или словом C3. Глубина вложенных ссылок - не более двух.',
+    note: [
+  'Одна ячейка - одно условие, до 46 символов. Писать без запятых и пробелов.',
+  'Нужно два условия сразу? Запишите каждое в свою ячейку (например C3 и C4), а в поле Condition напишите C3|C4 (верно хотя бы одно) или C3&C4 (верны оба).',
+  'Вставить ячейку в поле Condition: кнопкой C1..C12 под полем (она добавляет через |) или вручную, например C3.',
+  'Ячейка может ссылаться на другую ячейку, но не глубже двух уровней.',
+],
   },
   en: {
     title: 'Conditions library',
@@ -179,7 +183,12 @@ const T = {
     confirmUsed: (n, c) => `Cell ${c} is used in ${n} places. The change takes effect for them immediately. Save?`,
     placeholder: 'Empty. Example: D2&!D3 or T5>25.5 or Ss',
     legend: 'Letters in a condition: D - device state (output on a DEVICE pin, PWM or Zigbee device), DV - dimmer value, B - button (BU - not pressed, BH - held), T - temperature sensor, H - humidity sensor, Sr / Ss - day / night, C - reference to a library cell. The number after a letter is the ID from the first table column. The old letters R and RV still work.',
-    note: 'In the Condition field of any link a cell is inserted with the C1..C12 buttons or by the word C3. References nest no deeper than two levels.',
+    note: [
+  'One cell is one condition, up to 46 characters. Write it without commas or spaces.',
+  'Need two conditions at once? Put each in its own cell (for example C3 and C4), then write C3|C4 (at least one is true) or C3&C4 (both are true) in the Condition field.',
+  'To insert a cell into the Condition field, press a C1..C12 button under the field (it adds the cell with |) or type it by hand, for example C3.',
+  'A cell can refer to another cell, but no deeper than two levels.',
+],
   },
 };
 
@@ -311,7 +320,7 @@ export function CondLibraryPanel({ isRu = true }) {
       ${open && html`
         <div class="px-4 pb-4" style="max-height:70vh;overflow-y:auto;">
           <div class="mb-3 p-3 rounded-xl bg-white/60 border border-white/70 text-sm text-slate-700 space-y-1">
-            <div>${t.note}</div>
+            ${t.note.map((s) => html`<div>${s}</div>`)}
             <div>${t.legend}</div>
             ${freeSlots !== null && html`
               <div class=${freeSlots <= 2 ? 'text-amber-700 font-semibold' : 'text-slate-600'}>
@@ -346,4 +355,3 @@ export function CondLibraryPanel({ isRu = true }) {
     </div>
   `;
 }
-

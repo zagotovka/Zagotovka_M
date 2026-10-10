@@ -1,0 +1,95 @@
+/*
+ * Page background: neutral light "technical paper" - pure CSS, no raster image.
+ *
+ * Why no picture: a 1024x811 photo stretched over 1920x1080+ is upscaled and
+ * blurry, looks different on every aspect ratio (cover crops it) and makes the
+ * glass panels (bg-white/NN + backdrop-blur) dark. Gradients and a thin grid
+ * are drawn by the browser at the native resolution, so they stay sharp on
+ * HD / 2K / 4K / phones and weigh 0 KB.
+ *
+ * The layer is fixed to the viewport and sits below all page content.
+ * The palette is deliberately desaturated slate/blue-grey, so the pastel help
+ * blocks (sky / violet / amber / teal / rose / emerald -50) stay the only
+ * colourful elements on the page.
+ *
+ * Tuning:
+ *   --bg-tint-a / --bg-tint-b : strength of the two soft colour glows (0..0.2)
+ *   --bg-grid                 : visibility of the thin grid (0 = off, 0.05 max)
+ */
+:root {
+  --bg-base: #eef2f7;
+  --bg-top: #f6f8fb;
+  --bg-grid-rgb: 15, 23, 42;
+  --bg-tint-a: rgba(59, 130, 246, 0.10);  /* soft blue glow, top-left */
+  --bg-tint-b: rgba(20, 184, 166, 0.08);  /* soft teal glow, bottom-right */
+  --bg-grid: 0.035;
+  --bg-grid-size: 32px;
+
+  /* Tell the browser which theme is active (native scrollbars, selects, form controls). */
+  color-scheme: light;
+}
+
+/* Dark theme: switched by the sun / moon icons on the Global Settings page (theme.js).
+   Neutral deep slate, so the tinted help blocks stay the only colourful elements. */
+html[data-theme="dark"] {
+  --bg-base: #0b1220;
+  --bg-top: #101a2c;
+  --bg-tint-a: rgba(59, 130, 246, 0.16);
+  --bg-tint-b: rgba(20, 184, 166, 0.10);
+  --bg-grid-rgb: 148, 163, 184;
+  --bg-grid: 0.045;
+  color-scheme: dark;
+}
+
+html {
+  background-color: var(--bg-base);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--bg-base);
+  background-image:
+    /* fine grid (circuit-board / blueprint hint) */
+    linear-gradient(rgba(var(--bg-grid-rgb), var(--bg-grid)) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--bg-grid-rgb), var(--bg-grid)) 1px, transparent 1px),
+    /* soft colour glows, sized relative to the viewport -> same look on any screen */
+    radial-gradient(ellipse 70% 60% at 0% 0%, var(--bg-tint-a), transparent 70%),
+    radial-gradient(ellipse 70% 60% at 100% 100%, var(--bg-tint-b), transparent 70%),
+    /* gentle vertical light falloff */
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg-base) 100%);
+  background-size:
+    var(--bg-grid-size) var(--bg-grid-size),
+    var(--bg-grid-size) var(--bg-grid-size),
+    100% 100%,
+    100% 100%,
+    100% 100%;
+  background-position: center top, center top, 0 0, 0 0, 0 0;
+  background-repeat: repeat, repeat, no-repeat, no-repeat, no-repeat;
+}
+
+/* Small screens: slightly coarser grid, so it does not look noisy */
+@media (max-width: 640px) {
+  :root, html[data-theme="dark"] {
+    --bg-grid-size: 24px;
+    --bg-grid: 0.03;
+  }
+}
+
+/* Users who ask for more contrast / less decoration get a flat background */
+@media (prefers-contrast: more) {
+  :root, html[data-theme="dark"] {
+    --bg-grid: 0;
+    --bg-tint-a: transparent;
+    --bg-tint-b: transparent;
+  }
+}
+
+@media print {
+  body::before {
+    display: none;
+  }
+}

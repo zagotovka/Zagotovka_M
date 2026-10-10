@@ -41,6 +41,11 @@ function initGlobalTooltip() {
   function show(el) {
     clearTimeout(hideTimer);
     tip.innerHTML = el.dataset.tip;
+    const darkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+    tip.style.background = darkTheme ? '#e6eef4' : '#1a2332';
+    tip.style.color      = darkTheme ? '#14202b' : '#e8f4f8';
+    tip.style.border     = darkTheme ? '1px solid rgba(0,160,170,0.65)' : '1px solid rgba(0,188,188,0.35)';
+    tip.style.boxShadow  = darkTheme ? '0 6px 22px rgba(0,0,0,0.65)' : '0 6px 20px rgba(0,0,0,0.45)';
     tip.style.display = 'block';
     tip.style.opacity = '0';
     tip.style.left = '0px';
@@ -95,25 +100,51 @@ const _parseAction = (str) => {
   }).filter(x => x.pin !== undefined && x.pin !== '');
 };
 
+// Стили бейджей лимитов. Светлая тема: как раньше. Тёмная тема: тёмная
+// полупрозрачная заливка с цветной рамкой и светлым текстом.
+(function () {
+  if (document.getElementById('ow-badge-style')) return;
+  const st = document.createElement('style');
+  st.id = 'ow-badge-style';
+  st.textContent = `
+    .ow-b { display:inline-flex; align-items:center; gap:4px; border:1.5px solid;
+            border-radius:10px; padding:3px 10px; font-size:12px; font-weight:600;
+            white-space:nowrap; line-height:1.6; }
+    .ow-b-up { background:#fff7ed; border-color:#fdba74; }
+    .ow-b-lo { background:#eff6ff; border-color:#93c5fd; }
+    .ow-b-up .ow-l { color:#9a3412; margin-right:2px; }
+    .ow-b-lo .ow-l { color:#1e3a5f; margin-right:2px; }
+    .ow-b .ow-d  { color:#94a3b8; font-weight:400; }
+    .ow-b .ow-p  { color:#334155; font-weight:700; }
+    .ow-b .ow-br { color:#475569; }
+
+    [data-theme="dark"] .ow-b-up { background:rgba(251,146,60,0.14) !important; border-color:rgba(251,146,60,0.60) !important; }
+    [data-theme="dark"] .ow-b-lo { background:rgba(96,165,250,0.14) !important; border-color:rgba(96,165,250,0.60) !important; }
+    [data-theme="dark"] .ow-b-up .ow-l { color:#fdba74 !important; }
+    [data-theme="dark"] .ow-b-lo .ow-l { color:#93c5fd !important; }
+    [data-theme="dark"] .ow-b .ow-d  { color:#94a3b8 !important; }
+    [data-theme="dark"] .ow-b .ow-p  { color:#f1f5f9 !important; }
+    [data-theme="dark"] .ow-b .ow-br { color:#cbd5e1 !important; }
+  `;
+  document.head.appendChild(st);
+})();
+
 const ActionBadge = ({ isUpper, isHumid, value, unit, str }) => {
   const parts = _parseAction(str);
   const arrow = (isHumid ? 'H ' : '') + (isUpper ? '↑' : '↓');
-  const borderColor = isUpper ? '#fdba74' : '#93c5fd';
-  const bg = isUpper ? '#fff7ed' : '#eff6ff';
-  const labelColor = isUpper ? '#9a3412' : '#1e3a5f';
   return html`
-    <span style="display:inline-flex;align-items:center;gap:4px;background:${bg};border:1.5px solid ${borderColor};border-radius:10px;padding:3px 10px;font-size:12px;font-weight:600;white-space:nowrap;line-height:1.6;">
-      <span style="color:${labelColor};margin-right:2px;">${arrow} ${value ?? '—'}${unit}:</span>
+    <span class="ow-b ${isUpper ? 'ow-b-up' : 'ow-b-lo'}">
+      <span class="ow-l">${arrow} ${value ?? '—'}${unit}:</span>
       ${parts.length === 0
-        ? html`<span style="color:#94a3b8;">[—]</span>`
+        ? html`<span class="ow-d">[—]</span>`
         : html`
-          <span style="color:#475569;">[</span>
+          <span class="ow-br">[</span>
           ${parts.map(({ pin, state }, i) => html`
             <span>
-              <span style="color:#94a3b8;font-weight:400;">id</span><span style="color:#334155;font-weight:700;">${pin}</span><span style="color:#475569;">:</span><span style="color:${_stateColor(state)};font-weight:700;">${_stateLabel(state)}</span>${i < parts.length - 1 ? html`<span style="color:#94a3b8;">,${' '}</span>` : ''}
+              <span class="ow-d">id</span><span class="ow-p">${pin}</span><span class="ow-br">:</span><span style="color:${_stateColor(state)};font-weight:700;">${_stateLabel(state)}</span>${i < parts.length - 1 ? html`<span class="ow-d">,${' '}</span>` : ''}
             </span>
           `)}
-          <span style="color:#475569;">]</span>
+          <span class="ow-br">]</span>
         `}
     </span>
   `;
@@ -1013,7 +1044,7 @@ const TabOneWire = () => {
         </tr>
         ${isExpanded && hasChildren ? html`
           <tr>
-            <td colspan="6" class="px-4 py-3 bg-gradient-to-r from-cyan-50/80 via-slate-50/60 to-blue-50/80 border-t">
+            <td colspan="6" class="px-4 py-3 bg-gradient-to-r from-cyan-50/80 via-slate-50/60 to-blue-50/80 border-t dark:!bg-none dark:!bg-slate-900/60 dark:!border-cyan-500/20">
               <${SensorTable} d=${device} />
             </td>
           </tr>
@@ -1028,7 +1059,10 @@ const TabOneWire = () => {
     if (sensorType === 0 || numDevices === 0) return html`<div class="px-4 py-2 text-slate-500 font-medium">${T.noSensors}</div>`;
 
     let sensors = d.sensors || [];
-    const rowBg = ['bg-cyan-50/60 border-cyan-200/50', 'bg-slate-100/70 border-slate-200/50'];
+    const rowBg = [
+  'bg-cyan-50/60 border-cyan-200/50 dark:!bg-slate-800/70 dark:!border-cyan-500/25',
+  'bg-slate-100/70 border-slate-200/50 dark:!bg-slate-900/70 dark:!border-slate-600/40'
+];
 
     return sensors.length > 0 && Object.keys(sensors).length > 0
       ? html`<div class="flex flex-col gap-2 w-full">${sensors.map((s, idx) => html`
@@ -1057,7 +1091,7 @@ const TabOneWire = () => {
             }}>${T.edit}</a>
           </div>
         `)}</div>`
-      : html`<div class="px-4 py-4 text-slate-500 font-medium bg-white/50 rounded-xl text-center w-full">${T.noData}</div>`;
+      : html`<div class="px-4 py-4 text-slate-500 font-medium bg-white/50 dark:!bg-slate-800/60 rounded-xl text-center w-full">${T.noData}</div>`;
   };
 
   const handleOneWireUpdate = (upd) => {

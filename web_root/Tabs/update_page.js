@@ -801,7 +801,7 @@ export function FirmwareUpdate({ }) {
                       : `Switches the active bank to Bank ${targetBank}${targetVersion ? ` (${targetVersion})` : ''} without uploading a new image, then reboots`)}
                 class=${bankSwitchDisabled
                   ? "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-slate-200 text-slate-400 shadow-inner cursor-not-allowed"
-                  : "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-white text-rose-700 border-2 border-rose-400 shadow-sm transition-all duration-300 hover:bg-rose-600 hover:text-white hover:border-rose-600 active:scale-95"}
+                  : "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-white text-rose-700 border-2 border-rose-400 shadow-sm transition-all duration-300 hover:bg-rose-600 hover:text-white hover:border-rose-600 dark:hover:!bg-rose-600 dark:hover:!text-white dark:hover:!border-rose-600 active:scale-95"}
               >
                 <${Icons.backward} class="w-4" />
                 ${language === 'ru'
@@ -841,7 +841,7 @@ export function FirmwareUpdate({ }) {
                   : (language === 'ru' ? 'Перезагрузить устройство (требуется подтверждение)' : 'Reboot device (requires confirmation)')}
                 class=${uploading
                   ? "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-slate-200 text-slate-400 shadow-inner cursor-not-allowed"
-                  : "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-white text-amber-700 border-2 border-amber-400 shadow-sm transition-all duration-300 hover:bg-amber-500 hover:text-white hover:border-amber-500 active:scale-95"}
+                  : "w-full inline-flex justify-center items-center gap-2 py-2.5 rounded-full text-sm font-bold bg-white text-amber-700 border-2 border-amber-400 shadow-sm transition-all duration-300 hover:bg-amber-500 hover:text-white hover:border-amber-500 dark:hover:!bg-amber-500 dark:hover:!text-white dark:hover:!border-amber-500 active:scale-95"}
               >
                 <${Icons.refresh} class="w-4" />
                 ${language === 'ru' ? 'Перезагрузить устройство' : 'Reboot device'}
@@ -852,10 +852,10 @@ export function FirmwareUpdate({ }) {
 
         <div class="flex justify-end mt-2">
           <button
-            type="button"
-            onclick=${(e) => { lockToggle(e); setShowHelp(!showHelp); }}
-            class="px-8 py-2.5 rounded-full text-sm font-bold text-slate-700 bg-white/70 border border-slate-300 shadow-sm transition-all duration-300 hover:bg-white hover:border-slate-400 active:scale-95"
-          >
+	  type="button"
+	  onclick=${(e) => { lockToggle(e); setShowHelp(!showHelp); }}
+	  class="px-8 py-2.5 rounded-full text-sm font-bold text-white bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 shadow-sm transition-all duration-300 active:scale-95"
+	>
             ${showHelp ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help') : (language === 'ru' ? 'Показать справку' : 'Show Help')}
           </button>
         </div>

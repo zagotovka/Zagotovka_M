@@ -6,6 +6,7 @@ import { MyPolzunok, Chart, DeveloperNote, pageSetting, Toast } from '../main.js
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, rulangsettings } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire, enlangsettings } from '../enlang.js';
 import { condHelpTitle } from '../condlib.js';
+import { ThemeToggle } from '../theme.js';
 
 // ---------------------------------------------------------------------------
 // Глобальный tooltip-портал (position:fixed, body-level)
@@ -41,6 +42,11 @@ function initGlobalTooltip() {
   function show(el) {
     clearTimeout(hideTimer);
     tip.innerHTML = el.dataset.tip;
+    const darkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+    tip.style.background = darkTheme ? '#e6eef4' : '#1a2332';
+    tip.style.color      = darkTheme ? '#14202b' : '#e8f4f8';
+    tip.style.border     = darkTheme ? '1px solid rgba(0,160,170,0.65)' : '1px solid rgba(0,188,188,0.35)';
+    tip.style.boxShadow  = darkTheme ? '0 6px 22px rgba(0,0,0,0.65)' : '0 6px 20px rgba(0,0,0,0.45)';
     tip.style.display = 'block';
     tip.style.opacity = '0';
     tip.style.left = '0px';
@@ -1411,8 +1417,11 @@ function Settings({ }) {
         <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
         <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
+        <!-- Light / dark theme switch (top-right corner of the panel) -->
+        <${ThemeToggle} lang=${settings.lang || 'ru'} />
+
         <!-- Header -->
-        <div class="w-full mb-2 px-2 flex flex-row items-center gap-6">
+        <div class="w-full mb-2 px-2 pr-24 flex flex-row items-center gap-6">
           <h2 class="text-3xl font-extrabold text-slate-800 tracking-tight drop-shadow-sm uppercase">Global Settings</h2>
           <select
             value=${settings.lang}
@@ -1896,10 +1905,23 @@ function Settings({ }) {
                       </div>
                     `)}
                   </div>
+                  <div class="mt-3 text-base text-slate-700 space-y-1">
+                    ${(isRuSun ? [
+                      'Одна ячейка - одно условие, до 46 символов. Писать без запятых и пробелов.',
+                      'Нужно два условия сразу? Запишите каждое в свою ячейку (например C3 и C4), а в поле Condition на страницах Switch, Encoder, PID напишите C3|C4 (верно хотя бы одно) или C3&C4 (верны оба).',
+                      'Вставить ячейку в поле Condition: кнопкой C1..C12 под полем (она добавляет через |) или вручную, например C3.',
+                      'Ячейка может ссылаться на другую ячейку, но не глубже двух уровней.',
+                    ] : [
+                      'One cell is one condition, up to 46 characters. Write it without commas or spaces.',
+                      'Need two conditions at once? Put each in its own cell (for example C3 and C4), then write C3|C4 (at least one is true) or C3&C4 (both are true) in the Condition field on the Switch, Encoder, PID pages.',
+                      'To insert a cell into the Condition field, press a C1..C12 button under the field (it adds the cell with |) or type it by hand, for example C3.',
+                      'A cell can refer to another cell, but no deeper than two levels.',
+                    ]).map((s) => html`<div>${s}</div>`)}
+                  </div>
                   <p class="mt-2 text-base text-slate-700">
                     ${isRuSun
-                      ? 'Синтаксис: D1 - устройство с ID 1 включено (выход на пине DEVICE, PWM с яркостью больше 0 или Zigbee-устройство; прежняя запись R1 тоже работает), !D2 - выключено, DV1>0 / DV1=100 / DV1g100 / DV1l100 - диммер (для Zigbee - состояние/яркость устройства), B1 - кнопка нажата, BU1 - не нажата, BH1 - удерживается, T5>25.5 - температура (°C), H4>50 - влажность (%), Sr - день, Ss - ночь. Операторы: ! & | ( ) = > < g l. В действиях можно ссылаться сюда: C3 = это условие №3. Мёртвый датчик даёт «неизвестно» - действие блокируется, в т.ч. под отрицанием, но явная истина через | перекрывает: T5<25|D1 сработает при мёртвом T5, если D1 вкл. Вложенность C-ссылок: 2 работают, глубже - блокировка. ВАЖНО: прямое управление (ползунок On/Off, MQTT/API set) условие НЕ проверяет'
-                      : 'Syntax: D1 - device with ID 1 is on (an output on a DEVICE pin, PWM with brightness above 0, or a Zigbee device; the old notation R1 also works), !D2 - off, DV1>0 / DV1=100 / DV1g100 / DV1l100 - dimmer (for Zigbee - device state/level), B1 - button pressed, BU1 - not pressed, BH1 - held, T5>25.5 - temperature, H4>50 - humidity, Sr - daytime, Ss - night. Operators: ! & | ( ) = > < g l. Actions can reference here: C3 = this condition #3. Dead sensor yields "unknown" - blocked even under negation, but explicit truth via | overrides: T5<25|D1 fires with dead T5 if D1 is on. C-chain: 2 nested refs work, deeper is blocked. NOTE: direct control (On/Off toggle, MQTT/API set) does NOT check conditions'}
+                      ? 'Синтаксис: D1 - устройство с ID 1 включено (выход на пине DEVICE, PWM с яркостью больше 0 или Zigbee-устройство; прежняя запись R1 тоже работает), !D2 - выключено, DV1>0 / DV1=100 / DV1g100 / DV1l100 - диммер (для Zigbee - состояние/яркость устройства), B1 - кнопка нажата, BU1 - не нажата, BH1 - удерживается, T5>25.5 - температура (°C), H4>50 - влажность (%), Sr - день, Ss - ночь. Операторы: ! & | ( ) = > < g l. В действиях можно ссылаться сюда: C3 = это условие №3. Мёртвый датчик даёт «неизвестно» - действие блокируется, в т.ч. под отрицанием, но явная истина через | перекрывает: T5<25|D1 сработает при мёртвом T5, если D1 вкл. ВАЖНО: прямое управление (ползунок On/Off, MQTT/API set) условие НЕ проверяет'
+                      : 'Syntax: D1 - device with ID 1 is on (an output on a DEVICE pin, PWM with brightness above 0, or a Zigbee device; the old notation R1 also works), !D2 - off, DV1>0 / DV1=100 / DV1g100 / DV1l100 - dimmer (for Zigbee - device state/level), B1 - button pressed, BU1 - not pressed, BH1 - held, T5>25.5 - temperature, H4>50 - humidity, Sr - daytime, Ss - night. Operators: ! & | ( ) = > < g l. Actions can reference here: C3 = this condition #3. Dead sensor yields "unknown" - blocked even under negation, but explicit truth via | overrides: T5<25|D1 fires with dead T5 if D1 is on. NOTE: direct control (On/Off toggle, MQTT/API set) does NOT check conditions'}
                   </p>
                 </td>
               </tr>
