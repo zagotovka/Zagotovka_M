@@ -3405,6 +3405,36 @@ static const HTTPSsettings *const flash_settings_backup
 // копий)
 STATIC_ASSERT(sizeof(HTTPSsettings) * 2 <= FLASH_SECTOR_11_SIZE,
               structure_size_exceeds_flash_sector);
+
+/*
+ * Область настроек 0x081C0000 .. 0x081FFFFF (256 КБ):
+ *  - Single Bank: сектор 11 (FLASH_SECTOR_11), 256 КБ;
+ *  - Dual Bank  : Bank 2, секторы 22 (0x081C0000) и 23 (0x081E0000),
+ *                 по 128 КБ — стирать нужно ОБА.
+ * Сектора 19 и 20 (0x08160000 .. 0x0819FFFF) в Dual Bank относятся к образу
+ * Bank B — стирать их нельзя.
+ * Все SETTINGS_VERSION_COUNT слотов обязаны помещаться в 256 КБ.
+ */
+STATIC_ASSERT((SETTINGS_VERSION_COUNT * ((sizeof(HTTPSsettings) + 3) / 4 * 4)) <=
+                  FLASH_SECTOR_11_SIZE,
+              settings_slots_exceed_area);
+
+/* Режим банков Flash: бит nDBANK регистра OPTCR (0 = Dual Bank). */
+static bool settings_flash_is_dual_bank(void) {
+  return (FLASH->OPTCR & FLASH_OPTCR_nDBANK) == 0;
+}
+
+/* Проверка, что вся область слотов настроек стёрта (все слова 0xFFFFFFFF). */
+static bool settings_area_is_erased(void) {
+  const volatile uint32_t *p = (const volatile uint32_t *)FLASH_SECTOR_11_START_ADDR;
+  const size_t words = (SETTINGS_VERSION_COUNT * SETTINGS_ALIGNED_SIZE) / 4;
+  for (size_t i = 0; i < words; i++) {
+    if (p[i] != 0xFFFFFFFFu) {
+      return false;
+    }
+  }
+  return true;
+}
 extern CRC_HandleTypeDef hcrc;
 /* writebuf перенесён наверх файла (DTCM-указатель, zagotovka_dtcm_init) */
 
@@ -3581,23 +3611,38 @@ static bool write_settings_to_flash(const HTTPSsettings *settings) {
     return false;
   }
 
-  // Если нужно, стираем сектор
+  // Если нужно, стираем область настроек (начало нового цикла)
   if (need_erase) {
     FLASH_EraseInitTypeDef EraseInitStruct = {0};
     EraseInitStruct.TypeErase = FLASH_TYPEERASE_SECTORS;
-    EraseInitStruct.Banks = FLASH_BANK_2;
-    EraseInitStruct.Sector = FLASH_SECTOR_20;
-    EraseInitStruct.NbSectors = 1;
     EraseInitStruct.VoltageRange = FLASH_VOLTAGE_RANGE_3;
+    if (settings_flash_is_dual_bank()) {
+      // Dual Bank: Bank 2, секторы 22 (0x081C0000) и 23 (0x081E0000)
+      EraseInitStruct.Sector = FLASH_SECTOR_22;
+      EraseInitStruct.NbSectors = 2;
+    } else {
+      // Single Bank: сектор 11 (0x081C0000, 256 КБ)
+      EraseInitStruct.Sector = FLASH_SECTOR_11;
+      EraseInitStruct.NbSectors = 1;
+    }
 
     uint32_t SectorError = 0;
     status = HAL_FLASHEx_Erase(&EraseInitStruct, &SectorError);
     if (status != HAL_OK) {
       HAL_FLASH_Lock();
+      printf("Settings: flash erase FAILED (status %d)\r\n", (int)status);
       return false;
     }
 
-    // После стирания следующий адрес всегда в начале сектора
+    // Проверяем, что область действительно стёрта: запись поверх нестёртых
+    // данных даёт слот с верным magic и битым CRC.
+    if (!settings_area_is_erased()) {
+      HAL_FLASH_Lock();
+      printf("Settings: area NOT erased after erase, abort\r\n");
+      return false;
+    }
+
+    // После стирания следующий адрес всегда в начале области
     next_addr = FLASH_SECTOR_11_START_ADDR;
   }
 
@@ -3607,6 +3652,13 @@ static bool write_settings_to_flash(const HTTPSsettings *settings) {
 
   // Блокируем Flash
   HAL_FLASH_Lock();
+
+  // Проверяем запись: содержимое слота должно совпасть с записанным
+  if (write_result &&
+      memcmp((const void *)next_addr, &temp_settings, sizeof(HTTPSsettings)) != 0) {
+    printf("Settings: verify after write FAILED\r\n");
+    write_result = false;
+  }
 
   return write_result;
 }

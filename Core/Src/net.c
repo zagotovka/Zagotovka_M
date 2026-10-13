@@ -1136,6 +1136,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/logs/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/logs/get", c->id));
 				handle_logs_get(c, hm);
+				keep_alive = true;
 			} else if (mg_match(hm->uri, mg_str("/api/settings/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/settings/get", c->id));
 				handle_settings_get(c);

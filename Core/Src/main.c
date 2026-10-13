@@ -2182,7 +2182,10 @@ void StartWebServerTask(void *argument)
           if (cur_ids[i] != s_other_ids[i]) { changed = true; break; }
         }
       }
-      if (changed) {
+      static uint32_t s_diag_tk = 0;   /* время последней печати [DIAG] */
+
+      if (changed && (now_poll - s_diag_tk) > 10000) {   /* не чаще раза в 10 с */
+        s_diag_tk = now_poll;
         for (struct mg_connection *c = mgr->conns; c != NULL; c = c->next) {
           if (!c->is_listening && !c->is_tls && c != s_conn) {
             char rem_buf[32];
