@@ -1,4 +1,7 @@
+
 import { h, useState, useEffect, useRef, html } from '../bundle.js';
+import { lockToggle } from '../helpLock.js';
+import { HelpBox } from '../helpCopy.js';
 
 const LOG_RING_MAX_CHARS = 4000; // лимит на клиенте — не даём тексту расти бесконечно в DOM
 const LOG_POLL_MS = 1000;        // опрос раз в секунду, пока не поставлено на паузу
@@ -526,6 +529,7 @@ function LogsTerminal({ language }) {
 
 export function Logger({ }) {
   const [language, setLanguage] = useState('ru');
+  const [showHelp, setShowHelp] = useState(false);
 
   // Страница не хранит свои данные и не содержит /api/mysett/get — язык
   // берётся из общих настроек устройства (как на Firmware Update / Zigbee
@@ -556,7 +560,18 @@ export function Logger({ }) {
 
         <${LogsTerminal} language=${language} />
 
-        ${LOGGER_HELP[language] || LOGGER_HELP.en}
+        <div class="w-full flex justify-between items-center bg-white/40 backdrop-blur-md border border-white/60 shadow-sm p-4 rounded-2xl">
+          <button
+            class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40"
+            onclick=${(e) => { lockToggle(e); setShowHelp(!showHelp); }}
+          >
+            ${showHelp
+              ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help')
+              : (language === 'ru' ? 'Показать справку' : 'Show Help')}
+          </button>
+        </div>
+
+        ${showHelp && html`<${HelpBox} language=${language}>${LOGGER_HELP[language] || LOGGER_HELP.en}<//>`}
       </div>
     </div>
   `;

@@ -1,4 +1,6 @@
+
 import { lockToggle } from '../helpLock.js';
+import { HelpBox } from '../helpCopy.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { registerPoll, unregisterPoll } from '../pollQueue.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
@@ -925,7 +927,7 @@ function TabSelect({ }) {
             ${showHelp ? (language === 'ru' ? 'Скрыть справку' : 'Hide Help') : (language === 'ru' ? 'Показать справку' : 'Show Help')}
           </button>
         </div>
-        ${showHelp && html`<div class="mt-2 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner w-full" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">${HELP_CONTENT[language] || HELP_CONTENT['en']}</div>`}
+        ${showHelp && html`<${HelpBox} language=${language} class="mt-2">${HELP_CONTENT[language] || HELP_CONTENT['en']}<//>`}
       </div>
     </div>
   `;

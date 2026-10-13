@@ -1,4 +1,6 @@
+
 import { lockToggle } from '../helpLock.js';
+import { HelpBox } from '../helpCopy.js';
 import { ModalEncoder } from '../Modals/ModalEncoder.js';
 import { condInfo, condBadgeProps, condHelpTitle } from '../condlib.js';
 import { CondLibraryPanel, useCondLibrary } from '../CondLibrary.js';
@@ -1566,9 +1568,7 @@ function TabEncoder({ }) {
 
               ${showHelp &&
       html`
-                  <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">
-                    ${helpContent[language]}
-                  </div>
+                  <${HelpBox} language=${language} class="mt-6" boxClass="text-slate-700">${helpContent[language]}<//>
                 `}
             </div>
           </div>
@@ -1592,3 +1592,4 @@ function TabEncoder({ }) {
 }
 
 export { TabEncoder };
+

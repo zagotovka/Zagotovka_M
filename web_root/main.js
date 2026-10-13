@@ -682,7 +682,7 @@ const App = function ({ }) {
     return html`<${Login}
       loginFn=${login}
       logoIcon=${Logo}
-      title="Zagotovka‑M Web Interface Login"
+      title="Zagotovka‑M"
       tipText="Default: admin / 12345678"
     />`; // If not logged in, show login screen
 

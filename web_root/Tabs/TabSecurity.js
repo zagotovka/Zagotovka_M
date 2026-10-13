@@ -1,4 +1,6 @@
+
 import { lockToggle } from '../helpLock.js';
+import { HelpBox } from '../helpCopy.js';
 import { ModalSIM800L, maskPhone, EyeIcon, EyeSlashIcon } from '../Modals/ModalSIM800L.js';
 import { ModalSecurity } from '../Modals/ModalSecurity.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
@@ -1163,7 +1165,7 @@ const TabSecurity = () => {
             </table>
           </div>
           <div class="flex justify-end mt-6 w-full"><button onclick=${(e) => { lockToggle(e); setShowHelpSim800L(!showHelpSim800L); }} class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40">${showHelpSim800L ? T.hideHelp : T.showHelp}</button></div>
-          ${showHelpSim800L && html`<div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">${helpContentSim800L[language]}</div>`}
+          ${showHelpSim800L && html`<${HelpBox} language=${language} class="mt-6" boxClass="text-slate-700">${helpContentSim800L[language]}<//>`}
         </div>
 
         <div class="w-full">
@@ -1197,7 +1199,7 @@ const TabSecurity = () => {
             </table>
           </div>
           <div class="flex justify-end mt-6 w-full"><button onclick=${(e) => { lockToggle(e); setShowHlp(!showHelpSecurity); }} class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40">${showHelpSecurity ? T.hideHelp : T.showHelp}</button></div>
-          ${showHelpSecurity && html`<div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">${helpContentSecurity[language]}</div>`}
+          ${showHelpSecurity && html`<${HelpBox} language=${language} class="mt-6" boxClass="text-slate-700">${helpContentSecurity[language]}<//>`}
         </div>
       </div>
       ${isModalOpenSim800L && html`<${ModalSIM800L} hideModal=${() => setIsModalOpenSim800L(false)} title=${T.edit} selectedGps=${sim800lData} onSave=${handleSim800lSave} language=${language} />`}

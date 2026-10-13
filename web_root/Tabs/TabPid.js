@@ -1,4 +1,6 @@
+
 import { lockToggle } from '../helpLock.js';
+import { HelpBox } from '../helpCopy.js';
 import { ModalPid } from '../Modals/ModalPid.js';
 import { condInfo, condBadgeProps, condHelpTitle } from '../condlib.js';
 import { CondLibraryPanel, useCondLibrary } from '../CondLibrary.js';
@@ -848,69 +850,86 @@ const HELP = {
   },
 };
 
-const TONES_CSS = {
-  sky: ['#f0f9ff', '#7dd3fc'],
-  indigo: ['#eef2ff', '#a5b4fc'],
-  teal: ['#f0fdfa', '#5eead4'],
-  amber: ['#fffbeb', '#fcd34d'],
-  violet: ['#f5f3ff', '#c4b5fd'],
-  rose: ['#fff1f2', '#fda4af'],
-  emerald: ['#ecfdf5', '#6ee7b7'],
-  orange: ['#fff7ed', '#fdba74'],
-  cyan: ['#ecfeff', '#67e8f9'],
+/* Справка использует те же Tailwind-классы, что и справка страницы OneWire(s) pin(s):
+ * общая тёмная тема (theme.css) умеет переопределять именно такие классы.
+ * Inline-стили здесь не используем: тема их не видит и текст становится нечитаемым. */
+const TONE_CLS = {
+  indigo: 'bg-indigo-50 border-indigo-300',
+  sky: 'bg-sky-50 border-sky-300',
+  violet: 'bg-violet-50 border-violet-300',
+  amber: 'bg-amber-50 border-amber-300',
+  rose: 'bg-rose-50 border-rose-300',
+  teal: 'bg-teal-50 border-teal-300',
+  emerald: 'bg-emerald-50 border-emerald-300',
+  orange: 'bg-orange-50 border-orange-300',
+  cyan: 'bg-violet-50 border-violet-300',
 };
-const SUM_STYLE = 'font-size:20px;font-weight:700;color:#000;cursor:pointer;';
 
-/* Сворачиваемый цветной раздел. Первые разделы открыты, справочные - свёрнуты. */
+const C = {
+  h3: 'text-lg font-bold text-black mb-2',
+  p: 'mb-2',
+  card: 'p-4 rounded-xl bg-white/80 border border-teal-300',
+  th: 'border px-4 py-2 text-left font-bold text-black bg-black/5',
+  td: 'border px-4 py-2 align-top',
+  pillHeat: 'inline-block px-3 py-1 rounded-full text-xs font-bold bg-orange-50 text-amber-800 border border-orange-300',
+  pillCool: 'inline-block px-3 py-1 rounded-full text-xs font-bold bg-sky-200 text-sky-700',
+  helpNote: 'mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300',
+  helpEx: 'mt-4 p-3 rounded-xl bg-white/80 border border-amber-300',
+  ol: 'list-decimal ml-6 space-y-3',
+  ul: 'list-disc ml-6 space-y-1',
+  wrap: 'overflow-x-auto mb-3',
+  table: 'w-full bg-white/70',
+};
+
+/* Раздел справки: цветная секция как на OneWire, но сворачиваемая.
+ * Первые разделы открыты, справочные свёрнуты. */
 const sec = (title, open, body, tone) => {
-  const c = TONES_CSS[tone] || TONES_CSS.teal;
-  const st = 'background:' + c[0] + ';border:2px solid ' + c[1] + ';border-radius:16px;padding:16px 20px;';
+  const c = TONE_CLS[tone] || TONE_CLS.teal;
   return html`
-    <details open=${open} style=${st}>
-      <summary style=${SUM_STYLE} onClick=${lockToggle}>${title}</summary>
-      <div style="margin-top:14px;">${body}</div>
+    <details open=${open} class="rounded-2xl border-2 ${c} p-5">
+      <summary class="text-xl font-bold text-black cursor-pointer" onClick=${lockToggle}>${title}</summary>
+      <div class="mt-4 space-y-4">${body}</div>
     </details>
   `;
 };
 
-const OL = 'margin:0;padding-left:1.4rem;list-style:decimal;line-height:1.65;';
-const UL = 'margin:0;padding-left:1.4rem;list-style:disc;line-height:1.65;';
+const helpPill = (p, L) =>
+  html`<span class=${p.kind === 'heat' ? C.pillHeat : C.pillCool}>${KIND[L][p.kind]}</span>`;
 
-/* Список «термин — пояснение» */
+const OL = C.ol;
+const UL = C.ul;
+
+/* Список «термин - пояснение» */
 const glossary = (rows) => html`
-  <div style="display:flex;flex-direction:column;gap:8px;">
+  <div class="space-y-2">
     ${rows.map(
       (r) => html`
-        <div style="line-height:1.6;">
-          <b style="color:#000;">${r[0]}</b> — ${r[1]}
+        <div>
+          <b class="text-black">${r[0]}</b> - ${r[1]}
         </div>
       `
     )}
   </div>
 `;
 
-const CODE_STYLE = 'font-family:inherit;font-weight:600;color:#000;';
-const TBL_WRAP =
-  'overflow-x:auto;border-radius:12px;border:1px solid rgba(0,0,0,0.12);background:rgba(255,255,255,0.7);margin:8px 0 14px 0;';
-
-const codeEl = (t) => html`<code style=${CODE_STYLE}>${t}</code>`;
+const codeEl = (t) => html`<code class="font-sans font-semibold text-black">${t}</code>`;
 
 /* Таблица условий из 2 колонок: [код, пояснение] */
 const condTable2 = (h1, h2, rows) => html`
-  <div style=${TBL_WRAP}>
-    <table style="width:100%;min-width:520px;border-collapse:collapse;font-size:16px;">
+  <div class=${C.wrap}>
+    <table class=${C.table}>
       <thead>
-        <tr style="background:rgba(0,0,0,0.05);">
-          <th style=${S.th}>${h1}</th>
-          <th style=${S.th}>${h2}</th>
+        <tr>
+          <th class=${C.th}>${h1}</th>
+          <th class=${C.th}>${h2}</th>
         </tr>
       </thead>
       <tbody>
         ${rows.map(
           (r) => html`
             <tr>
-              <td style=${S.td + 'white-space:nowrap;'}>${codeEl(r[0])}</td>
-              <td style=${S.td}>${r[1]}</td>
+              <td class=${C.td + ' whitespace-nowrap'}>${codeEl(r[0])}</td>
+              <td class=${C.td}>${r[1]}</td>
             </tr>
           `
         )}
@@ -921,22 +940,22 @@ const condTable2 = (h1, h2, rows) => html`
 
 /* Таблица знаков из 3 колонок: [знак, смысл, пример-код, пример-текст] */
 const condTable3 = (h1, h2, h3, rows) => html`
-  <div style=${TBL_WRAP}>
-    <table style="width:100%;min-width:520px;border-collapse:collapse;font-size:16px;">
+  <div class=${C.wrap}>
+    <table class=${C.table}>
       <thead>
-        <tr style="background:rgba(0,0,0,0.05);">
-          <th style=${S.th}>${h1}</th>
-          <th style=${S.th}>${h2}</th>
-          <th style=${S.th}>${h3}</th>
+        <tr>
+          <th class=${C.th}>${h1}</th>
+          <th class=${C.th}>${h2}</th>
+          <th class=${C.th}>${h3}</th>
         </tr>
       </thead>
       <tbody>
         ${rows.map(
           (r) => html`
             <tr>
-              <td style=${S.td + 'white-space:nowrap;'}>${codeEl(r[0])}</td>
-              <td style=${S.td}>${r[1]}</td>
-              <td style=${S.td}>${codeEl(r[2])}${r[3] ? ' - ' + r[3] : ''}</td>
+              <td class=${C.td + ' whitespace-nowrap'}>${codeEl(r[0])}</td>
+              <td class=${C.td}>${r[1]}</td>
+              <td class=${C.td}>${codeEl(r[2])}${r[3] ? ' - ' + r[3] : ''}</td>
             </tr>
           `
         )}
@@ -954,13 +973,13 @@ const HOW = {
   ru: {
     title: 'Как подключить регулятор (пошагово)',
     steps: () => html`
-      <ol style=${OL}>
-        <li style="margin-bottom:8px;"><b>Подготовьте нагреватель и датчик.</b> На странице <b>"Select pin(s)"</b> выберите для пина нагревателя (или вентилятора) режим <b>"PWM"</b> и нажмите <b>"Submit"</b>. Датчик (DS18B20 или DHT-22) добавьте на странице <b>"OneWire(s) pin(s)"</b>. Серийный номер DS18B20 понадобится в шаге 3.</li>
-        <li style="margin-bottom:8px;"><b>Добавьте регулятор.</b> Нажмите зелёную кнопку <b>"+"</b> под таблицей. Появится новая строка. Если строка уже есть, пропустите этот шаг.</li>
-        <li style="margin-bottom:8px;"><b>Заполните настройки.</b> Нажмите <b>Edit</b> в строке регулятора (пока вы не нажали <b>Save changes</b>, ничего не меняется, закрыть окно можно кнопкой <b>Close</b>). В <b>PWM Pin</b> выберите пин нагревателя, в <b>Selected sensor</b> - тип датчика (для DS18B20 вставьте серийный номер в <b>Dev. ser. number</b>), в <b>Presets</b> - готовый вариант под своё устройство, в <b>t_set</b> - температуру, которую надо держать.</li>
-        <li style="margin-bottom:8px;"><b>Включите регулятор.</b> Включите ползунок <b>On/Off</b> и нажмите <b>Save changes</b>. В колонке <b>T cur.</b> должна появиться температура: значит, датчик работает.</li>
-        <li style="margin-bottom:8px;"><b>Запустите автоподбор.</b> Нажмите красную кнопку <b>Run tune</b> и дождитесь, когда она станет зелёной: регулятор подобрал коэффициенты и готов к работе.</li>
-        <li style="margin-bottom:8px;"><b>Если нужно - добавьте условие.</b> Хотите, чтобы регулятор работал только ночью или пока на улице холодно? Впишите правило в поле <b>Condition</b> окна <b>Edit</b> (как это сделать - в блоке про условия ниже).</li>
+      <ol class=${OL}>
+        <li><b>Подготовьте нагреватель и датчик.</b> На странице <b>"Select pin(s)"</b> выберите для пина нагревателя (или вентилятора) режим <b>"PWM"</b> и нажмите <b>"Submit"</b>. Датчик (DS18B20 или DHT-22) добавьте на странице <b>"OneWire(s) pin(s)"</b>. Серийный номер DS18B20 понадобится в шаге 3.</li>
+        <li><b>Добавьте регулятор.</b> Нажмите зелёную кнопку <b>"+"</b> под таблицей. Появится новая строка. Если строка уже есть, пропустите этот шаг.</li>
+        <li><b>Заполните настройки.</b> Нажмите <b>Edit</b> в строке регулятора (пока вы не нажали <b>Save changes</b>, ничего не меняется, закрыть окно можно кнопкой <b>Close</b>). В <b>PWM Pin</b> выберите пин нагревателя, в <b>Selected sensor</b> - тип датчика (для DS18B20 вставьте серийный номер в <b>Dev. ser. number</b>), в <b>Presets</b> - готовый вариант под своё устройство, в <b>t_set</b> - температуру, которую надо держать.</li>
+        <li><b>Включите регулятор.</b> Включите ползунок <b>On/Off</b> и нажмите <b>Save changes</b>. В колонке <b>T cur.</b> должна появиться температура: значит, датчик работает.</li>
+        <li><b>Запустите автоподбор.</b> Нажмите красную кнопку <b>Run tune</b> и дождитесь, когда она станет зелёной: регулятор подобрал коэффициенты и готов к работе.</li>
+        <li><b>Если нужно - добавьте условие.</b> Хотите, чтобы регулятор работал только ночью или пока на улице холодно? Впишите правило в поле <b>Condition</b> окна <b>Edit</b> (как это сделать - в блоке про условия ниже).</li>
       </ol>
     `,
     how: 'Регулятор через равные промежутки (от 1 до 5 секунд, зависит от пресета) сравнивает температуру датчика («T cur.») с заданной («T set.») и выдаёт мощность в процентах (колонка Duty): далеко от цели - побольше, близко - поменьше.',
@@ -1021,13 +1040,13 @@ const HOW = {
   en: {
     title: 'How to connect a controller (step by step)',
     steps: () => html`
-      <ol style=${OL}>
-        <li style="margin-bottom:8px;"><b>Prepare the heater and the sensor.</b> On the <b>"Select pin(s)"</b> page choose the <b>"PWM"</b> mode for the heater (or fan) pin and press <b>"Submit"</b>. Add the sensor (DS18B20 or DHT-22) on the <b>"OneWire(s) pin(s)"</b> page. You will need the DS18B20 serial number in step 3.</li>
-        <li style="margin-bottom:8px;"><b>Add a controller.</b> Press the green <b>"+"</b> button under the table. A new row appears. If the row is already there, skip this step.</li>
-        <li style="margin-bottom:8px;"><b>Fill in the settings.</b> Press <b>Edit</b> in the controller row (nothing changes until you press <b>Save changes</b>, and the window can be closed with <b>Close</b>). In <b>PWM Pin</b> choose the heater pin, in <b>Selected sensor</b> the sensor type (for DS18B20 paste the serial number into <b>Dev. ser. number</b>), in <b>Presets</b> a ready-made option for your device, in <b>t_set</b> the temperature to keep.</li>
-        <li style="margin-bottom:8px;"><b>Turn the controller on.</b> Turn on the <b>On/Off</b> slider and press <b>Save changes</b>. A temperature should appear in the <b>T cur.</b> column: it means the sensor works.</li>
-        <li style="margin-bottom:8px;"><b>Start auto tuning.</b> Press the red <b>Run tune</b> button and wait until it turns green: the controller has found its coefficients and is ready.</li>
-        <li style="margin-bottom:8px;"><b>If needed - add a condition.</b> Want the controller to work only at night or while it is cold outside? Type a rule into the <b>Condition</b> field of the <b>Edit</b> window (how - in the conditions block below).</li>
+      <ol class=${OL}>
+        <li><b>Prepare the heater and the sensor.</b> On the <b>"Select pin(s)"</b> page choose the <b>"PWM"</b> mode for the heater (or fan) pin and press <b>"Submit"</b>. Add the sensor (DS18B20 or DHT-22) on the <b>"OneWire(s) pin(s)"</b> page. You will need the DS18B20 serial number in step 3.</li>
+        <li><b>Add a controller.</b> Press the green <b>"+"</b> button under the table. A new row appears. If the row is already there, skip this step.</li>
+        <li><b>Fill in the settings.</b> Press <b>Edit</b> in the controller row (nothing changes until you press <b>Save changes</b>, and the window can be closed with <b>Close</b>). In <b>PWM Pin</b> choose the heater pin, in <b>Selected sensor</b> the sensor type (for DS18B20 paste the serial number into <b>Dev. ser. number</b>), in <b>Presets</b> a ready-made option for your device, in <b>t_set</b> the temperature to keep.</li>
+        <li><b>Turn the controller on.</b> Turn on the <b>On/Off</b> slider and press <b>Save changes</b>. A temperature should appear in the <b>T cur.</b> column: it means the sensor works.</li>
+        <li><b>Start auto tuning.</b> Press the red <b>Run tune</b> button and wait until it turns green: the controller has found its coefficients and is ready.</li>
+        <li><b>If needed - add a condition.</b> Want the controller to work only at night or while it is cold outside? Type a rule into the <b>Condition</b> field of the <b>Edit</b> window (how - in the conditions block below).</li>
       </ol>
     `,
     how: 'At equal intervals (1 to 5 seconds, depending on the preset) the controller compares the sensor temperature ("T cur.") with the target ("T set.") and outputs power in percent (the Duty column): more power when far from the target, less when close.',
@@ -1091,22 +1110,22 @@ function PidHelp({ lang }) {
   const L = langOf(lang);
   const X = HELP[L];
   /* Цвета разделов по порядку: шаги, SMS, колонки, пресеты, условия, примеры, лимиты, проверка */
-  const TONES = ['indigo', 'sky', 'teal', 'emerald', 'amber', 'rose', 'orange', 'cyan'];
+  const TONES = ['indigo', 'sky', 'teal', 'emerald', 'amber', 'rose', 'orange', 'violet'];
   let secIdx = 0;
   const sec2 = (title, open, body) => sec(title, open, body, TONES[secIdx++]);
   const Y = HOW[L];
 
   const presetTable = html`
-    <div style="overflow-x:auto;border-radius:12px;border:1px solid rgba(0,0,0,0.12);background:rgba(255,255,255,0.7);margin-top:12px;">
-      <table style="width:100%;min-width:760px;border-collapse:collapse;font-size:16px;">
+    <div class=${C.wrap + ' mt-3'}>
+      <table class=${C.table}>
         <thead>
-          <tr style="background:rgba(0,0,0,0.05);">
-            <th style=${S.th}>${X.colUse}</th>
-            <th style=${S.th}>${X.colPreset}</th>
-            <th style=${S.th}>${X.colRange}</th>
-            <th style=${S.th}>${X.colCeil}</th>
-            <th style=${S.th}>${X.colSens}</th>
-            <th style=${S.th}>${X.colPwr}</th>
+          <tr >
+            <th class=${C.th}>${X.colUse}</th>
+            <th class=${C.th}>${X.colPreset}</th>
+            <th class=${C.th}>${X.colRange}</th>
+            <th class=${C.th}>${X.colCeil}</th>
+            <th class=${C.th}>${X.colSens}</th>
+            <th class=${C.th}>${X.colPwr}</th>
           </tr>
         </thead>
         <tbody>
@@ -1114,15 +1133,15 @@ function PidHelp({ lang }) {
             const p = findPreset(u.id);
             return html`
               <tr>
-                <td style=${S.td}>${u[L]}</td>
-                <td style=${S.td}>
-                  <div style="font-weight:700;">${p.id}. ${p[L].name}</div>
-                  <div style="margin-top:3px;">${pill(p, L)}</div>
+                <td class=${C.td}>${u[L]}</td>
+                <td class=${C.td}>
+                  <div class="font-bold">${p.id}. ${p[L].name}</div>
+                  <div class="mt-1">${helpPill(p, L)}</div>
                 </td>
-                <td style=${S.td + 'white-space:nowrap;'}>${rangeLong(p, L)}</td>
-                <td style=${S.td + 'white-space:nowrap;'}>${p.tmax} °C</td>
-                <td style=${S.td}>${sensText(p, L)}</td>
-                <td style=${S.td + 'white-space:nowrap;'}>${p.pwmMax} %</td>
+                <td class=${C.td + ' whitespace-nowrap'}>${rangeLong(p, L)}</td>
+                <td class=${C.td + ' whitespace-nowrap'}>${p.tmax} °C</td>
+                <td class=${C.td}>${sensText(p, L)}</td>
+                <td class=${C.td + ' whitespace-nowrap'}>${p.pwmMax} %</td>
               </tr>
             `;
           })}
@@ -1132,20 +1151,20 @@ function PidHelp({ lang }) {
   `;
 
   return html`
-    <div class="mytext" style="display:flex;flex-direction:column;gap:14px;font-size:16px;font-family:inherit;line-height:1.6;color:#334155;">
+    <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
 
       ${sec2(
         Y.title,
         true,
         html`
           ${Y.steps()}
-          <div style=${S.helpNote}>
+          <div class=${C.helpNote}>
             <b>${L === 'ru' ? 'Как это работает:' : 'How it works:'}</b> ${X.what[0]} ${X.what[1]} ${Y.how}
           </div>
-          <div style=${S.helpNote}>${Y.important}</div>
-          <div style=${S.helpEx}>
+          <div class=${C.helpNote}>${Y.important}</div>
+          <div class=${C.helpEx}>
             <b>${L === 'ru' ? 'Пример.' : 'Example.'}</b> ${Y.exampleLead}
-            <ul style=${UL + 'margin-top:6px;'}>${Y.exampleItems()}</ul>
+            <ul class=${UL + ' mt-2'}>${Y.exampleItems()}</ul>
           </div>
         `
       )}
@@ -1154,15 +1173,15 @@ function PidHelp({ lang }) {
         L === 'ru' ? 'Рубильник On/Off по SMS и DTMF' : 'On/Off switch by SMS and DTMF',
         true,
         html`
-          <p style=${S.p}>${L === 'ru'
+          <p class=${C.p}>${L === 'ru'
             ? 'Ползунок On/Off любого PID-канала можно переключить с телефона, номер которого указан в настройках SIM800L: SMS-сообщением или во время звонка (тональный набор DTMF). Формат команды: ID#КОД*, где ID - число из колонки No нужного регулятора (нумерация с 1). Отключить: КОД = 55. Включить: КОД = 66.'
             : 'The On/Off slider of any PID channel can be switched from the phone number set in the SIM800L settings: by SMS or during a call (DTMF tones). Command format: ID#CODE*, where ID is the number from the No column of the needed controller (numbered from 1). Turn off: CODE = 55. Turn on: CODE = 66.'}</p>
-          <ul style=${UL}>
-            <li style="margin-bottom:4px;">${L === 'ru' ? 'Отключить PID 2: SMS 2#55*, звонок 2#55*#' : 'Turn PID 2 off: SMS 2#55*, call 2#55*#'}</li>
-            <li style="margin-bottom:4px;">${L === 'ru' ? 'Включить PID 2: SMS 2#66*, звонок 2#66*#' : 'Turn PID 2 on: SMS 2#66*, call 2#66*#'}</li>
-            <li style="margin-bottom:4px;">${L === 'ru' ? 'Несколько команд: SMS 2#55*3#66*, звонок 2#55*3#66*#. Ввод во время звонка всегда завершается символами *#.' : 'Several commands: SMS 2#55*3#66*, call 2#55*3#66*#. Input during a call always ends with *#.'}</li>
-            <li style="margin-bottom:4px;">${L === 'ru' ? 'Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - 00 (выкл) и 11 (вкл); Cron - 33 и 44; PID - 55 и 66.' : 'Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - 00 (off) and 11 (on); Cron - 33 and 44; PID - 55 and 66.'}</li>
-            <li style="margin-bottom:4px;">${L === 'ru' ? 'В ответ приходит SMS-отчёт, например OnOff: PID2=OFF (только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.' : 'An SMS report is sent back, for example OnOff: PID2=OFF (only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.'}</li>
+          <ul class=${UL}>
+            <li>${L === 'ru' ? 'Отключить PID 2: SMS 2#55*, звонок 2#55*#' : 'Turn PID 2 off: SMS 2#55*, call 2#55*#'}</li>
+            <li>${L === 'ru' ? 'Включить PID 2: SMS 2#66*, звонок 2#66*#' : 'Turn PID 2 on: SMS 2#66*, call 2#66*#'}</li>
+            <li>${L === 'ru' ? 'Несколько команд: SMS 2#55*3#66*, звонок 2#55*3#66*#. Ввод во время звонка всегда завершается символами *#.' : 'Several commands: SMS 2#55*3#66*, call 2#55*3#66*#. Input during a call always ends with *#.'}</li>
+            <li>${L === 'ru' ? 'Коды для всех страниц: Button, Switch, Encoder, OneWire, Security, Zigbee - 00 (выкл) и 11 (вкл); Cron - 33 и 44; PID - 55 и 66.' : 'Codes for all pages: Button, Switch, Encoder, OneWire, Security, Zigbee - 00 (off) and 11 (on); Cron - 33 and 44; PID - 55 and 66.'}</li>
+            <li>${L === 'ru' ? 'В ответ приходит SMS-отчёт, например OnOff: PID2=OFF (только если включён общий ползунок SIM800L). Неверные команды попадают в список Invld pins/cmd.' : 'An SMS report is sent back, for example OnOff: PID2=OFF (only if the common SIM800L slider is On). Wrong commands are listed in Invld pins/cmd.'}</li>
           </ul>
         `
       )}
@@ -1173,19 +1192,19 @@ function PidHelp({ lang }) {
         X.chooseTitle,
         false,
         html`
-          <ol style=${OL}>
-            ${X.rules.map((t) => html`<li style="margin-bottom:4px;">${t}</li>`)}
+          <ol class=${OL}>
+            ${X.rules.map((t) => html`<li>${t}</li>`)}
           </ol>
           ${presetTable}
-          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.numbersTitle}</h3>
+          <h3 class=${C.h3 + ' mt-4'}>${X.numbersTitle}</h3>
           ${glossary(X.numbers)}
-          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.faqTitle}</h3>
-          <div style="display:flex;flex-direction:column;gap:10px;">
+          <h3 class=${C.h3 + ' mt-4'}>${X.faqTitle}</h3>
+          <div class="space-y-3">
             ${X.faq.map(
               (f) => html`
-                <div style=${S.card}>
-                  <div style="font-weight:700;color:#000;margin-bottom:4px;">${f.q}</div>
-                  <div style="line-height:1.6;">${f.a}</div>
+                <div class=${C.card}>
+                  <div class="font-bold text-black mb-1">${f.q}</div>
+                  <div>${f.a}</div>
                 </div>
               `
             )}
@@ -1197,51 +1216,51 @@ function PidHelp({ lang }) {
         X.condTitle,
         false,
         html`
-          <p style="margin:0 0 8px;font-size:16px;font-style:italic;color:#475569;">${X.condLead}</p>
-          ${X.condIntro.map((t) => html`<p style=${S.p}>${t}</p>`)}
-          <div style=${S.helpNote}>
+          <p class="mb-2 italic text-slate-600">${X.condLead}</p>
+          ${X.condIntro.map((t) => html`<p class=${C.p}>${t}</p>`)}
+          <div class=${C.helpNote}>
             <b>${X.condWhereTitle}</b><br />
             ${X.condWhere}
           </div>
 
-          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.condStepsTitle}</h3>
-          <ol style=${OL}>
-            ${X.condSteps.map((t) => html`<li style="margin-bottom:6px;">${t}</li>`)}
+          <h3 class=${C.h3 + ' mt-4'}>${X.condStepsTitle}</h3>
+          <ol class=${OL}>
+            ${X.condSteps.map((t) => html`<li>${t}</li>`)}
           </ol>
-          <div style=${S.helpEx}>
+          <div class=${C.helpEx}>
             <b>${X.condLifeTitle}</b><br />
             ${X.condLife}
           </div>
 
-          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.condBuildTitle}</h3>
-          <ol style=${OL}>
-            ${X.condBuild.map((t) => html`<li style="margin-bottom:6px;">${t}</li>`)}
+          <h3 class=${C.h3 + ' mt-4'}>${X.condBuildTitle}</h3>
+          <ol class=${OL}>
+            ${X.condBuild.map((t) => html`<li>${t}</li>`)}
           </ol>
 
-          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.condWordsTitle}</h3>
-          <p style=${S.p}>${X.condWordsNote}</p>
+          <h3 class=${C.h3 + ' mt-4'}>${X.condWordsTitle}</h3>
+          <p class=${C.p}>${X.condWordsNote}</p>
           ${condTable2(X.condColEntry, X.condColRead, X.condWords)}
 
-          <h3 style=${S.h3}>${X.condSignsTitle}</h3>
+          <h3 class=${C.h3}>${X.condSignsTitle}</h3>
           ${condTable3(X.condColSign, X.condColMeaning, X.condColExample, X.condSigns)}
-          <p style=${S.p}>${X.condTip}</p>
+          <p class=${C.p}>${X.condTip}</p>
 
-          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.condExTitle}</h3>
-          <p style=${S.p}>${X.condExNote}</p>
+          <h3 class=${C.h3 + ' mt-4'}>${X.condExTitle}</h3>
+          <p class=${C.p}>${X.condExNote}</p>
           ${X.condExamples.map(
             (g) => html`
-              <div style="font-weight:700;color:#000;margin-top:6px;">${g[0]}</div>
+              <div class="font-bold text-black mt-2">${g[0]}</div>
               ${condTable2(X.condColType, X.condColHappens, g[1])}
             `
           )}
 
-          <h3 style=${S.h3 + 'margin-top:16px;'}>${X.condMistakesTitle}</h3>
-          <p style=${S.p}>${X.condMistakesNote}</p>
+          <h3 class=${C.h3 + ' mt-4'}>${X.condMistakesTitle}</h3>
+          <p class=${C.p}>${X.condMistakesNote}</p>
           ${condTable2(X.condColWrong, X.condColWhy, X.condMistakes)}
 
-          <h3 style=${S.h3}>${X.condRulesTitle}</h3>
-          <ul style=${UL}>
-            ${X.condRules.map((t) => html`<li style="margin-bottom:4px;">${t}</li>`)}
+          <h3 class=${C.h3}>${X.condRulesTitle}</h3>
+          <ul class=${UL}>
+            ${X.condRules.map((t) => html`<li>${t}</li>`)}
           </ul>
         `
       )}
@@ -1250,15 +1269,15 @@ function PidHelp({ lang }) {
         Y.exTitle,
         true,
         html`
-          <p style=${S.p}>${Y.exIntro}</p>
-          <div style="display:flex;flex-direction:column;gap:10px;">
+          <p class=${C.p}>${Y.exIntro}</p>
+          <div class="space-y-3">
             ${Y.examples().map(
               (e) => html`
-                <div style=${S.card}>
-                  <div style="font-size:18px;font-weight:700;color:#000;margin-bottom:4px;">${e.t}</div>
-                  <p style=${S.p}>${e.s}</p>
-                  <p style=${S.p}>${e.c}</p>
-                  <p style="margin:0;line-height:1.6;font-weight:600;">${e.r}</p>
+                <div class=${C.card}>
+                  <div class="text-lg font-bold text-black mb-1">${e.t}</div>
+                  <p class=${C.p}>${e.s}</p>
+                  <p class=${C.p}>${e.c}</p>
+                  <p class="font-semibold">${e.r}</p>
                 </div>
               `
             )}
@@ -1270,8 +1289,8 @@ function PidHelp({ lang }) {
         Y.limTitle,
         false,
         html`
-          <ul style=${UL}>
-            ${Y.limits.map((t) => html`<li style="margin-bottom:4px;">${t}</li>`)}
+          <ul class=${UL}>
+            ${Y.limits.map((t) => html`<li>${t}</li>`)}
           </ul>
         `
       )}
@@ -1280,10 +1299,10 @@ function PidHelp({ lang }) {
         Y.chkTitle,
         false,
         html`
-          <ul style=${UL}>
-            ${Y.chk.map((t) => html`<li style="margin-bottom:4px;">${t}</li>`)}
-            <li style="margin-bottom:4px;"><b>${X.errTitle}</b></li>
-            ${X.err.map((t) => html`<li style="margin-bottom:4px;margin-left:1rem;">${t}</li>`)}
+          <ul class=${UL}>
+            ${Y.chk.map((t) => html`<li>${t}</li>`)}
+            <li><b>${X.errTitle}</b></li>
+            ${X.err.map((t) => html`<li class="ml-4">${t}</li>`)}
           </ul>
         `
       )}
@@ -1749,9 +1768,7 @@ function TabPid({ }) {
       </div>
 
       ${showHelp && html`
-        <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700 w-full" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">
-          <${PidHelp} lang=${language} />
-        </div>
+        <${HelpBox} language=${language} class="mt-2"><${PidHelp} lang=${language} /><//>
       `}
 
       ${isModalOpen ? html`

@@ -1,4 +1,6 @@
+
 import { lockToggle } from '../helpLock.js';
+import { HelpBox } from '../helpCopy.js';
 import { ModalCron } from '../Modals/ModalCron.js';
 import { ModalPwmCron } from '../Modals/ModalPwmCron.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
@@ -1430,9 +1432,7 @@ const ArrayCron = ({ d, index }) => {
       </div>
 
       ${showHelp && html`
-        <div class="mt-6 p-6 bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-inner text-slate-700 w-full" style="max-height:70vh;max-height:70dvh;overflow-y:auto;">
-          ${helpContent[language]}
-        </div>
+        <${HelpBox} language=${language} class="mt-6" boxClass="text-slate-700">${helpContent[language]}<//>
       `}
 
       ${isModalOpen && modalType === 'edit_pwm' ? html`
