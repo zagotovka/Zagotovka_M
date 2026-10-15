@@ -503,6 +503,11 @@ void button_event_handler(
   if (handle->button_id >= NUMPIN) {
     return;
   }
+  /* Master Enable: onoff == 0 - кнопка отключена, никакая логика
+   * (действия, SMS, MQTT-события) для этого ID не выполняется. */
+  if (PinsConf[handle->button_id].onoff == 0) {
+    return;
+  }
   // Обработчик событий кнопки
   PressEvent event = get_button_event(handle);
 
@@ -513,7 +518,7 @@ void button_event_handler(
     //       printf("Button %d: PRESS_DOWN!\r\n", handle->button_id);
     break;
   case PRESS_UP: // Кнопка отпущена
-                 //       printf("Button %d: PRESS_UP!\r\n", handle->button_id);
+                 // printf("Button %d: PRESS_UP!\r\n", handle->button_id);
     break;
   case LONG_PRESS_START: // Начало долгого нажатия
     if (is_action_set(PinsConf[handle->button_id].lpress)) {
@@ -1160,6 +1165,7 @@ int main(void)
       dtcm_ota_magic = 0;
     }
   }
+
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -2542,6 +2548,7 @@ void StartOutputTask(void *argument)
  * @param argument: Not used
  * @retval None
  */
+#define CRON_POLL_MS  50   /* период проверки смены секунды в CronTask, мс */
 /* USER CODE END Header_StartCronTask */
 void StartCronTask(void *argument)
 {
@@ -2670,7 +2677,11 @@ void StartCronTask(void *argument)
         timez_copy.tm_mon -= 1;
       }
     }
-    osDelay(1);
+    /* Cron работает с точностью до секунды: проверка раз в CRON_POLL_MS (50 мс)
+     * вместо 1 мс. Секундная граница определяется с задержкой до 50 мс.
+     * Заодно в онлайн-режиме в 50 раз реже берётся критическая секция
+     * для чтения SetSettings.timezone. */
+    osDelay(CRON_POLL_MS);
   }
   /* USER CODE END StartCronTask */
 }
@@ -2685,104 +2696,121 @@ void StartCronTask(void *argument)
 void StartInputTask(void *argument)
 {
   /* USER CODE BEGIN StartInputTask */
-  ulTaskNotifyTake(0, portMAX_DELAY);
-  //	printf("Start 'Input' task \r\n");
-  uint8_t pinStates[NUMPIN] = {0};
-  uint32_t pinTimes[NUMPIN] = {0};
-  uint32_t millis;
-  uint8_t pinLevel[NUMPIN] = {0};
-  TickType_t xLastWake;
-  //    char mqtt_payload[20] = {0};
-  //    char mqtt_topic[20] = {0};
-  osDelay(1000);
-  InitMultibutton();
+	  ulTaskNotifyTake(0, portMAX_DELAY);
+	  //	printf("Start 'Input' task \r\n");
+	  uint8_t pinStates[NUMPIN] = {0};
+	  uint32_t pinTimes[NUMPIN] = {0};
+	  uint32_t millis;
+	  uint8_t pinLevel[NUMPIN] = {0};
+	  TickType_t xLastWake;
+	  //    char mqtt_payload[20] = {0};
+	  //    char mqtt_topic[20] = {0};
+	  osDelay(1000);
+	  InitMultibutton();
+
+	  /* Список входных пинов (Button topin == 1 и Switch topin == 3) строится
+	   * ОДИН РАЗ при старте, после InitMultibutton(). Раньше каждые 5 мс
+	   * перебирались все NUMPIN пинов ради условий topin == 1 / topin == 3.
+	   * Массив на NUMPIN байт - точная верхняя граница, лимитов и malloc не
+	   * нужно. Новые Button/Switch пины применяются после перезагрузки
+	   * (GPIO настраивается только при старте). */
+	  uint8_t inp_ids[NUMPIN];
+	  uint8_t n_inp = 0;
+	  for (uint8_t p = 0; p < NUMPIN; p++) {
+	    if (PinsConf[p].topin == 1 || PinsConf[p].topin == 3) {
+	      inp_ids[n_inp++] = p;
+	    }
+	  }
   /* Infinite loop */
   xLastWake = xTaskGetTickCount();
   for (;;) {
-    millis = HAL_GetTick();
-    for (uint8_t i = 0; i < NUMPIN; i++) {
-      if (PinsConf[i].topin == 1 && PinsConf[i].act == 1) { // BUTTON
-        button_ticks(&button[i]);
-      }
-      /*
-      // INPUT Button GPIO_PULLDOWN
-      if (PinsConf[i].topin == 1 && PinsConf[i].ptype == 2) { // Для 'button'
-              pinStates[i] = HAL_GPIO_ReadPin(PinsInfo[i].gpio_name,
-      PinsInfo[i].hal_pin); if (pinStates[i] == 1 && (millis - pinTimes[i]) >=
-      200) { pinTimes[i] = millis;
+	   millis = HAL_GetTick();
+	    for (uint8_t n = 0; n < n_inp; n++) {
+	      uint8_t i = inp_ids[n];
+	      /* Условия topin и act оставлены как были: читаются на лету, поэтому
+	       * пин, переназначенный из веба, сразу перестаёт обрабатываться. */
+	      if (PinsConf[i].topin == 1 && PinsConf[i].act == 1) { // BUTTON
+	        button_ticks(&button[i]);
+	      }
+	      /*
+	      // INPUT Button GPIO_PULLDOWN
+	      if (PinsConf[i].topin == 1 && PinsConf[i].ptype == 2) { // Для 'button'
+	              pinStates[i] = HAL_GPIO_ReadPin(PinsInfo[i].gpio_name,
+	      PinsInfo[i].hal_pin); if (pinStates[i] == 1 && (millis - pinTimes[i]) >=
+	      200) { pinTimes[i] = millis;
 
-                      // OUTPUT (вынести в отдельную функцию)
-                      for (int a = 0; a < NUMPINLINKS; a++) {
-                              if (PinsLinks[a].idin == i) {
-                                      data_pin.id = PinsLinks[a].idout;
-                                      data_pin.action = 2;
-                                      xQueueSend(outputQueueHandle, (void* )
-      &data_pin, 0);
-                              }
-                      }
-              }
-      }
-      // INPUT Button GPIO_PULLUP
-      if (PinsConf[i].topin == 1 && PinsConf[i].ptype == 1) { // Для 'button'
-              pinStates[i] = HAL_GPIO_ReadPin(PinsInfo[i].gpio_name,
-      PinsInfo[i].hal_pin); if (pinStates[i] == 0 && (millis - pinTimes[i]) >=
-      200) { pinTimes[i] = millis;
+	                      // OUTPUT (вынести в отдельную функцию)
+	                      for (int a = 0; a < NUMPINLINKS; a++) {
+	                              if (PinsLinks[a].idin == i) {
+	                                      data_pin.id = PinsLinks[a].idout;
+	                                      data_pin.action = 2;
+	                                      xQueueSend(outputQueueHandle, (void* )
+	      &data_pin, 0);
+	                              }
+	                      }
+	              }
+	      }
+	      // INPUT Button GPIO_PULLUP
+	      if (PinsConf[i].topin == 1 && PinsConf[i].ptype == 1) { // Для 'button'
+	              pinStates[i] = HAL_GPIO_ReadPin(PinsInfo[i].gpio_name,
+	      PinsInfo[i].hal_pin); if (pinStates[i] == 0 && (millis - pinTimes[i]) >=
+	      200) { pinTimes[i] = millis;
 
-                      // OUTPUT (вынести в отдельную функцию)
-                      for (int a = 0; a < NUMPINLINKS; a++) {
-                              if (PinsLinks[a].idin == i) {
-                                      data_pin.id = PinsLinks[a].idout;
-                                      data_pin.action = 2;
-                                      xQueueSend(outputQueueHandle, (void* )
-      &data_pin, 0);
-                              }
-                      }
-              }
-      }
+	                      // OUTPUT (вынести в отдельную функцию)
+	                      for (int a = 0; a < NUMPINLINKS; a++) {
+	                              if (PinsLinks[a].idin == i) {
+	                                      data_pin.id = PinsLinks[a].idout;
+	                                      data_pin.action = 2;
+	                                      xQueueSend(outputQueueHandle, (void* )
+	      &data_pin, 0);
+	                              }
+	                      }
+	              }
+	      }
 
-      */
-      // INPUT Switch
-      if (PinsConf[i].topin == 3) {
-        pinStates[i] =
-            HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
-        if (pinStates[i] != GPIO_PIN_RESET && pinStates[i] != GPIO_PIN_SET) {
-          printf("Error reading GPIO pin %d\r\n", i);
-          continue;
-        }
-        /* Master Enable: если onoff == 0, игнорируем физический выключатель.
-           Обновляем pinLevel/pinTimes, чтобы при включении onoff не произошёл
-           ложный фронт. */
-        if (PinsConf[i].onoff == 0) {
-          if (pinLevel[i] != pinStates[i]) {
-            pinLevel[i] = pinStates[i];
-            pinTimes[i] = millis;
-          }
-          continue;
-        }
-        // Инвертируем логику для pull-up выключателей
-        // Когда выключатель замкнут (нажат) - на входе 0
-        if (pinStates[i] == 0 && (millis - pinTimes[i]) >= 200 &&
-            pinLevel[i] != pinStates[i]) {
-          pinLevel[i] = pinStates[i];
-          pinTimes[i] = millis;
-          processPins(i, 1); // Отправляем 1, т.к. выключатель включен
-          mqtt_queue_send_safe(2, i, 1, 0);
-        }
-        // Когда выключатель разомкнут (отжат) - на входе 1
-        if (pinStates[i] == 1 && (millis - pinTimes[i]) >= 200 &&
-            pinLevel[i] != pinStates[i]) {
-          pinLevel[i] = pinStates[i];
-          pinTimes[i] = millis;
-          processPins(i, 0); // Отправляем 0, т.к. выключатель выключен
-          mqtt_queue_send_safe(2, i, 0, 0);
-        }
-      }
-    }
+	      */
+	      // INPUT Switch
+	      if (PinsConf[i].topin == 3) {
+	        pinStates[i] =
+	            HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
+	        if (pinStates[i] != GPIO_PIN_RESET && pinStates[i] != GPIO_PIN_SET) {
+	          printf("Error reading GPIO pin %d\r\n", i);
+	          continue;
+	        }
+	        /* Master Enable: если onoff == 0, игнорируем физический выключатель.
+	           Обновляем pinLevel/pinTimes, чтобы при включении onoff не произошёл
+	           ложный фронт. */
+	        if (PinsConf[i].onoff == 0) {
+	          if (pinLevel[i] != pinStates[i]) {
+	            pinLevel[i] = pinStates[i];
+	            pinTimes[i] = millis;
+	          }
+	          continue;
+	        }
+	        // Инвертируем логику для pull-up выключателей
+	        // Когда выключатель замкнут (нажат) - на входе 0
+	        if (pinStates[i] == 0 && (millis - pinTimes[i]) >= 200 &&
+	            pinLevel[i] != pinStates[i]) {
+	          pinLevel[i] = pinStates[i];
+	          pinTimes[i] = millis;
+	          processPins(i, 1); // Отправляем 1, т.к. выключатель включен
+	          mqtt_queue_send_safe(2, i, 1, 0);
+	        }
+	        // Когда выключатель разомкнут (отжат) - на входе 1
+	        if (pinStates[i] == 1 && (millis - pinTimes[i]) >= 200 &&
+	            pinLevel[i] != pinStates[i]) {
+	          pinLevel[i] = pinStates[i];
+	          pinTimes[i] = millis;
+	          processPins(i, 0); // Отправляем 0, т.к. выключатель выключен
+	          mqtt_queue_send_safe(2, i, 0, 0);
+	        }
+	      }
+	    }
 
-    /* Process Zigbee virtual buttons (RAW mode state machine) */
-    zbee_vbtn_tick();
+	    /* Process Zigbee virtual buttons (RAW mode state machine) */
+	    zbee_vbtn_tick();
 
-    vTaskDelayUntil(&xLastWake, pdMS_TO_TICKS(5));
+	    vTaskDelayUntil(&xLastWake, pdMS_TO_TICKS(5));
   }
   /* USER CODE END StartInputTask */
 }
@@ -2793,94 +2821,156 @@ void StartInputTask(void *argument)
  * @param argument: Not used
  * @retval None
  */
+#define ENC_TRANS_PER_DETENT  4      // переходов A/B на один щелчок; если один щелчок даёт полшага — поставь 2
+#define ENC_SLOW_STEP         1
+#define ENC_FAST_STEP         5      // 5 (рекомендуется) или 10
+#define ENC_FAST_MS           40     // щелчки чаще, чем раз в 40 мс — считаем вращение быстрым
+#define ENC_PARTIAL_RESET_MS  150    // сброс неполного щелчка
+#define ENC_DIRTY_PERIOD_MS   100    // mark_slice_dirty не чаще, чем раз в 100 мс
+
+typedef struct {
+  GPIO_TypeDef *gA, *gB;
+  uint16_t      pA, pB;
+  uint8_t       id;
+  uint8_t       state;       /* (A<<1)|B */
+  int8_t        cnt;         /* накопитель переходов */
+  int8_t        last_dir;
+  uint32_t      t_edge;      /* время последнего перехода */
+  uint32_t      t_detent;    /* время последнего щелчка   */
+} enc_ctx_t;
+
+/* Применить delta (с учётом знака) ко всем PWM, связанным с энкодером.
+ * Возвращает true, если хоть одно значение реально изменилось. */
+static bool enc_apply(uint8_t id, int delta)
+{
+  bool changed = false;
+
+  for (int a = 0; a < NUMPINLINKS; a++) {
+    if (PinsLinks[a].idin != id) continue;
+    if (!cond_eval_ref(PinsLinks[a].cond)) continue;
+
+    int idpwm = PinsLinks[a].idout;
+    if (idpwm < 0 || idpwm >= NUMPIN) continue;      /* Zigbee/мусор */
+    if (PinsConf[idpwm].topin != 5) continue;
+    if (is_pin_in_autotune(idpwm)) continue;         /* AutoTune lock */
+
+    int old = PinsConf[idpwm].dvalue;
+    int val = old + delta;
+    if (val < 0)   val = 0;
+    if (val > 100) val = 100;
+    if (val == old) continue;                        /* упёрлись в край */
+
+    PinsConf[idpwm].dvalue = val;
+    changed = true;
+
+    /* В железо — только если энкодер включён (иначе это пресет) */
+    if (PinsConf[id].onoff != 0) {
+      uint32_t pulse = (uint32_t)((uint64_t)val * PinsConf[idpwm].pwmmax / 100ULL);
+      __HAL_TIM_SET_COMPARE(&htim[idpwm], PinsInfo[idpwm].tim_channel, pulse);
+    }
+  }
+  return changed;
+}
 /* USER CODE END Header_StartEncoderTask */
 void StartEncoderTask(void *argument)
 {
   /* USER CODE BEGIN StartEncoderTask */
   ulTaskNotifyTake(0, portMAX_DELAY);
 
-  const int8_t enc_states[4][4] = {
-      { 0, -1,  1,  0},
-      { 1,  0,  0, -1},
-      {-1,  0,  0,  1},
-      { 0,  1, -1,  0}
+  /* Таблица [prev<<2 | curr] -> -1/0/+1 */
+  static const int8_t enc_tab[16] = {
+     0, -1,  1,  0,
+     1,  0,  0, -1,
+    -1,  0,  0,  1,
+     0,  1, -1,  0
   };
 
-  uint8_t enc_state[NUMPIN] = {0};
-  int8_t  enc_counter[NUMPIN] = {0};
-
-  /* ── Инициализация реальным состоянием пинов — ОДИН РАЗ до цикла ── */
+  /* ── Проход 1: считаем энкодеры ── */
+  uint8_t n_enc = 0;
   for (uint8_t id = 0; id < NUMPIN; id++) {
-      if (PinsConf[id].topin == 8) {
-          uint8_t idpinb_init = PinsConf[id].encoderb;
-          if (idpinb_init > 0 && idpinb_init < NUMPIN) {
-              uint8_t init_A = HAL_GPIO_ReadPin(PinsInfo[id].gpio_name, PinsInfo[id].hal_pin);
-              uint8_t init_B = HAL_GPIO_ReadPin(PinsInfo[idpinb_init].gpio_name, PinsInfo[idpinb_init].hal_pin);
-              enc_state[id] = (init_A << 1) | init_B;
-//              printf("ENC INIT[%d]: A=%d B=%d -> state=%d\r\n", id, init_A, init_B, enc_state[id]);
-          }
-      }
+    if (PinsConf[id].topin != 8) continue;
+    uint8_t b = PinsConf[id].encoderb;
+    if (b == 0 || b >= NUMPIN) continue;
+    n_enc++;
   }
-  /* ─────────────────────────────────────────────────────────────────── */
+
+  /* Нет энкодеров — задача больше не нужна */
+  if (n_enc == 0) {
+    for (;;) osDelay(portMAX_DELAY);
+  }
+
+  enc_ctx_t *list = (enc_ctx_t *)pvPortMalloc(n_enc * sizeof(enc_ctx_t));
+  if (list == NULL) {
+    printf("EncoderTask: no memory for %u encoders\r\n", (unsigned)n_enc);
+    for (;;) osDelay(portMAX_DELAY);
+  }
+
+  /* ── Проход 2: заполняем, берём реальное состояние пинов ── */
+  uint8_t k = 0;
+  for (uint8_t id = 0; id < NUMPIN && k < n_enc; id++) {
+    if (PinsConf[id].topin != 8) continue;
+    uint8_t b = PinsConf[id].encoderb;
+    if (b == 0 || b >= NUMPIN) continue;
+
+    enc_ctx_t *c = &list[k++];
+    memset(c, 0, sizeof(*c));
+    c->id = id;
+    c->gA = PinsInfo[id].gpio_name; c->pA = PinsInfo[id].hal_pin;
+    c->gB = PinsInfo[b].gpio_name;  c->pB = PinsInfo[b].hal_pin;
+    c->state = ((HAL_GPIO_ReadPin(c->gA, c->pA) ? 1 : 0) << 1)
+             |  (HAL_GPIO_ReadPin(c->gB, c->pB) ? 1 : 0);
+  }
+
+  TickType_t xLast     = xTaskGetTickCount();
+  uint32_t   t_dirty   = xLast;
+  bool       dirty_req = false;
+
   /* Infinite loop */
   for (;;) {
-	  for (uint8_t id = 0; id < NUMPIN; id++) {
-	           if (PinsConf[id].topin == 8) {
-	               uint8_t idpinb = PinsConf[id].encoderb;
-	               if (idpinb == 0 || idpinb >= NUMPIN) continue;
+	    uint32_t now = xTaskGetTickCount();
 
-	               uint8_t curr_A = HAL_GPIO_ReadPin(PinsInfo[id].gpio_name, PinsInfo[id].hal_pin);
-	               uint8_t curr_B = HAL_GPIO_ReadPin(PinsInfo[idpinb].gpio_name, PinsInfo[idpinb].hal_pin);
-	               uint8_t current_state = (curr_A << 1) | curr_B;
+	    for (uint8_t i = 0; i < n_enc; i++) {
+	      enc_ctx_t *e = &list[i];
 
-	               if (enc_state[id] != current_state) {
-	                   int8_t movement = enc_states[enc_state[id]][current_state];
-	                   enc_state[id] = current_state;
+	      uint8_t cur = ((HAL_GPIO_ReadPin(e->gA, e->pA) ? 1 : 0) << 1)
+	                  |  (HAL_GPIO_ReadPin(e->gB, e->pB) ? 1 : 0);
 
-	                   if (movement != 0) {
-	                       enc_counter[id] += movement;
+	      if (cur != e->state) {
+	        int8_t mv = enc_tab[(e->state << 2) | cur];
+	        e->state  = cur;
+	        e->t_edge = now;
 
-	                       if (enc_counter[id] >= 4 || enc_counter[id] <= -4) {
-	                           int8_t step = (enc_counter[id] > 0) ? 1 : -1;
-	                           enc_counter[id] = 0;
+	        if (mv != 0) {
+	          e->cnt += mv;
 
-	                           /* Обновляем dvalue для всех связанных PWM, даже если onoff=0 */
-	                           for (int a = 0; a < NUMPINLINKS; a++) {
-	                               if (PinsLinks[a].idin == id) {
-	                                   /* Условие на связь (библиотека условий) */
-	                                   if (!cond_eval_ref(PinsLinks[a].cond)) {
-	                                       continue;
-	                                   }
-	                                   int idpwm = PinsLinks[a].idout;
-	                                   if (idpwm < 0 || idpwm >= NUMPIN) continue; /* Zigbee/мусор — не PWM */
-	                                   if (PinsConf[idpwm].topin == 5) {
-	                                       if (is_pin_in_autotune(idpwm)) continue; /* AutoTune lock */
-	                                       // Изменяем значение в памяти
-	                                       int16_t val = PinsConf[idpwm].dvalue + step;
-	                                       if (val < 0)   val = 0;
-	                                       if (val > 100) val = 100;
-	                                       PinsConf[idpwm].dvalue = (int8_t)val;
-	                                       mark_slice_dirty(&g_ver_encoder);
-	                                       mark_slice_dirty(&g_ver_pins);
+	          if (e->cnt >= ENC_TRANS_PER_DETENT || e->cnt <= -ENC_TRANS_PER_DETENT) {
+	            int8_t dir = (e->cnt > 0) ? 1 : -1;
+	            e->cnt = 0;
 
-	                                       /* Применяем к железу только если включено */
-	                                       if (PinsConf[id].onoff != 0) {
-	                                           uint32_t pulse = (uint32_t)((uint64_t)PinsConf[idpwm].dvalue
-	                                                             * PinsConf[idpwm].pwmmax / 100ULL);
-	                                           __HAL_TIM_SET_COMPARE(&htim[idpwm], PinsInfo[idpwm].tim_channel, pulse);
-//	                                           printf("ENC[%d] -> PWM[%d]: %d%%\r\n", id, idpwm, PinsConf[idpwm].dvalue);
-	                                       } else {
-//	                                           printf("ENC[%d] -> PRESET[%d]: %d%% (OFF)\r\n", id, idpwm, PinsConf[idpwm].dvalue);
-	                                       }
-	                                   }
-	                               }
-	                           }
-	                       }
-	                   }
-	               }
-	           }
-	       }
-	       osDelay(1);
+	            /* Быстро = щелчки идут часто И в одну сторону */
+	            uint32_t dt = now - e->t_detent;
+	            int step = (dir == e->last_dir && dt < ENC_FAST_MS)
+	                         ? ENC_FAST_STEP : ENC_SLOW_STEP;
+	            e->t_detent = now;
+	            e->last_dir = dir;
+
+	            if (enc_apply(e->id, dir * step)) dirty_req = true;
+	          }
+	        }
+	      } else if (e->cnt != 0 && (now - e->t_edge) > ENC_PARTIAL_RESET_MS) {
+	        e->cnt = 0;                 /* недокрученный щелчок — забываем */
+	      }
+	    }
+
+	    /* Инвалидация ETag веб-слайсов — не чаще раза в 100 мс */
+	    if (dirty_req && (now - t_dirty) >= ENC_DIRTY_PERIOD_MS) {
+	      mark_slice_dirty(&g_ver_encoder);
+	      mark_slice_dirty(&g_ver_pins);
+	      t_dirty   = now;
+	      dirty_req = false;
+	    }
+
+	    vTaskDelayUntil(&xLast, pdMS_TO_TICKS(1));
   }
   /* USER CODE END StartEncoderTask */
 }
@@ -3148,210 +3238,324 @@ static void svc_printResults(void) {
   }
 }
 
+/* ── Определение изменений для ETag-слайсов и карта cron для PWM fade ──
+ * Используются в StartServiceTask. Вынесены сюда (на уровень файла),
+ * потому что вложенные функции GCC дают HardFault на Cortex-M7. */
+
+/* Хэш FNV-1a: дешёвая «подпись» данных, чтобы понять, изменились ли они. */
+static uint32_t svc_fnv(uint32_t h, const void *p, size_t n)
+{
+  const uint8_t *b = (const uint8_t *)p;
+  while (n--) {
+    h ^= *b++;
+    h *= 16777619u;
+  }
+  return h;
+}
+
+#define SVC_FNV_INIT 2166136261u
+#define SVC_MIX(h, v) \
+  do { uint32_t _v = (uint32_t)(v); (h) = svc_fnv((h), &_v, sizeof(_v)); } while (0)
+
+/* Раз в секунду вызывается из StartServiceTask. Помечает ETag-слайс только
+ * если изменились данные, которые он отдаёт в веб. g_ver_common здесь НЕ
+ * участвует: он несёт uptime, heap и время и должен помечаться каждую секунду.
+ *
+ * ВАЖНО: если в JSON-обработчики (handle_sensors, handle_onewire, handle_pid,
+ * handle_encoders, handle_get_pins) добавится новое числовое поле, которое
+ * может меняться само, не через веб, его нужно добавить в подпись ниже. */
+static void svc_mark_changed_slices(void)
+{
+  /* Нули при старте: первый вызов пометит все слайсы один раз. */
+  static uint32_t s_sens = 0, s_topo = 0, s_pins = 0, s_pid = 0;
+
+  /* Датчики (/api/state/sensors и /api/state/onewire): целиком массивы
+   * ds18b20 и dht22 (около 7 КБ), чтобы не перечислять поля. */
+  uint32_t h_sens = SVC_FNV_INIT;
+  h_sens = svc_fnv(h_sens, ds18b20, sizeof(ds18b20));
+  h_sens = svc_fnv(h_sens, dht22, MAX_DHT22_P * sizeof(dht22_pin_t));
+
+  /* Пины (/api/pins и /api/state/encoder): только числовые поля, которые
+   * показывает веб. Строки (info, sclick, ...) меняются только через веб,
+   * а веб-обработчики сами помечают слайсы. */
+  uint32_t h_topo = SVC_FNV_INIT;   /* тип пина: нужен слайсу onewire */
+  uint32_t h_pins = SVC_FNV_INIT;
+  for (int i = 0; i < NUMPIN; i++) {
+    SVC_MIX(h_topo, PinsConf[i].topin);
+    SVC_MIX(h_pins, PinsConf[i].topin);
+    SVC_MIX(h_pins, PinsConf[i].dvalue);
+    SVC_MIX(h_pins, PinsConf[i].onoff);
+    SVC_MIX(h_pins, PinsConf[i].pwm);
+    SVC_MIX(h_pins, PinsConf[i].pwmmax);
+    SVC_MIX(h_pins, PinsConf[i].pwm_flags);
+    SVC_MIX(h_pins, PinsConf[i].ponr);
+    SVC_MIX(h_pins, PinsConf[i].ptype);
+    SVC_MIX(h_pins, PinsConf[i].encoderb);
+    SVC_MIX(h_pins, PinsConf[i].zbee_bind_id);
+  }
+
+  /* PID (/api/pid): поля, которые показывает веб (рабочие переменные
+   * регулятора вроде integral и last_tick в подпись не входят). */
+  uint32_t h_pid = SVC_FNV_INIT;
+  for (int p = 0; p < PID_MAX_SLOTS; p++) {
+    SVC_MIX(h_pid, PidConf[p].onoff);
+    SVC_MIX(h_pid, PidConf[p].preset);
+    SVC_MIX(h_pid, PidConf[p].pwm_pin_id);
+    SVC_MIX(h_pid, PidConf[p].selsens);
+    SVC_MIX(h_pid, PidConf[p].cond);
+    SVC_MIX(h_pid, PidConf[p].tune_state);
+    SVC_MIX(h_pid, PidConf[p].tune_progress);
+    h_pid = svc_fnv(h_pid, &PidConf[p].tmpcur, sizeof(PidConf[p].tmpcur));
+    h_pid = svc_fnv(h_pid, &PidConf[p].tmpset, sizeof(PidConf[p].tmpset));
+    h_pid = svc_fnv(h_pid, PidConf[p].sernum, sizeof(PidConf[p].sernum));
+    h_pid = svc_fnv(h_pid, PidConf[p].info, sizeof(PidConf[p].info));
+  }
+
+  bool d_sens = (h_sens != s_sens);
+  bool d_topo = (h_topo != s_topo);
+  bool d_pins = (h_pins != s_pins);
+  /* /api/pid показывает ещё и dvalue PWM-пина, поэтому слайс pid
+   * помечается и при изменении пинов. */
+  bool d_pid  = (h_pid != s_pid) || d_pins;
+  s_sens = h_sens; s_topo = h_topo; s_pins = h_pins; s_pid = h_pid;
+
+  if (d_sens)             mark_slice_dirty(&g_ver_sensors);
+  if (d_sens || d_topo)   mark_slice_dirty(&g_ver_onewire);
+  if (d_pins) {
+    mark_slice_dirty(&g_ver_encoder);
+    mark_slice_dirty(&g_ver_pins);
+  }
+  if (d_pid)              mark_slice_dirty(&g_ver_pid);
+}
+
+/* Карта «какие cron-таймеры управляют PWM-пином»: бит t = таймер t,
+ * бит 63 = карта посчитана. Одной строки "pwm:N," достаточно, чтобы таймер
+ * считался управляющим этим пином (как и раньше). */
+#define SVC_MASK_VALID (1ULL << 63)
+_Static_assert(NUMTASK <= 63, "svc cron mask: NUMTASK must be <= 63");
+
+static uint64_t svc_build_cron_mask(int pwm_id)
+{
+  char needle[12];
+  snprintf(needle, sizeof(needle), "pwm:%d,", pwm_id);
+
+  uint64_t m = SVC_MASK_VALID;
+  for (int t = 0; t < NUMTASK; t++) {
+    char tmp[sizeof(dbCrontxt[0].activ)];
+    taskENTER_CRITICAL();
+    strncpy(tmp, dbCrontxt[t].activ, sizeof(tmp) - 1);
+    tmp[sizeof(tmp) - 1] = '\0';
+    taskEXIT_CRITICAL();
+    if (strstr(tmp, needle) != NULL) {
+      m |= (1ULL << t);
+    }
+  }
+  return m;
+}
+
 /* USER CODE END Header_StartServiceTask */
 void StartServiceTask(void *argument)
 {
   /* USER CODE BEGIN StartServiceTask */
-  ulTaskNotifyTake(0, portMAX_DELAY);
-  //	static uint8_t moonflag = 0; // Счетчик
-  static uint8_t prevday = 0;    // Для отслеживания смены дня
-  static uint8_t prevmin = 0xFF; // Для отслеживания смены минуты
-  //	DateTime nextfullmoon; // Declare nextFullMoon outside the loop
-  DateTime nextfullmnlcl; // Local time version of nextFullMoon
-  /* ── PWM Fade тик-счётчик ── */
-  static uint32_t fade_tick = 0;
+	  ulTaskNotifyTake(0, portMAX_DELAY);
+	  //	static uint8_t moonflag = 0; // Счетчик
+	  static uint8_t prevday = 0;    // Для отслеживания смены дня
+	  static uint8_t prevmin = 0xFF; // Для отслеживания смены минуты
+	  //	DateTime nextfullmoon; // Declare nextFullMoon outside the loop
+	  DateTime nextfullmnlcl; // Local time version of nextFullMoon
+	  /* ── PWM Fade тик-счётчик ── */
+	  static uint32_t fade_tick = 0;
+	  /* Карта «какие cron-таймеры управляют этим PWM» (см. svc_build_cron_mask).
+	   * Считается один раз при старте fade, а не каждую секунду. */
+	  static uint64_t svc_cron_mask[NUMPIN];
+	  /* Infinite loop */
+
   /* Infinite loop */
   for (;;) {
-/* ═══════════════════════════════════════════════
- *  БЛОК PWM Fade — каждые 1000 мс (НОВОЕ)
- * ═══════════════════════════════════════════════ */
-	    if (HAL_GetTick() - fade_tick >= 1000) {
-	      fade_tick = HAL_GetTick();
-          mark_slice_dirty(&g_ver_common);
-          mark_slice_dirty(&g_ver_sensors);
-          mark_slice_dirty(&g_ver_pid);
-          mark_slice_dirty(&g_ver_onewire);
-          mark_slice_dirty(&g_ver_encoder);
-          mark_slice_dirty(&g_ver_pins);
-	      for (int i = 0; i < NUMPIN; i++) {
-	        if (!fade_state[i].active)   continue;
-	        if (PinsConf[i].topin != 5)  continue;
-	        if (is_pin_in_autotune(i))   continue; /* AutoTune lock */
+	  /* ═══════════════════════════════════════════════
+	   *  БЛОК PWM Fade — каждые 1000 мс (НОВОЕ)
+	   * ═══════════════════════════════════════════════ */
+	  	    if (HAL_GetTick() - fade_tick >= 1000) {
+	  	      fade_tick = HAL_GetTick();
+	            /* common несёт uptime, heap и время - меняется каждую секунду.
+	             * Остальные слайсы помечаются в конце блока, только если данные
+	             * реально изменились (svc_mark_changed_slices). */
+	            mark_slice_dirty(&g_ver_common);
+	  	      for (int i = 0; i < NUMPIN; i++) {
+	  	        if (!fade_state[i].active) {
+	  	            svc_cron_mask[i] = 0;   /* следующий fade посчитает карту заново */
+	  	            continue;
+	  	        }
+	  	        if (PinsConf[i].topin != 5)  continue;
+	  	        if (is_pin_in_autotune(i))   continue; /* AutoTune lock */
 
-	        /* Рубильник: Encoder onoff (приоритетный) либо On/Off самой PWM-строки */
-	        bool enc_on = pwm_gate_open((uint8_t)i);
-	        if (!enc_on) {
-	            // Гасим PWM и блокируем — БЕЗОПАСНОСТЬ
-	            __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, 0);
-	            fade_state[i].active = false;
-	            continue;
+	  	        /* Рубильник: Encoder onoff (приоритетный) либо On/Off самой PWM-строки */
+	  	        bool enc_on = pwm_gate_open((uint8_t)i);
+	  	        if (!enc_on) {
+	  	            // Гасим PWM и блокируем — БЕЗОПАСНОСТЬ
+	  	            __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, 0);
+	  	            fade_state[i].active = false;
+	  	            continue;
+	  	        }
+
+	  	        /* ── Timer onoff — останавливаем fade, PWM не трогаем ── */
+	  	        /* Карта считается один раз при старте fade (а не раз в секунду) */
+	  	        if (!(svc_cron_mask[i] & SVC_MASK_VALID)) {
+	  	            svc_cron_mask[i] = svc_build_cron_mask(i);
+	  	        }
+
+	  	        bool timer_on = false;
+	  	        for (int t = 0; t < NUMTASK; t++) {
+	  	            if (!(svc_cron_mask[i] & (1ULL << t))) continue;
+	  	            if (dbCrontxt[t].onoff == 1) {   /* onoff читается на лету */
+	  	                timer_on = true;
+	  	                break;
+	  	            }
+	  	        }
+	  	        if (!timer_on) {
+	  	            /* Таймер выключен — останавливаем fade на текущем значении */
+	  	            fade_state[i].active = false;
+	  	            printf("PWM fade stopped by Timer OFF: id=%d at %d%%\r\n",
+	  	                   i, PinsConf[i].dvalue);
+	  	            continue; /* PWM НЕ трогаем — остаётся на текущем значении */
+	  	        }
+	  	        /* ──────────────────────────────────────────────────────── */
+
+	  	        fade_state[i].steps_left--;
+	  	        fade_state[i].current_duty += fade_state[i].delta;
+
+	  	        /* Клампинг 0–100% */
+	  	        if (fade_state[i].current_duty < 0.0f)
+	  	            fade_state[i].current_duty = 0.0f;
+	  	        if (fade_state[i].current_duty > 100.0f)
+	  	            fade_state[i].current_duty = 100.0f;
+
+	  	        int d = (int)(fade_state[i].current_duty + 0.5f);
+
+	  	        /* На последнем шаге гарантируем точное финальное значение */
+	  	        if (fade_state[i].steps_left == 0) {
+	  	          d = fade_state[i].end_duty;
+	  	          fade_state[i].active = false;
+
+	  	          /* Бесшовная передача: PID берёт PWM с финального значения fade */
+	  	          for (int p = 0; p < PID_MAX_SLOTS; p++) {
+	  	            if (PidConf[p].pwm_pin_id == i) {
+	  	              PidConf[p].pwm_out = (uint8_t)d;
+	  	              pid_set_pwm(p, (uint8_t)d);
+	  	              break;
+	  	            }
+	  	          }
+	  	        }
+
+	  	        PinsConf[i].dvalue = d;
+	  	        uint32_t pulse = (uint32_t)((uint64_t)d
+	  	                          * PinsConf[i].pwmmax / 100ULL);
+	  	        __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, pulse);
+	              /* MQTT: send_mqtt_timer_batch() отслеживает PWM duty раз в 1с */
+	  	      }
+	  	      /* После fade (он меняет dvalue): пометить только изменившиеся слайсы */
+	  	      svc_mark_changed_slices();
+	  	    }
+	  /* ═══════════════════════════════════════════════
+	   *  End PWM Fade
+	   * ═══════════════════════════════════════════════ */
+
+	      if (day != prevday) {
+	        prevday = day;
+	        // Calculate after system reboot
+	        svc_printResults();
+	        if (year != 0000) { // Ensure year is set
+	          calculateMoonPhase((DateTime){year, month, day, timez_copy.tm_hour,
+	                                        timez_copy.tm_min, timez_copy.tm_sec},
+	                             &nextfullmnlcl);
+	          nextfullmnlcl.hour += SetSettings.timezone; // Adjust for timezone
+	          if (nextfullmnlcl.hour >= 24) {
+	            nextfullmnlcl.hour -= 24;
+	            nextfullmnlcl.day++;
+	          }
+	          // Store the full moon data in the correct format
+	          uint8_t len = snprintf(
+	              SetSettings.fullmoon, sizeof(SetSettings.fullmoon),
+	              "%02d.%02d.%04d %02d:%02d", nextfullmnlcl.day, nextfullmnlcl.month,
+	              nextfullmnlcl.year, nextfullmnlcl.hour, nextfullmnlcl.minute);
+	          if (len < 0 || (size_t)len >= sizeof(SetSettings.fullmoon)) {
+	            printf("ERROR: len > setsettings.fullmoon! \n");
+	          }
 	        }
-
-	        /* ── Timer onoff — останавливаем fade, PWM не трогаем ── */
-	        bool timer_on = false;
-	        for (int t = 0; t < NUMTASK; t++) {
-	            uint8_t t_onoff;
-	            char tmp[sizeof(dbCrontxt[0].activ)];
-	            taskENTER_CRITICAL();
-	            t_onoff = dbCrontxt[t].onoff;
-	            if (t_onoff == 1) {
-	                strncpy(tmp, dbCrontxt[t].activ, sizeof(tmp) - 1);
-	                tmp[sizeof(tmp) - 1] = '\0';
+	        if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
+	          Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" after system
+	                                         // reboot
+	        }
+	      }
+	      if (timez_copy.tm_min != prevmin) { // Проверка раз в минуту
+	        prevmin = timez_copy.tm_min;
+	        if (timez_copy.tm_hour == 0 && timez_copy.tm_min == 1 && year != 0000) {
+	          //          if (moonflag < 3) { // Для уверенности 3 раза!
+	          if (year != 0000) { // Ensure year is set
+	            calculateMoonPhase((DateTime){year, month, day, timez_copy.tm_hour,
+	                                          timez_copy.tm_min, timez_copy.tm_sec},
+	                               &nextfullmnlcl);
+	            nextfullmnlcl.hour += SetSettings.timezone; // Adjust for timezone
+	            if (nextfullmnlcl.hour >= 24) {
+	              nextfullmnlcl.hour -= 24;
+	              nextfullmnlcl.day++;
 	            }
-	            taskEXIT_CRITICAL();
-
-	            if (t_onoff == 1) {
-	                /* Проверяем что этот cron управляет именно этим PWM */
-	                char needle[12];
-	                snprintf(needle, sizeof(needle), "pwm:%d,", i);
-	                if (strstr(tmp, needle) != NULL) {
-	                    timer_on = true;
-	                    break;
-	                }
-	            }
-	        }
-	        if (!timer_on) {
-	            /* Таймер выключен — останавливаем fade на текущем значении */
-	            fade_state[i].active = false;
-	            printf("PWM fade stopped by Timer OFF: id=%d at %d%%\r\n",
-	                   i, PinsConf[i].dvalue);
-	            continue; /* PWM НЕ трогаем — остаётся на текущем значении */
-	        }
-	        /* ──────────────────────────────────────────────────────── */
-
-	        fade_state[i].steps_left--;
-	        fade_state[i].current_duty += fade_state[i].delta;
-
-	        /* Клампинг 0–100% */
-	        if (fade_state[i].current_duty < 0.0f)
-	            fade_state[i].current_duty = 0.0f;
-	        if (fade_state[i].current_duty > 100.0f)
-	            fade_state[i].current_duty = 100.0f;
-
-	        int d = (int)(fade_state[i].current_duty + 0.5f);
-
-	        /* На последнем шаге гарантируем точное финальное значение */
-	        if (fade_state[i].steps_left == 0) {
-	          d = fade_state[i].end_duty;
-	          fade_state[i].active = false;
-
-	          /* Бесшовная передача: PID берёт PWM с финального значения fade */
-	          for (int p = 0; p < PID_MAX_SLOTS; p++) {
-	            if (PidConf[p].pwm_pin_id == i) {
-	              PidConf[p].pwm_out = (uint8_t)d;
-	              pid_set_pwm(p, (uint8_t)d);
-	              break;
+	            // Store the full moon data in the correct format
+	            uint8_t len =
+	                snprintf(SetSettings.fullmoon, sizeof(SetSettings.fullmoon),
+	                         "%02d.%02d.%04d %02d:%02d", nextfullmnlcl.day,
+	                         nextfullmnlcl.month, nextfullmnlcl.year,
+	                         nextfullmnlcl.hour, nextfullmnlcl.minute);
+	            if (len < 0 || (size_t)len >= sizeof(SetSettings.fullmoon)) {
+	              printf("ERROR: len > setsettings.fullmoon! \n");
 	            }
 	          }
 	        }
-
-	        PinsConf[i].dvalue = d;
-	        uint32_t pulse = (uint32_t)((uint64_t)d
-	                          * PinsConf[i].pwmmax / 100ULL);
-	        __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, pulse);
-            /* MQTT: send_mqtt_timer_batch() отслеживает PWM duty раз в 1с */
+	        if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
+	          Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" один раз в
+	                                         // минуту.
+	        }
 	      }
-	    }
-/* ═══════════════════════════════════════════════
- *  End PWM Fade
- * ═══════════════════════════════════════════════ */
-
-    if (day != prevday) {
-      prevday = day;
-      // Calculate after system reboot
-      svc_printResults();
-      if (year != 0000) { // Ensure year is set
-        calculateMoonPhase((DateTime){year, month, day, timez_copy.tm_hour,
-                                      timez_copy.tm_min, timez_copy.tm_sec},
-                           &nextfullmnlcl);
-        nextfullmnlcl.hour += SetSettings.timezone; // Adjust for timezone
-        if (nextfullmnlcl.hour >= 24) {
-          nextfullmnlcl.hour -= 24;
-          nextfullmnlcl.day++;
-        }
-        // Store the full moon data in the correct format
-        uint8_t len = snprintf(
-            SetSettings.fullmoon, sizeof(SetSettings.fullmoon),
-            "%02d.%02d.%04d %02d:%02d", nextfullmnlcl.day, nextfullmnlcl.month,
-            nextfullmnlcl.year, nextfullmnlcl.hour, nextfullmnlcl.minute);
-        if (len < 0 || (size_t)len >= sizeof(SetSettings.fullmoon)) {
-          printf("ERROR: len > setsettings.fullmoon! \n");
-        }
-      }
-      if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
-        Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" after system
-                                       // reboot
-      }
-    }
-    if (timez_copy.tm_min != prevmin) { // Проверка раз в минуту
-      prevmin = timez_copy.tm_min;
-      if (timez_copy.tm_hour == 0 && timez_copy.tm_min == 1 && year != 0000) {
-        //          if (moonflag < 3) { // Для уверенности 3 раза!
-        if (year != 0000) { // Ensure year is set
-          calculateMoonPhase((DateTime){year, month, day, timez_copy.tm_hour,
-                                        timez_copy.tm_min, timez_copy.tm_sec},
-                             &nextfullmnlcl);
-          nextfullmnlcl.hour += SetSettings.timezone; // Adjust for timezone
-          if (nextfullmnlcl.hour >= 24) {
-            nextfullmnlcl.hour -= 24;
-            nextfullmnlcl.day++;
-          }
-          // Store the full moon data in the correct format
-          uint8_t len =
-              snprintf(SetSettings.fullmoon, sizeof(SetSettings.fullmoon),
-                       "%02d.%02d.%04d %02d:%02d", nextfullmnlcl.day,
-                       nextfullmnlcl.month, nextfullmnlcl.year,
-                       nextfullmnlcl.hour, nextfullmnlcl.minute);
-          if (len < 0 || (size_t)len >= sizeof(SetSettings.fullmoon)) {
-            printf("ERROR: len > setsettings.fullmoon! \n");
-          }
-        }
-      }
-      if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
-        Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" один раз в
-                                       // минуту.
-      }
-    }
-    // === ПЕРИОДИЧЕСКИЙ ДАМП PWM РЕГИСТРОВ (каждые 10 секунд) ===
-//    {
-//      static uint32_t pwm_dbg_tick = 0;
-//      if (HAL_GetTick() - pwm_dbg_tick >= 10000) {
-//        pwm_dbg_tick = HAL_GetTick();
-//        bool found_pwm = false;
-//        for (int pi = 0; pi < NUMPIN; pi++) {
-//          if (PinsConf[pi].topin == 5 && PinsInfo[pi].tim != NULL) {
-//            found_pwm = true;
-//            printf("\r\n--- PWM [%d] %s (10s tick) ---\r\n", pi,
-//                   PinsInfo[pi].pins);
-//            printf("  dvalue=%d  pwmmax=%d  pwm=%d mHz\r\n",
-//                   PinsConf[pi].dvalue, PinsConf[pi].pwmmax, PinsConf[pi].pwm);
-//            printf("  CR1=0x%04lX(EN=%lu)  ARR=%lu  PSC=%lu\r\n",
-//                   (unsigned long)PinsInfo[pi].tim->CR1,
-//                   (unsigned long)(PinsInfo[pi].tim->CR1 & TIM_CR1_CEN),
-//                   (unsigned long)PinsInfo[pi].tim->ARR,
-//                   (unsigned long)PinsInfo[pi].tim->PSC);
-//            uint32_t ccr = 0;
-//            if (PinsInfo[pi].tim_channel == TIM_CHANNEL_1)
-//              ccr = PinsInfo[pi].tim->CCR1;
-//            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_2)
-//              ccr = PinsInfo[pi].tim->CCR2;
-//            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_3)
-//              ccr = PinsInfo[pi].tim->CCR3;
-//            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_4)
-//              ccr = PinsInfo[pi].tim->CCR4;
-//            printf("  CCR(ch%lu)=%lu\r\n",
-//                   (unsigned long)PinsInfo[pi].tim_channel, (unsigned long)ccr);
-//            if (PinsInfo[pi].tim == TIM1 || PinsInfo[pi].tim == TIM8)
-//              printf("  BDTR=0x%08lX  MOE=%lu  <<< MUST be 1!\r\n",
-//                     (unsigned long)PinsInfo[pi].tim->BDTR,
-//                     (unsigned long)((PinsInfo[pi].tim->BDTR >> 15) & 1));
-//          }
-//        }
-//        if (!found_pwm){
-//          printf("[PWM] No PWM pins configured (topin==5)!\r\n");}
-//      }
-//    }
-    osDelay(500);
+	      // === ПЕРИОДИЧЕСКИЙ ДАМП PWM РЕГИСТРОВ (каждые 10 секунд) ===
+	  //    {
+	  //      static uint32_t pwm_dbg_tick = 0;
+	  //      if (HAL_GetTick() - pwm_dbg_tick >= 10000) {
+	  //        pwm_dbg_tick = HAL_GetTick();
+	  //        bool found_pwm = false;
+	  //        for (int pi = 0; pi < NUMPIN; pi++) {
+	  //          if (PinsConf[pi].topin == 5 && PinsInfo[pi].tim != NULL) {
+	  //            found_pwm = true;
+	  //            printf("\r\n--- PWM [%d] %s (10s tick) ---\r\n", pi,
+	  //                   PinsInfo[pi].pins);
+	  //            printf("  dvalue=%d  pwmmax=%d  pwm=%d mHz\r\n",
+	  //                   PinsConf[pi].dvalue, PinsConf[pi].pwmmax, PinsConf[pi].pwm);
+	  //            printf("  CR1=0x%04lX(EN=%lu)  ARR=%lu  PSC=%lu\r\n",
+	  //                   (unsigned long)PinsInfo[pi].tim->CR1,
+	  //                   (unsigned long)(PinsInfo[pi].tim->CR1 & TIM_CR1_CEN),
+	  //                   (unsigned long)PinsInfo[pi].tim->ARR,
+	  //                   (unsigned long)PinsInfo[pi].tim->PSC);
+	  //            uint32_t ccr = 0;
+	  //            if (PinsInfo[pi].tim_channel == TIM_CHANNEL_1)
+	  //              ccr = PinsInfo[pi].tim->CCR1;
+	  //            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_2)
+	  //              ccr = PinsInfo[pi].tim->CCR2;
+	  //            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_3)
+	  //              ccr = PinsInfo[pi].tim->CCR3;
+	  //            else if (PinsInfo[pi].tim_channel == TIM_CHANNEL_4)
+	  //              ccr = PinsInfo[pi].tim->CCR4;
+	  //            printf("  CCR(ch%lu)=%lu\r\n",
+	  //                   (unsigned long)PinsInfo[pi].tim_channel, (unsigned long)ccr);
+	  //            if (PinsInfo[pi].tim == TIM1 || PinsInfo[pi].tim == TIM8)
+	  //              printf("  BDTR=0x%08lX  MOE=%lu  <<< MUST be 1!\r\n",
+	  //                     (unsigned long)PinsInfo[pi].tim->BDTR,
+	  //                     (unsigned long)((PinsInfo[pi].tim->BDTR >> 15) & 1));
+	  //          }
+	  //        }
+	  //        if (!found_pwm){
+	  //          printf("[PWM] No PWM pins configured (topin==5)!\r\n");}
+	  //      }
+	  //    }
+	      osDelay(500);
   }
   /* USER CODE END StartServiceTask */
 }
@@ -3362,23 +3566,28 @@ void StartServiceTask(void *argument)
  * @param argument: Not used
  * @retval None
  */
+#define SIM800L_POLL_MS  10   /* период опроса UART модема и SMS-тревог, мс */
 /* USER CODE END Header_StartSIM800LTask */
 void StartSIM800LTask(void *argument)
 {
   /* USER CODE BEGIN StartSIM800LTask */
-  ulTaskNotifyTake(0, portMAX_DELAY);
-  init_sim800l_module();
-  xTaskNotify(
-      ConfigTaskHandle, 0,
-      eNoAction); // Уведомляем ConfigTask о завершении инициализации GSM Task!
-                  //	printf("Hi world! It's from GPS task! \r\n");
-  /* Infinite loop */
+	  ulTaskNotifyTake(0, portMAX_DELAY);
+	  init_sim800l_module();
+	  xTaskNotify(
+	      ConfigTaskHandle, 0,
+	      eNoAction); // Уведомляем ConfigTask о завершении инициализации GSM Task!
+	                  //	printf("Hi world! It's from GPS task! \r\n");
+	  /* Infinite loop */
   for (;;) {
-    if (gsm_available()) { // если модуль что-то прислал
-      process_sim800l_data();
-    }
-    sms_alarm_poll(); // SMS-тревоги от датчиков Security (Send SMS = YES)
-    osDelay(1);
+	    if (gsm_available()) { // если модуль что-то прислал
+	      process_sim800l_data();
+	    }
+	    sms_alarm_poll(); // SMS-тревоги от датчиков Security (Send SMS = YES)
+	    /* Опрос раз в SIM800L_POLL_MS (10 мс) вместо 1 мс. Модем на 57600 бод даёт
+	     * не более 6 байт/мс, значит, между опросами накапливается не более 58 байт
+	     * при буфере 512 байт. process_sim800l_data() всё равно сам ждёт 50 мс,
+	     * чтобы собрать сообщение целиком. */
+	    osDelay(SIM800L_POLL_MS);
   }
   /* USER CODE END StartSIM800LTask */
 }
@@ -3389,6 +3598,7 @@ void StartSIM800LTask(void *argument)
  * @param argument: Not used
  * @retval None
  */
+#define SEC_POLL_MS  5   /* период опроса Security-пинов, мс (антидребезг 45 мс) */
 /* USER CODE END Header_StartSecurityTask */
 void StartSecurityTask(void *argument)
 {
@@ -3396,68 +3606,68 @@ void StartSecurityTask(void *argument)
   ulTaskNotifyTake(0, portMAX_DELAY);
   /* Infinite loop */
   for (;;) {
-    uint32_t currtime = HAL_GetTick();
+	    uint32_t currtime = HAL_GetTick();
 
-    for (int i = 0; i < NUMPIN; i++) {
-      if (PinsConf[i].topin != 10)
-        continue;
+	    for (int i = 0; i < NUMPIN; i++) {
+	      if (PinsConf[i].topin != 10)
+	        continue;
 
-      uint8_t current_state =
-          HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
+	      uint8_t current_state =
+	          HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
 
-      if (current_state != PinsConf[i].prvstate) {
-        if ((currtime - sec_deb_tm[i]) >= DEBOUNCE_DELAY) {
-          bool trigger_event = false;
+	      if (current_state != PinsConf[i].prvstate) {
+	        if ((currtime - sec_deb_tm[i]) >= DEBOUNCE_DELAY) {
+	          bool trigger_event = false;
 
-          switch (PinsConf[i].ptype) {
-          case 0: // PIR датчик движения
-                  // Подключение: PIR->pin, None
-                  // В покое - 0, при движении - 1
-                  // Срабатывание на появление движения (0->1)
-            trigger_event = (PinsConf[i].prvstate == 0 && current_state == 1);
-            break;
+	          switch (PinsConf[i].ptype) {
+	          case 0: // PIR датчик движения
+	                  // Подключение: PIR->pin, None
+	                  // В покое - 0, при движении - 1
+	                  // Срабатывание на появление движения (0->1)
+	            trigger_event = (PinsConf[i].prvstate == 0 && current_state == 1);
+	            break;
 
-          case 1: // Геркон NO (нормально разомкнутый)
-                  // Подключение: 3.3V->Геркон->pin.
-                  // При поднесенном магните - контакты замкнуты - 1
-                  // При отсутствии магнита - контакты разомкнуты - 0
-                  // Срабатывание на размыкание контактов (1->0)
-            trigger_event = (PinsConf[i].prvstate == 1 && current_state == 0);
-            break;
+	          case 1: // Геркон NO (нормально разомкнутый)
+	                  // Подключение: 3.3V->Геркон->pin.
+	                  // При поднесенном магните - контакты замкнуты - 1
+	                  // При отсутствии магнита - контакты разомкнуты - 0
+	                  // Срабатывание на размыкание контактов (1->0)
+	            trigger_event = (PinsConf[i].prvstate == 1 && current_state == 0);
+	            break;
 
-          case 2: // Геркон NC (нормально замкнутый)
-                  // Подключение: 3.3V->Геркон->pin.
-                  // При поднесенном магните - контакты разомкнуты - 0
-                  // При отсутствии магнита - контакты замкнуты - 1
-                  // Срабатывание на змыкание контактов (0->1)
-            trigger_event = (PinsConf[i].prvstate == 0 && current_state == 1);
-            break;
-          }
+	          case 2: // Геркон NC (нормально замкнутый)
+	                  // Подключение: 3.3V->Геркон->pin.
+	                  // При поднесенном магните - контакты разомкнуты - 0
+	                  // При отсутствии магнита - контакты замкнуты - 1
+	                  // Срабатывание на змыкание контактов (0->1)
+	            trigger_event = (PinsConf[i].prvstate == 0 && current_state == 1);
+	            break;
+	          }
 
-          if (trigger_event) { // Если обнаружено срабатывание
-            if ((currtime - sec_lasttrg[i]) >= 1000) {
-              if (PinsConf[i].onoff && PinsConf[i].sclick[0] != '\0' &&
-                  strcmp(PinsConf[i].sclick, "None") != 0) {
-                action_handler(i, PinsConf[i].sclick, "Security action");
+	          if (trigger_event) { // Если обнаружено срабатывание
+	            if ((currtime - sec_lasttrg[i]) >= 1000) {
+	              if (PinsConf[i].onoff && PinsConf[i].sclick[0] != '\0' &&
+	                  strcmp(PinsConf[i].sclick, "None") != 0) {
+	                action_handler(i, PinsConf[i].sclick, "Security action");
 
-                mqtt_queue_send_safe(6, i, current_state, 0);
-              }
-              /* Send SMS не зависит от поля Action: SMS уходит, даже если
-               * Action = None. Отправляет задача SIM800L (sms_alarm_poll). */
-              if (PinsConf[i].onoff && strcmp(PinsConf[i].send_sms, "YES") == 0) {
-                sms_alarm_request(i);
-              }
+	                mqtt_queue_send_safe(6, i, current_state, 0);
+	              }
+	              /* Send SMS не зависит от поля Action: SMS уходит, даже если
+	               * Action = None. Отправляет задача SIM800L (sms_alarm_poll). */
+	              if (PinsConf[i].onoff && strcmp(PinsConf[i].send_sms, "YES") == 0) {
+	                sms_alarm_request(i);
+	              }
 
-              sec_lasttrg[i] = currtime;
-            }
-          }
-          PinsConf[i].prvstate = current_state;
-          PinsConf[i].state = current_state;
-          sec_deb_tm[i] = currtime;
-        }
-      }
-    }
-    osDelay(1);
+	              sec_lasttrg[i] = currtime;
+	            }
+	          }
+	          PinsConf[i].prvstate = current_state;
+	          PinsConf[i].state = current_state;
+	          sec_deb_tm[i] = currtime;
+	        }
+	      }
+	    }
+	    osDelay(1);
   }
   /* USER CODE END StartSecurityTask */
 }

@@ -39,20 +39,23 @@ function ModalPwmCron({
 
     const [pwmOptions, setPwmOptions] = useState([]);
 
-    useEffect(() => {
-        fetch('/api/select/get', { method: 'GET', cache: 'no-store' })
-            .then(res => res.json())
-            .then(res => {
-                if (res && res.data && Array.isArray(res.data)) {
-                    const pwms = res.data.filter(pin => pin.topin === 5);
-                    setPwmOptions(pwms);
-                    if (!pwmId && pwms.length > 0) {
-                        setPwmId(pwms[0].id.toString());
-                    }
-                }
-            })
-            .catch(err => console.error("Error fetching pin config:", err));
-    }, []);
+	useEffect(() => {
+	    // limit=100 обязателен: без него бэкенд отдает только пины с ID 0-29
+	    // (по умолчанию limit=30 в обработчике /api/select/get), и PWM-пины
+	    // с ID >= 30 (например PF9, ID=70) не попадают в список.
+	    fetch('/api/select/get?limit=100', { method: 'GET', cache: 'no-store' })
+		.then(res => res.json())
+		.then(res => {
+		    if (res && res.data && Array.isArray(res.data)) {
+		        const pwms = res.data.filter(pin => pin.topin === 5);
+		        setPwmOptions(pwms);
+		        if (!pwmId && pwms.length > 0) {
+		            setPwmId(pwms[0].id.toString());
+		        }
+		    }
+		})
+		.catch(err => console.error("Error fetching pin config:", err));
+	}, []);
 
     const handleSubmit = (e) => {
         e.preventDefault();

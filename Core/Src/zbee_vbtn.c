@@ -94,6 +94,12 @@ void vbtn_execute(int slot, int event_type) {
     const char *action_str = NULL;
     const char *press_type = NULL;
 
+    /* Master Enable: onoff == 0 - кнопка отключена, никакая логика
+     * (действия, MQTT-события) для этого ID не выполняется. */
+    if (slot < 0 || slot >= NUMZBEE || ZigbeeConf[slot].onoff == 0) {
+        return;
+    }
+
     switch (event_type) {
     case 0: action_str = zbee_action_sclick(slot); press_type = "sclick press"; break;
     case 1: action_str = zbee_action_dclick(slot); press_type = "double press"; break;

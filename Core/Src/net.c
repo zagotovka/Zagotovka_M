@@ -1053,6 +1053,11 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				keep_alive = true;
 				break;
 			}
+			if (mg_match(hm->uri, mg_str("/api/pwmpins/get"), NULL)) {
+			  handle_pwmpins_get(c);
+			  keep_alive = true;
+			  break;
+			}
 			/* ── Keep-Alive GET poll endpoints (reuse connection, no TLS storm) ── */
 			if (mg_match(hm->uri, mg_str("/api/select/get"), NULL)) {
 				if (!check_etag_304(c, hm, &g_ver_select)) {
@@ -2501,6 +2506,16 @@ static void handle_pid(struct mg_connection *c) {
         char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[i].tmpset, 1);
         char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), PidConf[i].tmpcur, 1);
 
+        /* Выбранный датчик: ID/имя пина и признак наличия валидной температуры */
+        uint8_t sp_id = PidConf[i].sensor_pin_id;
+        const char *sp_name = (PidConf[i].selsens != PID_SENS_NONE &&
+                               sp_id > 0 && sp_id < NUMPIN)
+                              ? PinsInfo[sp_id].pins : "";
+        char esc_spname[16];
+        json_escape_str(esc_spname, sp_name, sizeof(esc_spname));
+        int tmpok = (PidConf[i].selsens != PID_SENS_NONE &&
+                     PidConf[i].stale_cnt == 0) ? 1 : 0;
+
         /* pinact: пустой объект, если PWM-пин не привязан (иначе UI покажет "(0)") */
         char pinact[40];
         if (pin_id > 0 && pin_id < NUMPIN) {
@@ -2520,6 +2535,7 @@ static void handle_pid(struct mg_connection *c) {
             "\"tmpset\":\"%s\",\"tmpcur\":\"%s\","
             "\"duty\":%d,\"info\":\"%s\",\"onoff\":%d,"
             "\"tune_state\":%u,\"tune_progress\":%u,"
+            "\"sensor_pin_id\":%d,\"sensor_pin\":\"%s\",\"tmpok\":%d,"
             "\"cond\":%d,\"cexpr\":\"%s\"}",
             first ? "" : ",",
             i + 1, esc_pname,
@@ -2532,6 +2548,7 @@ static void handle_pid(struct mg_connection *c) {
             esc_info,
             PidConf[i].onoff,
             PidConf[i].tune_state, PidConf[i].tune_progress,
+            (int)sp_id, esc_spname, tmpok,
             (int)PidConf[i].cond, ce_expr);
 
         first = false;

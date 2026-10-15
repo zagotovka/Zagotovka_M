@@ -1,12 +1,10 @@
-
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
-import { fetchConditions, fetchCondPool, condPayload, validateCondExpr, CondInput } from '../condlib.js';
+import { fetchCondData, condPayload, validateCondExpr, CondInput } from '../condlib.js';
 
-// Список пресетов и подсказка приходят из TabPid.js через параметры presetList и PresetHintComponent
 const SENSOR_OPTIONS = [
   { value: '1', label: 'DS18B20' },
   { value: '2', label: 'DHT-22' },
@@ -30,92 +28,133 @@ function ModalPid({
   const [onoff, setOnOff] = useState(selectedPid?.onoff === 1);
   const [selsens, setSelsens] = useState(selectedPid?.selsens || '1');
   const [sernum, setSernum] = useState(selectedPid?.sernum || '');
+  const [sensorPinId, setSensorPinId] = useState(Number(selectedPid?.sensor_pin_id) || 0);
+  const [owPins, setOwPins] = useState([]);
   const [presets, setPresets] = useState(selectedPid?.presets || '1');
   const [tmpset, setTmpset] = useState(selectedPid?.tmpset || '');
   const [tmpcur, setTmpcur] = useState(selectedPid?.tmpcur || '');
   const [pwmOptions, setPwmOptions] = useState([]);
-  const [selectedPwm, setSelectedPwm] = useState(Object.entries(selectedPid?.pinact || {})[0] || ['', '']
-);
+  const [selectedPwm, setSelectedPwm] = useState(Object.entries(selectedPid?.pinact || {})[0] || ['', '']);
   const [condsList, setCondsList] = useState([]);
   const [poolInfo, setPoolInfo] = useState(null);
-  // Условие регулятора - свободное выражение (исходные значения нужны,
-  // чтобы не отвязать ссылку на ячейку библиотеки 1..12 без правки).
   const [pidCond, setPidCond] = useState(selectedPid?.cexpr || '');
   const [condText0, setCondText0] = useState(selectedPid?.cexpr || '');
   const [condNum0, setCondNum0] = useState(parseInt(selectedPid?.cond, 10) || 0);
 
-  // Обновляем состояние при смене selectedPid
-useEffect(() => {
-  setPidInfo(selectedPid?.info || '');
-  setOnOff(selectedPid?.onoff === 1);
-  setSelsens(selectedPid?.selsens || '1');
-  setSernum(selectedPid?.sernum || '');
-  setPresets(selectedPid?.presets || '1');
-  setTmpset(selectedPid?.tmpset || '');
-  setTmpcur(selectedPid?.tmpcur || '');
-  setSelectedPwm(Object.entries(selectedPid?.pinact || {})[0] || ['', '']);
-  setPidCond(selectedPid?.cexpr || '');
-  setCondText0(selectedPid?.cexpr || '');
-  setCondNum0(parseInt(selectedPid?.cond, 10) || 0);
-}, [selectedPid]);
-
-
   useEffect(() => {
-  fetchConditions().then(setCondsList);
-  fetchCondPool().then(setPoolInfo);
-  fetch('/api/select/get', {
-    method: 'GET',
-    cache: 'no-store',
-    headers: { 'Content-Type': 'application/json' }
-  })
-    .then((response) => {
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      return response.json();
-    })
-    .then((response) => {
-      if (!response || !response.data || !Array.isArray(response.data)) {
-        console.error('Invalid data format:', response);
-        setPwmOptions([]);
-        return;
+    setPidInfo(selectedPid?.info || '');
+    setOnOff(selectedPid?.onoff === 1);
+    setSelsens(selectedPid?.selsens || '1');
+    setSernum(selectedPid?.sernum || '');
+    setSensorPinId(Number(selectedPid?.sensor_pin_id) || 0);
+    setPresets(selectedPid?.presets || '1');
+    setTmpset(selectedPid?.tmpset || '');
+    setTmpcur(selectedPid?.tmpcur || '');
+    setSelectedPwm(Object.entries(selectedPid?.pinact || {})[0] || ['', '']);
+    setPidCond(selectedPid?.cexpr || '');
+    setCondText0(selectedPid?.cexpr || '');
+    setCondNum0(parseInt(selectedPid?.cond, 10) || 0);
+  }, [selectedPid]);
+
+  // Последовательная загрузка: не более одного запроса одновременно (экономия кучи на контроллере)
+  useEffect(() => {
+    let cancelled = false;
+
+    const getJson = async (url) => {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    };
+
+    (async () => {
+      const cd = await fetchCondData();
+      if (cancelled) return;
+      setCondsList(cd.conds);
+      setPoolInfo(cd.pool);
+
+      try {
+        const sel = await getJson('/api/pwmpins/get');
+        if (cancelled) return;
+        const list = sel && Array.isArray(sel.data) ? sel.data : [];
+        setPwmOptions(list.filter((pin) => pin.topin === 5));
+      } catch (error) {
+        console.error('Error fetching pin config:', error);
+        if (!cancelled) setPwmOptions([]);
       }
-      const pwmPins = response.data.filter((pin) => pin.topin === 5);
-      setPwmOptions(pwmPins);
-    })
-    .catch((error) => {
-      console.error('Error fetching pin config:', error);
-      setPwmOptions([]);
-    });
-}, [selectedPid]);
+
+      try {
+        const ow = await getJson('/api/state/onewire');
+        if (!cancelled) setOwPins(Array.isArray(ow.pins) ? ow.pins : []);
+      } catch (error) {
+        if (!cancelled) setOwPins([]);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [selectedPid]);
+
+  const sensorChoices = [];
+  owPins.forEach((p) => {
+    if (!p.id || String(p.typsensr) !== String(selsens)) return;
+    const sensors = Array.isArray(p.sensors) ? p.sensors : [];
+    if (p.typsensr === 1) {
+      sensors.forEach((s) => {
+        sensorChoices.push({
+          key: `${p.id}|${s.s_number}`,
+          pinId: p.id,
+          sernum: s.s_number,
+          label: `${p.pin} (ID: ${p.id}) - ${s.s_number}` +
+                 (s.valid ? ` - ${Number(s.t).toFixed(1)} C` : ' - no data')
+        });
+      });
+    } else if (p.typsensr === 2) {
+      const s = sensors[0] || {};
+      sensorChoices.push({
+        key: `${p.id}|`,
+        pinId: p.id,
+        sernum: '',
+        label: `${p.pin} (ID: ${p.id}) - DHT22` +
+             (s.valid ? ` - ${Number(s.t).toFixed(1)} C` : ' - no data')
+      });
+    }
+  });
+  const currentSensorKey = `${sensorPinId}|${sernum}`;
+  const hasCurrentSensor = sensorChoices.some((c) => c.key === currentSensorKey);
+
+  const handleSensorChange = (e) => {
+    const c = sensorChoices.find((x) => x.key === e.target.value);
+    setSensorPinId(c ? c.pinId : 0);
+    setSernum(c ? c.sernum : '');
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
-const hasPwm = selectedPwm[0] && selectedPwm[1] !== undefined && selectedPwm[1] !== '';
+    const hasPwm = selectedPwm[0] && selectedPwm[1] !== undefined && selectedPwm[1] !== '';
 
-// Условие регулятора: свободное выражение ("cexpr") либо, если текст не
-// менялся, ссылка на ячейку библиотеки (номер "cond").
-const condErr = validateCondExpr(pidCond);
-if (condErr) {
-  alert(condErr.ru);
-  return;
-}
-const condBody = condPayload({ loadedText: condText0, loadedNum: condNum0, text: pidCond });
+    const condErr = validateCondExpr(pidCond);
+    if (condErr) {
+      alert(condErr.ru);
+      return;
+    }
+    const condBody = condPayload({ loadedText: condText0, loadedNum: condNum0, text: pidCond });
 
-const jsonData = {
-  id: selectedPid.id,
-  pins: selectedPwm[0],          // имя пина, например "PB15"
-  pinact: hasPwm
-    ? { [selectedPwm[0]]: parseInt(selectedPwm[1]) }
-    : {},
-  selsens: selsens,
-  sernum: sernum,
-  presets: presets,
-  tmpset: tmpset,
-  tmpcur: tmpcur,
-  info: pidInfo,
-  onoff: onoff ? 1 : 0,
-  ...condBody,                  // условие работы регулятора
-};
+    const jsonData = {
+      id: selectedPid.id,
+      pins: selectedPwm[0],
+      pinact: hasPwm
+        ? { [selectedPwm[0]]: parseInt(selectedPwm[1]) }
+        : {},
+      selsens: selsens,
+      sernum: sernum,
+      sensor_pin_id: Number(sensorPinId) || 0,
+      presets: presets,
+      tmpset: tmpset,
+      tmpcur: tmpcur,
+      info: pidInfo,
+      onoff: onoff ? 1 : 0,
+      ...condBody,
+    };
 
     console.log('Data being sent to server:', jsonData);
 
@@ -127,7 +166,6 @@ const jsonData = {
       .then(async (response) => {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-          // 400: условие длиннее 46 символов / ошибка синтаксиса / пул полон
           alert(data.message || `Ошибка ${response.status}`);
           return;
         }
@@ -140,14 +178,15 @@ const jsonData = {
         console.error('Error:', error);
       });
   };
-const handlePwmChange = (e) => {
-  if (!e.target.value) {
-    setSelectedPwm(['', '']);
-  } else {
-    const parts = e.target.value.split('|');
-    setSelectedPwm([parts[0], parts[1]]);
-  }
-};
+
+  const handlePwmChange = (e) => {
+    if (!e.target.value) {
+      setSelectedPwm(['', '']);
+    } else {
+      const parts = e.target.value.split('|');
+      setSelectedPwm([parts[0], parts[1]]);
+    }
+  };
 
   const renderModalContent = () => {
     if (page === 'TabPid' && modalType === 'edit') {
@@ -187,7 +226,7 @@ const handlePwmChange = (e) => {
                     value: html`
                       <select
                         value=${selsens}
-                        onChange=${(e) => setSelsens(e.target.value)}
+                        onChange=${(e) => { setSelsens(e.target.value); setSensorPinId(0); setSernum(''); }}
                         class="border rounded p-2 w-full"
                       >
                         ${SENSOR_OPTIONS.map(
@@ -204,25 +243,22 @@ const handlePwmChange = (e) => {
                     `
                   },
                   {
-                    label: 'Dev. ser. number',
-                    value: selsens === '1'
-                      ? html`
-                          <input
-                            type="text"
-                            value=${sernum}
-                            onInput=${(e) => setSernum(e.target.value)}
-                            class="border rounded p-2 w-full font-mono"
-                            placeholder="e.g. xxxxxxxxxxxxxxxx"
-                          />
-                        `
-                      : html`
-                          <input
-                            type="text"
-                            value="N/A"
-                            readOnly
-                            class="border rounded p-2 w-full bg-gray-100 cursor-not-allowed text-gray-400 italic"
-                          />
-                        `
+                    label: 'Sensor',
+                    value: html`
+                      <select
+                        value=${hasCurrentSensor ? currentSensorKey : (sensorPinId || sernum ? currentSensorKey : '')}
+                        onChange=${handleSensorChange}
+                        class="border rounded p-2 w-full font-mono"
+                      >
+                        <option value="">Select sensor</option>
+                        ${!hasCurrentSensor && (sensorPinId || sernum)
+                          ? html`<option value=${currentSensorKey}>${sernum || ('ID: ' + sensorPinId)} (not found)</option>`
+                          : null}
+                        ${sensorChoices.map(
+                          (c) => html`<option value=${c.key}>${c.label}</option>`
+                        )}
+                      </select>
+                    `
                   },
                   {
                     label: 'Presets',
@@ -390,7 +426,6 @@ const handlePwmChange = (e) => {
     document.body.appendChild(portalEl);
     portalRef.current = portalEl;
 
-    // страница под модальным окном не должна прокручиваться
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 

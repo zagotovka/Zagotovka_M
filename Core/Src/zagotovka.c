@@ -563,6 +563,29 @@ void handle_select_set(struct mg_connection *c, struct mg_http_message *hm) {
   }
 }
 
+/* /api/pwmpins/get: только пины, настроенные как PWM (topin == 5) */
+void handle_pwmpins_get(struct mg_connection *c) {
+  char buf[768];
+  int pos = snprintf(buf, sizeof(buf), "{\"data\":[");
+  int first = 1;
+  for (long i = 0; i < (long)NUMPIN; i++) {
+    int topin;
+    taskENTER_CRITICAL();
+    topin = PinsConf[i].topin;
+    taskEXIT_CRITICAL();
+    if (topin != 5) continue;
+    if (pos > (int)sizeof(buf) - 80) break;
+    pos += snprintf(buf + pos, sizeof(buf) - pos,
+                    "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":5}",
+                    first ? "" : ",", i, PinsInfo[i].pins);
+    first = 0;
+  }
+  snprintf(buf + pos, sizeof(buf) - pos, "]}");
+  mg_http_reply(c, 200,
+                "Content-Type: application/json\r\nCache-Control: no-cache\r\n",
+                "%s", buf);
+}
+
 /* ── Каскадное удаление связей при установке NONE ── */
 
 // Удаляет из строки "6:1,93:2,94.1:1" все токены с указанным ID
@@ -1075,41 +1098,10 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
 
   if (zbi >= 0) {
     ZigbeeConf[zbi].onoff = onoff;
-    if (ZigbeeConf[zbi].zbee_ieee[0] != '\0') {
-      if (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_SWITCH) {
-        /* Switch: обновляем state и выполняем processPins */
-        ZigbeeConf[zbi].state = onoff;
-        processPins(NUMPIN + zbi, onoff);
-        LOG_Z2M("onoff: SWITCH id=%d state=%d\r\n", NUMPIN + zbi, onoff);
-      } else {
-        /* Проверяем есть ли sclick/dclick/lpress (кнопка) */
-        int is_button = (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_TRIGGER &&
-                         zbee_action_sclick(zbi)[0] != '\0');
-
-        if (!is_button) {
-          /* Обычное устройство: ON/OFF. Для PIR-слота On/Off — локальный
-           * флаг охраны со страницы Security: датчику движения кластер 6
-           * отправлять нельзя (у него нет OnOff, а зонд иногда ставит
-           * флаг ZBEE_CL_ONOFF по умолчанию). */
-          if (ZigbeeConf[zbi].onoff && !zbee_is_pir(&ZigbeeConf[zbi])) {
-            const char *cmd = (onoff != 0) ? "ON" : "OFF";
-            uint8_t flags = ZigbeeConf[zbi].cluster_flags;
-            if (flags & ZBEE_CL_ONOFF) {
-              SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
-                                ZigbeeConf[zbi].zbee_endpoint,
-                                6, ZigbeeConf[zbi].zbee_attribute, cmd);
-            }
-          }
-        } else {
-          /* Кнопка: onoff toggle → выполняем sclick */
-          if (onoff) {
-            vbtn_execute(zbi, 0);
-          }
-        }
-      }
-    } else {
-      LOG_Z2M("onoff: SKIP SendZigbeeCommand ieee EMPTY zbi=%d\r\n", zbi);
-    }
+    /* On/Off - только Master Enable для этого ID. Ползунок не управляет
+     * устройством и не запускает связи/действия. Физическое управление идет
+     * через /api/zigbee/command, флаг Zigbee-страницы - /api/zigbee/enable. */
+    LOG_Z2M("onoff: id=%d enable=%d (flag only)\r\n", NUMPIN + zbi, onoff);
 
     /* Сохраняем на USB */
     extern osMessageQueueId_t usbQueueHandle;
@@ -1138,7 +1130,9 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
       pwm_write_duty((uint8_t)onoffid);
     }
 
-    for (int a = 0; a < NUMPINLINKS; a++) {
+/* Сброс связанного PWM в 0 при выключении - только у энкодера (мера
+     * безопасности). У Switch/Button/Security ползунок - только флаг. */
+    for (int a = 0; PinsConf[onoffid].topin == 8 && a < NUMPINLINKS; a++) {
       if (PinsLinks[a].idin == (int)onoffid) {
         int idpwm = PinsLinks[a].idout;
         if (idpwm < 0 || idpwm >= NUMPIN) continue; /* Zigbee/мусор — не PWM */
@@ -8791,13 +8785,29 @@ void sms_alarm_request(int id) {
 }
 
 void sms_alarm_poll(void) {
-  for (int id = 0; id < NUMPIN + NUMZBEE; id++) {
+  /* Перебираем маску БАЙТАМИ (не битами): 37 байт вместо 289 битов. */
+  for (size_t b = 0; b < sizeof(s_sms_alarm_mask); b++) {
+
+    /* Быстрая проверка без критической секции. Чтение одного байта
+     * атомарно. Если в байте нет заявок - сразу к следующему.
+     * Если заявка появится сразу после проверки - она не потеряется,
+     * её подхватит следующий вызов (через 1 мс). */
+    if (s_sms_alarm_mask[b] == 0) continue;
+
+    /* Критическая секция - только когда заявка реально есть:
+     * забираем весь байт целиком и обнуляем его за один вход. */
     uint8_t pending;
     taskENTER_CRITICAL();
-    pending = s_sms_alarm_mask[id / 8] & (uint8_t)(1u << (id % 8));
-    s_sms_alarm_mask[id / 8] &= (uint8_t)~(1u << (id % 8));
+    pending = s_sms_alarm_mask[b];
+    s_sms_alarm_mask[b] = 0;
     taskEXIT_CRITICAL();
-    if (pending) {
+
+    /* Разбираем забранные биты уже вне критической секции;
+     * порядок отправки тот же: по возрастанию ID. */
+    for (uint8_t bit = 0; bit < 8; bit++) {
+      if (!(pending & (uint8_t)(1u << bit))) continue;
+      int id = (int)(b * 8u + bit);
+      if (id >= NUMPIN + NUMZBEE) continue;   /* защита от мусорных битов */
       send_sms(id);
     }
   }
@@ -10149,6 +10159,12 @@ void gen_pid_json(char *buffer, int buffer_size) {
 
     char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[i].tmpset, 1);
     char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), PidConf[i].tmpcur, 1);
+    uint8_t sp_id = PidConf[i].sensor_pin_id;
+    const char *sp_name = (PidConf[i].selsens != PID_SENS_NONE &&
+                           sp_id > 0 && sp_id < NUMPIN)
+                          ? PinsInfo[sp_id].pins : "";
+    int tmpok = (PidConf[i].selsens != PID_SENS_NONE &&
+                 PidConf[i].stale_cnt == 0) ? 1 : 0;
     char ce_raw[COND_LEN];
     char ce_expr[2 * COND_LEN + 8];
     cond_text_copy(PidConf[i].cond, ce_raw, sizeof(ce_raw));
@@ -10158,14 +10174,42 @@ void gen_pid_json(char *buffer, int buffer_size) {
                     ",\"tmpset\":\"%s\",\"tmpcur\":\"%s\""
                     ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d"
                     ",\"cond\":%d,\"cexpr\":\"%s\""
-                    ",\"tune_state\":%d,\"tune_progress\":%d}",
+                    ",\"tune_state\":%d,\"tune_progress\":%d"
+                    ",\"sensor_pin_id\":%d,\"sensor_pin\":\"%s\",\"tmpok\":%d}",
                     (int)PidConf[i].selsens, PidConf[i].sernum,
                     PidConf[i].preset, s_ts, s_tc,
                     current_duty, PidConf[i].info, PidConf[i].onoff,
                     PidConf[i].cond, ce_expr,
-                    (int)PidConf[i].tune_state, (int)PidConf[i].tune_progress);
+                    (int)PidConf[i].tune_state, (int)PidConf[i].tune_progress,
+                    (int)sp_id, sp_name, tmpok);
   }
-  pos += snprintf(buffer + pos, buffer_size - pos, "]}");
+pos += snprintf(buffer + pos, buffer_size - pos, "]}");
+ }
+
+/* ──── pid_bind_ds18b20: привязка PID-слота к DS18B20 по серийному номеру ────
+ * Ищет датчик с серийником PidConf[slot].sernum и записывает кэш
+ * sensor_pin_id / sensor_sub_idx. Возвращает true, если датчик найден. */
+static bool pid_bind_ds18b20(int slot) {
+  const char *want = PidConf[slot].sernum;
+  if (want[0] == '\0')
+    return false;
+
+  for (int p = 0; p < MAX_DS18B20_P; p++) {
+    if (ds18b20[p].typsensr != 1)
+      continue;
+    for (int s = 0; s < ds18b20[p].numsens && s < MAX_DS18B20_PER_PIN; s++) {
+      const uint8_t *a = ds18b20[p].sensors[s].addr;
+      char addr_str[17];
+      snprintf(addr_str, sizeof(addr_str), "%02X%02X%02X%02X%02X%02X%02X%02X",
+               a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
+      if (strcasecmp(addr_str, want) == 0) {
+        PidConf[slot].sensor_pin_id  = ds18b20[p].id;
+        PidConf[slot].sensor_sub_idx = (uint8_t)s;
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /* ──── parse_pid_json: парсит JSON от /api/pid/set ──── */
@@ -10225,6 +10269,10 @@ void parse_pid_json(const char *json) {
     mg_free(sernum);
   }
 
+  if (mg_json_get(body, "$.sensor_pin_id", NULL) >= 0) {
+    PidConf[id].sensor_pin_id = (uint8_t)mg_json_get_long(body, "$.sensor_pin_id", 0);
+  }
+
   if (mg_json_get(body, "$.presets", NULL) >= 0) {
     char *pv_str = mg_json_get_str(body, "$.presets");
     long pv = 0;
@@ -10270,26 +10318,48 @@ void parse_pid_json(const char *json) {
     PidConf[id].cond = (uint8_t)pid_cond;
   }
 
-  if (PidConf[id].selsens == PID_SENS_DS18B20 &&
-      PidConf[id].sernum[0] != '\0') {
-    for (int p = 0; p < MAX_DS18B20_P; p++) {
-      if (ds18b20[p].typsensr != 1)
-        continue;
-      for (int s = 0; s < ds18b20[p].numsens; s++) {
-        char addr_str[17];
-        for (int k = 0; k < 8; k++) {
-          sprintf(addr_str + (k * 2), "%04X", ds18b20[p].sensors[s].addr[k]);
-        }
-        if (strcmp(addr_str, PidConf[id].sernum) == 0) {
-          PidConf[id].sensor_pin_id = ds18b20[p].id;
-          PidConf[id].sensor_sub_idx = (uint8_t)s;
-          printf("[PID] DS18B20 matched: slot=%d pin_id=%d sub=%d\r\n", id,
-                 ds18b20[p].id, s);
-          goto ds_found;
-        }
+  /* Привязка к конкретному датчику. Выполняется только если UI прислал хотя бы
+   * одно из полей выбора датчика (частичные запросы, например переключение
+   * onoff, существующую привязку не трогают). */
+  bool sens_touched = (mg_json_get(body, "$.selsens", NULL) >= 0) ||
+                      (mg_json_get(body, "$.sernum", NULL) >= 0) ||
+                      (mg_json_get(body, "$.sensor_pin_id", NULL) >= 0);
+  if (sens_touched) {
+    if (PidConf[id].selsens == PID_SENS_DS18B20) {
+      if (pid_bind_ds18b20(id)) {
+        printf("[PID] DS18B20 matched: slot=%d pin_id=%d sub=%d\r\n", id,
+               PidConf[id].sensor_pin_id, PidConf[id].sensor_sub_idx);
+      } else {
+        PidConf[id].sensor_pin_id  = 0;
+        PidConf[id].sensor_sub_idx = 0;
+        printf("[PID] DS18B20 not found: slot=%d sernum=%s\r\n", id,
+               PidConf[id].sernum);
       }
+    } else if (PidConf[id].selsens == PID_SENS_DHT22) {
+      long sp = mg_json_get_long(body, "$.sensor_pin_id", -1);
+      bool found = false;
+      if (sp > 0) {
+        for (int p = 0; p < MAX_DHT22_P; p++) {
+          if (dht22[p].typsensr == 2 && dht22[p].id == (uint8_t)sp) {
+            found = true;
+            break;
+          }
+          }
+        }
+      if (found) {
+        PidConf[id].sensor_pin_id  = (uint8_t)sp;
+        PidConf[id].sensor_sub_idx = 0;
+        PidConf[id].sernum[0]      = '\0';
+        printf("[PID] DHT22 bound: slot=%d pin_id=%ld\r\n", id, sp);
+      } else {
+        PidConf[id].sensor_pin_id  = 0;
+        PidConf[id].sensor_sub_idx = 0;
+        printf("[PID] DHT22 pin id=%ld not found: slot=%d\r\n", sp, id);
+      }
+    } else {
+      PidConf[id].sensor_pin_id  = 0;
+      PidConf[id].sensor_sub_idx = 0;
     }
-  ds_found:;
   }
 
   if (my_DgnTaskHandle)
@@ -10315,7 +10385,7 @@ void parse_pidline_json(char *json_string, struct dbSettings *settings) {
 
 /* ──── handle_pid_get: HTTP GET /api/pid/get ──── */
 void handle_pid_get(struct mg_connection *c) {
-  char buf[512];
+  char buf[640];
 
   mg_printf(c, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n");
 
@@ -10357,6 +10427,11 @@ void handle_pid_get(struct mg_connection *c) {
 
     { char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), pid.tmpset, 1);
       char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), pid.tmpcur, 1);
+      uint8_t sp_id = pid.sensor_pin_id;
+      const char *sp_name = (pid.selsens != PID_SENS_NONE &&
+                             sp_id > 0 && sp_id < NUMPIN)
+                            ? PinsInfo[sp_id].pins : "";
+      int tmpok = (pid.selsens != PID_SENS_NONE && pid.stale_cnt == 0) ? 1 : 0;
       char ce_raw[COND_LEN];
       char ce_expr[2 * COND_LEN + 8];
       cond_text_copy(pid.cond, ce_raw, sizeof(ce_raw));
@@ -10366,12 +10441,14 @@ void handle_pid_get(struct mg_connection *c) {
                    ",\"tmpset\":\"%s\",\"tmpcur\":\"%s\""
                    ",\"duty\":%d,\"info\":\"%s\",\"onoff\":%d"
                    ",\"cond\":%d,\"cexpr\":\"%s\""
-                   ",\"tune_state\":%d,\"tune_progress\":%d}",
+                   ",\"tune_state\":%d,\"tune_progress\":%d"
+                   ",\"sensor_pin_id\":%d,\"sensor_pin\":\"%s\",\"tmpok\":%d}",
                    (int)pid.selsens, pid.sernum,
                    pid.preset, s_ts, s_tc,
                    current_duty, pid.info, pid.onoff,
                    pid.cond, ce_expr,
-                   (int)pid.tune_state, (int)pid.tune_progress); }
+                   (int)pid.tune_state, (int)pid.tune_progress,
+                   (int)sp_id, sp_name, tmpok); }
     mg_http_write_chunk(c, buf, (size_t)len);
   }
 
@@ -10442,19 +10519,24 @@ float pid_read_temperature(int slot) {
     return -999.0f;
 
   if (PidConf[slot].selsens == PID_SENS_DS18B20) {
-    /* Быстрый путь: используем кэшированные sensor_pin_id / sensor_sub_idx
-     * (заполняются в parse_pid_json при выборе датчика).
-     * Вместо O(N*M) sprintf+strcmp — прямой доступ O(1).               */
-    uint8_t pin_id = PidConf[slot].sensor_pin_id;
-    uint8_t sub    = PidConf[slot].sensor_sub_idx;
-    for (int p = 0; p < MAX_DS18B20_P; p++) {
-      if (ds18b20[p].id == pin_id && ds18b20[p].typsensr == 1 &&
-          ds18b20[p].onoff) {
-        if (sub < ds18b20[p].numsens && ds18b20[p].sensors[sub].valid) {
-          return ds18b20[p].sensors[sub].temp;
+    /* Быстрый путь: кэшированные sensor_pin_id / sensor_sub_idx. Если кэш не
+     * сработал (пин не найден, например после пересканирования шины или для
+     * слота, сохранённого до исправления привязки), один раз перепривязываемся
+     * по серийному номеру. */
+    for (int attempt = 0; attempt < 2; attempt++) {
+      uint8_t pin_id = PidConf[slot].sensor_pin_id;
+      uint8_t sub    = PidConf[slot].sensor_sub_idx;
+      for (int p = 0; p < MAX_DS18B20_P; p++) {
+        if (ds18b20[p].id == pin_id && ds18b20[p].typsensr == 1 &&
+            ds18b20[p].onoff) {
+          if (sub < ds18b20[p].numsens && ds18b20[p].sensors[sub].valid) {
+            return ds18b20[p].sensors[sub].temp;
+          }
+          return -999.0f; /* датчик не валиден или sub вне диапазона */
         }
-        return -999.0f; /* датчик не валиден или sub вне диапазона */
       }
+      if (attempt == 0 && !pid_bind_ds18b20(slot))
+        break;
     }
     return -999.0f; /* пин не найден */
   } else if (PidConf[slot].selsens == PID_SENS_DHT22) {
@@ -10570,8 +10652,7 @@ void pid_autotune_start(int slot) {
   /* ── 1. Адаптивные пороги под тип датчика ── */
   if (PidConf[slot].selsens == PID_SENS_DS18B20) {
     PidConf[slot].tune_sigma_thr = 0.10f;  /* DS18B20 шум ~0.05-0.08°C */
-    PidConf[slot].tune_sigma_thr = 0.10f;  /* DS18B20 шум ~0.05-0.08°C */
-    PidConf[slot].tune_err_thr   = 0.50f;  /* ⚠️ Исправлено: ±0.5°C точность DS18B20 */
+    PidConf[slot].tune_err_thr   = 0.50f;  /* точность DS18B20 +-0.5°C */
   } else {
     PidConf[slot].tune_sigma_thr = 0.30f;  /* DHT22 шум ~0.15-0.25°C   */
     PidConf[slot].tune_err_thr   = 0.50f;  /* DHT22 точность ±0.5°C    */

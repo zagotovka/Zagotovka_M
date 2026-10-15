@@ -1638,10 +1638,10 @@ function TabPid({ }) {
           })()}
         </td>
         <td class="px-4 py-3 text-sm text-slate-700">${!hasPin || String(d.selsens) === '0' ? 'N/A' : getSensorLabel(d.selsens)}</td>
-        <td class="px-4 py-3 text-sm font-mono ${d.selsens === '1' && hasPin ? 'text-slate-700' : 'text-slate-400 italic'}">${d.selsens === '1' && hasPin ? (d.sernum || '—') : 'N/A'}</td>
+        <td class="px-4 py-3 text-sm font-mono ${hasPin && (d.selsens === '1' || (d.selsens === '2' && d.sensor_pin_id)) ? 'text-slate-700' : 'text-slate-400 italic'}">${!hasPin ? 'N/A' : d.selsens === '1' ? (d.sernum || '—') : (d.selsens === '2' && d.sensor_pin_id ? `${d.sensor_pin} (ID: ${d.sensor_pin_id})` : 'N/A')}</td>
         <td class="px-4 py-3 text-sm text-slate-700">${!hasPin ? 'N/A' : getPresetLabel(d.presets)}</td>
         <td class="px-4 py-3 text-sm text-slate-700 font-mono">${!hasPin ? 'N/A' : d.tmpset}</td>
-        <td class="px-4 py-3 text-sm text-slate-700 font-mono">${!hasPin ? 'N/A' : d.tmpcur}</td>
+        <td class="px-4 py-3 text-sm text-slate-700 font-mono">${!hasPin ? 'N/A' : (d.tmpok === 0 ? '—' : d.tmpcur)}</td>
         <td class="px-4 py-3 text-sm text-slate-800 font-mono ${!d.onoff ? 'text-rose-500 font-bold' : ''}">${!d.onoff ? 'OFF' : (d.duty !== undefined ? d.duty : '—')}</td>
         <td class="px-4 py-3 text-sm text-slate-700">
           ${(() => {

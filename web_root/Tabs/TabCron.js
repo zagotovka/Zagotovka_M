@@ -1312,7 +1312,7 @@ const ArrayCron = ({ d, index }) => {
     <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
       <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.id}</td>
       <td class="px-6 py-4 text-sm text-slate-700 font-mono tracking-wider">${d.cron}</td>
-      <td class="px-6 py-4 text-sm text-slate-700 font-mono tracking-wider items-center gap-1 flex justify-start">${displayActiv}</td>
+      <td class="px-6 py-4 text-sm text-slate-700 font-mono tracking-wider">${displayActiv}</td>
       <td class="px-6 py-4 text-sm text-slate-600">${d.info}</td>
       <td class="px-6 py-4">
         <${MyPolzunok}

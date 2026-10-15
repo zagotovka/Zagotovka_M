@@ -1,6 +1,22 @@
 ################################################################################
-# Custom build targets — вставляется в конец auto-generated makefile
+# Custom build targets - вставляется в конец auto-generated makefile
 ################################################################################
+
+# Проверка результата веб-сборки.
+# Скрипт build_web_and_pack.sh запускается из makefile.init при чтении makefile
+# (через $(shell ...)), поэтому его код возврата терялся. Теперь перед линковкой
+# выполняется проверка файла-признака, который скрипт пишет только в самом конце.
+# При ошибке удаляются старые .elf и .bin (и копия в Proshivka), чтобы нельзя
+# было случайно прошить устаревшую прошивку со старым интерфейсом.
+.PHONY: web-build-check
+web-build-check:
+	@sh ../scripts/check_web_build.sh || { \
+		rm -f $(EXECUTABLES) $(BUILD_ARTIFACT_NAME).bin ../Proshivka/$(BUILD_ARTIFACT_NAME)_v*.bin; \
+		exit 1; \
+	}
+
+# Линковка возможна только после успешной проверки веб-сборки
+$(EXECUTABLES): web-build-check
 
 # Генерация .bin из .elf
 $(BUILD_ARTIFACT_NAME).bin: $(EXECUTABLES)

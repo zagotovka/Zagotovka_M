@@ -93,6 +93,27 @@ export async function fetchConditions() {
   }
 }
 
+export async function fetchCondData() {
+  try {
+    const r = await fetch('/api/mysett/get', { cache: 'no-store' });
+    if (!r.ok) return { conds: [], pool: null };
+    const data = await r.json();
+    const src = Array.isArray(data.conds) ? data.conds : [];
+    const conds = [];
+    for (let i = 0; i < 12; i++) conds.push(src[i] || '');
+    const pool = data.cond_pool
+      ? {
+          used: parseInt(data.cond_pool.used, 10) || 0,
+          total: parseInt(data.cond_pool.total, 10) || 0,
+        }
+      : null;
+    return { conds, pool };
+  } catch (e) {
+    console.error('fetchCondData:', e);
+    return { conds: [], pool: null };
+  }
+}
+
 // Подсказка по синтаксису (RU/EN)
 export const COND_HINT = {
   ru: 'Условие после "?": D1 - устройство с ID 1 включено (выход на пине DEVICE, PWM с яркостью больше 0 или Zigbee-устройство; ID из первой колонки таблицы; прежняя запись R1 тоже работает), !D2 - выключено, DV1>0 / DV1=255 / DV1g100 / DV1l100 - диммер, B1 - кнопка нажата, BU1 - не нажата, BH1 - удерживается, T5>25.5 - температура, H4>50 - влажность, Sr - день, Ss - ночь. Операторы: ! & | ( ) = > < g l. Пример: BH1|(D1&!D2)|(DV5=255). Мёртвый датчик: T/H-сравнение «неизвестно», блокирует действие даже под ! (Клейни), НО явная истина через | перекрывает: T5<25|D1 сработает при мёртвом T5, если D1 вкл. C3 - ссылка на условие №3 из библиотеки (работает цепочка из 2 вложенных ссылок, глубже - блокировка). ВНИМАНИЕ: прямое управление (ползунок On/Off, MQTT/API) условие НЕ проверяет - это не защита от одновременного включения',

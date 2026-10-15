@@ -137,8 +137,8 @@ input:checked + .slider:before {
 table,
 th,
 td {
-  border: 1px solid black; /* временный стиль для отладки */
-  visibility: visible; /* убедитесь, что элементы видимы */
+  border: 1px solid black; /* общая рамка таблиц сайта */
+  visibility: visible;
 }
 
 .cron-table {

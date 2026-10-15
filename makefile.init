@@ -1,6 +1,19 @@
-# Pre-build: generate packed_fs.c from web sources (runs before compilation)
+# Pre-build: generate packed_fs.c from web sources (runs before compilation).
+# Скрипт запускается при чтении makefile. Код возврата проверяется: при ошибке
+# сборка немедленно останавливается через $(error), без компиляции и линковки.
 ifneq ($(MAKECMDGOALS),clean)
 PROJECT_ROOT := $(abspath $(CURDIR)/..)
 $(info [pre-build] Running web build + pack...)
-$(shell bash $(PROJECT_ROOT)/scripts/build_web_and_pack.sh 1>&2)
+
+# Признак успеха прошлой сборки удаляется ДО запуска скрипта
+$(shell rm -f $(PROJECT_ROOT)/scripts/.web_build_status)
+
+# stdout скрипта уходит в stderr (чтобы попасть в консоль), в переменную попадает только код возврата
+WEB_BUILD_RC := $(shell bash $(PROJECT_ROOT)/scripts/build_web_and_pack.sh 1>&2; echo $$?)
+
+ifneq ($(strip $(WEB_BUILD_RC)),0)
+# Удаляем старые .elf/.bin и копию в Proshivka, чтобы нельзя было прошить устаревший интерфейс
+$(shell rm -f $(CURDIR)/*.elf $(CURDIR)/*.bin $(PROJECT_ROOT)/Proshivka/*_v*.bin)
+$(error Web build FAILED (exit code $(WEB_BUILD_RC)). Firmware build aborted. See the [pre-build] output above for the real error)
+endif
 endif

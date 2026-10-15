@@ -456,7 +456,10 @@ export function FirmwareUpdate({ }) {
         const t = setTimeout(() => ctrl.abort(), 2000); // не ждать вечно (защита от мёртвых keep-alive сокетов / NAT / Wi-Fi)
         const res = await fetch('api/firmware/status', { signal: ctrl.signal, cache: 'no-store' });
         clearTimeout(t);
-        if (res.ok) {
+        /* 401/403 тоже означает, что устройство уже загрузилось: после
+         * перезагрузки сессия потеряна. Перезагружаем страницу, и пользователь
+         * попадёт на окно входа, а не будет ждать таймаут. */
+        if (res.ok || res.status === 401 || res.status === 403) {
           window.location.reload();
           return;
         }
