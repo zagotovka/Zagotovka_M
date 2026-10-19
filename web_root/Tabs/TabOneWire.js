@@ -1,10 +1,12 @@
 
+
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
 import { ModalEditSensor } from '../Modals/ModalEditSensor.js';
 import { ModalOneWire } from '../Modals/ModalOneWire.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
-import { registerPoll, unregisterPoll } from '../pollQueue.js';
+import { registerPoll, unregisterPoll, pauseAll, resumeAll } from '../pollQueue.js';
+import { postJson } from '../safeFetch.js';
 import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -855,6 +857,54 @@ The numbers in the table are valid for entries without conditions.
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
+// Загрузка списка OneWire-пинов постранично: сервер ограничивает размер одного ответа
+// (ONEWIRE_PAGE_BYTES в прошивке) и отдаёт "next" - id пина для продолжения, -1 если всё.
+const OW_PAGE_LIMIT = 40;   // макс. строк на страницу (совпадает с ONEWIRE_GET_MAX_LIMIT)
+const OW_MAX_PAGES = 30;    // защита от зацикливания (пинов не больше NUMPIN = 89)
+const OW_FETCH_TIMEOUT = 8000;
+const OW_RETRY_MS = 3000;   // первая пауза автоповтора, дальше удваивается
+const OW_MAX_RETRIES = 4;   // 3 + 6 + 12 + 24 секунд, затем кнопка "Повторить"
+
+// Один GET страницы. Запрос один за раз: вызывающий код ждёт его завершения.
+const fetchOwPage = async (from) => {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), OW_FETCH_TIMEOUT);
+  try {
+    const r = await fetch('/api/onewire/get?from=' + from + '&limit=' + OW_PAGE_LIMIT,
+                          { cache: 'no-store', signal: ctl.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    if (!data || !Array.isArray(data.pins)) throw new Error('bad response');
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+// Читает все страницы. Если во время чтения версия конфигурации изменилась
+// (поле ver), начинает заново (до 3 раз). Старая прошивка без paging отдаёт все
+// пины одним ответом без next, тогда цикл завершается после первой страницы.
+const loadOneWireAll = async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const first = await fetchOwPage(0);
+    const pins = first.pins.slice();
+    let next = first.next;
+    let pages = 1;
+    let changed = false;
+    while (typeof next === 'number' && next >= 0 && pages < OW_MAX_PAGES) {
+      const p = await fetchOwPage(next);
+      if (first.ver !== undefined && p.ver !== first.ver) { changed = true; break; }
+      for (const row of p.pins) pins.push(row);
+      pages++;
+      const nn = p.next;
+      if (typeof nn !== 'number' || nn < 0 || nn <= next) break;
+      next = nn;
+    }
+    if (!changed) return { lang: first.lang, ver: first.ver, pins };
+  }
+  throw new Error('config keeps changing');
+};
+
 const TabOneWire = () => {
   const [varonewire, setOneWire] = useState([]);
   const [error, setError] = useState(null);
@@ -864,6 +914,17 @@ const TabOneWire = () => {
   const [language, setLanguage] = useState('ru');
   const [showHelp, setShowHelp] = useState(false);
   const [expandedPins, setExpandedPins] = useState({});
+
+  // Состояние загрузки и опроса держим в ref: колбэки pollQueue регистрируются один
+  // раз и не должны зависеть от замыканий конкретного рендера.
+  const aliveRef = useRef(true);        // компонент смонтирован
+  const refreshing = useRef(false);     // перезагрузка уже идёт
+  const refreshAgain = useRef(false);   // во время перезагрузки попросили ещё одну
+  const busy = useRef(false);           // идёт POST: опрос конфигурации игнорируется
+  const lastVer = useRef(null);         // последняя известная версия конфигурации
+  const pauseDepth = useRef(0);         // счётчик пауз pauseAll/resumeAll
+  const retryCount = useRef(0);
+  const retryTimer = useRef(null);
 
   const i18n = {
     ru: {
@@ -883,6 +944,7 @@ const TabOneWire = () => {
       title:       'OneWire(s) pin(s)',
       subtitle:    'В теплице стало жарко, пока вы были на работе, а вентилятор уже включился сам. Подключите датчик DS18B20 или DHT22, задайте пределы температуры и влажности, и дом сам отреагирует, когда показания выйдут за них.',
       expandHint:  'Нажмите на строку, чтобы посмотреть список датчиков на этом пине',
+      retry:       'Повторить',
     },
     en: {
       colId:       'ID',
@@ -901,6 +963,7 @@ const TabOneWire = () => {
       title:       'OneWire(s) pin(s)',
       subtitle:    'The greenhouse got hot while you were at work, and the fan has already turned on by itself. Connect a DS18B20 or DHT22 sensor, set the temperature and humidity limits, and the house reacts on its own when readings cross them.',
       expandHint:  'Click the row to see the list of sensors on this pin',
+      retry:       'Retry',
     },
   };
 
@@ -979,24 +1042,75 @@ const TabOneWire = () => {
     }));
   };
 
-  const refresh = () => {
-    registerPoll('onewire_init', '/api/onewire/get', function(data) {
-      setLanguage(data.lang || 'ru');
-      setOneWire(data.pins || []);
-      setError(null);
-      
-      // ── Загрузка показаний + polling через pollQueue (одно соединение, без нового handshake) ──
-      registerPoll('sensors', '/api/state/sensors', function(sData) {
-        if (sData !== null && sData !== undefined) updateSensorData(sData);
-      }, { immediate: true });
-    }, { immediate: true, oneShot: true });
+  // Пауза опроса со счётчиком: refreshSafe и POST из модалок могут пересекаться,
+  // опрос возобновляется только когда освободил последний.
+  const holdPoll = () => { if (pauseDepth.current++ === 0) pauseAll(); };
+  const releasePoll = () => { if (pauseDepth.current > 0 && --pauseDepth.current === 0) resumeAll(); };
+
+  const scheduleRetry = () => {
+    if (!aliveRef.current || retryCount.current >= OW_MAX_RETRIES) return;
+    const delay = OW_RETRY_MS * Math.pow(2, retryCount.current);
+    retryCount.current++;
+    clearTimeout(retryTimer.current);
+    retryTimer.current = setTimeout(() => { if (aliveRef.current) refreshSafe(); }, delay);
+  };
+
+  // Регистрация опросов после каждой успешной загрузки. pollQueue сам удаляет запись
+  // после 3 ошибок подряд, повторная регистрация возвращает её; одинаковый ключ не
+  // увеличивает очередь, а лишь сбрасывает ETag.
+  const startPolls = (hasVer) => {
+    // Температуры и влажность (ETag по g_ver_sensors, 304 если не менялись).
+    registerPoll('sensors', '/api/state/sensors', function(sData) {
+      if (sData !== null && sData !== undefined) updateSensorData(sData);
+    }, { immediate: true });
+    // Конфигурация: limit=0 возвращает только ver и total (около 60 байт, 304 если
+    // версия не менялась). Старая прошивка без ver - опрос конфигурации не включаем.
+    if (hasVer) {
+      registerPoll('onewire_cfg', '/api/onewire/get?limit=0', function(r) {
+        if (!aliveRef.current || pauseDepth.current > 0) return;   // идёт загрузка или POST
+        if (!r || r.__session_expired || r.ver === undefined) return;
+        if (String(r.ver) !== lastVer.current) refreshSafe();
+      }, { immediate: false });
+    }
+  };
+
+  // Безопасная перезагрузка: не более одной за раз, лишние вызовы схлопываются в один
+  // повтор, на время загрузки опрос стоит на паузе (в полёте не больше одного запроса).
+  const refreshSafe = async () => {
+    if (refreshing.current) { refreshAgain.current = true; return; }
+    refreshing.current = true;
+    holdPoll();
+    try {
+      do {
+        refreshAgain.current = false;
+        const r = await loadOneWireAll();
+        if (!aliveRef.current) return;
+        lastVer.current = r.ver !== undefined ? String(r.ver) : null;
+        setLanguage(r.lang || 'ru');
+        setOneWire(r.pins);
+        setError(null);
+        retryCount.current = 0;
+        startPolls(r.ver !== undefined);
+      } while (refreshAgain.current && aliveRef.current);
+    } catch (e) {
+      if (aliveRef.current) {
+        setError(String(e && e.message ? e.message : e));
+        scheduleRetry();
+      }
+    } finally {
+      refreshing.current = false;
+      releasePoll();
+    }
   };
 
   useEffect(() => {
-    refresh();
+    aliveRef.current = true;
+    refreshSafe();
     return function() {
-      unregisterPoll('onewire_init');
+      aliveRef.current = false;
+      clearTimeout(retryTimer.current);
       unregisterPoll('sensors');
+      unregisterPoll('onewire_cfg');
     };
   }, []);
 
@@ -1005,6 +1119,7 @@ const TabOneWire = () => {
   const handleSensorUpdate = (updatedSensor) => {
     setOneWire(prev => prev.map(dev => dev.id === updatedSensor.oneWireId ? { ...dev, sensors: dev.sensors?.map(s => s.s_number === updatedSensor.s_number ? { ...s, ...updatedSensor } : s) } : dev));
     closeModal();
+    refreshSafe();
   };
 
   const openOneWireModal = (oneWire) => { setEditingOneWire(oneWire); setIsModalOpen(true); };
@@ -1099,10 +1214,37 @@ const TabOneWire = () => {
   const handleOneWireUpdate = (upd) => {
     setOneWire(prev => prev.map(dev => dev.id === upd.id ? upd : dev));
     closeModal();
+    refreshSafe();   // после сохранения показываем то, что реально записано в контроллере
   };
 
-  const handleOWOnOffChange = (upd) => {
-    setOneWire(prev => prev.map(dev => dev.id === upd.id ? { ...dev, onoff: upd.onoff } : dev));
+  // Слайдер On/Off в таблице: раньше менял только локальное состояние. Теперь
+  // отправляется на контроллер; при отказе возвращается прежнее значение.
+  const handleOWOnOffChange = async (upd) => {
+    if (busy.current || refreshing.current) return;
+    const prev = varonewire.find(dev => dev.id === upd.id);
+    if (!prev) return;
+    const type = prev.typsensor || prev.typsensr || 0;
+    if (type === 0) return;   // у пина без датчика нет настройки, которую можно сохранить
+    const setLocal = (v) => setOneWire(p => p.map(dev => dev.id === upd.id ? { ...dev, onoff: v } : dev));
+    setLocal(upd.onoff);
+    busy.current = true;
+    holdPoll();
+    try {
+      const res = await postJson('/api/onewire/set', {
+        id: prev.id,
+        pin: prev.pin || prev.pins,
+        typsensor: type,
+        numdevices: prev.numdevices || prev.numsens || 0,
+        onoff: upd.onoff
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+    } catch (e) {
+      console.error('Error updating OneWire On/Off:', e);
+      if (aliveRef.current) setLocal(prev.onoff || 0);
+    } finally {
+      busy.current = false;
+      releasePoll();
+    }
   };
 
   return html`
@@ -1124,7 +1266,7 @@ const TabOneWire = () => {
             </thead>
             ${varonewire.length > 0
               ? varonewire.map((device, index) => html`<${ArrayOneWire} device=${device} index=${index} key=${device.id} />`)
-              : html`<tbody><tr><td colspan="6" class="px-4 py-2">${error ? T.errFetch(error) : T.noPins}</td></tr></tbody>`}
+              : html`<tbody><tr><td colspan="6" class="px-4 py-2">${error ? html`${T.errFetch(error)} <button class="ml-3 text-blue-600 hover:text-blue-800 font-semibold" onclick=${() => { retryCount.current = 0; refreshSafe(); }}>${T.retry}</button>` : T.noPins}</td></tr></tbody>`}
           </table>
         </div>
         <div class="w-full flex justify-between items-center mb-4 mt-2 bg-white/40 backdrop-blur-md border border-white/60 p-4 rounded-2xl">
@@ -1136,8 +1278,8 @@ const TabOneWire = () => {
       </div>
     </div>
     ${isModalOpen && (selectedSensor
-      ? html`<${ModalEditSensor} typsensor=${selectedSensor} oneWireId=${selectedSensor.oneWireId} pins=${selectedSensor.pins} onClose=${closeModal} onUpdate=${handleSensorUpdate} sensorType=${selectedSensor.sensorType} closeOnOverlayClick=${true} refresh=${refresh} />`
-      : html`<${ModalOneWire} oneWire=${editingOneWire} onClose=${closeModal} onUpdate=${handleOneWireUpdate} closeOnOverlayClick=${true} refresh=${refresh} />`
+      ? html`<${ModalEditSensor} typsensor=${selectedSensor} oneWireId=${selectedSensor.oneWireId} pins=${selectedSensor.pins} onClose=${closeModal} onUpdate=${handleSensorUpdate} sensorType=${selectedSensor.sensorType} closeOnOverlayClick=${true} holdPoll=${holdPoll} releasePoll=${releasePoll} />`
+      : html`<${ModalOneWire} oneWire=${editingOneWire} onClose=${closeModal} onUpdate=${handleOneWireUpdate} closeOnOverlayClick=${true} holdPoll=${holdPoll} releasePoll=${releasePoll} />`
     )}
   `;
 };

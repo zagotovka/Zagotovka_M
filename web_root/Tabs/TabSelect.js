@@ -1,8 +1,7 @@
-
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
-import { registerPoll, unregisterPoll } from '../pollQueue.js';
+import { registerPoll, unregisterPoll, pauseAll, resumeAll } from '../pollQueue.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, ruLangselect } from '../rulang.js';
@@ -586,6 +585,9 @@ function TabSelect({ }) {
   const lastPollData = useRef(null);
   const serverSnapshot = useRef({});
   const serverSim800l = useRef(false);
+  const refreshing = useRef(false);    // идёт ли сейчас полная перезагрузка таблицы
+  const refreshAgain = useRef(false);  // во время перезагрузки пришёл ещё один запрос на неё
+  const submitting = useRef(false);    // идёт ли сейчас отправка настроек (Submit)
 
   const buildSnapshotEntry = (d) => ({
     topin: d.topin.toString(),
@@ -607,7 +609,11 @@ function TabSelect({ }) {
     return gpsEnabled && (id === 1 || id === 35);
   };
 
-  const PAGE_SIZE = 30;
+  // Опрос берёт только первую страницу (физические пины, ~1.5 КБ).
+  const POLL_PAGE_SIZE = 30;
+  // Полная перезагрузка идёт страницами по 20 записей: в худшем случае (все Zigbee-слоты
+  // заполнены) страница весит ~4.7 КБ, пик кучи при росте буфера ~10 КБ вместо ~14 КБ.
+  const PAGE_SIZE = 20;
 
   const fetchPage = (offset) =>
     fetch(`/api/select/get?offset=${offset}&limit=${PAGE_SIZE}`, { cache: 'no-store' })
@@ -627,6 +633,9 @@ function TabSelect({ }) {
       return { ...first, data, total: data.length };
     }).then((r) => {
       const data = r.data || r;
+      // Запоминаем версию таблицы из первой страницы, чтобы опрос не запускал
+      // повторную перезагрузку из-за изменений, которые мы уже загрузили.
+      if (r.ver !== undefined) lastPollData.current = String(r.ver);
       setSelect(data);
       setGpsEnabled(r.sim800l === 1);
       serverSim800l.current = (r.sim800l === 1);
@@ -646,18 +655,40 @@ function TabSelect({ }) {
       serverSnapshot.current = snap;
     });
 
+  // Безопасная перезагрузка: не запускается параллельно сама с собой и на время
+  // работы ставит опрос на паузу, чтобы в каждый момент шёл один запрос.
+  const refreshSafe = async () => {
+    if (refreshing.current) { refreshAgain.current = true; return; }
+    refreshing.current = true;
+    pauseAll();
+    try {
+      do {
+        refreshAgain.current = false;
+        await refresh();
+      } while (refreshAgain.current);
+    } catch (e) {
+      console.error('select refresh:', e);
+    } finally {
+      refreshing.current = false;
+      resumeAll();
+    }
+  };
+
   useEffect(() => {
     let active = true;
 
-    registerPoll('select', `/api/select/get?offset=0&limit=${PAGE_SIZE}`, function(r) {
+    registerPoll('select', `/api/select/get?offset=0&limit=${POLL_PAGE_SIZE}`, function(r) {
       if (!active) return;
+      if (submitting.current) return;
       if (Date.now() - lastChangeTime.current < 3000) return;
-      if (r !== null && r !== undefined) {
-        const total = r.total || r.data.length;
-        const firstPageStr = JSON.stringify(r.data);
-        if (firstPageStr !== lastPollData.current) {
-          lastPollData.current = firstPageStr;
-          refresh();
+      if (r !== null && r !== undefined && Array.isArray(r.data)) {
+        // Версия всей таблицы приходит с сервера в поле "ver" (видит изменения любого
+        // из 289 пинов). Для старой прошивки без "ver" - запасной вариант: сравнение
+        // первой страницы.
+        const sig = (r.ver !== undefined) ? String(r.ver) : JSON.stringify(r.data);
+        if (sig !== lastPollData.current) {
+          lastPollData.current = sig;
+          refreshSafe();
         }
       }
     }, { immediate: true });
@@ -740,6 +771,10 @@ function TabSelect({ }) {
 
     setSubmissionStatus('submitting');
 
+    let saved = false;
+    submitting.current = true;
+    pauseAll();
+
     try {
       const CHUNK_SIZE = 20; // ~20 записей ≈ 3КБ, комфортно для mg_iobuf
       const jsonBase = { lang: language, sim800l: gpsEnabled ? 1 : 0 };
@@ -773,12 +808,16 @@ function TabSelect({ }) {
       });
       setSelectedValues((prevState) => ({ ...prevState, ...updatedValues }));
       lastChangeTime.current = 0;
-
-      refresh();
+      saved = true;
     } catch (error) {
       setSubmissionStatus('error');
       console.error('Error:', error);
+    } finally {
+      submitting.current = false;
+      resumeAll();
     }
+
+    if (saved) refreshSafe();
   };
 
   const handleRadioChange = (e) => {

@@ -870,6 +870,13 @@ void GetCronConfig() {
   //    printf("Processed %d records\r\n", currentIndex);
   f_close(&USBHFile);
   //    printf("File closed\r\n");
+  {
+    extern volatile uint8_t g_cron_dirty[NUMTASK];
+    extern volatile uint32_t g_ver_timers;
+    extern void mark_slice_dirty(volatile uint32_t *ver);
+    memset((void *)g_cron_dirty, 1, sizeof(g_cron_dirty));
+    mark_slice_dirty(&g_ver_timers);
+  }
 }
 
 // Создаем всегда новый файл "cron.ini" и записываем данные

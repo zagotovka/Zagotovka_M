@@ -288,10 +288,92 @@ void handle_events_get(struct mg_connection *c,
 
 /* Хвост системного лога для веб-вьюера. tmp[] на стеке WebServerTask
  * (18 КБ) — НЕ static: в .bss свободно 64 байта, линкер-ASSERT
- * ((_ebss + _Min_Stack_Size) <= _estack) заблокирует сборку. */
+ * ((_ebss + _Min_Stack_Size) <= _estack) заблокирует сборку.
+ *
+ * Запрос: GET /api/logs/get?since=N (опрос через pollQueue, keep-alive, один
+ * запрос в полёте) либо прежний POST /api/logs/get с телом {"since":N}.
+ * Ответ: {"text":"...","cursor":N,"dropped":0|1,"lang":"ru"}.
+ * Поле "lang" позволяет странице не запрашивать отдельно /api/mysett/get
+ * (весь JSON настроек ради двух символов).
+ *
+ * Текст экранируется собственной функцией print_log_text: mg_print_esc
+ * экранирует только \b \f \n \r \t \\ \", а любой другой управляющий байт
+ * (например 0x1B из ответа модема или MQTT-нагрузки) уходил в JSON сырым,
+ * JSON.parse на странице падал, и окно лога замирало.
+ *
+ * Размер ответа ограничен так, чтобы заголовки (~106 Б), рамка JSON (~60 Б)
+ * и экранированный текст целиком помещались в один блок MG_IO_SIZE (2048 Б):
+ * буфер отправки не растёт, и в куче нет пика "старый + новый буфер".
+ * Обычный лог (1 КБ, переводы строк \r\n) занимает ~1,1 КБ и под предел не
+ * попадает. При превышении отбрасываются самые СТАРЫЕ байты окна, ответ
+ * получает dropped=1 (страница покажет пометку о пропуске). */
+#define LOGS_REPLY_MAX_ESC 1700u
+
+/* Сколько байт займёт символ в JSON-строке */
+static size_t logs_esc_len(unsigned char ch) {
+  switch (ch) {
+    case '"': case '\\': case '\n': case '\r': case '\t': case '\b': case '\f':
+      return 2;
+    default:
+      return ch < 0x20 ? 6 : 1;   /* \u00XX для прочих управляющих */
+  }
+}
+
+/* %m-печать текста лога: аргументы (const unsigned char *p, size_t n).
+ * Кавычки вокруг строки добавляет сам %m. */
+static size_t print_log_text(void (*out)(char, void *), void *arg,
+                             va_list *ap) {
+  const unsigned char *p = va_arg(*ap, const unsigned char *);
+  size_t n = va_arg(*ap, size_t);
+  static const char hex[] = "0123456789abcdef";
+  size_t written = 0;
+  for (size_t i = 0; i < n; i++) {
+    unsigned char ch = p[i];
+    switch (ch) {
+      case '"':  out('\\', arg); out('"', arg);  written += 2; break;
+      case '\\': out('\\', arg); out('\\', arg); written += 2; break;
+      case '\n': out('\\', arg); out('n', arg);  written += 2; break;
+      case '\r': out('\\', arg); out('r', arg);  written += 2; break;
+      case '\t': out('\\', arg); out('t', arg);  written += 2; break;
+      case '\b': out('\\', arg); out('b', arg);  written += 2; break;
+      case '\f': out('\\', arg); out('f', arg);  written += 2; break;
+      default:
+        if (ch < 0x20) {
+          out('\\', arg); out('u', arg); out('0', arg); out('0', arg);
+          out(hex[ch >> 4], arg); out(hex[ch & 0x0F], arg);
+          written += 6;
+        } else {
+          out((char) ch, arg);
+          written++;
+        }
+        break;
+    }
+  }
+  return written;
+}
+
+/* Курсор since - счётчик записанных байт, uint32 (до 4294967295). Читать его
+ * через mg_json_get_long нельзя: long на этой платформе 32-битный, и после
+ * 2147483647 записанных байт (около 25 суток при 1 КБ/с) преобразование
+ * double -> long выходит за диапазон (в C поведение не определено, на практике
+ * значение насыщается). Курсор клиента тогда всегда оказывался меньше текущего,
+ * и каждый запрос отдавал весь буфер заново с пометкой о пропуске. */
+static uint32_t logs_parse_since(struct mg_str s, const char *path) {
+  double dv = 0;
+  if (!mg_json_get_num(s, path, &dv) || dv <= 0) return 0;
+  if (dv >= 4294967295.0) return 0xFFFFFFFFu;
+  return (uint32_t) dv;
+}
+
 void handle_logs_get(struct mg_connection *c, struct mg_http_message *hm) {
-  long since_l = mg_json_get_long(hm->body, "$.since", 0);
-  uint32_t since = since_l > 0 ? (uint32_t)since_l : 0;
+  uint32_t since = 0;
+  if (hm->body.len > 0) {
+    since = logs_parse_since(hm->body, "$.since");                 /* POST */
+  } else {
+    char vb[16];
+    if (mg_http_get_var(&hm->query, "since", vb, sizeof(vb)) > 0)  /* GET */
+      since = logs_parse_since(mg_str(vb), "$");
+  }
 
   char tmp[LOG_RING_SIZE];
   size_t n = 0;
@@ -299,10 +381,27 @@ void handle_logs_get(struct mg_connection *c, struct mg_http_message *hm) {
   bool dropped = false;
   logger_ring_read(since, tmp, sizeof(tmp), &n, &cursor, &dropped);
 
-  mg_http_reply(c, 200, s_json_header, "{%m:%m,%m:%lu,%m:%d}\n",
-                MG_ESC("text"), mg_print_esc, (int) n, tmp,
+  /* Ограничиваем экранированный размер: лишнее отбрасываем с начала окна */
+  size_t esc = 0;
+  for (size_t i = 0; i < n; i++) esc += logs_esc_len((unsigned char) tmp[i]);
+  size_t skip = 0;
+  while (esc > LOGS_REPLY_MAX_ESC && skip < n) {
+    esc -= logs_esc_len((unsigned char) tmp[skip]);
+    skip++;
+  }
+  if (skip > 0) {
+    dropped = true;
+    /* не начинаем текст с "хвоста" многобайтового символа UTF-8 */
+    while (skip < n && ((unsigned char) tmp[skip] & 0xC0) == 0x80) skip++;
+  }
+
+  const char *lang = (strncmp(SetSettings.lang, "en", 2) == 0) ? "en" : "ru";
+
+  mg_http_reply(c, 200, s_json_header, "{%m:%m,%m:%lu,%m:%d,%m:%m}\n",
+                MG_ESC("text"), print_log_text, tmp + skip, n - skip,
                 MG_ESC("cursor"), (unsigned long) cursor,
-                MG_ESC("dropped"), dropped ? 1 : 0);
+                MG_ESC("dropped"), dropped ? 1 : 0,
+                MG_ESC("lang"), mg_print_esc, 0, lang);
 }
 
 void handle_settings_set(struct mg_connection *c, struct mg_http_message *hm) {
@@ -536,16 +635,19 @@ void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm)
 #if defined(__CORTEX_M) && (__CORTEX_M == 7U)
 		SCB_CleanInvalidateDCache();
 #endif
-    uint32_t prev_ota_state = mg_ota_mark_pending();  // выставляем ДО mg_ota_end()
     if (mg_ota_end() == false) {
         ota_log_direct("Upload error: mg_ota_end() failed, CRC or size mismatch\n");
-        mg_ota_cancel_pending(prev_ota_state);        // откатываем, свопа не было
+        /* mg_ota_mark_pending() здесь НЕ вызывался: ota_pending/ota_active_bank
+         * не тронуты, устройство остаётся на текущем банке. Целевой банк
+         * остаётся помеченным OTA_BANK_VERSION_PARTIAL (поставлено при старте
+         * загрузки), поэтому не считается рабочим. */
         mg_http_reply(c, 500, "", "mg_ota_end() failed, CRC or size mismatch\n");
         ota_session_clear();
     } else {
         // Double Bank: mg_ota_end() вернул true — CRC+size ОК.
         // HTTP 200 OK отправляется ПЕРВЫМ, потом через 500мс — ребут.
         // Это даёт TCP-стеку время отправить ответ браузеру.
+        mg_ota_mark_pending();  // только теперь: CRC+size сошлись, банк-кандидат целый
         ota_log_direct("OTA SUCCESS! Rebooting device...\n");
         mg_http_reply(c, 200, s_json_header, "true\n");
         ota_session_clear();
@@ -610,7 +712,7 @@ void handle_firmware_status(struct mg_connection *c) {
    * пустую версию при bank_a_valid=true — фронтенд (update_page.js)
    * завязан на валидность, а не на непустоту версии. */
   mg_http_reply(c, 200, s_json_header,
-                "{%m:[%M,%M],%m:%d,%m:%m,%m:%m,%m:%s,%m:%s}\n",
+                "{%m:[%M,%M],%m:%d,%m:%m,%m:%m,%m:%s,%m:%s,%m:%m}\n",
                 MG_ESC("firmwares"), print_status, MG_FIRMWARE_CURRENT,
                           print_status, MG_FIRMWARE_PREVIOUS,
                 MG_ESC("active_bank"), (int) active,
@@ -621,7 +723,8 @@ void handle_firmware_status(struct mg_connection *c) {
                 MG_ESC("bank_a_valid"),
                     mg_ota_bank_image_valid(0) ? "true" : "false",
                 MG_ESC("bank_b_valid"),
-                    mg_ota_bank_image_valid(1) ? "true" : "false");
+                    mg_ota_bank_image_valid(1) ? "true" : "false",
+                MG_ESC("lang"), MG_ESC(SetSettings.lang));
 }
 
 void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm) {
@@ -630,13 +733,16 @@ void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm) {
   mg_timer_add(c->mgr, 500, 0, (void (*)(void *)) mg_device_reset, NULL);
 }
 
-void handle_device_eraselast(struct mg_connection *c) {
+#ifdef ENABLE_ERASE_LAST_SECTOR
+void handle_device_eraselast(struct mg_connection *c, struct mg_http_message *hm) {
+  if (!require_post_json(c, hm)) return;
   size_t ss = mg_flash_sector_size(), size = mg_flash_size();
   char *base = (char *) mg_flash_start(), *last = base + size - ss;
   if (mg_flash_bank() == 2) last -= size / 2;
   mg_flash_erase(last);
   mg_http_reply(c, 200, s_json_header, "true\n");
 }
+#endif
 // Определяем типы соединений
 #define CONN_TYPE_HTTP     1
 #define CONN_TYPE_HTTPS    2
@@ -652,6 +758,11 @@ static uint32_t s_login_block_until = 0;
 /* Лимит тела запроса для JSON API — защита от mg_iobuf_resiz starvation.
    Firmware upload исключён явно, там body законно большой. */
 #define MAX_API_BODY_SIZE 8192
+
+/* Максимальное тело одного чанка /api/firmware/upload. Страница шлёт 4096 байт,
+   запас вдвое. Тело принимается целиком в c->recv, поэтому лимит и проверка
+   авторизации выполняются в MG_EV_HTTP_HDRS, до приёма тела. */
+#define OTA_MAX_CHUNK_BODY 8192
 
 /* Максимальный limit для пагинации /api/select/get — защита от OOB. */
 #define MAX_SELECT_PAGE_LIMIT 100
@@ -711,10 +822,11 @@ static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
                            volatile uint32_t *ver);
 void handle_buttons(struct mg_connection *c, struct mg_http_message *hm);
 void handle_switches(struct mg_connection *c);
-void handle_encoders(struct mg_connection *c);
+static void handle_switches_req(struct mg_connection *c, struct mg_http_message *hm);
+void handle_encoders(struct mg_connection *c, struct mg_http_message *hm);
 static void handle_get_pins(struct mg_connection *c, struct mg_http_message *hm);
-static void handle_pid(struct mg_connection *c);
-static void handle_security(struct mg_connection *c);
+static void handle_pid(struct mg_connection *c, struct mg_http_message *hm);
+static void handle_security(struct mg_connection *c, struct mg_http_message *hm);
 static void handle_sensors(struct mg_connection *c);
 static void handle_common(struct mg_connection *c);
 static void handle_onewire(struct mg_connection *c);
@@ -926,7 +1038,26 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
     case MG_EV_HTTP_HDRS: {
         struct mg_http_message *hm = (struct mg_http_message *) ev_data;
-        if (!mg_match(hm->uri, mg_str("/api/firmware/upload"), NULL)) {
+        if (mg_match(hm->uri, mg_str("/api/firmware/upload"), NULL)) {
+            struct mg_str *cl_hdr = mg_http_get_header(hm, "Content-Length");
+            int content_length = 0;
+            if (authenticate(hm) == NULL) {
+                mg_http_reply(c, 403, "Connection: close\r\n",
+                              "{\"error\":\"session_expired\"}");
+                c->is_draining = 1;
+            } else if (cl_hdr == NULL ||
+                       !mg_str_to_num(*cl_hdr, 10, &content_length, sizeof(content_length))) {
+                mg_http_reply(c, 411, "Connection: close\r\n",
+                              "{\"status\":false,\"message\":\"Length required\"}");
+                c->is_draining = 1;
+            } else if (content_length > OTA_MAX_CHUNK_BODY) {
+                MG_ERROR(("%lu Rejecting oversized OTA chunk: %d bytes (limit %d)",
+                          (unsigned long) c->id, content_length, OTA_MAX_CHUNK_BODY));
+                mg_http_reply(c, 413, "Connection: close\r\n",
+                              "{\"status\":false,\"message\":\"Payload too large\"}");
+                c->is_draining = 1;
+            }
+        } else {
             struct mg_str *cl_hdr = mg_http_get_header(hm, "Content-Length");
             if (cl_hdr != NULL) {
                 int content_length = 0;
@@ -1004,18 +1135,18 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 					if (!check_etag_304(c, hm, &g_ver_sensors)) handle_sensors(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/common"), NULL)) {
 					if (!check_etag_304(c, hm, &g_ver_common)) handle_common(c);
-				} else if (mg_match(hm->uri, mg_str("/api/state/pid"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_pid)) handle_pid(c);
-				} else if (mg_match(hm->uri, mg_str("/api/state/onewire"), NULL)) {
+} else if (mg_match(hm->uri, mg_str("/api/state/pid"), NULL)) {
+				if (!check_etag_304(c, hm, &g_ver_pid)) handle_pid(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/state/onewire"), NULL)) {
 					if (!check_etag_304(c, hm, &g_ver_onewire)) handle_onewire(c);
 				} else if (mg_match(hm->uri, mg_str("/api/state/button"), NULL)) {
 					if (!check_etag_304(c, hm, &g_ver_button)) handle_buttons(c, hm);
 				} else if (mg_match(hm->uri, mg_str("/api/state/security"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_security)) handle_security(c);
+					if (!check_etag_304(c, hm, &g_ver_security)) handle_security(c, hm);
 				} else if (mg_match(hm->uri, mg_str("/api/state/switch"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_switch)) handle_switches(c);
+					if (!check_etag_304(c, hm, &g_ver_switch)) handle_switches_req(c, hm);
 				} else if (mg_match(hm->uri, mg_str("/api/state/encoder"), NULL)) {
-					if (!check_etag_304(c, hm, &g_ver_encoder)) handle_encoders(c);
+					if (!check_etag_304(c, hm, &g_ver_encoder)) handle_encoders(c, hm);
 				} else {
 					mg_http_reply(c, 404, "", "");
 				}
@@ -1049,17 +1180,79 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 					c->is_resp = 0;
 					return;
 				}
-				else if (!check_etag_304(c, hm, &g_ver_pid)) { handle_pid(c); }
+				else if (!check_etag_304(c, hm, &g_ver_pid)) { handle_pid(c, hm); }
 				keep_alive = true;
 				break;
 			}
-			if (mg_match(hm->uri, mg_str("/api/pwmpins/get"), NULL)) {
-			  handle_pwmpins_get(c);
-			  keep_alive = true;
-			  break;
+			/* ── /api/pins/get (user labels for pin modals) ── */
+			if (mg_match(hm->uri, mg_str("/api/pins/get"), NULL)) {
+				if (u == NULL) {
+					mg_printf(c, "HTTP/1.1 403 Forbidden\r\n"
+					             "Content-Type: application/json\r\n"
+					             "Content-Length: 27\r\n"
+					             "\r\n"
+					             "{\"error\":\"session_expired\"}");
+					c->is_resp = 0;
+					return;
+				}
+				handle_pins_get(c, hm);
+				keep_alive = true;
+				break;
+			}
+			/* /api/sensors/get - компактный постраничный список датчиков OneWire (для окна Edit PID).
+			   В отличие от /api/pins/get требует авторизации. */
+			if (mg_match(hm->uri, mg_str("/api/sensors/get"), NULL)) {
+				if (u == NULL) {
+					mg_printf(c, "HTTP/1.1 403 Forbidden\r\n"
+					             "Content-Type: application/json\r\n"
+					             "Content-Length: 27\r\n"
+					             "\r\n"
+					             "{\"error\":\"session_expired\"}");
+					c->is_resp = 0;
+					return;
+				}
+				handle_sensors_get(c, hm);
+				keep_alive = true;
+				break;
+			}
+			if (mg_match(hm->uri, mg_str("/api/switch/get"), NULL)) {
+				if (u == NULL) {
+					mg_printf(c, "HTTP/1.1 403 Forbidden\r\n"
+					             "Content-Type: application/json\r\n"
+					             "Content-Length: 27\r\n"
+					             "\r\n"
+					             "{\"error\":\"session_expired\"}");
+					c->is_resp = 0;
+					return;
+				}
+				handle_switches_req(c, hm);
+				keep_alive = true;
+				break;
+			}
+			if (mg_match(hm->uri, mg_str("/api/pintopin/get"), NULL)) {
+				if (u == NULL) {
+					mg_printf(c, "HTTP/1.1 403 Forbidden\r\n"
+					             "Content-Type: application/json\r\n"
+					             "Content-Length: 27\r\n"
+					             "\r\n"
+					             "{\"error\":\"session_expired\"}");
+					c->is_resp = 0;
+					return;
+				}
+				keep_alive = handle_pintopin_get_ex(c, hm);
+				break;
 			}
 			/* ── Keep-Alive GET poll endpoints (reuse connection, no TLS storm) ── */
 			if (mg_match(hm->uri, mg_str("/api/select/get"), NULL)) {
+				if (u == NULL) {
+					mg_printf(c, "HTTP/1.1 403 Forbidden\r\n"
+					             "Content-Type: application/json\r\n"
+					             "Content-Length: 27\r\n"
+					             "\r\n"
+					             "{\"error\":\"session_expired\"}");
+					c->is_resp = 0;
+					return;
+				}
 				if (!check_etag_304(c, hm, &g_ver_select)) {
 					char buf[32];
 					long offset = 0, limit = 30;
@@ -1077,20 +1270,51 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				break;
 			}
 			if (mg_match(hm->uri, mg_str("/api/cron/get"), NULL)) {
+				if (u == NULL) {
+					mg_printf(c, "HTTP/1.1 403 Forbidden\r\n"
+					             "Content-Type: application/json\r\n"
+					             "Content-Length: 27\r\n"
+					             "\r\n"
+					             "{\"error\":\"session_expired\"}");
+					c->is_resp = 0;
+					return;
+				}
 				MG_INFO(("%lu Processing /api/cron/get", c->id));
-				handle_timers_get(c);
+				if (!check_etag_304(c, hm, &g_ver_timers)) handle_timers_get(c, hm);
 				keep_alive = true;
 				break;
 			}
 			if (mg_match(hm->uri, mg_str("/api/onewire/get"), NULL)) {
-				MG_INFO(("%lu Processing /api/onewire/get", c->id));
-				handle_onewire_get(c);
+				if (u == NULL) {
+					mg_printf(c, "HTTP/1.1 403 Forbidden\r\n"
+					             "Content-Type: application/json\r\n"
+					             "Content-Length: 27\r\n"
+					             "\r\n"
+					             "{\"error\":\"session_expired\"}");
+					c->is_resp = 0;
+					return;
+				}
+				/* ETag = версия конфигурации (onewire_cfg_ver), не температур. */
+				volatile uint32_t ow_ver = onewire_cfg_ver();
+				if (!check_etag_304(c, hm, &ow_ver)) {
+				    MG_INFO(("%lu Processing /api/onewire/get", c->id));
+				    handle_onewire_get(c, hm, (uint32_t) ow_ver);
+				}
 				keep_alive = true;
 				break;
 			}
 			if (mg_match(hm->uri, mg_str("/api/mysett/get"), NULL)) {
+				if (u == NULL) {
+					mg_printf(c, "HTTP/1.1 403 Forbidden\r\n"
+				                 "Content-Type: application/json\r\n"
+				                 "Content-Length: 27\r\n"
+				                 "\r\n"
+				                 "{\"error\":\"session_expired\"}");
+					c->is_resp = 0;
+					return;
+				}
 				MG_INFO(("%lu Processing /api/mysett/get", c->id));
-				handle_mysett_get(c);
+				if (!check_etag_304(c, hm, &g_ver_settings)) handle_mysett_get(c);
 				keep_alive = true;
 				break;
 			}
@@ -1173,34 +1397,34 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/device/reset"), NULL)) {
 				MG_INFO(("%lu Processing /api/device/reset", c->id));
 				handle_device_reset(c, hm);
+			#ifdef ENABLE_ERASE_LAST_SECTOR
 			} else if (mg_match(hm->uri, mg_str("/api/device/eraselast"), NULL)) {
 				MG_INFO(("%lu Processing /api/device/eraselast", c->id));
-				handle_device_eraselast(c);
-			} else if (mg_match(hm->uri, mg_str("/api/pintopin/get"), NULL)) {
-				MG_INFO(("%lu Processing /api/pintopin/get", c->id));
-				handle_pintopin_get(c);
+				handle_device_eraselast(c, hm);
+#endif
 			} else if (mg_match(hm->uri, mg_str("/api/select/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/select/set", c->id));
 				handle_select_set(c, hm);
-			} else if (mg_match(hm->uri, mg_str("/api/switch/get"), NULL)) {
-				MG_INFO(("%lu Processing /api/switch/get", c->id));
-				handle_switch_get(c);
 			} else if (mg_match(hm->uri, mg_str("/api/switch/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/switch/set", c->id));
 				handle_switch_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/zigbee/get"), NULL)) {
 				if (!check_etag_304(c, hm, &g_ver_zigbee)) {
 					char buf[32];
+					char tbuf[64];
+					const char *type_filter = NULL;  /* ?type=dimmer,color_lamp - серверный фильтр по типам */
 					long offset = 0, limit = 30;
 					if (mg_http_get_var(&hm->query, "offset", buf, sizeof(buf)) > 0)
 						offset = mg_json_get_long(mg_str(buf), "$", 0);
 					if (mg_http_get_var(&hm->query, "limit", buf, sizeof(buf)) > 0)
 						limit = mg_json_get_long(mg_str(buf), "$", 30);
+					if (mg_http_get_var(&hm->query, "type", tbuf, sizeof(tbuf)) > 0)
+						type_filter = tbuf;
 					if (offset < 0) offset = 0;
 					if (limit <= 0) limit = 30;
 					if (limit > MAX_SELECT_PAGE_LIMIT) limit = MAX_SELECT_PAGE_LIMIT;
 					MG_INFO(("%lu Processing /api/zigbee/get offset=%ld limit=%ld", c->id, offset, limit));
-					handle_zigbee_get(c, offset, limit);
+					handle_zigbee_get(c, offset, limit, type_filter);
 				}
 				keep_alive = true;
 				break;
@@ -1219,9 +1443,11 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/zigbee/learn/status"), NULL)) {
 				MG_INFO(("%lu Processing /api/zigbee/learn/status", c->id));
 				handle_zigbee_learn_status(c, hm);
+				keep_alive = true;
 			} else if (mg_match(hm->uri, mg_str("/api/zigbee/learn/get"), NULL)) {
 				MG_INFO(("%lu Processing /api/zigbee/learn/get", c->id));
 				handle_zigbee_learn_get(c, hm);
+				keep_alive = true;
 			} else if (mg_match(hm->uri, mg_str("/api/zigbee/learn/label"), NULL)) {
 				MG_INFO(("%lu Processing /api/zigbee/learn/label", c->id));
 				handle_zigbee_learn_label(c, hm);
@@ -2086,88 +2312,133 @@ static void handle_get_pins(struct mg_connection *c,
     c->is_draining = 1;
 }
 
-/* ─── /api/state/button (Chunked — no g_body limit) ─── */
-void handle_buttons(struct mg_connection *c, struct mg_http_message *hm) {
+/* ─── /api/state/button?from=ID&limit=N (Chunked, постранично) ───
+ *
+ * Весь ответ собирается в c->send целиком: буфер растёт кратно MG_IO_SIZE, и при
+ * каждом росте Mongoose выделяет новый, копирует и только потом освобождает старый
+ * (пик = старый + новый). При 89 физических и 200 Zigbee-кнопках один ответ весил
+ * бы ~112 КБ, пик ~218 КБ при configTOTAL_HEAP_SIZE 192512 - не помещается.
+ * Поэтому один ответ ограничен: не больше limit записей и не больше
+ * BUTTON_PAGE_BYTES байт в c->send. Продолжение - поле "next" (id первой не
+ * отданной записи, -1 если всё отдано), курсор по id устойчив к правкам между
+ * запросами. Поле "ver" - версия всей таблицы (то же значение, что в ETag):
+ * клиент сравнивает его, а не данные первой страницы.
+ * Пустые поля не отдаются (sclick/dclick/lpress/info), у Zigbee нет ptype
+ * (всегда 0), "pinact" и "display_id" убраны: клиент их не использует. */
+#define BUTTON_GET_DEF_LIMIT   20
+#define BUTTON_GET_MAX_LIMIT   40
+#define BUTTON_PAGE_BYTES      4096
+#define BUTTON_FRAG_SZ         272   /* ,"sclick":"<до 124 символов с экранированием>" */
 
-    char etag[16];
-    snprintf(etag, sizeof(etag), "\"%lu\"", (unsigned long)g_ver_button);
+/* Фрагмент ,"key":"escaped" для вставки в запись либо пустая строка, если значение пустое. */
+static void json_frag_str(char *dst, size_t dst_sz, const char *key, const char *src) {
+    dst[0] = '\0';
+    if (src == NULL || src[0] == '\0') return;
+    int n = snprintf(dst, dst_sz, ",\"%s\":\"", key);
+    if (n < 0 || (size_t)n + 4 >= dst_sz) { dst[0] = '\0'; return; }
+    json_escape_str(dst + n, src, dst_sz - (size_t)n - 1);
+    size_t len = strlen(dst);
+    dst[len] = '"';
+    dst[len + 1] = '\0';
+}
+
+void handle_buttons(struct mg_connection *c, struct mg_http_message *hm) {
+    char qbuf[16];
+    long from = 0, limit = BUTTON_GET_DEF_LIMIT;
+    if (mg_http_get_var(&hm->query, "from", qbuf, sizeof(qbuf)) > 0)
+        from = mg_json_get_long(mg_str(qbuf), "$", 0);
+    if (mg_http_get_var(&hm->query, "limit", qbuf, sizeof(qbuf)) > 0)
+        limit = mg_json_get_long(mg_str(qbuf), "$", BUTTON_GET_DEF_LIMIT);
+    if (from < 0) from = 0;
+    if (limit <= 0) limit = BUTTON_GET_DEF_LIMIT;
+    if (limit > BUTTON_GET_MAX_LIMIT) limit = BUTTON_GET_MAX_LIMIT;
+
+    const unsigned long ver = (unsigned long)g_ver_button;
+    const long total = (long)NUMPIN + (long)NUMZBEE;
 
     mg_printf(c,
               "HTTP/1.1 200 OK\r\n"
               "Content-Type: application/json\r\n"
               "Transfer-Encoding: chunked\r\n"
-              "ETag: %s\r\n"
+              "ETag: \"%lu\"\r\n"
               "Cache-Control: no-cache\r\n\r\n",
-              etag);
+              ver);
 
     /* ── Заголовок JSON ── */
-    mg_http_printf_chunk(c, "{\"lang\":\"%s\",\"buttons\":[", SetSettings.lang);
+    mg_http_printf_chunk(c, "{\"lang\":\"%s\",\"ver\":%lu,\"buttons\":[",
+                         SetSettings.lang, ver);
 
-    bool first = true;
+    char frag_sc[BUTTON_FRAG_SZ], frag_dc[BUTTON_FRAG_SZ], frag_lp[BUTTON_FRAG_SZ];
+    char frag_info[96];
+    char esc_pins[64];
 
-    /* ── Массив buttons (STM32) ── */
-    for (int i = 0; i < NUMPIN; i++) {
-        if (PinsConf[i].topin != 1) continue;
+    long emitted = 0, next = -1;
 
-        char esc_info[64], esc_sc[200], esc_dc[200], esc_lp[200];
-        char esc_pins[16];
-        json_escape_str(esc_sc,   PinsConf[i].sclick, sizeof(esc_sc));
-        json_escape_str(esc_dc,   PinsConf[i].dclick, sizeof(esc_dc));
-        json_escape_str(esc_lp,   PinsConf[i].lpress, sizeof(esc_lp));
-        json_escape_str(esc_info, PinsConf[i].info,   sizeof(esc_info));
-        json_escape_str(esc_pins, PinsInfo[i].pins,   sizeof(esc_pins));
+    for (long i = from; i < total; i++) {
+        const bool phys = (i < (long)NUMPIN);
+        int zbi = -1;
 
-        CHUNK_SEND_FMT(c, &first,
-            "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
-            "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
-            "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
-            PinsConf[i].topin, i, esc_pins,
-            PinsConf[i].ptype,
-            esc_sc, esc_dc, esc_lp, esc_info,
-            PinsConf[i].onoff);
-    }
-
-    /* ── Zigbee trigger buttons ── */
-    for (int i = 0; i < NUMZBEE; i++) {
-        if (ZigbeeConf[i].zbee_role != ZBEE_ROLE_TRIGGER) continue;
-        if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
-
-        char esc_sclick[260], esc_dclick[260], esc_lpress[260];
-        char esc_label[64];
-        json_escape_str(esc_sclick, zbee_action_sclick(i), sizeof(esc_sclick));
-        json_escape_str(esc_dclick, zbee_action_dclick(i), sizeof(esc_dclick));
-        json_escape_str(esc_lpress, zbee_action_lpress(i), sizeof(esc_lpress));
-        json_escape_str(esc_label, ZigbeeConf[i].zbee_label, sizeof(esc_label));
-
-        int zbee_id = NUMPIN + i;
-        char display_id[24];
-        snprintf(display_id, sizeof(display_id), "%d", zbee_id);
-
-        char esc_pins[64];
-        if (ZigbeeConf[i].ep > 0) {
-            snprintf(esc_pins, sizeof(esc_pins), "EP%d", ZigbeeConf[i].ep);
-        } else if (ZigbeeConf[i].pt_single[0] != '\0') {
-            json_escape_str(esc_pins, ZigbeeConf[i].pt_single, sizeof(esc_pins));
+        /* Является ли слот кнопкой - до проверки лимитов, чтобы "next" указывал на реальную запись */
+        if (phys) {
+            if (PinsConf[i].topin != 1) continue;
         } else {
-            snprintf(esc_pins, sizeof(esc_pins), "ZB_%.16s", ZigbeeConf[i].zbee_ieee);
+            zbi = (int)(i - (long)NUMPIN);
+            if (ZigbeeConf[zbi].zbee_role != ZBEE_ROLE_TRIGGER) continue;
+            if (ZigbeeConf[zbi].zbee_ieee[0] == '\0') continue;
         }
 
-        CHUNK_SEND_FMT(c, &first,
-            "{\"topin\":1,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,"
-            "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
-            "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d,"
-            "\"display_id\":\"%s\",\"is_zigbee\":1,"
-            "\"vbtn_mode\":%d}",
-            zbee_id, esc_pins,
-            esc_sclick, esc_dclick, esc_lpress,
-            esc_label, ZigbeeConf[i].onoff,
-            display_id, ZigbeeConf[i].vbtn_mode);
+        /* Лимит записей либо байт в буфере отправки: продолжение со следующего запроса.
+           Хотя бы одна запись на страницу отдаётся всегда - прогресс гарантирован. */
+        if (emitted >= limit || (emitted > 0 && c->send.len >= BUTTON_PAGE_BYTES)) {
+            next = i;
+            break;
+        }
+
+        if (phys) {
+            json_frag_str(frag_sc, sizeof(frag_sc), "sclick", PinsConf[i].sclick);
+            json_frag_str(frag_dc, sizeof(frag_dc), "dclick", PinsConf[i].dclick);
+            json_frag_str(frag_lp, sizeof(frag_lp), "lpress", PinsConf[i].lpress);
+            json_frag_str(frag_info, sizeof(frag_info), "info", PinsConf[i].info);
+            json_escape_str(esc_pins, PinsInfo[i].pins, sizeof(esc_pins));
+
+            mg_http_printf_chunk(c,
+                "%s{\"topin\":1,\"id\":%ld,\"pins\":\"%s\",\"ptype\":%d%s%s%s%s,\"onoff\":%d}",
+                emitted ? "," : "", i, esc_pins, PinsConf[i].ptype,
+                frag_sc, frag_dc, frag_lp, frag_info, PinsConf[i].onoff);
+        } else {
+            json_frag_str(frag_sc, sizeof(frag_sc), "sclick", zbee_action_sclick(zbi));
+            json_frag_str(frag_dc, sizeof(frag_dc), "dclick", zbee_action_dclick(zbi));
+            json_frag_str(frag_lp, sizeof(frag_lp), "lpress", zbee_action_lpress(zbi));
+            json_frag_str(frag_info, sizeof(frag_info), "info", ZigbeeConf[zbi].zbee_label);
+
+            if (ZigbeeConf[zbi].ep > 0) {
+                snprintf(esc_pins, sizeof(esc_pins), "EP%d", ZigbeeConf[zbi].ep);
+            } else if (ZigbeeConf[zbi].pt_single[0] != '\0') {
+                json_escape_str(esc_pins, ZigbeeConf[zbi].pt_single, sizeof(esc_pins));
+            } else {
+                snprintf(esc_pins, sizeof(esc_pins), "ZB_%.16s", ZigbeeConf[zbi].zbee_ieee);
+            }
+
+            mg_http_printf_chunk(c,
+                "%s{\"topin\":1,\"id\":%ld,\"pins\":\"%s\"%s%s%s%s,\"onoff\":%d,"
+                "\"is_zigbee\":1,\"vbtn_mode\":%d}",
+                emitted ? "," : "", i, esc_pins,
+                frag_sc, frag_dc, frag_lp, frag_info,
+                ZigbeeConf[zbi].onoff, ZigbeeConf[zbi].vbtn_mode);
+        }
+        emitted++;
     }
 
     /* ── Закрываем JSON ── */
-    mg_http_printf_chunk(c, "]}");
+    mg_http_printf_chunk(c, "],\"next\":%ld}", next);
     mg_http_write_chunk(c, "", 0);
-    c->is_draining = 1;
+    /* НЕТ c->is_draining = 1 — соединение остаётся живым (опрос идёт по keep-alive,
+       без нового TCP/TLS-рукопожатия на каждый полный ответ). */
+
+    MG_DEBUG(("%lu buttons: from=%ld n=%ld next=%ld ver=%lu send=%lu heap=%lu min=%lu",
+              c->id, from, emitted, next, ver, (unsigned long)c->send.len,
+              (unsigned long)xPortGetFreeHeapSize(),
+              (unsigned long)xPortGetMinimumEverFreeHeapSize()));
 }
 
 /* ─── Вспомогательная: сборка pinact JSON из PinsLinks[] ─── */
@@ -2305,20 +2576,130 @@ void handle_switches(struct mg_connection *c) {
     /* НЕТ c->is_draining = 1 — соединение остаётся живым! */
 }
 
-/* ─── /api/state/encoder (Keep-Alive polling) ─── */
-void handle_encoders(struct mg_connection *c) {
+#define SWITCH_PAGE_DEF_LIMIT 10
+#define SWITCH_PAGE_MAX_LIMIT 20
+
+static void handle_switches_page(struct mg_connection *c, long from, long limit) {
+    if (from < 0) from = 0;
+    if (limit <= 0) limit = SWITCH_PAGE_DEF_LIMIT;
+    if (limit > SWITCH_PAGE_MAX_LIMIT) limit = SWITCH_PAGE_MAX_LIMIT;
+
+    mg_printf(c, "HTTP/1.1 200 OK\r\n"
+                 "Content-Type: application/json\r\n"
+                 "Transfer-Encoding: chunked\r\n"
+                 "Cache-Control: no-cache\r\n"
+                 "ETag: \"%lu\"\r\n"
+                 "\r\n", (unsigned long)g_ver_switch);
+    mg_http_printf_chunk(c, "{\"lang\":\"%s\",\"ver\":%lu,\"switches\":[",
+                         SetSettings.lang, (unsigned long)g_ver_switch);
+
+    const long total = (long)NUMPIN + (long)NUMZBEE;
+    long emitted = 0, next = -1;
+    bool first = true;
+
+    for (long id = from; id < total; id++) {
+        char esc_info[64];
+        char esc_pins[64];
+        char pinact_buf[256];
+        char rec[512];
+        int n;
+
+        if (id < (long)NUMPIN) {
+            if (PinsConf[id].topin != 3) continue;
+            if (emitted >= limit) { next = id; break; }
+
+            json_escape_str(esc_info, PinsConf[id].info, sizeof(esc_info));
+            json_escape_str(esc_pins, PinsInfo[id].pins, sizeof(esc_pins));
+            build_pinact_json(pinact_buf, sizeof(pinact_buf), (int)id);
+            n = snprintf(rec, sizeof(rec),
+                "%s{\"topin\":%d,\"id\":%ld,\"pins\":\"%s\",\"ptype\":%d,"
+                "\"pinact\":%s,\"info\":\"%s\",\"onoff\":%d}",
+                first ? "" : ",",
+                PinsConf[id].topin, id, esc_pins,
+                PinsConf[id].ptype, pinact_buf, esc_info, PinsConf[id].onoff);
+        } else {
+            long zi = id - (long)NUMPIN;
+            if (ZigbeeConf[zi].zbee_role != ZBEE_ROLE_SWITCH) continue;
+            if (emitted >= limit) { next = id; break; }
+
+            json_escape_str(esc_info, ZigbeeConf[zi].info, sizeof(esc_info));
+            if (ZigbeeConf[zi].vbtn_mode == VBTN_MODE_PASSTHROUGH &&
+                ZigbeeConf[zi].pt_single[0] != '\0') {
+                json_escape_str(esc_pins, ZigbeeConf[zi].pt_single, sizeof(esc_pins));
+            } else {
+                snprintf(esc_pins, sizeof(esc_pins), "ZB_%.16s", ZigbeeConf[zi].zbee_ieee);
+            }
+            build_pinact_json(pinact_buf, sizeof(pinact_buf), (int)id);
+            n = snprintf(rec, sizeof(rec),
+                "%s{\"topin\":11,\"id\":%ld,\"pins\":\"%s\",\"ptype\":0,"
+                "\"pinact\":%s,\"info\":\"%s\",\"onoff\":%d}",
+                first ? "" : ",",
+                id, esc_pins, pinact_buf, esc_info, ZigbeeConf[zi].onoff);
+        }
+
+        if (n > 0 && (size_t)n < sizeof(rec)) {
+            mg_http_write_chunk(c, rec, (size_t)n);
+            first = false;
+            emitted++;
+        }
+    }
+
+    mg_http_printf_chunk(c, "],\"next\":%ld}", next);
+    mg_http_write_chunk(c, "", 0);
+}
+
+static void handle_switches_req(struct mg_connection *c, struct mg_http_message *hm) {
+    char buf[16];
+    if (mg_http_get_var(&hm->query, "limit", buf, sizeof(buf)) > 0) {
+        long limit = mg_json_get_long(mg_str(buf), "$", SWITCH_PAGE_DEF_LIMIT);
+        long from = 0;
+        if (mg_http_get_var(&hm->query, "from", buf, sizeof(buf)) > 0)
+            from = mg_json_get_long(mg_str(buf), "$", 0);
+        handle_switches_page(c, from, limit);
+    } else {
+        handle_switches(c);
+    }
+}
+
+/* ─── /api/state/encoder (Keep-Alive polling) ───
+ * Постраничная выдача: ?from=<курсор>. Курсор 0..NUMPIN-1 - строки энкодеров
+ * (по номеру пина), NUMPIN..2*NUMPIN-1 - строки PWM без энкодера. Страница
+ * заканчивается, когда в g_body уже больше ENC_PAGE_BUDGET байт; в конце JSON
+ * поле "next" - курсор следующей страницы или -1, если всё отдано.
+ * Страница не больше ~5.6 КБ (строка не длиннее ~0.55 КБ), поэтому буфер
+ * c->send растёт не выше 6 КБ и пик кучи при росте (prev + new, шаг MG_IO_SIZE)
+ * не выше 10 КБ, а не около 55 КБ для полного ответа в худшем случае.
+ * hm == NULL (/api/encoder/get) - прежнее поведение, один ответ целиком. */
+#define ENC_PAGE_BUDGET 4800
+void handle_encoders(struct mg_connection *c, struct mg_http_message *hm) {
 
     int pos = 0;
+    int cursor = 0;
+    int next = -1;
+    bool paged = (hm != NULL);
+    /* Версия берётся в начале сборки: если данные изменятся во время сборки,
+     * клиент получит старый ETag и перезапросит (безопасная сторона). */
+    uint32_t ver = g_ver_encoder;
+
+    if (paged) {
+        char vb[12];
+        if (mg_http_get_var(&hm->query, "from", vb, sizeof(vb)) > 0) {
+            long v = mg_json_get_long(mg_str(vb), "$", 0);
+            if (v > 0) cursor = (v < 2L * NUMPIN) ? (int)v : 2 * NUMPIN;
+        }
+    }
 
     /* ── Заголовок JSON ── */
     pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-        "{\"lang\":\"%s\",\"encoders\":[", SetSettings.lang);
+        "{\"lang\":\"%s\",\"ver\":%lu,\"encoders\":[", SetSettings.lang, (unsigned long)ver);
 
     bool first = true;
 
     /* ── Массив encoders ── */
-    for (int i = 0; i < NUMPIN; i++) {
+    for (int i = (cursor < NUMPIN ? cursor : NUMPIN); i < NUMPIN; i++) {
         if (PinsConf[i].topin != 8) continue;
+        /* Страница полна: эта строка ещё НЕ записана, продолжение начнётся с неё */
+        if (paged && pos > ENC_PAGE_BUDGET) { next = i; break; }
 
         /* ── Encoder B pin ── */
         uint8_t encoderb_id = PinsConf[i].encoderb;
@@ -2377,6 +2758,7 @@ void handle_encoders(struct mg_connection *c) {
         if (remaining < 700) {  // 700 — максимум одного encoder-слота (pinact 256 + cexpr 102 + поля)
             MG_ERROR(("encoders: OVERFLOW at pin %d, pos=%d remaining=%d",
                       i, pos, remaining));
+            if (paged) next = i;
             break;
         }
 
@@ -2409,13 +2791,16 @@ void handle_encoders(struct mg_connection *c) {
         if (in_id < 0 || in_id >= NUMPIN || out_id < 0 || out_id >= NUMPIN) continue;
         if (PinsConf[in_id].topin == 8) enc_linked[out_id] = 1;
     }
-    for (int i = 0; i < NUMPIN; i++) {
+    for (int i = (cursor > NUMPIN ? cursor - NUMPIN : 0); next < 0 && i < NUMPIN; i++) {
         if (PinsConf[i].topin != 5 || enc_linked[i]) continue;
+        /* Страница полна: эта строка ещё НЕ записана, продолжение начнётся с неё */
+        if (paged && pos > ENC_PAGE_BUDGET) { next = NUMPIN + i; break; }
 
         int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 700) {
             MG_ERROR(("encoders: OVERFLOW (pwm rows) at pin %d, pos=%d remaining=%d",
                       i, pos, remaining));
+            if (paged) next = NUMPIN + i;
             break;
         }
 
@@ -2449,130 +2834,229 @@ void handle_encoders(struct mg_connection *c) {
     /* ── Закрываем JSON ──
      * Массив pintopin больше не встраивается (см. комментарий в handle_switches) —
      * полный список отдаёт /api/pintopin/get. */
-    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "],\"next\":%d}", next);
 
     /* ── Лог для контроля ── */
-    MG_DEBUG(("encoders: len=%d buf=%d", pos, (int)G_BODY_SIZE));
+    MG_DEBUG(("encoders: len=%d buf=%d next=%d", pos, (int)G_BODY_SIZE, next));
 
     /* ── Ответ с Content-Length → Keep-Alive работает ── */
     char extra[128];
     snprintf(extra, sizeof(extra), "%sETag: \"%lu\"\r\n",
-             s_json_header, (unsigned long)g_ver_encoder);
+             s_json_header, (unsigned long)ver);
 
     mg_http_reply(c, 200, extra, "%s", g_body);
     /* НЕТ c->is_draining = 1 — соединение остаётся живым! */
 }
 
 /* ─── /api/state/pid (Keep-Alive polling) ─── */
-static void handle_pid(struct mg_connection *c) {
 
-    int pos = 0;
+/* Постраничная выдача: страница заканчивается, когда добавление следующего слота
+   вышло бы за PID_PAGE_BYTES (мягкий лимит; хотя бы один слот на страницу отдаётся всегда)
+   или набралось limit слотов. Худший слот ~380 байт, т.е. страница вмещает 7-8 слотов. */
+#define PID_PAGE_BYTES   3000
+#define PID_SLOT_MAX     448
 
-    /* ── Заголовок JSON ── */
-    pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-        "{\"lang\":\"%s\",\"pidline\":%d,\"pid\":[",
-        SetSettings.lang, SetSettings.pidline);
-
-    bool first = true;
-
-    for (int i = 0; i < PID_MAX_SLOTS; i++) {
-
-        const char *pin_name = "";
-        uint8_t pin_id = PidConf[i].pwm_pin_id;
-        int duty = 0;
-
-        if (pin_id > 0 && pin_id < NUMPIN) {
-            pin_name = PinsInfo[pin_id].pins;
-            duty     = PinsConf[pin_id].dvalue;
-        }
-
-        char esc_info[64];
-        char esc_pname[16];
-        char ce_raw[COND_LEN];
-        char ce_expr[2 * COND_LEN + 8];
-        json_escape_str(esc_info, PidConf[i].info, sizeof(esc_info));
-        json_escape_str(esc_pname, pin_name, sizeof(esc_pname));
-        cond_text_copy(PidConf[i].cond, ce_raw, sizeof(ce_raw));
-        json_escape_str(ce_expr, ce_raw, sizeof(ce_expr));
-
-        /* Проверка — остаток буфера перед записью слота */
-        int remaining = (int)G_BODY_SIZE - pos;
-        if (remaining < 500) {  // 500 — максимум одного PID-слота с cexpr
-            MG_ERROR(("pid: OVERFLOW at slot %d, pos=%d remaining=%d",
-                      i, pos, remaining));
-            break;  // JSON будет неполным но не битым — закроем массив ниже
-        }
-
-        char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[i].tmpset, 1);
-        char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), PidConf[i].tmpcur, 1);
-
-        /* Выбранный датчик: ID/имя пина и признак наличия валидной температуры */
-        uint8_t sp_id = PidConf[i].sensor_pin_id;
-        const char *sp_name = (PidConf[i].selsens != PID_SENS_NONE &&
-                               sp_id > 0 && sp_id < NUMPIN)
-                              ? PinsInfo[sp_id].pins : "";
-        char esc_spname[16];
-        json_escape_str(esc_spname, sp_name, sizeof(esc_spname));
-        int tmpok = (PidConf[i].selsens != PID_SENS_NONE &&
-                     PidConf[i].stale_cnt == 0) ? 1 : 0;
-
-        /* pinact: пустой объект, если PWM-пин не привязан (иначе UI покажет "(0)") */
-        char pinact[40];
-        if (pin_id > 0 && pin_id < NUMPIN) {
-            snprintf(pinact, sizeof(pinact), "\"%s\":%d", esc_pname, pin_id);
-        } else {
-            pinact[0] = '\0';
-        }
-
-        /* selsens: "0" = NONE, "1" = DS18B20, "2" = DHT22 (NONE раньше ложно шёл как "2") */
-        const char *s_sens =
-            (PidConf[i].selsens == 1) ? "1" :
-            (PidConf[i].selsens == 2) ? "2" : "0";
-
-        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-            "%s{\"id\":%d,\"pins\":\"%s\",\"pinact\":{%s},"
-            "\"selsens\":\"%s\",\"sernum\":\"%s\",\"presets\":\"%u\","
-            "\"tmpset\":\"%s\",\"tmpcur\":\"%s\","
-            "\"duty\":%d,\"info\":\"%s\",\"onoff\":%d,"
-            "\"tune_state\":%u,\"tune_progress\":%u,"
-            "\"sensor_pin_id\":%d,\"sensor_pin\":\"%s\",\"tmpok\":%d,"
-            "\"cond\":%d,\"cexpr\":\"%s\"}",
-            first ? "" : ",",
-            i + 1, esc_pname,
-            pinact,
-            s_sens,
-            PidConf[i].sernum,
-            PidConf[i].preset,
-            s_ts, s_tc,
-            duty,
-            esc_info,
-            PidConf[i].onoff,
-            PidConf[i].tune_state, PidConf[i].tune_progress,
-            (int)sp_id, esc_spname, tmpok,
-            (int)PidConf[i].cond, ce_expr);
-
-        first = false;
-    }
-
-    /* ── Закрываем JSON ── */
-    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
-
-    /* ── Лог для контроля ── */
-    MG_DEBUG(("pid: len=%d buf=%d", pos, (int)G_BODY_SIZE));
-
-    /* ── Ответ с Content-Length → Keep-Alive работает ── */
-    char extra[128];
-    snprintf(extra, sizeof(extra), "%sETag: \"%lu\"\r\n",
-             s_json_header, (unsigned long)g_ver_pid);
-
-    mg_http_reply(c, 200, extra, "%s", g_body);
-    /* НЕТ c->is_draining = 1 — соединение остаётся живым! */
+/* Один раз резервируем место в c->send. Иначе Mongoose растит буфер шагами по MG_IO_SIZE,
+   на каждом шаге выделяя новый буфер, копируя и освобождая старый: пик кучи = старый + новый.
+   Условие size < need обязательно: mg_iobuf_resize умеет и уменьшать буфер. */
+static bool net_reserve_send(struct mg_connection *c, size_t extra) {
+    size_t need = c->send.len + extra + 2;
+    if (c->send.size >= need) return true;
+    return mg_iobuf_resize(&c->send, need);
 }
 
-/* ─── /api/state/security (Keep-Alive polling) ─── */
-static void handle_security(struct mg_connection *c) {
+/* Слот, в котором нечего показывать (ни пина, ни датчика, ни имени, ни условия). */
+static bool pid_slot_is_empty(const dbPidConf *p) {
+    return p->pwm_pin_id == 0 && p->selsens == PID_SENS_NONE && p->sensor_pin_id == 0 &&
+           p->sernum[0] == '\0' && p->info[0] == '\0' && p->onoff == 0 &&
+           p->cond == 0 && p->preset == 0 && p->tune_state == PID_TUNE_IDLE &&
+           p->tmpset == 0.0f;
+}
+
+/* Форматирует один слот в out. Пустой слот - компактно: {"id":N}. Возвращает длину или 0. */
+static int pid_format_slot(char *out, size_t sz, int i, bool first) {
+    const char *sep = first ? "" : ",";
+
+    if (pid_slot_is_empty(&PidConf[i])) {
+        int n = snprintf(out, sz, "%s{\"id\":%d}", sep, i + 1);
+        return (n > 0 && (size_t)n < sz) ? n : 0;
+    }
+
+    const char *pin_name = "";
+    uint8_t pin_id = PidConf[i].pwm_pin_id;
+    int duty = 0;
+
+    if (pin_id > 0 && pin_id < NUMPIN) {
+        pin_name = PinsInfo[pin_id].pins;
+        duty     = PinsConf[pin_id].dvalue;
+    }
+
+    char esc_info[64];
+    char esc_pname[16];
+    char ce_raw[COND_LEN];
+    char ce_expr[2 * COND_LEN + 8];
+    json_escape_str(esc_info, PidConf[i].info, sizeof(esc_info));
+    json_escape_str(esc_pname, pin_name, sizeof(esc_pname));
+    cond_text_copy(PidConf[i].cond, ce_raw, sizeof(ce_raw));
+    json_escape_str(ce_expr, ce_raw, sizeof(ce_expr));
+
+    char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[i].tmpset, 1);
+    char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), PidConf[i].tmpcur, 1);
+
+    /* Выбранный датчик: ID/имя пина и признак наличия валидной температуры */
+    uint8_t sp_id = PidConf[i].sensor_pin_id;
+    const char *sp_name = (PidConf[i].selsens != PID_SENS_NONE &&
+                           sp_id > 0 && sp_id < NUMPIN)
+                          ? PinsInfo[sp_id].pins : "";
+    char esc_spname[16];
+    json_escape_str(esc_spname, sp_name, sizeof(esc_spname));
+    int tmpok = (PidConf[i].selsens != PID_SENS_NONE &&
+                 PidConf[i].stale_cnt == 0) ? 1 : 0;
+
+    /* pinact: пустой объект, если PWM-пин не привязан (иначе UI покажет "(0)") */
+    char pinact[40];
+    if (pin_id > 0 && pin_id < NUMPIN) {
+        snprintf(pinact, sizeof(pinact), "\"%s\":%d", esc_pname, pin_id);
+    } else {
+        pinact[0] = '\0';
+    }
+
+    /* selsens: "0" = NONE, "1" = DS18B20, "2" = DHT22 */
+    const char *s_sens =
+        (PidConf[i].selsens == 1) ? "1" :
+        (PidConf[i].selsens == 2) ? "2" : "0";
+
+    int n = snprintf(out, sz,
+        "%s{\"id\":%d,\"pins\":\"%s\",\"pinact\":{%s},"
+        "\"selsens\":\"%s\",\"sernum\":\"%s\",\"presets\":\"%u\","
+        "\"tmpset\":\"%s\",\"tmpcur\":\"%s\","
+        "\"duty\":%d,\"info\":\"%s\",\"onoff\":%d,"
+        "\"tune_state\":%u,\"tune_progress\":%u,"
+        "\"sensor_pin_id\":%d,\"sensor_pin\":\"%s\",\"tmpok\":%d,"
+        "\"cond\":%d,\"cexpr\":\"%s\"}",
+        sep,
+        i + 1, esc_pname,
+        pinact,
+        s_sens,
+        PidConf[i].sernum,
+        PidConf[i].preset,
+        s_ts, s_tc,
+        duty,
+        esc_info,
+        PidConf[i].onoff,
+        PidConf[i].tune_state, PidConf[i].tune_progress,
+        (int)sp_id, esc_spname, tmpok,
+        (int)PidConf[i].cond, ce_expr);
+    return (n > 0 && (size_t)n < sz) ? n : 0;
+}
+
+/* Собирает JSON страницы слотов [from, ...) в buf. Возвращает длину.
+   paged=false (параметра limit нет): все слоты одним ответом, как раньше.
+   В конце "next": индекс первого неотданного слота или -1, если всё отдано. */
+static int pid_build_body(char *buf, int bufsz, int from, int limit, bool paged,
+                          unsigned long ver) {
+    int pos = snprintf(buf, bufsz,
+        "{\"lang\":\"%s\",\"pidline\":%d,\"ver\":%lu,\"from\":%d,\"pid\":[",
+        SetSettings.lang, SetSettings.pidline, ver, from);
+
+    char slot[PID_SLOT_MAX];
+    int emitted = 0;
+    int next = -1;
+
+    for (int i = from; i < PID_MAX_SLOTS; i++) {
+        if (paged && emitted >= limit) { next = i; break; }
+
+        int n = pid_format_slot(slot, sizeof(slot), i, emitted == 0);
+        if (n <= 0) continue;
+
+        if (paged && emitted > 0 && (pos + n) > PID_PAGE_BYTES) { next = i; break; }
+
+        /* Защита от переполнения g_body: вместо тихой обрезки отдаём "next" с продолжением. */
+        if (bufsz - pos < n + 32) { next = i; break; }
+
+        memcpy(buf + pos, slot, (size_t)n);
+        pos += n;
+        emitted++;
+    }
+
+    pos += snprintf(buf + pos, bufsz - pos, "],\"next\":%d}", next);
+    return pos;
+}
+
+static void handle_pid(struct mg_connection *c, struct mg_http_message *hm) {
+    char qv[16];
+    int from = 0, limit = PID_MAX_SLOTS;
+    bool paged = false;
+
+    if (hm != NULL) {
+        if (mg_http_get_var(&hm->query, "from", qv, sizeof(qv)) > 0) from = atoi(qv);
+        if (mg_http_get_var(&hm->query, "limit", qv, sizeof(qv)) > 0) { limit = atoi(qv); paged = true; }
+    }
+    if (from < 0) from = 0;
+    if (from > PID_MAX_SLOTS) from = PID_MAX_SLOTS;
+    if (limit < 1) limit = 1;
+    if (limit > PID_MAX_SLOTS) limit = PID_MAX_SLOTS;
+
+    unsigned long ver = (unsigned long)g_ver_pid;
+    int pos = pid_build_body(g_body, (int)G_BODY_SIZE, from, limit, paged, ver);
+
+    MG_DEBUG(("pid: from=%d limit=%d len=%d buf=%d heap_free=%lu heap_min=%lu",
+              from, limit, pos, (int)G_BODY_SIZE,
+              (unsigned long)xPortGetFreeHeapSize(),
+              (unsigned long)xPortGetMinimumEverFreeHeapSize()));
+
+    char extra[160];
+    snprintf(extra, sizeof(extra), "%sETag: \"%lu\"\r\n", s_json_header, ver);
+
+    /* Статус-строка + заголовки + Content-Length: резерв 96 байт с запасом. */
+    if (!net_reserve_send(c, (size_t)pos + strlen(extra) + 96)) {
+        MG_ERROR(("pid: no memory for %d bytes", pos));
+        mg_http_reply(c, 503, "Connection: close\r\nContent-Type: application/json\r\n",
+                      "{\"error\":\"low memory\"}");
+        c->is_draining = 1;
+        return;
+    }
+
+    mg_http_reply(c, 200, extra, "%s", g_body);
+    /* НЕТ c->is_draining = 1 - соединение остаётся живым! */
+}
+
+/* ─── /api/state/security (Keep-Alive polling) ───
+ * Строки таблицы: физические пины с topin==10 (id 0..NUMPIN-1) и Zigbee-PIR
+ * (id NUMPIN..NUMPIN+NUMZBEE-1). Параметры запроса:
+ *   from  - сквозной id, с которого искать строки (по умолчанию 0)
+ *   limit - максимум строк в ответе (1..SEC_PAGE_MAX_LIMIT). Без limit число
+ *           строк не режется (как раньше), ответ ограничен только размером
+ *           g_body; при его нехватке отдаётся "next" вместо молчаливой обрезки.
+ * В конце JSON: "next" - id для продолжения или -1, если всё отдано.
+ * "ver" в заголовке JSON - версия таблицы (g_ver_security, совпадает с ETag). */
+#define SEC_PAGE_DEF_LIMIT  20
+#define SEC_PAGE_MAX_LIMIT  40
+#define SEC_ACTION_ESC      256   /* sclick[125]: с запасом на экранирование */
+#define SEC_REC_RESERVE     400   /* максимум одной записи + хвост JSON */
+
+static bool sec_row_present(long i) {
+    if (i < (long)NUMPIN) return PinsConf[i].topin == 10;
+    int z = (int)(i - (long)NUMPIN);
+    return ZigbeeConf[z].zbee_ieee[0] != '\0' && zbee_is_pir(&ZigbeeConf[z]);
+}
+
+static void handle_security(struct mg_connection *c, struct mg_http_message *hm) {
 
     int pos = 0;
+    char qb[16];
+    long from = 0, limit = 0;
+    bool paged = false;
+
+    if (mg_http_get_var(&hm->query, "from", qb, sizeof(qb)) > 0)
+        from = mg_json_get_long(mg_str(qb), "$", 0);
+    if (mg_http_get_var(&hm->query, "limit", qb, sizeof(qb)) > 0) {
+        limit = mg_json_get_long(mg_str(qb), "$", SEC_PAGE_DEF_LIMIT);
+        paged = true;
+        if (limit <= 0) limit = SEC_PAGE_DEF_LIMIT;
+        if (limit > SEC_PAGE_MAX_LIMIT) limit = SEC_PAGE_MAX_LIMIT;
+    }
+    if (from < 0) from = 0;
 
     /* ── Заголовок JSON ── */
     char esc_info[64];
@@ -2580,84 +3064,74 @@ static void handle_security(struct mg_connection *c) {
 
     pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
         "{\"lang\":\"%s\",\"sim800l\":%d,\"tel\":\"%s\","
-        "\"info\":\"%s\",\"onoff\":%d,\"pins\":[",
+        "\"info\":\"%s\",\"onoff\":%d,\"ver\":%lu,\"pins\":[",
         SetSettings.lang, SetSettings.sim800l, SetSettings.tel,
-        esc_info, PinsConf[1].onoff);
+        esc_info, PinsConf[1].onoff, (unsigned long)g_ver_security);
 
+    const long total = (long)NUMPIN + (long)NUMZBEE;
+    long emitted = 0, next = -1;
     bool first = true;
 
-    /* ── Массив security pins ── */
-    for (int i = 0; i < NUMPIN; i++) {
-        if (PinsConf[i].topin != 10) continue;
+    /* ── Security pins и Zigbee-PIR одним проходом по сквозному id ── */
+    for (long i = from; i < total; i++) {
+        if (!sec_row_present(i)) continue;
+
+        if (paged && emitted >= limit) { next = i; break; }
 
         int remaining = (int)G_BODY_SIZE - pos;
-        if (remaining < 200) {
-            MG_ERROR(("security: OVERFLOW at pin %d, pos=%d remaining=%d",
+        if (remaining < SEC_REC_RESERVE) {
+            MG_ERROR(("security: buffer full at id %ld, pos=%d remaining=%d",
                       i, pos, remaining));
+            next = i;   /* клиент продолжит с этого id, а не потеряет хвост */
             break;
         }
 
-        const char *action   = PinsConf[i].sclick[0]   ? PinsConf[i].sclick   : "None";
-        const char *send_sms = PinsConf[i].send_sms[0] ? PinsConf[i].send_sms : "NO";
+        char esc_action[SEC_ACTION_ESC], esc_sms[16], esc_row_info[64];
 
-        char esc_info2[64];
-        char esc_pins2[16];
-        char esc_action[64], esc_sms[16];
-        json_escape_str(esc_info2, PinsConf[i].info, sizeof(esc_info2));
-        json_escape_str(esc_pins2, PinsInfo[i].pins, sizeof(esc_pins2));
-        json_escape_str(esc_action, action, sizeof(esc_action));
-        json_escape_str(esc_sms, send_sms, sizeof(esc_sms));
+        if (i < (long)NUMPIN) {
+            const char *action   = PinsConf[i].sclick[0]   ? PinsConf[i].sclick   : "None";
+            const char *send_sms = PinsConf[i].send_sms[0] ? PinsConf[i].send_sms : "NO";
+            char esc_pins2[16];
+            json_escape_str(esc_row_info, PinsConf[i].info, sizeof(esc_row_info));
+            json_escape_str(esc_pins2, PinsInfo[i].pins, sizeof(esc_pins2));
+            json_escape_str(esc_action, action, sizeof(esc_action));
+            json_escape_str(esc_sms, send_sms, sizeof(esc_sms));
 
-        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-            "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
-            "\"action\":\"%s\",\"send_sms\":\"%s\","
-            "\"info\":\"%s\",\"onoff\":%d}",
-            first ? "" : ",",
-            PinsConf[i].topin, i, esc_pins2, PinsConf[i].ptype,
-            esc_action, esc_sms, esc_info2, PinsConf[i].onoff);
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
+                "\"action\":\"%s\",\"send_sms\":\"%s\","
+                "\"info\":\"%s\",\"onoff\":%d}",
+                first ? "" : ",",
+                PinsConf[i].topin, (int)i, esc_pins2, PinsConf[i].ptype,
+                esc_action, esc_sms, esc_row_info, PinsConf[i].onoff);
+        } else {
+            int z = (int)(i - (long)NUMPIN);
+            const char *zact = zbee_action_sclick(z);
+            const char *action   = (zact[0] != '\0' && strcmp(zact, "None") != 0) ? zact : "None";
+            const char *send_sms = ZigbeeConf[z].sec_send_sms ? "YES" : "NO";
+            char esc_zpins[24];
+            json_escape_str(esc_row_info, ZigbeeConf[z].zbee_label, sizeof(esc_row_info));
+            json_escape_str(esc_zpins, ZigbeeConf[z].zbee_ieee, sizeof(esc_zpins));
+            json_escape_str(esc_action, action, sizeof(esc_action));
+            json_escape_str(esc_sms, send_sms, sizeof(esc_sms));
 
-        first = false;
-    }
-
-    /* ── Виртуальные пины (Zigbee-PIR): id = NUMPIN + индекс слота ── */
-    for (int i = 0; i < NUMZBEE; i++) {
-        if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
-        if (!zbee_is_pir(&ZigbeeConf[i])) continue;
-
-        int remaining = (int)G_BODY_SIZE - pos;
-        if (remaining < 220) {
-            MG_ERROR(("security: OVERFLOW at zigbee slot %d, pos=%d remaining=%d",
-                      i, pos, remaining));
-            break;
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                "%s{\"topin\":11,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,\"zbee\":1,"
+                "\"action\":\"%s\",\"send_sms\":\"%s\","
+                "\"info\":\"%s\",\"onoff\":%d}",
+                first ? "" : ",", (int)i, esc_zpins,
+                esc_action, esc_sms, esc_row_info, ZigbeeConf[z].onoff);
         }
 
-        const char *zact = zbee_action_sclick(i);
-        const char *action   = (zact[0] != '\0' && strcmp(zact, "None") != 0) ? zact : "None";
-        const char *send_sms = ZigbeeConf[i].sec_send_sms ? "YES" : "NO";
-
-        char esc_zinfo[64];
-        char esc_zpins[24];
-        char esc_zaction[64], esc_zsms[16];
-        json_escape_str(esc_zinfo, ZigbeeConf[i].zbee_label, sizeof(esc_zinfo));
-        json_escape_str(esc_zpins, ZigbeeConf[i].zbee_ieee, sizeof(esc_zpins));
-        json_escape_str(esc_zaction, action, sizeof(esc_zaction));
-        json_escape_str(esc_zsms, send_sms, sizeof(esc_zsms));
-
-        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
-            "%s{\"topin\":11,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,\"zbee\":1,"
-            "\"action\":\"%s\",\"send_sms\":\"%s\","
-            "\"info\":\"%s\",\"onoff\":%d}",
-            first ? "" : ",", NUMPIN + i, esc_zpins,
-            esc_zaction, esc_zsms, esc_zinfo, ZigbeeConf[i].onoff);
-
         first = false;
+        emitted++;
     }
 
     /* ── Закрываем JSON ── */
-    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "]}");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "],\"next\":%ld}", next);
 
     /* ── Лог для контроля ── */
-    MG_DEBUG(("security: len=%d buf=%d", pos, (int)G_BODY_SIZE));
+    MG_DEBUG(("security: len=%d buf=%d rows=%ld next=%ld", pos, (int)G_BODY_SIZE, emitted, next));
 
     /* ── Ответ с Content-Length → Keep-Alive работает ── */
     char extra[128];

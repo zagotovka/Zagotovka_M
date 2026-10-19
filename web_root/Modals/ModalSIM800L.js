@@ -1,3 +1,4 @@
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -41,7 +42,8 @@ const i18nModal = {
     info: 'ИНФО',
     onOff: 'Вкл/Выкл',
     close: 'Закрыть',
-    saveChanges: 'Сохранить'
+    saveChanges: 'Сохранить',
+    saveError: 'Не удалось сохранить. Проверьте соединение и повторите.'
   },
   en: {
     rxd: 'RXD',
@@ -55,7 +57,8 @@ const i18nModal = {
     info: 'INFO',
     onOff: 'On/Off',
     close: 'Close',
-    saveChanges: 'Save changes'
+    saveChanges: 'Save changes',
+    saveError: 'Failed to save. Check the connection and try again.'
   }
 };
 
@@ -66,6 +69,8 @@ function ModalSIM800L({ hideModal, title, selectedGps, onSave, language = 'en' }
   const [info, setInfo] = useState(selectedGps?.info || '');
   const [onoff, setOnoff] = useState(selectedGps?.onoff === 1);
   const [isValidPhone, setIsValidPhone] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
 
   // Показывать номер открыто: либо явно нажали "глаз", либо поле сейчас в фокусе (редактируем).
   const [revealPhone, setRevealPhone] = useState(false);
@@ -86,36 +91,24 @@ function ModalSIM800L({ hideModal, title, selectedGps, onSave, language = 'en' }
     setIsValidPhone(validatePhoneNumber(newValue));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!isValidPhone) return;
+    if (!isValidPhone || saving) return;
 
-    const jsonData = {
-      type: 'sim800l',
-      tel: tel,
-      info: info,
-      onoff: onoff ? 1 : 0
-    };
-
-    console.log('Сохраняемые данные:', jsonData);
-
-    fetch('/api/security/set', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(jsonData)
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        if (typeof onSave === 'function') {
-          onSave(jsonData);
-        }
-        hideModal();
-      })
-      .catch((error) => {
-        console.error('Error:', error);
-      });
+    // POST выполняет родитель (TabSecurity.handleSim800lSave): один запрос, проверка ответа,
+    // пауза опроса. Раньше здесь был свой fetch, и родитель отправлял те же данные второй раз.
+    setSaving(true);
+    setSubmitError(false);
+    let ok = false;
+    try {
+      ok = typeof onSave === 'function'
+        ? (await onSave({ tel: tel, info: info, onoff: onoff ? 1 : 0 })) !== false
+        : false;
+    } catch (error) {
+      console.error('Error:', error);
+    }
+    setSaving(false);
+    if (ok) hideModal(); else setSubmitError(true);
   };
 
   const modalContent = html`
@@ -211,8 +204,8 @@ function ModalSIM800L({ hideModal, title, selectedGps, onSave, language = 'en' }
             <div class="modal-footer flex justify-end mt-4">
               <button
                 type="submit"
-                disabled=${!isValidPhone}
-                class=${`font-bold py-2 px-4 rounded ${isValidPhone
+                disabled=${!isValidPhone || saving}
+                class=${`font-bold py-2 px-4 rounded ${isValidPhone && !saving
       ? 'bg-blue-500 hover:bg-blue-700 text-white'
       : 'bg-gray-300 text-gray-500 cursor-not-allowed'
     }`}
@@ -220,6 +213,7 @@ function ModalSIM800L({ hideModal, title, selectedGps, onSave, language = 'en' }
                 ${M.saveChanges}
               </button>
             </div>
+            ${submitError && html`<p class="text-red-500 mt-2">${M.saveError}</p>`}
           </form>
         </div>
       </div>
@@ -251,3 +245,5 @@ function ModalSIM800L({ hideModal, title, selectedGps, onSave, language = 'en' }
 }
 
 export { ModalSIM800L, maskPhone, EyeIcon, EyeSlashIcon };
+
+

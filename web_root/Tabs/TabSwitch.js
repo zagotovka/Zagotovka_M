@@ -1,11 +1,10 @@
-
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
 import { ModalSwitch } from '../Modals/ModalSwitch.js';
 import { condInfo, condBadgeProps, condHelpTitle } from '../condlib.js';
-import { CondLibraryPanel, useCondLibrary } from '../CondLibrary.js';
-import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
-import { registerPoll, unregisterPoll } from '../pollQueue.js';
+import { CondLibraryPanel, useCondLibrary, refreshCondLibrary } from '../CondLibrary.js';
+import { h, render, useState, useEffect, useRef, useMemo, useContext, html, Router } from '../bundle.js';
+import { registerPoll, unregisterPoll, pauseAll, resumeAll } from '../pollQueue.js';
 import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -105,6 +104,51 @@ function initGlobalTooltip() {
 }
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Постраничная загрузка (прошивка отдаёт небольшие ответы: меньше пик кучи).
+// Все запросы идут строго по одному.
+// ---------------------------------------------------------------------------
+const SWITCH_PAGE_SIZE = 10;  // выключателей за запрос (запись до ~330 байт)
+const LINK_PAGE_SIZE = 40;    // связей за запрос (запись до ~120 байт)
+// Опрос: одна запись + версия "ver" (ETag не меняется - ответ 304)
+const SWITCH_POLL_URL = '/api/state/switch?from=0&limit=1';
+
+async function getJsonStrict(url) {
+  const r = await fetch(url, { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+async function loadSwitchPages() {
+  const all = [];
+  let head = null;
+  let from = 0;
+  for (let guard = 0; guard < 40 && from >= 0; guard++) {
+    const j = await getJsonStrict(`/api/switch/get?from=${from}&limit=${SWITCH_PAGE_SIZE}`);
+    if (!head) head = j;
+    if (Array.isArray(j.switches)) all.push(...j.switches);
+    // Старая прошивка отдаёт всё сразу и поля "next" нет - цикл завершится
+    from = (typeof j.next === 'number') ? j.next : -1;
+  }
+  return {
+    lang: head ? head.lang : undefined,
+    ver: head ? head.ver : undefined,
+    switches: all
+  };
+}
+
+async function loadLinkPages() {
+  const all = [];
+  let from = 0;
+  for (let guard = 0; guard < 40 && from >= 0; guard++) {
+    const j = await getJsonStrict(`/api/pintopin/get?kind=switch&from=${from}&limit=${LINK_PAGE_SIZE}`);
+    if (Array.isArray(j)) return j;  // старая прошивка: полный массив связей
+    if (Array.isArray(j.data)) all.push(...j.data);
+    from = (typeof j.next === 'number') ? j.next : -1;
+  }
+  return all;
+}
+
 function TabSwitch({ }) {
   const [switchData, setSwitchData] = useState(null);
   const [saveResult, setSaveResult] = useState(null);
@@ -117,9 +161,11 @@ function TabSwitch({ }) {
   const [pintopin, setPintopin] = useState([]);
   const condLib = useCondLibrary();
   const condsList = condLib.loaded ? condLib.conds : [];
-  const [debugInfo, setDebugInfo] = useState('');
   const [isFormValid, setIsFormValid] = useState(false);
   const isPendingOnOff = useRef(false);
+  const refreshing = useRef(false);    // идёт ли сейчас полная перезагрузка данных
+  const refreshAgain = useRef(false);  // во время перезагрузки пришёл ещё один запрос на неё
+  const lastVer = useRef(null);        // версия таблицы выключателей (поле "ver")
 
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => { initGlobalTooltip(); }, []);
@@ -127,44 +173,71 @@ function TabSwitch({ }) {
   // Библиотека условий (общий стор CondLibrary.js) - для показа текста условия связи
   
 
-  const refresh = () =>
-    Promise.all([
-      fetch('/api/switch/get').then((r) => r.json()),
-      fetch('/api/pintopin/get').then((r) => r.json())
-    ])
-      .then(([switchData, pintopinData]) => {
-        setLanguage(switchData.lang);
-        setSwitch(switchData.switches);
-        setSwitchData(switchData);
-        setPintopin(pintopinData);
-        setDebugInfo(
-          `Pintopin data: ${JSON.stringify(
-            pintopinData,
-            null,
-            2
-          )}\n\nSwitch data: ${JSON.stringify(switchData.switches, null, 2)}`
-        );
-        console.log('Pintopin data:', pintopinData);
-        console.log('Switch data:', switchData.switches);
-      })
-      .catch((error) => {
-        console.error('Error fetching data:', error);
-        setDebugInfo(`Error fetching data: ${error.message}`);
-      });
+  // Полная загрузка: выключатели, затем связи; страницами, по одному запросу.
+  const refresh = async () => {
+    const sw = await loadSwitchPages();
+    const links = await loadLinkPages();
+    if (sw.lang) setLanguage(sw.lang);
+    setSwitch(sw.switches);
+    setSwitchData({ lang: sw.lang, switches: sw.switches });
+    setPintopin(links);
+    // Запоминаем версию, чтобы опрос не запускал повторную загрузку тех же данных
+    if (sw.ver !== undefined) lastVer.current = String(sw.ver);
+  };
+
+  // Безопасная перезагрузка: не запускается параллельно сама с собой и на время
+  // работы ставит опрос на паузу (в каждый момент идёт один запрос).
+  const refreshSafe = async () => {
+    if (refreshing.current) { refreshAgain.current = true; return; }
+    refreshing.current = true;
+    pauseAll();
+    try {
+      do {
+        refreshAgain.current = false;
+        await refresh();
+      } while (refreshAgain.current);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      refreshing.current = false;
+      resumeAll();
+    }
+  };
 
   useEffect(() => {
     let active = true;
-    refresh();
 
-    // ── Загрузка + polling через pollQueue (одно соединение, без нового handshake) ──
-    registerPoll('switches', '/api/state/switch', function(data) {
+    (async () => {
+      // Библиотеку условий уже грузит хук useCondLibrary(); ждём её (общий
+      // inflight-запрос, дубля нет), и только потом грузим выключатели.
+      try { await refreshCondLibrary(); } catch (e) { /* ошибка видна в сторе */ }
       if (!active) return;
-      if (isPendingOnOff.current) return;
-      if (data !== null && data !== undefined) {
-        if (data.switches) { setSwitch(data.switches); setLanguage(data.lang); }
-        if (data.pintopin) setPintopin(data.pintopin);
-      }
-    }, { immediate: true });
+
+      await refreshSafe();
+      if (!active) return;
+
+      // Опрос по версии таблицы: ответ 304, пока ничего не менялось.
+      registerPoll('switches', SWITCH_POLL_URL, function(data) {
+        if (!active) return;
+        if (isPendingOnOff.current || refreshing.current) return;
+        if (data === null || data === undefined) return;
+
+        if (data.ver === undefined) {
+          // Старая прошивка без "ver": ответ содержит полный список выключателей
+          if (data.switches) {
+            setSwitch(data.switches);
+            if (data.lang) setLanguage(data.lang);
+          }
+          return;
+        }
+
+        const sig = String(data.ver);
+        if (sig !== lastVer.current) {
+          lastVer.current = sig;
+          refreshSafe();
+        }
+      });
+    })();
 
     return function() {
       active = false;
@@ -174,36 +247,49 @@ function TabSwitch({ }) {
 
   const isGpioPin = (pin) => /^P[A-Z]\d+$/i.test(pin);
 
+  // Индекс связей по idin: один проход вместо поиска по всему списку
+  // для каждой строки таблицы при каждой перерисовке.
+  const linksByIn = useMemo(() => {
+    const m = new Map();
+    pintopin.forEach((p) => {
+      let a = m.get(p.idin);
+      if (!a) { a = []; m.set(p.idin, a); }
+      a.push(p);
+    });
+    return m;
+  }, [pintopin]);
+
   const getConnectedPins = (switchId) => {
     const connectedPins = new Map();
+    const links = linksByIn.get(switchId) || [];
 
     // Номер и текст условия связи из /api/pintopin/get (0/""/пусто = нет)
-    const linkCond = (relayId) => {
-      const l = pintopin.find((p) => p.idin === switchId && p.idout === relayId);
-      return l ? parseInt(l.cond, 10) || 0 : 0;
-    };
-    const linkCexpr = (relayId) => {
-      const l = pintopin.find((p) => p.idin === switchId && p.idout === relayId);
-      return l ? l.cexpr || '' : '';
-    };
+    const linkFor = (relayId) => links.find((p) => p.idout === relayId);
 
     const switchItem = varswitch.find((sw) => sw.id === switchId);
-    console.log(`[getConnectedPins] switchId=${switchId}`, 'pinact=', switchItem?.pinact, 'pintopin entries=', pintopin.filter(p => p.idin === switchId));
     if (switchItem && switchItem.pinact) {
       Object.entries(switchItem.pinact).forEach(([deviceId, pinName]) => {
-        console.log(`[getConnectedPins] pinact entry: deviceId=${deviceId}, pinName=${pinName}, isGpio=${isGpioPin(pinName)}`);
         if (pinName) {
           const rid = parseInt(deviceId);
-          connectedPins.set(rid, { pin: pinName, relayId: rid, cond: linkCond(rid), cexpr: linkCexpr(rid) });
+          const l = linkFor(rid);
+          connectedPins.set(rid, {
+            pin: pinName,
+            relayId: rid,
+            cond: l ? parseInt(l.cond, 10) || 0 : 0,
+            cexpr: l ? l.cexpr || '' : ''
+          });
         }
       });
     }
 
-    pintopin.forEach((item) => {
-      if (item.idin === switchId) {
-        if (!connectedPins.has(item.idout)) {
-          connectedPins.set(item.idout, { pin: item.pins, relayId: item.idout, cond: parseInt(item.cond, 10) || 0, cexpr: item.cexpr || '' });
-        }
+    links.forEach((item) => {
+      if (!connectedPins.has(item.idout)) {
+        connectedPins.set(item.idout, {
+          pin: item.pins,
+          relayId: item.idout,
+          cond: parseInt(item.cond, 10) || 0,
+          cexpr: item.cexpr || ''
+        });
       }
     });
     return Array.from(connectedPins.values());
@@ -271,8 +357,7 @@ function TabSwitch({ }) {
         );
       })
       .then(() => {
-        console.log('Соединение удалено успешно');
-        refresh();
+        refreshSafe();
       })
       .catch((error) => {
         console.error('Ошибка при удалении соединения:', error);
@@ -333,7 +418,7 @@ function TabSwitch({ }) {
   const handleSwitchSaved = (updatedSwitch) => {
     console.log('handleSwitchSaved:', updatedSwitch);
     if (updatedSwitch.onoff !== selectedSwitch?.onoff) {
-      handleSwitchChange(updatedSwitch).then(() => refresh());
+      handleSwitchChange(updatedSwitch).then(() => refreshSafe());
     } else {
       setSwitch((prevSwitches) =>
         prevSwitches.map((sw) =>
@@ -341,7 +426,7 @@ function TabSwitch({ }) {
         )
       );
       closeModal();
-      refresh();
+      refreshSafe();
     }
   };
 
@@ -1283,6 +1368,8 @@ function TabSwitch({ }) {
               selectedSwitch=${selectedSwitch}
               onSwitchChange=${handleSwitchSaved}
               pintopin=${pintopin}
+              condsLib=${condsList}
+              condPool=${condLib.pool}
             />
           `}
       </div>

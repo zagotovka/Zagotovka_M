@@ -127,7 +127,7 @@ const urlMappings = {
     contentType: 'application/json'
   },
 
-  '/api/firmware/commi': {
+  '/api/firmware/commit': {
     file: 'json/firmware_commit.json',
     contentType: 'application/json'
   },
@@ -135,7 +135,7 @@ const urlMappings = {
     file: 'json/firmware_rollback.json',
     contentType: 'application/json'
   },
-  '/api/firmware/statusv': {
+  '/api/firmware/status': {
     file: 'json/firmware_status.json',
     contentType: 'application/json'
   },

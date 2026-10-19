@@ -1,4 +1,5 @@
 
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -13,6 +14,7 @@ const ModalButton = ({
   closeOnOverlayClick = true,
   title,
   selectedButton,
+  onSubmit,
   onButtonChange,
   SliderComponent = MyPolzunok
 }) => {
@@ -28,8 +30,16 @@ const ModalButton = ({
     lpress: null
   });
   const [submitError, setSubmitError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const mounted = useRef(true);
+  const savingRef = useRef(false);   // защита от двойного клика: state обновляется только после перерисовки
 
   const isRu = (selectedButton?.lang || 'ru') === 'ru';
+
+  // info на контроллере - char[30], то есть до 29 байт UTF-8 (кириллица занимает 2 байта на букву).
+  // Более длинное значение сервер молча обрезает, поэтому проверяем до отправки.
+  const INFO_MAX_BYTES = 29;
+  const infoBytes = new TextEncoder().encode(buttonInfo).length;
 
   const validateInput = (value) => {
     return validateActionStr(value);
@@ -52,12 +62,19 @@ const ModalButton = ({
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (savingRef.current) return;
 
     // ── Edit (без изменений) ──
     if (Object.values(errors).some((error) => error !== null)) {
       setSubmitError('Please correct the errors before submitting.');
+      return;
+    }
+    if (infoBytes > INFO_MAX_BYTES) {
+      setSubmitError(isRu
+        ? `INFO слишком длинный: ${infoBytes} из ${INFO_MAX_BYTES} байт (кириллица занимает 2 байта на букву).`
+        : `INFO is too long: ${infoBytes} of ${INFO_MAX_BYTES} bytes.`);
       return;
     }
 
@@ -71,20 +88,39 @@ const ModalButton = ({
       lpress: lpress || 'None'
     };
 
-    fetch('/api/button/set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedButton)
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        onButtonChange(updatedButton);
-        hideModal();
-      })
-      .catch((error) => {
-        console.error('Error:', error);
-        setSubmitError('Failed to save changes. Please try again.');
-      });
+    // В POST уходят только поля, которые читает контроллер (handle_button_set).
+    const payload = {
+      id: updatedButton.id,
+      info: updatedButton.info,
+      onoff: updatedButton.onoff,
+      ptype: updatedButton.ptype,
+      sclick: updatedButton.sclick,
+      dclick: updatedButton.dclick,
+      lpress: updatedButton.lpress
+    };
+
+    setSubmitError(null);
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      // onSubmit ставит опрос на паузу, не пересекает запрос с перезагрузкой таблицы
+      // и бросает ошибку с текстом сервера при ответе 400/507.
+      await onSubmit(payload);
+    } catch (error) {
+      console.error('Error:', error);
+      savingRef.current = false;
+      if (mounted.current) {
+        setSaving(false);
+        setSubmitError(
+          (error && error.message)
+            ? 'Failed to save changes: ' + error.message
+            : 'Failed to save changes. Please try again.'
+        );
+      }
+      return;
+    }
+    onButtonChange(updatedButton);
+    hideModal();
   };
 
   const handleResetPin = () => {
@@ -173,8 +209,9 @@ const ModalButton = ({
                   name="info"
                   value=${buttonInfo}
                   onInput=${(e) => setButtonInfo(e.target.value)}
-                  class="border rounded p-2 w-full"
+                  class="border rounded p-2 w-full ${infoBytes > INFO_MAX_BYTES ? 'border-red-500' : ''}"
                 />
+                <p class="${infoBytes > INFO_MAX_BYTES ? 'text-red-500' : 'text-gray-500'} text-xs mt-1 text-right">${infoBytes}/${INFO_MAX_BYTES} bytes</p>
               </td>
             </tr>
             <tr class="bg-white">
@@ -196,9 +233,10 @@ const ModalButton = ({
         </button>
         <button
           type="submit"
-          class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          disabled=${saving}
+          class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${saving ? 'opacity-60 cursor-not-allowed' : ''}"
         >
-          Save changes
+          ${saving ? 'Saving...' : 'Save changes'}
         </button>
       </div>
       ${submitError && html`<p class="text-red-500 mt-2">${submitError}</p>`}
@@ -232,11 +270,13 @@ const ModalButton = ({
   const portalRef = useRef(null);
 
   useEffect(() => {
+    mounted.current = true;
     const portalEl = document.createElement('div');
     portalEl.id = 'modal-portal';
     document.body.appendChild(portalEl);
     portalRef.current = portalEl;
     return () => {
+      mounted.current = false;
       render(null, portalEl);
       document.body.removeChild(portalEl);
     };

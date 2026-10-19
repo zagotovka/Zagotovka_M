@@ -1,4 +1,3 @@
-
 // CondInput (в самом конце файла) рендерится через html из bundle.js —
 // без этого импорта модалки падают с "html is not defined".
 import { html } from './bundle.js';
@@ -368,12 +367,86 @@ export function CondInput({ value, onChange, conds = [], pool = null, isRu = tru
             </div>
           </details>`}
       <p class="text-gray-500 text-xs mt-1">${condHint(isRu)}</p>
-      ${free !== null &&
-      html`<p class="text-xs mt-1 ${free <= 2 ? 'text-amber-600' : 'text-gray-400'}">
-            ${isRu
-              ? `Свободных выражений: ${free} из ${pool.total} (одинаковые условия не занимают новое место)`
-              : `Free expression slots: ${free} of ${pool.total} (identical conditions do not take a new slot)`}
-          </p>`}
+${free !== null &&
+       html`<p class="text-xs mt-1 ${free <= 2 ? 'text-amber-600' : 'text-gray-400'}">
+             ${isRu
+               ? `Свободных выражений: ${free} из ${pool.total} (одинаковые условия не занимают новое место)`
+               : `Free expression slots: ${free} of ${pool.total} (identical conditions do not take a new slot)`}
+           </p>`}
     </div>
   `;
+}
+
+export async function fetchPinsByType(types, { signal } = {}) {
+  const t = Array.isArray(types) ? types.join(',') : String(types);
+  const out = [];
+  let from = 0;
+  for (let guard = 0; guard < 20 && from >= 0; guard++) {
+    const r = await fetch(`/api/pins/get?topin=${t}&from=${from}&limit=40`, {
+      cache: 'no-store',
+      signal
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (Array.isArray(j.data)) out.push(...j.data);
+    from = (typeof j.next === 'number') ? j.next : -1;
+  }
+  return out;
+}
+
+/* Постраничная загрузка /api/zigbee/get. Страницы идут строго по одной (один запрос в полёте),
+   продолжение по полю "next" (прошивка с постраничной выдачей) или по total (запасной путь для
+   прошивки без "next"). type - необязательный серверный фильтр ("dimmer" или "dimmer,color_lamp").
+   Если версия таблицы (ver) изменилась между страницами, загрузка начинается заново (до 3 попыток),
+   чтобы не склеить половину старой таблицы с половиной новой. На каждую страницу таймаут 8 с, иначе
+   зависший запрос держал бы вызывающий код (и pauseAll) бесконечно.
+   Возвращает { zigbee, lang, ver, total }. */
+export async function fetchZigbeeAll({ type, signal, pageLimit = 12 } = {}) {
+  const typePart = type ? `&type=${encodeURIComponent(type)}` : '';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const byId = new Map();
+    let offset = 0;
+    let first = null;
+    let changed = false;
+    for (let guard = 0; guard < 60; guard++) {
+      if (signal && signal.aborted) throw new Error('aborted');
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 8000);
+      const onAbort = () => ctl.abort();
+      if (signal) signal.addEventListener('abort', onAbort, { once: true });
+      let j;
+      try {
+        const r = await fetch(`/api/zigbee/get?offset=${offset}&limit=${pageLimit}${typePart}`, {
+          cache: 'no-store',
+          signal: ctl.signal
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        j = await r.json();
+      } finally {
+        clearTimeout(timer);
+        if (signal) signal.removeEventListener('abort', onAbort);
+      }
+      if (!j || !Array.isArray(j.zigbee)) throw new Error('bad response');
+      if (!first) {
+        first = j;
+      } else if (j.ver !== undefined && first.ver !== undefined && j.ver !== first.ver) {
+        changed = true;
+        break;
+      }
+      j.zigbee.forEach(d => byId.set(d.id, d));
+      let nextOff;
+      if (typeof j.next === 'number') {
+        nextOff = j.next;
+      } else {
+        nextOff = (j.zigbee.length > 0 && offset + j.zigbee.length < (j.total || 0))
+          ? offset + j.zigbee.length : -1;
+      }
+      if (nextOff < 0 || nextOff <= offset) break;
+      offset = nextOff;
+    }
+    if (!changed) {
+      return { zigbee: Array.from(byId.values()), lang: first.lang, ver: first.ver, total: first.total };
+    }
+  }
+  throw new Error('zigbee table keeps changing');
 }

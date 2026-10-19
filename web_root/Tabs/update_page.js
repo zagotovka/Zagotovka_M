@@ -1,11 +1,45 @@
-
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
 import { h, useState, useEffect, useRef, html } from '../bundle.js';
 import { pauseAll, resumeAll } from '../pollQueue.js';
 import { Icons, Button } from '../components.js';
 
-const FIRMWARE_UPLOAD_CHUNK_SIZE = 4096; // байт на POST; лимит тела запроса для /api/firmware/upload на устройстве не действует
+// Размер чанка: 4096 байт тела на POST. Устройство ограничивает тело одного чанка
+// (OTA_MAX_CHUNK_BODY в net.c, 8192), поэтому увеличивать чанк больше 8192 нельзя.
+// Первый чанк обязан содержать метку банка (fw_meta по смещению 0x300), иначе
+// серверная проверка банка пропускается: не уменьшайте чанк ниже 1024 байт.
+const FIRMWARE_UPLOAD_CHUNK_SIZE = 4096;
+// Таймаут одного чанка и число попыток. Сессия OTA на устройстве сбрасывается после
+// 20 с простоя (OTA_SESSION_IDLE_TIMEOUT_MS), поэтому 2 попытки по 8 с укладываются.
+// Повтор безопасен: уже записанный чанк (offset > 0) устройство игнорирует и отвечает 200,
+// а повтор первого чанка (offset = 0) просто начинает сессию заново.
+const UPLOAD_CHUNK_TIMEOUT_MS = 8000;
+const UPLOAD_CHUNK_RETRIES = 2;
+// Метка, которую устройство ставит в версию банка на время записи образа или
+// после прерванной загрузки (OTA_BANK_VERSION_PARTIAL в Core/Inc/compat_ota.h).
+const BANK_PARTIAL_MARK = '!partial';
+
+// POST одного чанка с таймаутом и повтором при сетевой ошибке или таймауте.
+// Ответы с кодом ошибки (4xx/5xx) не повторяются: их разбирает вызывающий код.
+async function postChunk(url, buf, attempts) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), UPLOAD_CHUNK_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { method: 'POST', body: buf, signal: ctrl.signal });
+      clearTimeout(t);
+      return response;
+    } catch (e) {
+      clearTimeout(t);
+      lastErr = e;
+      if (i + 1 < attempts) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+  }
+  throw lastErr;
+}
 
 const helpContent = {
   ru: html`
@@ -254,23 +288,39 @@ export function FirmwareUpdate({ }) {
   const [uploading, setUploading] = useState(false); // блокирует повторный/параллельный запуск onupload
   const uploadingRef = useRef(false);
 
+  // Статус прошивки. Новая прошивка отдаёт в нём и язык ("lang"), поэтому
+  // отдельный запрос /api/mysett/get (весь JSON настроек ради двух символов) не нужен.
   const refresh = () =>
-    fetch('api/firmware/status')
+    fetch('api/firmware/status', { cache: 'no-store' })
       .then((r) => r.json())
-      .then((r) => setInfo(r));
+      .then((r) => {
+        setInfo(r);
+        if (r && r.lang) setLanguage(r.lang);
+        return r;
+      });
 
-  // /api/firmware/status не содержит поле lang, поэтому язык берём
-  // из общего источника настроек устройства (как на странице Settings),
-  // по аналогии с тем, как это сделано на странице Zigbee Devices.
+  // Запасной вариант для старой прошивки, у которой в статусе нет поля lang:
+  // язык берём из общего источника настроек устройства (как на странице Settings).
   const refreshLang = () =>
     fetch('api/mysett/get', { cache: 'no-store' })
       .then((r) => r.json())
       .then((r) => setLanguage(r.lang || 'ru'))
       .catch(() => { });
 
+  // При открытии запросы идут по одному: статус, затем (только если нужно) язык.
   useEffect(() => {
-    refresh();
-    refreshLang();
+    let cancelled = false;
+    (async () => {
+      let st = null;
+      try {
+        st = await refresh();
+      } catch (e) {
+        console.error('firmware status:', e);
+      }
+      if (cancelled) return;
+      if (!st || !st.lang) await refreshLang();
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -332,6 +382,11 @@ export function FirmwareUpdate({ }) {
   const currentStatus = firmwares[0]?.status;
   const isUncommittedOta = currentStatus === 1 || currentStatus === 2;
   const bankLabel = (version, valid, isActiveBank) => {
+    if (version === BANK_PARTIAL_MARK) {
+      return language === 'ru'
+        ? 'образ записан не полностью (загрузка прервана)'
+        : 'incomplete image (upload interrupted)';
+    }
     if (version) return version;
     if (isActiveBank && isUncommittedOta) {
       return language === 'ru'
@@ -349,7 +404,8 @@ export function FirmwareUpdate({ }) {
   // пишется в другой банк), поэтому в нём всегда остаётся последняя
   // подтверждённая рабочая прошивка — переключение на него безопасно.
   const targetBank = activeBank === 1 ? 'A' : 'B';
-  const targetVersion = activeBank === 1 ? bankAVersion : bankBVersion;
+  const targetVersionRaw = activeBank === 1 ? bankAVersion : bankBVersion;
+  const targetVersion = targetVersionRaw === BANK_PARTIAL_MARK ? '' : targetVersionRaw;
   const targetValid = activeBank === 1 ? bankAValid : bankBValid;
 
   // Кнопка "Вернуться на Bank X" не должна быть кликабельной, если в целевом
@@ -377,7 +433,18 @@ export function FirmwareUpdate({ }) {
       body: JSON.stringify({})
     })
       .then((r) => r.json())
-      .then(refresh)
+      .then((ok) => {
+        if (ok !== true) {
+          setAlert({
+            type: 'red',
+            message:
+              language === 'ru'
+                ? 'Ошибка: прошивка не подтверждена.'
+                : 'Error: the firmware was not committed.'
+          });
+        }
+        return refresh();
+      })
       .catch(() =>
         setAlert({
           type: 'red',
@@ -514,7 +581,15 @@ export function FirmwareUpdate({ }) {
     return onreboot(ev);
   };
 
-  const onerase = (ev) => fetch('api/device/eraselast').then(refresh);
+  // Опасная операция: стирает последний сектор флеш (в этой раскладке там хранятся
+  // настройки). Кнопка скрыта, а на устройстве маршрут включается только сборкой с
+  // ENABLE_ERASE_LAST_SECTOR и принимает только POST с JSON.
+  const onerase = (ev) =>
+    fetch('api/device/eraselast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    }).then(refresh);
 
   const onupload = async function (file) {
     if (uploadingRef.current) {
@@ -529,6 +604,15 @@ export function FirmwareUpdate({ }) {
       setAlert({
         type: 'yellow',
         message: language === 'ru' ? 'Ошибка: файл не выбран.' : 'Error: No file selected.'
+      });
+      uploadingRef.current = false;
+      return;
+    }
+
+    if (!file.size) {
+      setAlert({
+        type: 'red',
+        message: language === 'ru' ? 'Ошибка: файл пустой.' : 'Error: The file is empty.'
       });
       uploadingRef.current = false;
       return;
@@ -589,7 +673,12 @@ export function FirmwareUpdate({ }) {
           '&total=' +
           total;
 
-        const response = await fetch(url, { method: 'POST', body: buf });
+        // Финальный пустой чанк не повторяем: после успеха устройство перезагружается
+        const response = await postChunk(
+          url,
+          buf,
+          buf.byteLength === 0 ? 1 : UPLOAD_CHUNK_RETRIES
+        );
         if (!response.ok) {
           // Тело ответа содержит пояснение сервера. Отказ по банку
           // ("Wrong bank image: built for Bank X, need Bank Y") показываем
@@ -608,7 +697,7 @@ export function FirmwareUpdate({ }) {
           throw new Error(`HTTP ${response.status} @offset=${offset}`);
         }
 
-        setProgress(total ? Math.round((offset / total) * 100) : 100);
+        setProgress(total ? Math.round(((offset + buf.byteLength) / total) * 100) : 100);
 
         if (buf.byteLength === 0) break;
         offset += buf.byteLength;

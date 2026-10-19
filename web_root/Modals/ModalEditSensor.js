@@ -1,9 +1,11 @@
 
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
+import { postJson } from '../safeFetch.js';
 import { condHint } from '../condlib.js';
 
 // Условие после "?" в действиях: D1, !D2, DV1>0, B1, BH1, T5>25.5, H4>50, Sr, Ss
@@ -16,6 +18,8 @@ function ModalEditSensor({
   onUpdate,
   sensorType,
   sensorData,
+  holdPoll = () => {},    // пауза опроса на время POST (счётчик в TabOneWire)
+  releasePoll = () => {},
   closeOnOverlayClick = true
 }) {
   const [formData, setFormData] = useState({
@@ -32,6 +36,7 @@ function ModalEditSensor({
     humidity: sensorData?.humidity || typsensor.humidity || 0
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const validateNumericInput = (value, min, max) => {
     if (value === '' || value === '-') return value;
@@ -75,22 +80,21 @@ function ModalEditSensor({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setIsSubmitting(true);
+    setSubmitError('');
     const parsedFormData = parseNumericValues(formData);
+    holdPoll();
     try {
-      const response = await fetch('/api/sensor/set', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: oneWireId,
-          pins: pins,
-          sensorNumber: typsensor.s_number,
-          ...parsedFormData,
-          s_number: typsensor.s_number,
-          t: typsensor.t
-        })
+      const response = await postJson('/api/sensor/set', {
+        id: oneWireId,
+        pins: pins,
+        sensorNumber: typsensor.s_number,
+        ...parsedFormData,
+        s_number: typsensor.s_number,
+        t: typsensor.t
       });
-      if (!response.ok) throw new Error('Network response was not ok');
+      if (!response.ok) throw new Error('HTTP ' + response.status);
       onUpdate({
         ...typsensor,
         ...parsedFormData,
@@ -102,7 +106,10 @@ function ModalEditSensor({
       onClose();
     } catch (error) {
       console.error('Error updating Sensor:', error);
+      setSubmitError('Не удалось сохранить: ' + (error && error.message ? error.message : error) +
+        '. Контроллер отклонил запрос или не ответил, настройки не изменены.');
     } finally {
+      releasePoll();
       setIsSubmitting(false);
     }
   };
@@ -266,13 +273,15 @@ function ModalEditSensor({
                 </tr>
               </tbody>
             </table>
+            ${submitError && html`<p class="text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2 mt-2">${submitError}</p>`}
           </div>
           <div class="modal-footer flex justify-end mt-4">
             <button
               type="submit"
               class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+              disabled=${isSubmitting}
             >
-              Save changes
+              ${isSubmitting ? 'Saving...' : 'Save changes'}
             </button>
           </div>
         </form>

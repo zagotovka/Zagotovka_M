@@ -1,4 +1,28 @@
 import { h, useState, useEffect, useRef, html } from '../bundle.js';
+import { registerPoll, unregisterPoll, pauseAll, resumeAll } from '../pollQueue.js';
+
+/* Поле zbee_label на контроллере хранит 29 байт UTF-8. Обрезка здесь, по границе символа,
+   чтобы тело learn/label не раздувалось именами, которые прошивка всё равно отрежет. */
+const _utf8 = new TextEncoder();
+function clipUtf8(str, maxBytes) {
+  let bytes = 0;
+  let out = '';
+  for (const ch of String(str || '')) {
+    const n = _utf8.encode(ch).length;
+    if (bytes + n > maxBytes) break;
+    bytes += n;
+    out += ch;
+  }
+  return out;
+}
+const LABEL_MAX_BYTES = 29;
+
+/* fetch с таймаутом: зависший запрос не должен держать окно (и pauseAll) бесконечно */
+function fetchWithTimeout(url, opts, ms) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  return fetch(url, { ...opts, signal: ctl.signal }).finally(() => clearTimeout(t));
+}
 
 const ROLE_OPTIONS = [
   { value: 'ignore',      label: { ru: 'Игнорировать', en: 'Ignore' } },
@@ -38,7 +62,8 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
   const [switchValues, setSwitchValues] = useState({});  // { obsKey: '1' | '0' }
   const [clickTypes, setClickTypes] = useState({});  // { obsKey: 'single' | 'double' | 'long' }
   const [sessionTick, setSessionTick] = useState(0); // bump -> перезапуск сессии («Повторить»)
-  const pollRef = useRef(null);
+  const lastOkRef = useRef(0);         // момент последнего успешного ответа опроса
+  const savedTimerRef = useRef(null);  // таймер отложенного onSaved
   const mergedRef = useRef({});
   const flashRef = useRef({});         // obsKey -> id таймера подсветки
   const lastTickRef = useRef({});      // obsKey -> последний известный last_seen_tick
@@ -136,57 +161,62 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
     };
   }, [ieee]);
 
+  /* Опрос идёт через pollQueue (один запрос в полёте на всю страницу), а не собственным
+     setInterval с голым fetch: раньше два запроса каждые 1.5 с шли параллельно с опросом
+     страницы, могли накладываться сами на себя при медленном ответе и, пока сервер закрывал
+     соединение после каждого GET, каждый раз открывали новое (при HTTPS новое рукопожатие). */
   useEffect(() => {
     let alive = true;
-    const poll = async () => {
-      if (!alive) return;
-      try {
-        const sr = await fetch('/api/zigbee/learn/status');
-        const sd = await sr.json();
-        if (!alive) return;
-        setStatus(sd);
+    const KEY_S = 'zlearn_status';
+    const KEY_G = 'zlearn_get';
+    lastOkRef.current = Date.now();
 
-        if (sd.active) {
-          const gr = await fetch('/api/zigbee/learn/get');
-          const gd = await gr.json();
-          if (!alive) return;
+    const stopPolling = () => { unregisterPoll(KEY_S); unregisterPoll(KEY_G); };
 
-          for (const obs of (gd.observations || [])) {
-            const k = obsKey(obs);
-            if (!(k in mergedRef.current)) {
-              mergedRef.current[k] = obs;
-            } else {
-              mergedRef.current[k] = { ...mergedRef.current[k], ...obs };
-            }
-            /* Детект повторного нажатия: tick изменился с прошлого опроса */
-            if (obs.source === 'trigger' && typeof obs.last_seen_tick === 'number') {
-              const prevTick = lastTickRef.current[k];
-              if (prevTick !== undefined && prevTick !== obs.last_seen_tick) {
-                clearTimeout(flashRef.current[k]);
-                setFlashKeys(prev => ({ ...prev, [k]: true }));
-                flashRef.current[k] = setTimeout(() => {
-                  setFlashKeys(prev => {
-                    const next = { ...prev };
-                    delete next[k];
-                    return next;
-                  });
-                }, 2000);
-              }
-              lastTickRef.current[k] = obs.last_seen_tick;
-            }
-          }
-          setObservations(Object.values(mergedRef.current));
-        } else if (sd.ieee === ieee && sd.end_reason && sd.end_reason !== 'none') {
-          /* Сессия этого устройства завершена прошивкой (таймаут, пропажа
-             браузера, stop, сохранение) — опрос больше не нужен. На первый
-             опрос после старта не среагирует: learn/start уже отработан
-             и end_reason новой сессии — 'none'. */
-          setObservations(Object.values(mergedRef.current));
-          clearInterval(pollRef.current);
-        }
-      } catch (e) {
-        if (alive) setError(e.message);
+    const onStatus = (sd) => {
+      if (!alive || !sd || sd.__session_expired) return;
+      lastOkRef.current = Date.now();
+      setError(null);
+      setStatus(sd);
+      if (!sd.active && sd.ieee === ieee && sd.end_reason && sd.end_reason !== 'none') {
+        /* Сессия этого устройства завершена прошивкой (таймаут, пропажа
+           браузера, stop, сохранение) - опрос больше не нужен. На первый
+           опрос после старта не среагирует: learn/start уже отработан
+           и end_reason новой сессии - 'none'. */
+        setObservations(Object.values(mergedRef.current));
+        stopPolling();
       }
+    };
+
+    const onGet = (gd) => {
+      if (!alive || !gd || gd.__session_expired) return;
+      lastOkRef.current = Date.now();
+      if (!gd.active) return;   /* наблюдения читаем только пока сессия активна, как и раньше */
+      for (const obs of (gd.observations || [])) {
+        const k = obsKey(obs);
+        if (!(k in mergedRef.current)) {
+          mergedRef.current[k] = obs;
+        } else {
+          mergedRef.current[k] = { ...mergedRef.current[k], ...obs };
+        }
+        /* Детект повторного нажатия: tick изменился с прошлого опроса */
+        if (obs.source === 'trigger' && typeof obs.last_seen_tick === 'number') {
+          const prevTick = lastTickRef.current[k];
+          if (prevTick !== undefined && prevTick !== obs.last_seen_tick) {
+            clearTimeout(flashRef.current[k]);
+            setFlashKeys(prev => ({ ...prev, [k]: true }));
+            flashRef.current[k] = setTimeout(() => {
+              setFlashKeys(prev => {
+                const next = { ...prev };
+                delete next[k];
+                return next;
+              });
+            }, 2000);
+          }
+          lastTickRef.current[k] = obs.last_seen_tick;
+        }
+      }
+      setObservations(Object.values(mergedRef.current));
     };
 
     /* learn/start отправляется отсюда, а не из TabZigbee: к первому опросу
@@ -194,19 +224,36 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
        (sessionTick) проходит через тот же путь. */
     (async () => {
       try {
-        await fetch('/api/zigbee/learn/start', {
+        await fetchWithTimeout('/api/zigbee/learn/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ieee }),
-        });
-      } catch (e) { /* упала сеть — poll покажет ошибку */ }
+        }, 8000);
+      } catch (e) { /* упала сеть - сторож ниже покажет потерю связи */ }
       if (!alive) return;
-      poll();
-      pollRef.current = setInterval(poll, 1500);
+      lastOkRef.current = Date.now();
+      registerPoll(KEY_S, '/api/zigbee/learn/status', onStatus, { immediate: true });
+      registerPoll(KEY_G, '/api/zigbee/learn/get', onGet);
     })();
 
-    return () => { alive = false; clearInterval(pollRef.current); };
+    /* pollQueue молча снимает запись после трёх ошибок подряд. Если успешных ответов нет
+       дольше 45 с (прошивка сама гасит сессию через 90 с без опроса), показываем экран
+       "связь потеряна" с кнопкой «Повторить» и больше не опрашиваем: бесконечного цикла нет. */
+    const watchdog = setInterval(() => {
+      if (!alive) return;
+      if (Date.now() - lastOkRef.current > 45000) {
+        clearInterval(watchdog);
+        stopPolling();
+        setStatus({ active: false, ieee, end_reason: 'heartbeat' });
+      }
+    }, 5000);
+
+    return () => { alive = false; clearInterval(watchdog); stopPolling(); };
   }, [ieee, sessionTick]);
+
+  /* Отложенный onSaved не должен сработать после закрытия окна: иначе он закрыл бы
+     окно обучения, открытое для другого устройства за эти 2 секунды */
+  useEffect(() => () => clearTimeout(savedTimerRef.current), []);
 
   const restart = () => {
     setError(null);
@@ -236,14 +283,14 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
                 source: 'trigger',
                 trigger_payload: o.payload,
                 role: labels[k] || 'ignore',
-                label: names[k] || '',
+                label: clipUtf8(names[k] || '', LABEL_MAX_BYTES),
               }
             : {
                 ep: o.cluster === '0xEF00' ? parseInt(o.attr, 16) : o.ep,
                 cluster: o.cluster,
                 attr: o.attr,
                 role: labels[k] || 'ignore',
-                label: names[k] || '',
+                label: clipUtf8(names[k] || '', LABEL_MAX_BYTES),
               };
           /* Добавляем click_type для кнопок */
           const role = labels[k] || 'ignore';
@@ -262,16 +309,24 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
           return base;
         }),
       };
-      const r = await fetch('/api/zigbee/learn/label', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const res = await r.json();
+      /* На время отправки опрос ставится на паузу: один запрос в полёте */
+      let res;
+      pauseAll();
+      try {
+        const r = await fetchWithTimeout('/api/zigbee/learn/label', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }, 15000);
+        res = await r.json();
+      } finally {
+        resumeAll();
+      }
       if (res.status) {
         setSavedType(res.device_type);
         if (res.device_type !== 'trigger' && res.device_type !== 'switch' && res.device_type !== 'multi_ep') {
-          setTimeout(() => onSaved?.(res.device_type), 2000);
+          clearTimeout(savedTimerRef.current);
+          savedTimerRef.current = setTimeout(() => onSaved?.(res.device_type), 2000);
         }
         if (res.ep_slots > 1) {
           setSavedType('multi_ep');
@@ -477,10 +532,11 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
                                class="border rounded px-2 py-1 text-sm w-full min-w-[9rem]"
                                placeholder="${lang === 'ru' ? 'Появится в Info (напр. Кухня - Вкл)' : 'Shown in Info (e.g. Kitchen - On)'}"
                                value=${names[obsKey(o)] || ''}
-                               onInput=${e => setNames(prev => ({
-                                 ...prev,
-                                 [obsKey(o)]: e.target.value
-                               }))} />
+                               onInput=${e => {
+                                 const v = clipUtf8(e.target.value, LABEL_MAX_BYTES);
+                                 if (v !== e.target.value) e.target.value = v;
+                                 setNames(prev => ({ ...prev, [obsKey(o)]: v }));
+                               }} />
                       </td>
                       <td class="py-2">
                         <div class="flex flex-wrap items-center gap-1">
@@ -547,10 +603,11 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
                                class="border rounded px-2 py-1 text-sm w-full min-w-[9rem]"
                                placeholder="${lang === 'ru' ? 'Появится в Info (напр. Яркость)' : 'Shown in Info (e.g. Brightness)'}"
                                value=${names[obsKey(o)] || ''}
-                               onInput=${e => setNames(prev => ({
-                                 ...prev,
-                                 [obsKey(o)]: e.target.value
-                               }))} />
+                               onInput=${e => {
+                                 const v = clipUtf8(e.target.value, LABEL_MAX_BYTES);
+                                 if (v !== e.target.value) e.target.value = v;
+                                 setNames(prev => ({ ...prev, [obsKey(o)]: v }));
+                               }} />
                       </td>
                       <td class="py-2">
                         <div class="flex flex-wrap items-center gap-1">

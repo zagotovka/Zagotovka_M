@@ -1,9 +1,10 @@
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
-import { fetchCondData, condPayload, validateCondExpr, CondInput } from '../condlib.js';
+import { fetchCondData, fetchPinsByType, condPayload, validateCondExpr, CondInput } from '../condlib.js';
 
 const SENSOR_OPTIONS = [
   { value: '1', label: 'DS18B20' },
@@ -17,7 +18,11 @@ function ModalPid({
   closeOnOverlayClick = true,
   title,
   selectedPid,
-  handlePidChange,
+  onSave,                 // async (body, { condChanged }) => { ok, message } - сохранение делает TabPid
+  holdPoll = () => {},    // пауза опроса таблицы на время загрузки данных модалки
+  releasePoll = () => {},
+  condsInit = null,       // уже загруженная библиотека условий (стор CondLibrary.js)
+  poolInit = null,
   language = 'en',
   modalClass,
   SliderComponent = MyPolzunok,
@@ -29,14 +34,18 @@ function ModalPid({
   const [selsens, setSelsens] = useState(selectedPid?.selsens || '1');
   const [sernum, setSernum] = useState(selectedPid?.sernum || '');
   const [sensorPinId, setSensorPinId] = useState(Number(selectedPid?.sensor_pin_id) || 0);
-  const [owPins, setOwPins] = useState([]);
+  const [sensorList, setSensorList] = useState([]);
+  const [saving, setSaving] = useState(false);
   const [presets, setPresets] = useState(selectedPid?.presets || '1');
   const [tmpset, setTmpset] = useState(selectedPid?.tmpset || '');
   const [tmpcur, setTmpcur] = useState(selectedPid?.tmpcur || '');
   const [pwmOptions, setPwmOptions] = useState([]);
   const [selectedPwm, setSelectedPwm] = useState(Object.entries(selectedPid?.pinact || {})[0] || ['', '']);
-  const [condsList, setCondsList] = useState([]);
-  const [poolInfo, setPoolInfo] = useState(null);
+  // Если TabPid передал библиотеку условий - отдельный запрос /api/mysett/get не нужен.
+  const [condsLocal, setCondsLocal] = useState([]);
+  const [poolLocal, setPoolLocal] = useState(null);
+  const condsList = condsInit || condsLocal;
+  const poolInfo = condsInit ? poolInit : poolLocal;
   const [pidCond, setPidCond] = useState(selectedPid?.cexpr || '');
   const [condText0, setCondText0] = useState(selectedPid?.cexpr || '');
   const [condNum0, setCondNum0] = useState(parseInt(selectedPid?.cond, 10) || 0);
@@ -56,37 +65,56 @@ function ModalPid({
     setCondNum0(parseInt(selectedPid?.cond, 10) || 0);
   }, [selectedPid]);
 
-  // Последовательная загрузка: не более одного запроса одновременно (экономия кучи на контроллере)
+  // Последовательная загрузка: не более одного запроса одновременно (экономия кучи на контроллере).
+  // Опрос таблицы на это время стоит на паузе (holdPoll/releasePoll - со счётчиком в TabPid).
   useEffect(() => {
     let cancelled = false;
+    holdPoll();
 
-    const getJson = async (url) => {
-      const r = await fetch(url, { cache: 'no-store' });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
+    // Плоский список датчиков с сервера: /api/sensors/get?type=1,2 (постранично по "next").
+    // Раньше брался полный /api/state/onewire (все пины, пределы, действия, info).
+    const fetchSensors = async () => {
+      const out = [];
+      let from = 0;
+      for (let guard = 0; guard < 10; guard++) {
+        const r = await fetch('/api/sensors/get?type=1,2&from=' + from + '&limit=40', { cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const page = await r.json();
+        if (Array.isArray(page.data)) out.push(...page.data);
+        const next = typeof page.next === 'number' ? page.next : -1;
+        if (next <= from) break;
+        from = next;
+      }
+      return out;
     };
 
     (async () => {
-      const cd = await fetchCondData();
-      if (cancelled) return;
-      setCondsList(cd.conds);
-      setPoolInfo(cd.pool);
-
       try {
-        const sel = await getJson('/api/pwmpins/get');
-        if (cancelled) return;
-        const list = sel && Array.isArray(sel.data) ? sel.data : [];
-        setPwmOptions(list.filter((pin) => pin.topin === 5));
-      } catch (error) {
-        console.error('Error fetching pin config:', error);
-        if (!cancelled) setPwmOptions([]);
-      }
+        if (!condsInit) {
+          const cd = await fetchCondData();   // запасной путь: стор ещё не загружен
+          if (cancelled) return;
+          setCondsLocal(cd.conds);
+          setPoolLocal(cd.pool);
+        }
 
-      try {
-        const ow = await getJson('/api/state/onewire');
-        if (!cancelled) setOwPins(Array.isArray(ow.pins) ? ow.pins : []);
-      } catch (error) {
-        if (!cancelled) setOwPins([]);
+        try {
+          const list = await fetchPinsByType([5]);
+          if (cancelled) return;
+          setPwmOptions(list);
+        } catch (error) {
+          console.error('Error fetching pin config:', error);
+          if (!cancelled) setPwmOptions([]);
+        }
+
+        try {
+          const list = await fetchSensors();
+          if (!cancelled) setSensorList(list);
+        } catch (error) {
+          console.error('Error fetching sensors:', error);
+          if (!cancelled) setSensorList([]);
+        }
+      } finally {
+        releasePoll();
       }
     })();
 
@@ -94,27 +122,22 @@ function ModalPid({
   }, [selectedPid]);
 
   const sensorChoices = [];
-  owPins.forEach((p) => {
-    if (!p.id || String(p.typsensr) !== String(selsens)) return;
-    const sensors = Array.isArray(p.sensors) ? p.sensors : [];
-    if (p.typsensr === 1) {
-      sensors.forEach((s) => {
-        sensorChoices.push({
-          key: `${p.id}|${s.s_number}`,
-          pinId: p.id,
-          sernum: s.s_number,
-          label: `${p.pin} (ID: ${p.id}) - ${s.s_number}` +
-                 (s.valid ? ` - ${Number(s.t).toFixed(1)} C` : ' - no data')
-        });
-      });
-    } else if (p.typsensr === 2) {
-      const s = sensors[0] || {};
+  sensorList.forEach((s) => {
+    if (!s.id || String(s.typsensr) !== String(selsens)) return;
+    const tail = s.valid ? ` - ${Number(s.t).toFixed(1)} C` : ' - no data';
+    if (Number(s.typsensr) === 1) {
       sensorChoices.push({
-        key: `${p.id}|`,
-        pinId: p.id,
+        key: `${s.id}|${s.s_number}`,
+        pinId: s.id,
+        sernum: s.s_number,
+        label: `${s.pin} (ID: ${s.id}) - ${s.s_number}` + tail
+      });
+    } else if (Number(s.typsensr) === 2) {
+      sensorChoices.push({
+        key: `${s.id}|`,
+        pinId: s.id,
         sernum: '',
-        label: `${p.pin} (ID: ${p.id}) - DHT22` +
-             (s.valid ? ` - ${Number(s.t).toFixed(1)} C` : ' - no data')
+        label: `${s.pin} (ID: ${s.id}) - DHT22` + tail
       });
     }
   });
@@ -127,8 +150,9 @@ function ModalPid({
     setSernum(c ? c.sernum : '');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return;   // защита от двойного клика: второй POST и второе соединение не нужны
 
     const hasPwm = selectedPwm[0] && selectedPwm[1] !== undefined && selectedPwm[1] !== '';
 
@@ -156,27 +180,23 @@ function ModalPid({
       ...condBody,
     };
 
-    console.log('Data being sent to server:', jsonData);
+    const condChanged = (pidCond || '').trim() !== (condText0 || '').trim();
 
-    fetch('/api/pid/set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(jsonData)
-    })
-      .then(async (response) => {
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          alert(data.message || `Ошибка ${response.status}`);
-          return;
-        }
-        console.log('Success:', data);
-        handlePidChange({ ...selectedPid, ...jsonData });
-        hideModal();
-        window.location.href = '/#/pid';
-      })
-      .catch((error) => {
-        console.error('Error:', error);
-      });
+    setSaving(true);
+    try {
+      // POST, перезагрузка таблицы и обновление библиотеки условий делает TabPid под одной паузой опроса
+      const res = await onSave(jsonData, { condChanged });
+      if (!res || !res.ok) {
+        alert((res && res.message) || 'Ошибка сохранения');
+        return;
+      }
+      hideModal();
+      window.location.href = '/#/pid';
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handlePwmChange = (e) => {
@@ -377,7 +397,8 @@ function ModalPid({
             </button>
             <button
               type="submit"
-              class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+              disabled=${saving}
+              class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
             >
               Save changes
             </button>

@@ -173,10 +173,13 @@ void log_headers(const char *headers) {
 /*********************** End delay_us() **************************/
 
 /* ─── State Slice version counters ─── */
-volatile uint32_t g_ver_common  = 1;
+volatile uint32_t g_ver_common   = 1;
 volatile uint32_t g_ver_sensors = 1;
 volatile uint32_t g_ver_pid     = 1;
 volatile uint32_t g_ver_encoder = 1;
+/* Поколение текста cron-действий (dbCrontxt[].activ). Растёт при каждом изменении;
+ * StartServiceTask по нему сбрасывает кэш карты cron для PWM fade. */
+volatile uint32_t g_cron_gen = 1;
 volatile uint32_t g_ver_onewire = 1;
 volatile uint32_t g_ver_switch  = 1;
 volatile uint32_t g_ver_button  = 1;
@@ -184,6 +187,12 @@ volatile uint32_t g_ver_security = 1;
 volatile uint32_t g_ver_pins     = 1;
 volatile uint32_t g_ver_zigbee   = 1;
 volatile uint32_t g_ver_select   = 1;
+volatile uint32_t g_ver_timers   = 1;
+/* Версия /api/mysett/get: растёт при сохранении настроек, смене маски логов,
+ * после любого сохранения конфигурации (менятся счётчики использования условий)
+ * и при пересчёте восхода/заката/полнолуния. */
+volatile uint32_t g_ver_settings = 1;
+volatile uint8_t  g_cron_dirty[NUMTASK];
 
 /* Флаг «в PinsLinks нет свободных слотов» — сбрасывается при входе в parse_*,
  * выставляется при неудачной записи связи. HTTP-хендлеры отдают 507 вместо 200. */
@@ -312,6 +321,8 @@ void etag_version_seed(void) {
   g_ver_pins     = salt | 1;
   g_ver_zigbee   = salt | 1;
   g_ver_select   = salt | 1;
+  g_ver_timers   = salt | 1;
+  g_ver_settings = salt | 1;
 }
 
 extern uint64_t s_boot_timestamp;
@@ -479,8 +490,9 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
     (unsigned long)g_ver_select);
 
   mg_http_printf_chunk(c,
-    "{\"lang\":\"%s\",\"sim800l\":%d,\"total\":%ld,\"offset\":%ld,\"limit\":%ld,\"data\":[",
-    SetSettings.lang, SetSettings.sim800l, total, offset, limit);
+    "{\"lang\":\"%s\",\"sim800l\":%d,\"ver\":%lu,\"total\":%ld,\"offset\":%ld,\"limit\":%ld,\"data\":[",
+    SetSettings.lang, SetSettings.sim800l, (unsigned long)g_ver_select,
+    total, offset, limit);
 
   if (offset >= total) {
     mg_http_printf_chunk(c, "]}");
@@ -499,37 +511,56 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
     taskENTER_CRITICAL();
     conf = PinsConf[i];
     taskEXIT_CRITICAL();
+    
+    char esc_pins[48];
+    json_escape_str(esc_pins, info->pins, sizeof(esc_pins));
+    
     mg_http_printf_chunk(c,
       "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d,\"pwm\":%d}",
-      (first ? "" : ","), i, info->pins, conf.topin, info->pwm);
+      (first ? "" : ","), i, esc_pins, conf.topin, info->pwm);
     first = 0;
     emitted++;
   }
 
-  {
-    static char clbuf[32];
-    for (int i = 0; i < NUMZBEE && emitted < offset + limit; i++) {
-      ZigbeeVirtualPin zb;
-      taskENTER_CRITICAL();
-      zb = ZigbeeConf[i];
-      taskEXIT_CRITICAL();
-      if (emitted < offset) { emitted++; continue; }
-      clusters_flags_to_json(zb.cluster_flags, clbuf, sizeof(clbuf));
+  static char clbuf[32];
+  for (int i = 0; i < NUMZBEE && emitted < offset + limit; i++) {
+    if (emitted < offset) { emitted++; continue; }
+
+    ZigbeeVirtualPin zb;
+    taskENTER_CRITICAL();
+    zb = ZigbeeConf[i];
+    taskEXIT_CRITICAL();
+
+    if (zb.topin == 0 && zb.zbee_ieee[0] == '\0' && zb.zbee_label[0] == '\0') {
       mg_http_printf_chunk(c,
-        "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d,"
-        "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
-        "\"clusters\":%s,\"zbee_attribute\":%d,"
-        "\"zbee_label\":\"%s\",\"role\":%d}",
-        (first ? "" : ","), (long)NUMPIN + i,
-        zb.zbee_ieee[0] != '\0' ? zb.zbee_label : "",
-        zb.topin,
-        zb.zbee_ieee, zb.zbee_endpoint,
-        clbuf, zb.zbee_attribute,
-        zb.zbee_label,
-        zb.zbee_role);
+        "%s{\"id\":%ld,\"pins\":\"\",\"topin\":0}",
+        (first ? "" : ","), (long)NUMPIN + i);
       first = 0;
       emitted++;
+      continue;
     }
+
+    clusters_flags_to_json(zb.cluster_flags, clbuf, sizeof(clbuf));
+    
+    char esc_zbee_label[64];
+    json_escape_str(esc_zbee_label, zb.zbee_label, sizeof(esc_zbee_label));
+    char esc_zbee_ieee[64];
+    json_escape_str(esc_zbee_ieee, zb.zbee_ieee, sizeof(esc_zbee_ieee));
+    
+    mg_http_printf_chunk(c,
+    "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d,"
+    "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
+    "\"clusters\":%s,\"zbee_attribute\":%d,"
+    "\"zbee_label\":\"%s\",\"role\":%d}",
+    (first ? "" : ","), (long)NUMPIN + i,
+    zb.zbee_ieee[0] != '\0' ? esc_zbee_label : "",
+    zb.topin,
+    esc_zbee_ieee, zb.zbee_endpoint,
+    clbuf, zb.zbee_attribute,
+    esc_zbee_label,
+    zb.zbee_role);
+    first = 0;
+    emitted++;
   }
 
   mg_http_printf_chunk(c, "]}");
@@ -563,27 +594,217 @@ void handle_select_set(struct mg_connection *c, struct mg_http_message *hm) {
   }
 }
 
-/* /api/pwmpins/get: только пины, настроенные как PWM (topin == 5) */
-void handle_pwmpins_get(struct mg_connection *c) {
-  char buf[768];
-  int pos = snprintf(buf, sizeof(buf), "{\"data\":[");
-  int first = 1;
-  for (long i = 0; i < (long)NUMPIN; i++) {
-    int topin;
-    taskENTER_CRITICAL();
-    topin = PinsConf[i].topin;
-    taskEXIT_CRITICAL();
-    if (topin != 5) continue;
-    if (pos > (int)sizeof(buf) - 80) break;
-    pos += snprintf(buf + pos, sizeof(buf) - pos,
-                    "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":5}",
-                    first ? "" : ",", i, PinsInfo[i].pins);
-    first = 0;
+/* ── /api/pins/get?topin=2,11,3&from=0&limit=40
+   Только пины (физические и Zigbee), у которых topin входит в список.
+   За один ответ не больше limit записей; "next" - ID для продолжения или -1.
+   Необязательный zdim=1: из Zigbee-слотов только диммеры (тот же критерий, что
+   type "dimmer" в /api/zigbee/get), чтобы окна не грузили полные записи Zigbee. */
+#define PINS_GET_MAX_TYPES  12
+#define PINS_GET_DEF_LIMIT  40
+#define PINS_GET_MAX_LIMIT  60
+
+static bool zbee_probe_active_for(const char *ieee, uint8_t ep);
+
+void handle_pins_get(struct mg_connection *c, struct mg_http_message *hm) {
+  uint8_t types[PINS_GET_MAX_TYPES];
+  int ntypes = 0;
+  char buf[48];
+  long from = 0, limit = PINS_GET_DEF_LIMIT;
+
+  if (mg_http_get_var(&hm->query, "topin", buf, sizeof(buf)) > 0) {
+    const char *p = buf;
+    while (*p && ntypes < PINS_GET_MAX_TYPES) {
+      char *end = NULL;
+      long v = strtol(p, &end, 10);
+      if (end == p) break;
+      if (v >= 0 && v <= 255) types[ntypes++] = (uint8_t)v;
+      p = end;
+      if (*p == ',') p++;
+    }
   }
-  snprintf(buf + pos, sizeof(buf) - pos, "]}");
-  mg_http_reply(c, 200,
-                "Content-Type: application/json\r\nCache-Control: no-cache\r\n",
-                "%s", buf);
+  if (ntypes == 0) {
+    mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+                  "{\"error\":\"topin required\"}");
+    return;
+  }
+  if (mg_http_get_var(&hm->query, "from", buf, sizeof(buf)) > 0)
+    from = mg_json_get_long(mg_str(buf), "$", 0);
+  if (mg_http_get_var(&hm->query, "limit", buf, sizeof(buf)) > 0)
+    limit = mg_json_get_long(mg_str(buf), "$", PINS_GET_DEF_LIMIT);
+  if (from < 0) from = 0;
+  if (limit <= 0) limit = PINS_GET_DEF_LIMIT;
+  if (limit > PINS_GET_MAX_LIMIT) limit = PINS_GET_MAX_LIMIT;
+
+  const long total = (long)NUMPIN + (long)NUMZBEE;
+
+  mg_printf(c,
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Type: application/json\r\n"
+    "Transfer-Encoding: chunked\r\n"
+    "Cache-Control: no-cache\r\n"
+    "\r\n");
+  mg_http_printf_chunk(c, "{\"data\":[");
+
+  long emitted = 0, next = -1;
+  int first = 1;
+
+  for (long i = from; i < total; i++) {
+    int topin;
+    char label[30];
+    label[0] = '\0';
+
+    if (i < (long)NUMPIN) {
+      taskENTER_CRITICAL();
+      topin = PinsConf[i].topin;
+      taskEXIT_CRITICAL();
+    } else {
+      long z = i - (long)NUMPIN;
+      taskENTER_CRITICAL();
+      topin = ZigbeeConf[z].topin;
+      if (ZigbeeConf[z].zbee_ieee[0] != '\0') {
+        memcpy(label, ZigbeeConf[z].zbee_label, sizeof(label));
+        label[sizeof(label) - 1] = '\0';
+      }
+      taskEXIT_CRITICAL();
+    }
+
+    int match = 0;
+    for (int t = 0; t < ntypes; t++) {
+      if (types[t] == topin) { match = 1; break; }
+    }
+    if (!match) continue;
+
+    if (emitted >= limit) { next = i; break; }
+
+    char esc_label[64];
+    json_escape_str(esc_label, label, sizeof(esc_label));
+    mg_http_printf_chunk(c, "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d}",
+                         first ? "" : ",", i,
+                         (i < (long)NUMPIN) ? PinsInfo[i].pins : esc_label, topin);
+    first = 0;
+    emitted++;
+  }
+
+  mg_http_printf_chunk(c, "],\"next\":%ld}", next);
+  mg_http_write_chunk(c, "", 0);
+}
+
+/* ── /api/sensors/get: компактный постраничный список датчиков OneWire ──
+   Нужен окну Edit PID. Заменяет полный /api/state/onewire (все пины, пределы, действия, info).
+   Параметры: type=1,2 (1 - DS18B20, 2 - DHT22; по умолчанию оба), from, limit.
+   Ответ: {"data":[{"id","pin","typsensr","s_number","valid","t"}],"next":N|-1}.
+   s_number - серийный номер DS18B20 (hex) или пустая строка для DHT22.
+   Порядок обхода тот же, что в /api/state/onewire: пины с topin==4 по возрастанию id. */
+#define SENS_GET_DEF_LIMIT 20
+#define SENS_GET_MAX_LIMIT 40
+
+void handle_sensors_get(struct mg_connection *c, struct mg_http_message *hm) {
+  char buf[32];
+  int want_ds = 0, want_dht = 0;
+  long from = 0, limit = SENS_GET_DEF_LIMIT;
+
+  if (mg_http_get_var(&hm->query, "type", buf, sizeof(buf)) > 0) {
+    const char *p = buf;
+    while (*p) {
+      char *end = NULL;
+      long v = strtol(p, &end, 10);
+      if (end == p) break;
+      if (v == 1) want_ds = 1;
+      if (v == 2) want_dht = 1;
+      p = end;
+      if (*p == ',') p++;
+    }
+  }
+  if (!want_ds && !want_dht) { want_ds = 1; want_dht = 1; }
+
+  if (mg_http_get_var(&hm->query, "from", buf, sizeof(buf)) > 0)
+    from = mg_json_get_long(mg_str(buf), "$", 0);
+  if (mg_http_get_var(&hm->query, "limit", buf, sizeof(buf)) > 0)
+    limit = mg_json_get_long(mg_str(buf), "$", SENS_GET_DEF_LIMIT);
+  if (from < 0) from = 0;
+  if (limit <= 0) limit = SENS_GET_DEF_LIMIT;
+  if (limit > SENS_GET_MAX_LIMIT) limit = SENS_GET_MAX_LIMIT;
+
+  mg_printf(c,
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Type: application/json\r\n"
+    "Transfer-Encoding: chunked\r\n"
+    "Cache-Control: no-cache\r\n"
+    "\r\n");
+  mg_http_printf_chunk(c, "{\"data\":[");
+
+  long idx = 0, emitted = 0, next = -1;
+  int first = 1;
+
+  for (int i = 0; i < NUMPIN && next < 0; i++) {
+    if (PinsConf[i].topin != 4) continue;
+
+    if (want_ds) {
+      for (int j = 0; j < MAX_DS18B20_P && next < 0; j++) {
+        if (ds18b20[j].id != i || ds18b20[j].typsensr != 1) continue;
+        for (int k = 0; k < ds18b20[j].numsens && k < MAX_DS18B20_PER_PIN; k++) {
+          if (idx < from) { idx++; continue; }
+          if (emitted >= limit) { next = idx; break; }
+
+          uint8_t addr[8];
+          float temp;
+          int valid;
+          char pin[5];
+          taskENTER_CRITICAL();
+          memcpy(addr, ds18b20[j].sensors[k].addr, sizeof(addr));
+          temp  = ds18b20[j].sensors[k].temp;
+          valid = ds18b20[j].sensors[k].valid ? 1 : 0;
+          memcpy(pin, ds18b20[j].pin, sizeof(pin));
+          taskEXIT_CRITICAL();
+          pin[sizeof(pin) - 1] = '\0';
+
+          char s_t[16];
+          fmt_float(s_t, sizeof(s_t), valid ? temp : 0.0f, 1);
+          mg_http_printf_chunk(c,
+            "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":1,"
+            "\"s_number\":\"%02X%02X%02X%02X%02X%02X%02X%02X\","
+            "\"valid\":%d,\"t\":%s}",
+            first ? "" : ",", i, pin,
+            addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7],
+            valid, s_t);
+          first = 0;
+          emitted++;
+          idx++;
+        }
+      }
+    }
+
+    if (want_dht && next < 0) {
+      for (int j = 0; j < MAX_DHT22_P && next < 0; j++) {
+        if (dht22[j].id != i || dht22[j].typsensr != 2) continue;
+        if (idx < from) { idx++; continue; }
+        if (emitted >= limit) { next = idx; break; }
+
+        float temp;
+        int valid;
+        char pin[5];
+        taskENTER_CRITICAL();
+        temp  = dht22[j].temp;
+        valid = dht22[j].valid ? 1 : 0;
+        memcpy(pin, dht22[j].pin, sizeof(pin));
+        taskEXIT_CRITICAL();
+        pin[sizeof(pin) - 1] = '\0';
+
+        char s_t[16];
+        fmt_float(s_t, sizeof(s_t), valid ? temp : 0.0f, 1);
+        mg_http_printf_chunk(c,
+          "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":2,\"s_number\":\"\","
+          "\"valid\":%d,\"t\":%s}",
+          first ? "" : ",", i, pin, valid, s_t);
+        first = 0;
+        emitted++;
+        idx++;
+      }
+    }
+  }
+
+  mg_http_printf_chunk(c, "],\"next\":%ld}", next);
+  mg_http_write_chunk(c, "", 0);
 }
 
 /* ── Каскадное удаление связей при установке NONE ── */
@@ -672,6 +893,7 @@ static void cascade_delete_pin_id(int deleted_id) {
   extern volatile uint32_t g_ver_pins;
   extern volatile uint32_t g_ver_button;
   extern volatile uint32_t g_ver_encoder;
+  extern volatile uint32_t g_cron_gen;
   extern volatile uint32_t g_ver_security;
   extern volatile uint32_t g_ver_switch;
   extern volatile uint32_t g_ver_onewire;
@@ -851,6 +1073,8 @@ static void cascade_delete_pin_id(int deleted_id) {
   mark_slice_dirty(&g_ver_select);
   mark_slice_dirty(&g_ver_common);
   if (changed_pid) mark_slice_dirty(&g_ver_pid);
+  if (changed_cron) mark_slice_dirty(&g_ver_timers);
+  g_cron_gen++;
 }
 
 void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
@@ -950,7 +1174,10 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
 
   MG_DEBUG(("select/set parsed: zbee_count=%d", zbee_count));
 
+
   mark_slice_dirty(&g_ver_select);
+  mark_slice_dirty(&g_ver_timers);
+
 
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
@@ -1259,6 +1486,90 @@ void handle_pintopin_get(struct mg_connection *c) {
   n += (size_t)snprintf(buf + n, sizeof(buf) - n, "]");
   mg_http_write_chunk(c, buf, n);
   mg_http_write_chunk(c, "", 0); /* терминальный чанк — keep-alive сохраняется */
+}
+
+#define PINTOPIN_PAGE_DEF_LIMIT 40
+#define PINTOPIN_PAGE_MAX_LIMIT 60
+
+static bool pintopin_idin_is_switch(int id) {
+  if (id >= 0 && id < NUMPIN) return PinsConf[id].topin == 3;
+  if (id >= NUMPIN && id < NUMPIN + NUMZBEE)
+    return ZigbeeConf[id - NUMPIN].zbee_role == ZBEE_ROLE_SWITCH;
+  return false;
+}
+
+bool handle_pintopin_get_ex(struct mg_connection *c, struct mg_http_message *hm) {
+  char buf[16];
+  bool paged = false, kind_switch = false;
+  long from = 0, limit = PINTOPIN_PAGE_DEF_LIMIT, only_idin = -1;
+
+  if (mg_http_get_var(&hm->query, "from", buf, sizeof(buf)) > 0) {
+    from = mg_json_get_long(mg_str(buf), "$", 0);
+    paged = true;
+  }
+  if (mg_http_get_var(&hm->query, "limit", buf, sizeof(buf)) > 0) {
+    limit = mg_json_get_long(mg_str(buf), "$", PINTOPIN_PAGE_DEF_LIMIT);
+    paged = true;
+  }
+  if (mg_http_get_var(&hm->query, "idin", buf, sizeof(buf)) > 0) {
+    only_idin = mg_json_get_long(mg_str(buf), "$", -1);
+    paged = true;
+  }
+  if (mg_http_get_var(&hm->query, "kind", buf, sizeof(buf)) > 0) {
+    kind_switch = (strcmp(buf, "switch") == 0);
+    paged = true;
+  }
+  if (!paged) {
+    handle_pintopin_get(c);
+    return false;
+  }
+  if (from < 0) from = 0;
+  if (limit <= 0) limit = PINTOPIN_PAGE_DEF_LIMIT;
+  if (limit > PINTOPIN_PAGE_MAX_LIMIT) limit = PINTOPIN_PAGE_MAX_LIMIT;
+
+  mg_printf(c, "HTTP/1.1 200 OK\r\n"
+               "Content-Type: application/json\r\n"
+               "Transfer-Encoding: chunked\r\n"
+               "Cache-Control: no-cache\r\n"
+               "\r\n");
+  mg_http_printf_chunk(c, "{\"ver\":%lu,\"data\":[", (unsigned long)g_ver_switch);
+
+  long emitted = 0, next = -1;
+  bool first = true;
+
+  for (long k = from; k < NUMPINLINKS; k++) {
+    struct dbPinToPin link;
+    taskENTER_CRITICAL();
+    link = PinsLinks[k];
+    taskEXIT_CRITICAL();
+
+    if (link.idin == 0 && link.idout == 0) continue;
+    if (only_idin >= 0 && link.idin != only_idin) continue;
+    if (kind_switch && !pintopin_idin_is_switch(link.idin)) continue;
+    if (emitted >= limit) { next = k; break; }
+
+    char esc_pp_pins[16];
+    char ce_raw[COND_LEN];
+    char ce_expr[2 * COND_LEN + 8];
+    char rec[200];
+    json_escape_str(esc_pp_pins, link.pins, sizeof(esc_pp_pins));
+    cond_text_copy(link.cond, ce_raw, sizeof(ce_raw));
+    json_escape_str(ce_expr, ce_raw, sizeof(ce_expr));
+
+    int w = snprintf(rec, sizeof(rec),
+                     "%s{\"idin\":%d,\"idout\":%d,\"pins\":\"%s\",\"cond\":%d,"
+                     "\"cexpr\":\"%s\"}",
+                     first ? "" : ",", link.idin, link.idout, esc_pp_pins,
+                     link.cond, ce_expr);
+    if (w < 0 || (size_t)w >= sizeof(rec)) continue;
+    mg_http_write_chunk(c, rec, (size_t)w);
+    first = false;
+    emitted++;
+  }
+
+  mg_http_printf_chunk(c, "],\"next\":%ld}", next);
+  mg_http_write_chunk(c, "", 0);
+  return true;
 }
 
 void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm) {
@@ -1647,6 +1958,13 @@ static bool reply_if_str_too_long(struct mg_connection *c, struct mg_str body,
   return false;
 }
 
+static bool json_action_is_real(struct mg_str body, const char *path) {
+  char *v = mg_json_get_str(body, path);
+  bool real = (v != NULL && v[0] != '\0' && strcmp(v, "None") != 0);
+  if (v) mg_free(v);
+  return real;
+}
+
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
@@ -1665,8 +1983,21 @@ void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
     if (id_val >= NUMPIN && id_val < NUMPIN + NUMZBEE) {
       int zbi = (int)id_val - NUMPIN;
       if (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_TRIGGER) {
-        if (ZigbeeConf[zbi].action_pool_idx == ACTION_POOL_IDX_NONE) {
+        if (ZigbeeConf[zbi].action_pool_idx == ACTION_POOL_IDX_NONE &&
+            (json_action_is_real(body, "$.sclick") ||
+             json_action_is_real(body, "$.dclick") ||
+             json_action_is_real(body, "$.lpress"))) {
+          /* Слот пула нужен, только если есть настоящее действие. Раньше при
+           * исчерпании пула (NUMACTIONPOOL слотов на все Zigbee-кнопки) действия
+           * молча не сохранялись, а ответ был status:true. Теперь - 507. */
           ZigbeeConf[zbi].action_pool_idx = zbee_action_alloc();
+          if (ZigbeeConf[zbi].action_pool_idx == ACTION_POOL_IDX_NONE) {
+            mg_http_reply(c, 507, extra_headers,
+                          "{\"status\":false,\"message\":\"No free slots in "
+                          "Zigbee action pool (limit %d). Clear the actions of "
+                          "another Zigbee button first.\"}", NUMACTIONPOOL);
+            return;
+          }
         }
         uint8_t idx = ZigbeeConf[zbi].action_pool_idx;
         char *action_str = mg_json_get_str(body, "$.sclick");
@@ -1919,7 +2250,7 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
 }
 
 void handle_encoder_get(struct mg_connection *c) {
-  handle_encoders(c);
+  handle_encoders(c, NULL);
 }
 
 void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm) {
@@ -2364,40 +2695,80 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
     xTaskNotifyGive(my_DgnTaskHandle);
 }
 
-void handle_timers_get(struct mg_connection *c) {
+/* /api/cron/get?from=0&limit=N
+   from  - ID первой записи (по умолчанию 0).
+   limit - максимум записей в ответе; 0 - только заголовок (ver, numline, total, lang)
+           для опроса; по умолчанию NUMTASK.
+   Размер ответа ограничен: как только в c->send накоплено TIMERS_GET_SOFT_BYTES,
+   выдача обрывается, "next" - ID для продолжения или -1, если всё отдано.
+   Пустые строки отдаются компактно: {"id":N}, клиент достраивает недостающие поля.
+   Тело ответа целиком копится в c->send (рост буфера кратно MG_IO_SIZE с копированием),
+   поэтому ограничение размера ответа напрямую ограничивает пик кучи. */
+#define TIMERS_GET_SOFT_BYTES  3600
+
+void handle_timers_get(struct mg_connection *c, struct mg_http_message *hm) {
+  char buf[16];
+  long from = 0, limit = NUMTASK;
+
+  if (hm != NULL) {
+    if (mg_http_get_var(&hm->query, "from", buf, sizeof(buf)) > 0)
+      from = mg_json_get_long(mg_str(buf), "$", 0);
+    if (mg_http_get_var(&hm->query, "limit", buf, sizeof(buf)) > 0)
+      limit = mg_json_get_long(mg_str(buf), "$", NUMTASK);
+  }
+  if (from < 0) from = 0;
+  if (limit < 0 || limit > NUMTASK) limit = NUMTASK;
+
+  const unsigned long ver = (unsigned long)g_ver_timers;
+  const size_t start_len = c->send.len;
+
   mg_printf(c,
     "HTTP/1.1 200 OK\r\n"
     "Content-Type: application/json\r\n"
     "Transfer-Encoding: chunked\r\n"
-    "Connection: keep-alive\r\n"
     "Cache-Control: no-cache\r\n"
-    "\r\n");
+    "ETag: \"%lu\"\r\n"
+    "\r\n",
+    ver);
 
   mg_http_printf_chunk(c,
-    "{\"lang\":\"%s\",\"numline\":%d,\"timers\":[",
-    SetSettings.lang, SetSettings.numline);
+    "{\"lang\":\"%s\",\"numline\":%d,\"ver\":%lu,\"total\":%ld,\"from\":%ld,\"timers\":[",
+    SetSettings.lang, SetSettings.numline, ver, (long)NUMTASK, from);
 
-  for (int i = 0; i < NUMTASK; i++) {
+  long emitted = 0, next = -1;
+  int first = 1;
+
+  for (long i = from; i < NUMTASK; i++) {
+    if (emitted >= limit) { next = i; break; }
+
     struct dbCron cron;
     taskENTER_CRITICAL();
     cron = dbCrontxt[i];
     taskEXIT_CRITICAL();
 
-    char esc_cron[72], esc_activ[512], esc_info[64];
-    json_escape_str(esc_cron, cron.cron, sizeof(esc_cron));
-    json_escape_str(esc_activ, cron.activ, sizeof(esc_activ));
-    json_escape_str(esc_info, cron.info, sizeof(esc_info));
+    if (cron.cron[0] == '\0' && cron.activ[0] == '\0' &&
+        cron.info[0] == '\0' && cron.onoff == 0) {
+      mg_http_printf_chunk(c, "%s{\"id\":%ld}", first ? "" : ",", i);
+    } else {
+      char esc_cron[72], esc_activ[512], esc_info[64];
+      json_escape_str(esc_cron, cron.cron, sizeof(esc_cron));
+      json_escape_str(esc_activ, cron.activ, sizeof(esc_activ));
+      json_escape_str(esc_info, cron.info, sizeof(esc_info));
+      mg_http_printf_chunk(c,
+        "%s{\"id\":%ld,\"cron\":\"%s\",\"activ\":\"%s\","
+        "\"info\":\"%s\",\"onoff\":%d}",
+        first ? "" : ",", i, esc_cron, esc_activ, esc_info, cron.onoff);
+    }
+    first = 0;
+    emitted++;
 
-    if (i > 0)
-      mg_http_printf_chunk(c, ",");
-
-    mg_http_printf_chunk(c,
-      "{\"id\":%d,\"cron\":\"%s\",\"activ\":\"%s\","
-      "\"info\":\"%s\",\"onoff\":%d}",
-      i, esc_cron, esc_activ, esc_info, cron.onoff);
+    if (i + 1 < NUMTASK && (c->send.len - start_len) >= TIMERS_GET_SOFT_BYTES) {
+      next = i + 1;
+      break;
+    }
   }
 
-  mg_http_printf_chunk(c, "]}");
+  mg_http_printf_chunk(c, "],\"next\":%ld}", next);
   mg_http_write_chunk(c, "", 0);
 }
 void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm) {
@@ -2414,8 +2785,8 @@ void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm) {
     parse_timers_json(hm->body.buf, dbCrontxt, NUMTASK);
     snprintf(
         response, sizeof(response),
-        "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu}",
-        (unsigned long)hm->body.len);
+        "{\"status\":true,\"message\":\"Received JSON data\",\"length\":%lu,\"ver\":%lu}",
+        (unsigned long)hm->body.len, (unsigned long)g_ver_timers);
 
     MG_INFO(("Response headers for connection %ld:", c->id));
     log_headers(extra_headers);
@@ -2437,6 +2808,7 @@ void parse_numline_json(char *json_string, struct dbSettings *SetSettings) {
   long numline = mg_json_get_long(body, "$.numline", -1);
   if (numline > 0 && numline <= NUMTASK) {
     SetSettings->numline = (uint8_t)numline;
+    mark_slice_dirty(&g_ver_timers);
   } else if (numline == -1) {
     fprintf(stderr, "Missing or invalid 'numline' in JSON\n");
   }
@@ -2557,7 +2929,12 @@ void parse_timers_json(char *json_string, struct dbCron *dbCrontxt, int count) {
     if (has_onoff) {
       dbCrontxt[id].onoff = temp_onoff;
     }
+    if (has_cron) {
+      g_cron_dirty[id] = 1;
+    }
     taskEXIT_CRITICAL();
+    g_cron_gen++;
+    mark_slice_dirty(&g_ver_timers);
   }
 
   if (my_DgnTaskHandle)
@@ -2841,7 +3218,7 @@ void mysett_cache_reload(void) {
 
 /* ──── stream_mysett_json: потоковая отправка без f_read и taskYIELD ──── */
 static void stream_mysett_json(struct mg_connection *c,
-                               const struct dbSettings *s) {
+                               const struct dbSettings *s, uint32_t ver) {
   char buf[512];
 
   if (s_mysett_mutexHandle)
@@ -2855,7 +3232,10 @@ static void stream_mysett_json(struct mg_connection *c,
     return;
   }
 
-  mg_http_write_chunk(c, "{", 1);
+  {
+    int vlen = snprintf(buf, sizeof(buf), "{\"ver\":%lu,", (unsigned long)ver);
+    mg_http_write_chunk(c, buf, (size_t)vlen);
+  }
 
   emit_system_basic(c, s, buf);
   emit_sunrise_pins(c, s, buf);
@@ -2914,17 +3294,29 @@ static void stream_mysett_json(struct mg_connection *c,
 
 /* ──── handle_mysett_get: HTTP GET /api/mysett/get ──── */
 void handle_mysett_get(struct mg_connection *c) {
+  /* Кэш ещё не готов (идёт перезагрузка после Save): ответ без ETag, иначе
+   * клиент запомнит бы ETag ошибки и дальше получал бы 304 вместо данных. */
+  if (!s_mysett_cache_valid) {
+    mg_http_reply(c, 503, s_json_header, "{\"error\":\"cache not ready\"}");
+    return;
+  }
+
+  /* Версия берётся до копирования настроек: если данные изменятся во время
+   * сборки, клиент получит старый ETag и перезапросит (безопасная сторона). */
+  uint32_t ver = g_ver_settings;
+
   struct dbSettings s;
   taskENTER_CRITICAL();
   s = SetSettings;
   taskEXIT_CRITICAL();
 
   mg_printf(c, "HTTP/1.1 200 OK\r\n"
-            "Content-Type: application/json\r\n"
-            "Transfer-Encoding: chunked\r\n"
-            "Cache-Control: no-cache\r\n"
-            "\r\n");
-  stream_mysett_json(c, &s);
+          "Content-Type: application/json\r\n"
+          "Transfer-Encoding: chunked\r\n"
+          "Cache-Control: no-cache\r\n"
+          "ETag: \"%lu\"\r\n"
+          "\r\n", (unsigned long)ver);
+  stream_mysett_json(c, &s, ver);
 }
 
 void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm) {
@@ -2972,6 +3364,8 @@ void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm) {
     parse_mysett_json(hm->body.buf, &SetSettings);
     s_mysett_cache_valid = false;
     mysett_cache_reload();
+    mark_slice_dirty(&g_ver_pid);
+    mark_slice_dirty(&g_ver_settings);
     char response[256];
     snprintf(
         response, sizeof(response),
@@ -2990,6 +3384,8 @@ void handle_mysett_set(struct mg_connection *c, struct mg_http_message *hm) {
 }
 
 void mqtt_publish_logfilter_status(void) {
+  /* Вызывается после любой смены маски логов (HTTP и MQTT): версия настроек растёт */
+  mark_slice_dirty(&g_ver_settings);
   if (s_conn == NULL && !SetSettings.check_mqtt_srv) return;
   uint32_t mask = logger_get_mask();
   char payload[512];
@@ -3734,7 +4130,8 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
     settings->adm_pswd[sizeof(settings->adm_pswd) - 1] = '\0'; mg_free(_v); } }
   { char *_v = mg_json_get_str(body, "$.lang");
     if (_v) { strncpy(settings->lang, _v, sizeof(settings->lang) - 1);
-    settings->lang[sizeof(settings->lang) - 1] = '\0'; mg_free(_v); } }
+    settings->lang[sizeof(settings->lang) - 1] = '\0'; mg_free(_v);
+    mark_slice_dirty(&g_ver_timers); } }
 
   settings->timezone = mg_json_get_long(body, "$.timezone", (long)settings->timezone);
   { double d; if (mg_json_get_num(body, "$.lon_de", &d)) settings->lon_de = d; }
@@ -4227,181 +4624,250 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
     mg_http_reply(c, 400, NULL, "Invalid URI format\n");
   }
 }
-
+// TODO
 /*********************************** ONEWIRE
  * ****************************************/
-void gen_onewire_json(char *buffer, int buffer_size) {
-  //    printf("\n=== Start of gen_onewire_json ===\n");
-  //    printf("Buffer size: %d\n", buffer_size);
 
-  int offset = 0;
-  bool fstpin = true;
-  bool bfrfull = false;
-  bool owfound = false;
-  bool snsr_fnd = false;
+/* Страница /api/onewire/get собирается в общем буфере g_body и целиком уходит в
+ * c->send одной порцией. Пик кучи равен сумме старого и нового буфера mongoose,
+ * кратных MG_IO_SIZE, поэтому размер одной страницы ограничен: заголовок ответа
+ * (около 170 байт) и страница укладываются в 2 блока по MG_IO_SIZE (4096 при
+ * MG_IO_SIZE = 2048, см. mongoose_config.h). */
+#define ONEWIRE_PAGE_BYTES    3800 /* макс. размер JSON страницы, байт */
+#define ONEWIRE_GET_MAX_LIMIT 40   /* макс. строк (пинов) на страницу */
 
-  // Start JSON
-  offset += snprintf(buffer + offset, buffer_size - offset,
-                     "{\"lang\":\"%s\",\"pins\":[", SetSettings.lang);
-
-  for (uint8_t i = 0; i < NUMPIN && !bfrfull; i++) {
-    if (PinsConf[i].topin == 4) { // Нашли OneWire пин
-      owfound = true;
-      snsr_fnd = false;
-
-      // Проверяем есть ли этот пин в массиве ds18b20
-      for (uint8_t j = 0; j < MAX_DS18B20_P && !bfrfull; j++) {
-        if (ds18b20[j].id == i && ds18b20[j].typsensr == 1) {
-          snsr_fnd = true;
-          if (!fstpin) {
-            offset += snprintf(buffer + offset, buffer_size - offset, ",");
-          }
-          fstpin = false;
-
-          if (offset > (buffer_size - 1000)) {
-            bfrfull = true;
-            break;
-          }
-
-          // Основная информация о пине DS18B20
-          offset += snprintf(buffer + offset, buffer_size - offset,
-                             "{\"id\":%d,\"pin\":\"%s\",\"typsensr\":%d,"
-                             "\"numsens\":%d,\"onoff\":%d",
-                             ds18b20[j].id, ds18b20[j].pin, ds18b20[j].typsensr,
-                             ds18b20[j].numsens, ds18b20[j].onoff);
-
-          // Массив датчиков DS18B20
-          offset +=
-              snprintf(buffer + offset, buffer_size - offset, ",\"sensors\":[");
-          bool first_sensor = true;
-
-          for (uint8_t k = 0; k < ds18b20[j].numsens && k < MAX_DS18B20_PER_PIN;
-               k++) {
-            if (offset > (buffer_size - 500)) {
-              bfrfull = true;
-              break;
-            }
-
-            if (!first_sensor) {
-              offset += snprintf(buffer + offset, buffer_size - offset, ",");
-            }
-            first_sensor = false;
-
-            char address_str[17];
-            snprintf(
-                address_str, sizeof(address_str),
-                "%02X%02X%02X%02X%02X%02X%02X%02X",
-                ds18b20[j].sensors[k].addr[0], ds18b20[j].sensors[k].addr[1],
-                ds18b20[j].sensors[k].addr[2], ds18b20[j].sensors[k].addr[3],
-                ds18b20[j].sensors[k].addr[4], ds18b20[j].sensors[k].addr[5],
-                ds18b20[j].sensors[k].addr[6], ds18b20[j].sensors[k].addr[7]);
-
-            char s_t[16];  fmt_float(s_t,  sizeof(s_t),  ds18b20[j].sensors[k].temp, 4);
-            char s_ut[16]; fmt_float(s_ut, sizeof(s_ut), ds18b20[j].sensors[k].upt,  2);
-            char s_lt[16]; fmt_float(s_lt, sizeof(s_lt), ds18b20[j].sensors[k].lowt, 2);
-            offset += snprintf(
-                buffer + offset, buffer_size - offset,
-                "{\"s_number\":\"%s\",\"t\":%s,\"valid\":%s,"
-                "\"ut\":%s,\"lt\":%s,\"action_ut\":\"%s\","
-                "\"action_lt\":\"%s\",\"info\":\"%s\"}",
-                address_str, s_t,
-                ds18b20[j].sensors[k].valid ? "true" : "false",
-                s_ut, s_lt,
-                ds18b20[j].sensors[k].actup, ds18b20[j].sensors[k].actlow,
-                ds18b20[j].sensors[k].info);
-          }
-          offset += snprintf(buffer + offset, buffer_size - offset, "]}");
-        }
-      }
-
-      // Проверяем есть ли этот пин в массиве dht22
-      for (uint8_t j = 0; j < MAX_DHT22_P && !bfrfull && !snsr_fnd; j++) {
-        if (dht22[j].id == i && dht22[j].typsensr == 2) {
-          snsr_fnd = true;
-          if (!fstpin) {
-            offset += snprintf(buffer + offset, buffer_size - offset, ",");
-          }
-          fstpin = false;
-
-          if (offset > (buffer_size - 500)) {
-            bfrfull = true;
-            break;
-          }
-
-          offset += snprintf(buffer + offset, buffer_size - offset,
-                             "{\"id\":%d,\"pin\":\"%s\",\"typsensr\":%d,"
-                             "\"numsens\":%d,\"onoff\":%d,\"sensors\":[",
-                             dht22[j].id, dht22[j].pin, dht22[j].typsensr,
-                             dht22[j].numsens, dht22[j].onoff);
-
-          char s_t[16];  fmt_float(s_t,  sizeof(s_t),  dht22[j].temp,  2);
-          char s_h[16];  fmt_float(s_h,  sizeof(s_h),  dht22[j].humid, 2);
-          char s_ut[16]; fmt_float(s_ut, sizeof(s_ut), dht22[j].upt,   2);
-          char s_lt[16]; fmt_float(s_lt, sizeof(s_lt), dht22[j].lowt,  2);
-          char s_uh[16]; fmt_float(s_uh, sizeof(s_uh), dht22[j].uph,   2);
-          char s_lh[16]; fmt_float(s_lh, sizeof(s_lh), dht22[j].lowh,  2);
-          offset += snprintf(
-              buffer + offset, buffer_size - offset,
-              "{\"s_number\":\"DHT22\",\"t\":%s,\"humidity\":%s,"
-              "\"valid\":%"
-              "s,"
-              "\"ut\":%s,\"lt\":%s,\"action_ut\":\"%s\",\"action_lt\":\"%"
-              "s\","
-              "\"upphumid\":%s,\"humlolim\":%s,\"actuphum\":\"%s\","
-              "\"actlowhum\":\"%s\",\"info\":\"%s\"}",
-              s_t, s_h, dht22[j].valid ? "true" : "false",
-              s_ut, s_lt, dht22[j].actup, dht22[j].actlow,
-              s_uh, s_lh, dht22[j].actuh, dht22[j].actlh,
-              dht22[j].info);
-
-          offset += snprintf(buffer + offset, buffer_size - offset, "]}");
-        }
-      }
-
-      // Если OneWire пин найден, но не активен (нет датчиков)
-      if (!snsr_fnd && !bfrfull) {
-        if (!fstpin) {
-          offset += snprintf(buffer + offset, buffer_size - offset, ",");
-        }
-        fstpin = false;
-
-        offset += snprintf(
-            buffer + offset, buffer_size - offset,
-            "{\"id\":%d,\"pin\":\"%s\",\"typsensr\":0,"
-            "\"numsens\":0,\"info\":\"No active sensors found\",\"onoff\":0}",
-            i, PinsInfo[i].pins);
-      }
-    }
+/* FNV-1a: подпись конфигурации OneWire (без температур и флагов valid). */
+static uint32_t ow_fnv(uint32_t h, const void *p, size_t n) {
+  const uint8_t *b = (const uint8_t *)p;
+  while (n--) {
+    h ^= *b++;
+    h *= 16777619u;
   }
-  // Если не нашли ни одного OneWire пина
-  if (!owfound && !bfrfull) {
-    offset += snprintf(
-        buffer + offset, buffer_size - offset,
-        "{\"id\":0,\"pin\":\"N/A\",\"typsensr\":0,"
-        "\"numsens\":0,\"info\":\"No OneWire pins found\",\"onoff\":0}");
-  }
-  // Завершаем JSON
-  if (bfrfull) {
-    offset += snprintf(
-        buffer + offset, buffer_size - offset,
-        "],\"warning\":\"Data truncated due to buffer size limitation\"}");
-  } else {
-    offset += snprintf(buffer + offset, buffer_size - offset, "]}");
-  }
-  //    printf("\nJSON generated (%d bytes). %s\n", offset, bfrfull ?
-  //    "Warning: Data truncated!" : "All data included"); printf("%s\n",
-  //    buffer); printf("=== End of gen_onewire_json ===\n\n");
-
-  //    uint8_t usbnum = 5;
-  //    xQueueSend(usbQueueHandle, &usbnum, 0);
+  return h;
 }
 
-/* ─── /api/onewire/get ─── */
-void handle_onewire_get(struct mg_connection *c) {
-  gen_onewire_json(g_body, G_BODY_SIZE);
-  size_t len = strlen(g_body);
-  mg_printf(c, "HTTP/1.1 200 OK\r\n%sConnection: keep-alive\r\nContent-Length: %d\r\n\r\n", s_json_header, (int)len);
-  mg_send(c, g_body, len);
+static uint32_t ow_fnv_str(uint32_t h, const char *s, size_t max) {
+  size_t n = 0;
+  while (n < max && s[n]) n++;
+  h = ow_fnv(h, s, n);
+  const uint8_t sep = 0;
+  return ow_fnv(h, &sep, 1);
+}
+
+/* Версия конфигурации страницы OneWire. Считается на лету при каждом запросе
+ * (около 5 КБ данных), поэтому не зависит от мест, где конфигурация меняется. */
+uint32_t onewire_cfg_ver(void) {
+  uint32_t h = 2166136261u;
+  h = ow_fnv_str(h, SetSettings.lang, sizeof(SetSettings.lang));
+  for (int i = 0; i < NUMPIN; i++) {
+    if (PinsConf[i].topin != 4) continue;
+    h = ow_fnv(h, &i, sizeof(i));
+    for (int j = 0; j < MAX_DS18B20_P; j++) {
+      const ds18b20_pin_t *d = &ds18b20[j];
+      if (d->id != i || d->typsensr != 1) continue;
+      int n = d->numsens;
+      h = ow_fnv(h, &d->numsens, sizeof(d->numsens));
+      h = ow_fnv(h, &d->onoff, sizeof(d->onoff));
+      h = ow_fnv_str(h, d->pin, sizeof(d->pin));
+      if (n > MAX_DS18B20_PER_PIN) n = MAX_DS18B20_PER_PIN;
+      for (int k = 0; k < n; k++) {
+        h = ow_fnv(h, d->sensors[k].addr, sizeof(d->sensors[k].addr));
+        h = ow_fnv(h, &d->sensors[k].upt, sizeof(d->sensors[k].upt));
+        h = ow_fnv(h, &d->sensors[k].lowt, sizeof(d->sensors[k].lowt));
+        h = ow_fnv_str(h, d->sensors[k].actup, sizeof(d->sensors[k].actup));
+        h = ow_fnv_str(h, d->sensors[k].actlow, sizeof(d->sensors[k].actlow));
+        h = ow_fnv_str(h, d->sensors[k].info, sizeof(d->sensors[k].info));
+      }
+      break;
+    }
+    for (int j = 0; j < MAX_DHT22_P; j++) {
+      const dht22_pin_t *d = &dht22[j];
+      if (d->id != i || d->typsensr != 2) continue;
+      h = ow_fnv(h, &d->numsens, sizeof(d->numsens));
+      h = ow_fnv(h, &d->onoff, sizeof(d->onoff));
+      h = ow_fnv_str(h, d->pin, sizeof(d->pin));
+      h = ow_fnv(h, &d->upt, sizeof(d->upt));
+      h = ow_fnv(h, &d->lowt, sizeof(d->lowt));
+      h = ow_fnv(h, &d->uph, sizeof(d->uph));
+      h = ow_fnv(h, &d->lowh, sizeof(d->lowh));
+      h = ow_fnv_str(h, d->actup, sizeof(d->actup));
+      h = ow_fnv_str(h, d->actlow, sizeof(d->actlow));
+      h = ow_fnv_str(h, d->actuh, sizeof(d->actuh));
+      h = ow_fnv_str(h, d->actlh, sizeof(d->actlh));
+      h = ow_fnv_str(h, d->info, sizeof(d->info));
+      break;
+    }
+  }
+  return h;
+}
+
+/* Запись в buf со смещения off, не дальше cap. При нехватке места возвращает -1. */
+#define OW_PUT(...)                                                         \
+  do {                                                                      \
+    int _n = snprintf(buf + off, (size_t)(cap - off), __VA_ARGS__);         \
+    if (_n < 0 || _n >= cap - off) return -1;                               \
+    off += _n;                                                              \
+  } while (0)
+
+/* Одна строка (пин) страницы. Возвращает новое смещение или -1 (не хватило места).
+ * Все строки экранируются json_escape_str: кавычка в info или action_* больше не
+ * ломает JSON. Пустой пин отдаётся компактно (без текстовой заглушки). */
+static int ow_emit_row(char *buf, int cap, int off, int pin_id) {
+  if (off >= cap) return -1;
+
+  for (int j = 0; j < MAX_DS18B20_P; j++) {
+    const ds18b20_pin_t *d = &ds18b20[j];
+    if (d->id != pin_id || d->typsensr != 1) continue;
+    char e_pin[16];
+    json_escape_str(e_pin, d->pin, sizeof(e_pin));
+    OW_PUT("{\"id\":%d,\"pin\":\"%s\",\"typsensr\":1,\"numsens\":%d,"
+           "\"onoff\":%d,\"sensors\":[",
+           pin_id, e_pin, d->numsens, d->onoff);
+    int n = d->numsens;
+    if (n > MAX_DS18B20_PER_PIN) n = MAX_DS18B20_PER_PIN;
+    for (int k = 0; k < n; k++) {
+      const uint8_t *a = d->sensors[k].addr;
+      char s_t[16];  fmt_float(s_t,  sizeof(s_t),  d->sensors[k].temp, 4);
+      char s_ut[16]; fmt_float(s_ut, sizeof(s_ut), d->sensors[k].upt,  2);
+      char s_lt[16]; fmt_float(s_lt, sizeof(s_lt), d->sensors[k].lowt, 2);
+      char e_aut[64]; json_escape_str(e_aut, d->sensors[k].actup,  sizeof(e_aut));
+      char e_alt[64]; json_escape_str(e_alt, d->sensors[k].actlow, sizeof(e_alt));
+      char e_inf[64]; json_escape_str(e_inf, d->sensors[k].info,   sizeof(e_inf));
+      OW_PUT("%s{\"s_number\":\"%02X%02X%02X%02X%02X%02X%02X%02X\","
+             "\"t\":%s,\"valid\":%s,\"ut\":%s,\"lt\":%s,"
+             "\"action_ut\":\"%s\",\"action_lt\":\"%s\",\"info\":\"%s\"}",
+             k ? "," : "", a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7],
+             s_t, d->sensors[k].valid ? "true" : "false", s_ut, s_lt,
+             e_aut, e_alt, e_inf);
+    }
+    OW_PUT("]}");
+    return off;
+  }
+
+  for (int j = 0; j < MAX_DHT22_P; j++) {
+    const dht22_pin_t *d = &dht22[j];
+    if (d->id != pin_id || d->typsensr != 2) continue;
+    char e_pin[16];
+    json_escape_str(e_pin, d->pin, sizeof(e_pin));
+    char s_t[16];  fmt_float(s_t,  sizeof(s_t),  d->temp,  2);
+    char s_h[16];  fmt_float(s_h,  sizeof(s_h),  d->humid, 2);
+    char s_ut[16]; fmt_float(s_ut, sizeof(s_ut), d->upt,   2);
+    char s_lt[16]; fmt_float(s_lt, sizeof(s_lt), d->lowt,  2);
+    char s_uh[16]; fmt_float(s_uh, sizeof(s_uh), d->uph,   2);
+    char s_lh[16]; fmt_float(s_lh, sizeof(s_lh), d->lowh,  2);
+    char e_aut[64]; json_escape_str(e_aut, d->actup,  sizeof(e_aut));
+    char e_alt[64]; json_escape_str(e_alt, d->actlow, sizeof(e_alt));
+    char e_auh[64]; json_escape_str(e_auh, d->actuh,  sizeof(e_auh));
+    char e_alh[64]; json_escape_str(e_alh, d->actlh,  sizeof(e_alh));
+    char e_inf[64]; json_escape_str(e_inf, d->info,   sizeof(e_inf));
+    OW_PUT("{\"id\":%d,\"pin\":\"%s\",\"typsensr\":2,\"numsens\":%d,"
+           "\"onoff\":%d,\"sensors\":[{\"s_number\":\"DHT22\",\"t\":%s,"
+           "\"humidity\":%s,\"valid\":%s,\"ut\":%s,\"lt\":%s,"
+           "\"action_ut\":\"%s\",\"action_lt\":\"%s\","
+           "\"upphumid\":%s,\"humlolim\":%s,"
+           "\"actuphum\":\"%s\",\"actlowhum\":\"%s\",\"info\":\"%s\"}]}",
+           pin_id, e_pin, d->numsens, d->onoff, s_t, s_h,
+           d->valid ? "true" : "false", s_ut, s_lt, e_aut, e_alt, s_uh, s_lh,
+           e_auh, e_alh, e_inf);
+    return off;
+  }
+
+  char e_pin[16];
+  json_escape_str(e_pin, PinsInfo[pin_id].pins, sizeof(e_pin));
+  OW_PUT("{\"id\":%d,\"pin\":\"%s\",\"typsensr\":0,\"numsens\":0,\"onoff\":0}",
+         pin_id, e_pin);
+  return off;
+}
+
+/* Собирает страницу JSON в buf.
+ *  paged == false: все строки подряд (формат старой прошивки, плюс поля ver,
+ *                  total, next); при нехватке места добавляется "warning".
+ *  paged == true : строки начиная с пина from, не больше limit штук и не больше
+ *                  ONEWIRE_PAGE_BYTES байт; "next" - id пина для продолжения
+ *                  или -1, если всё отдано. limit == 0 отдаёт только ver и total.
+ * Возвращает длину JSON. */
+static int ow_build_page(char *buf, int size, uint32_t ver, long from,
+                         long limit, bool paged) {
+  const int cap = size - 160; /* резерв под хвост */
+  int total = 0;
+  for (int i = 0; i < NUMPIN; i++)
+    if (PinsConf[i].topin == 4) total++;
+
+  char e_lang[8];
+  json_escape_str(e_lang, SetSettings.lang, sizeof(e_lang));
+  int off = snprintf(buf, (size_t)size,
+                     "{\"lang\":\"%s\",\"ver\":%lu,\"total\":%d,\"pins\":[",
+                     e_lang, (unsigned long)ver, total);
+
+  long next = -1;
+  int emitted = 0;
+  bool trunc = false;
+  if (from < 0) from = 0;
+
+  for (long i = from; i < NUMPIN; i++) {
+    if (PinsConf[i].topin != 4) continue;
+    if (paged && emitted >= limit) {
+      next = i;
+      break;
+    }
+    int start = off;
+    if (emitted > 0) buf[off++] = ',';
+    int r = ow_emit_row(buf, cap, off, (int)i);
+    if (r < 0) { /* строка не поместилась в буфер */
+      off = start;
+      if (paged && emitted > 0) next = i;
+      else trunc = true;
+      break;
+    }
+    if (paged && emitted > 0 && r > ONEWIRE_PAGE_BYTES) { /* бюджет страницы */
+      off = start;
+      next = i;
+      break;
+    }
+    off = r;
+    emitted++;
+  }
+
+  /* Старый формат: при отсутствии OneWire-пинов отдавалась строка-заглушка. */
+  if (!paged && total == 0) {
+    off += snprintf(buf + off, (size_t)(size - off),
+                    "{\"id\":0,\"pin\":\"N/A\",\"typsensr\":0,\"numsens\":0,"
+                    "\"info\":\"No OneWire pins found\",\"onoff\":0}");
+  }
+
+  off += snprintf(buf + off, (size_t)(size - off), "],\"next\":%ld%s}", next,
+                  trunc ? ",\"warning\":\"Data truncated due to buffer size limitation\""
+                        : "");
+  return off;
+}
+
+void gen_onewire_json(char *buffer, int buffer_size) {
+  ow_build_page(buffer, buffer_size, onewire_cfg_ver(), 0, 0, false);
+}
+
+/* /api/onewire/get?from=<id пина>&limit=<строк>
+ * ver считает net.c (onewire_cfg_ver) и использует для ETag/304. */
+void handle_onewire_get(struct mg_connection *c, struct mg_http_message *hm,
+                        uint32_t ver) {
+  char q[16];
+  long from = 0, limit = 0;
+  bool paged = false;
+  if (mg_http_get_var(&hm->query, "from", q, sizeof(q)) > 0)
+    from = mg_json_get_long(mg_str(q), "$", 0);
+  if (mg_http_get_var(&hm->query, "limit", q, sizeof(q)) > 0) {
+    limit = mg_json_get_long(mg_str(q), "$", 0);
+    paged = true;
+  }
+  if (from < 0) from = 0;
+  if (limit < 0) limit = 0;
+  if (limit > ONEWIRE_GET_MAX_LIMIT) limit = ONEWIRE_GET_MAX_LIMIT;
+
+  int len = ow_build_page(g_body, G_BODY_SIZE, ver, from, limit, paged);
+  mg_printf(c,
+            "HTTP/1.1 200 OK\r\n%sETag: \"%lu\"\r\nConnection: keep-alive\r\n"
+            "Content-Length: %d\r\n\r\n",
+            s_json_header, (unsigned long)ver, len);
+  mg_send(c, g_body, (size_t)len);
   c->is_resp = 0;
 }
 
@@ -4430,6 +4896,13 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
   }
   long onoff_val = mg_json_get_long(body, "$.onoff", 0);
   long numdev_val = mg_json_get_long(body, "$.numdevices", 0);
+  /* Количество датчиков ограничено размером массивов: DS18B20 до
+   * MAX_DS18B20_PER_PIN, DHT22 один на пин. Иначе циклы по numsens выходят
+   * за пределы sensors[]. */
+  if (numdev_val < 0) numdev_val = 0;
+  if (sensrtpe == 1 && numdev_val > MAX_DS18B20_PER_PIN)
+    numdev_val = MAX_DS18B20_PER_PIN;
+  if (sensrtpe == 2 && numdev_val > 1) numdev_val = 1;
 
   if (sensrtpe == 1) { // DS18B20
     int free_slot = -1;
@@ -4601,7 +5074,7 @@ bool parse_sensor_json(const char *json_string) {
     int sensor_index = -1;
 
     for (int i = 0; i < MAX_DS18B20_P; i++) {
-      for (int j = 0; j < ds18b20[i].numsens; j++) {
+for (int j = 0; j < ds18b20[i].numsens && j < MAX_DS18B20_PER_PIN; j++) {
         char sensor_addr_str[17] = {0};
         for (int k = 0; k < 8; k++) {
           sprintf(sensor_addr_str + (k * 2), "%02X",
@@ -4670,7 +5143,12 @@ void handle_onewire_set(struct mg_connection *c, struct mg_http_message *hm) {
   const char *extra_headers =
       "Connection: close\r\nContent-Type: application/json\r\n";
   if (hm->body.len > 0) {
-    parse_onewire_json(hm->body.buf, &PinsConf[NUMPIN]);
+    if (!parse_onewire_json(hm->body.buf, &PinsConf[NUMPIN])) {
+      /* Раньше отказ разбора скрывался за ответом 200 со status:true. */
+      mg_http_reply(c, 400, extra_headers,
+                    "{\"status\":false,\"message\":\"OneWire settings rejected\"}");
+      return;
+    }
     char response[256];
     snprintf(
         response, sizeof(response),
@@ -4696,7 +5174,11 @@ void handle_sensor_set(struct mg_connection *c, struct mg_http_message *hm) {
                                      "$.actlow", "$.actuphum", "$.actlowhum"};
     const int act_limits[] = {30, 30, 30, 30, 30, 30};
     if (reply_if_str_too_long(c, tbody, act_paths, act_limits, 6)) return;
-    parse_sensor_json(hm->body.buf);
+    if (!parse_sensor_json(hm->body.buf)) {
+      mg_http_reply(c, 400, extra_headers,
+                    "{\"status\":false,\"message\":\"Sensor settings rejected\"}");
+      return;
+    }
     char response[256];
     snprintf(
         response, sizeof(response),
@@ -4874,63 +5356,28 @@ void handle_security_get(struct mg_connection *c) {
 }
 
 void parse_sim800l_json(const char *buffer) {
-  const char *p = buffer;
-  char value[32];
-  int i = 0;
+  struct mg_str body = mg_str_n(buffer, strlen(buffer));
 
-  // Ищем "tel"
-  if ((p = strstr(buffer, "\"tel\":"))) {
-    p += 6; // пропускаем "tel":"
-    while (*p == ' ' || *p == '"')
-      p++; // пропускаем пробелы и кавычку
-    i = 0;
-    while (*p != '"' && *p != ',' && *p != '}' && i < sizeof(value) - 1) {
-      value[i++] = *p++;
-    }
-    value[i] = '\0';
-    //        printf("Debug: Extracted tel value: '%s'\n", value);
-    strncpy(SetSettings.tel, value, sizeof(SetSettings.tel) - 1);
+  /* tel и info разбираем штатным JSON-парсером: прежний поиск по strstr
+   * обрывал значение на первой запятой или кавычке ("Дом, гараж" -> "Дом"). */
+  char *tel = json_get_str_allow_empty(body, "$.tel");
+  if (tel) {
+    strncpy(SetSettings.tel, tel, sizeof(SetSettings.tel) - 1);
     SetSettings.tel[sizeof(SetSettings.tel) - 1] = '\0';
+    mg_free(tel);
   }
 
-  // Ищем "info"
-  p = buffer;
-  if ((p = strstr(buffer, "\"info\":"))) {
-    p += 7; // пропускаем "info":"
-    while (*p == ' ' || *p == '"')
-      p++; // пропускаем пробелы и кавычку
-    i = 0;
-    while (*p != '"' && *p != ',' && *p != '}' && i < sizeof(value) - 1) {
-      value[i++] = *p++;
-    }
-    value[i] = '\0';
-    //        printf("Debug: Extracted info value: '%s'\n", value);
-    strncpy(PinsConf[1].info, value, sizeof(PinsConf[1].info) - 1);
+  char *info = json_get_str_allow_empty(body, "$.info");
+  if (info) {
+    strncpy(PinsConf[1].info, info, sizeof(PinsConf[1].info) - 1);
     PinsConf[1].info[sizeof(PinsConf[1].info) - 1] = '\0';
+    mg_free(info);
   }
 
-  // Ищем "onoff"
-  p = buffer;
-  if ((p = strstr(buffer, "\"onoff\":"))) {
-    p += 8; // пропускаем "onoff":
-    while (*p == ' ')
-      p++; // пропускаем пробелы
-    if (*p == '0') {
-      PinsConf[1].onoff = 0;
-    } else if (*p == '1') {
-      PinsConf[1].onoff = 1;
-    }
-    printf("Debug: Extracted onoff value: %d\n", PinsConf[1].onoff);
+  long onoff = mg_json_get_long(body, "$.onoff", -1);
+  if (onoff == 0 || onoff == 1) {
+    PinsConf[1].onoff = (uint8_t)onoff;
   }
-  uint8_t usbnum = 1; // Сохраянем в "pins.ini"
-  xQueueSend(usbQueueHandle, &usbnum, 0);
-  usbnum = 2; // Сохраянем в "setings.ini"
-  xQueueSend(usbQueueHandle, &usbnum, 0);
-
-  //    printf("\nFinal values:\n");
-  //    printf("SetSettings.tel = '%s'\n", SetSettings.tel);
-  //    printf("PinsConf[1].info = '%s'\n", PinsConf[1].info);
-  //    printf("PinsConf[1].onoff = %d\n", PinsConf[1].onoff);
 }
 
 // === ZIGBEE PLAN B ===
@@ -5991,9 +6438,13 @@ void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm
         first = 0;
 
         if (o->source == OBS_SOURCE_TRIGGER) {
+            /* payload приходит из MQTT как есть: экранируем, иначе кавычка в нём ломает JSON
+               (32 байта * 6 + 1 = 193 байта) */
+            char esc_payload[200];
+            json_escape_str(esc_payload, o->payload, sizeof(esc_payload));
             off += snprintf(body + off, DTCM_BUF_ZBEE_BODY - off,
                              "{\"source\":\"trigger\",\"payload\":\"%s\",\"last_seen_tick\":%lu}",
-                             o->payload, (unsigned long)o->last_seen_tick);
+                             esc_payload, (unsigned long)o->last_seen_tick);
         } else {
             const char *cl_name = "Unknown";
             switch (o->cluster) {
@@ -6132,9 +6583,10 @@ static const char *learn_old_label(uint16_t ep) {
 }
 
 void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *hm) {
-    char *raw_body = (char *)dtcm_zbee_raw;
-    snprintf(raw_body, DTCM_BUF_ZBEE_RAW, "%.*s", (int)hm->body.len, hm->body.buf);
-    struct mg_str json = mg_str(raw_body);
+    /* Тело разбирается прямо из буфера приёма. Копия в dtcm_zbee_raw (2048 байт) обрезала
+       тело длиннее 2047 байт: 16 наблюдений с именами и ролями дают около 3 КБ, и роли
+       последних строк молча терялись. Лимит тела (8192) проверяет net.c. */
+    struct mg_str json = hm->body;
 
     if (s_zbee_learn.ieee[0] == '\0') {
         mg_http_reply(c, 400, "Content-Type: application/json\r\n",
@@ -8942,6 +9394,7 @@ static int remote_onoff_cron(int id, uint8_t onoff, char *label,
   taskENTER_CRITICAL();
   dbCrontxt[id].onoff = onoff;
   taskEXIT_CRITICAL();
+  mark_slice_dirty(&g_ver_timers);
   remote_onoff_save(3); /* cron.ini */
   if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
   snprintf(label, label_sz, "Cron%d=%s", id, onoff ? "ON" : "OFF");
@@ -10455,14 +10908,18 @@ void handle_pid_get(struct mg_connection *c) {
   mg_send(c, "]}", 2);
 }
 
+#define PID_POST_HDR "Connection: close\r\n" \
+                     "Content-Type: application/json\r\n" \
+                     "Cache-Control: no-cache\r\n"
+
 /* ──── handle_pid_set: HTTP POST /api/pid/set ──── */
 void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm) {
   if (hm->body.len == 0) {
-    mg_http_reply(c, 400, s_json_header, "{\"error\":\"empty body\"}");
+    mg_http_reply(c, 400, PID_POST_HDR, "{\"error\":\"empty body\"}");
     return;
   }
   if (hm->body.len >= G_BODY_SIZE) {
-    mg_http_reply(c, 413, s_json_header, "{\"error\":\"payload too large\"}");
+    mg_http_reply(c, 413, PID_POST_HDR, "{\"error\":\"payload too large\"}");
     return;
   }
 
@@ -10473,7 +10930,7 @@ void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm) {
 
   /* Некорректное условие — 400, слот PID не изменён */
   if (g_cond_error) {
-    mg_http_reply(c, 400, s_json_header, "{\"status\":false,\"message\":\"%s\"}",
+    mg_http_reply(c, 400, PID_POST_HDR, "{\"status\":false,\"message\":\"%s\"}",
                   g_cond_error_msg);
     return;
   }
@@ -10487,7 +10944,7 @@ void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm) {
     xQueueSend(usbQueueHandle, &num, 0);
   }
 
-  mg_http_reply(c, 200, s_json_header, "{\"status\":\"ok\"}");
+  mg_http_reply(c, 200, PID_POST_HDR, "{\"status\":\"ok\"}");
   /* НЕТ pvPortMalloc / vPortFree */
 }
 
@@ -10496,7 +10953,7 @@ void handle_pidline_set(struct mg_connection *c, struct mg_http_message *hm) {
   /* Копируем тело в стековый буфер для NUL-терминации перед cJSON_Parse */
   char buf[512];
   if (hm->body.len >= sizeof(buf)) {
-    mg_http_reply(c, 413, "Content-Type: application/json\r\n",
+    mg_http_reply(c, 413, PID_POST_HDR,
                   "{\"error\":\"payload too large\"}");
     return;
   }
@@ -10504,13 +10961,13 @@ void handle_pidline_set(struct mg_connection *c, struct mg_http_message *hm) {
   buf[hm->body.len] = '\0';
 
   parse_pidline_json(buf, &SetSettings);
+  mark_slice_dirty(&g_ver_pid);
 
   /* Сохранение настроек */
   uint8_t num = 2;
   xQueueSend(usbQueueHandle, &num, 0);
 
-  mg_http_reply(c, 200, "Content-Type: application/json\r\n",
-                "{\"status\":\"ok\"}");
+  mg_http_reply(c, 200, PID_POST_HDR, "{\"status\":\"ok\"}");
 }
 
 /* ──── pid_read_temperature: читает T из ds18b20[]/dht22[] ──── */
@@ -11155,7 +11612,7 @@ void pid_compute_imc(int slot) {
 void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
   char buf[256];
   if (hm->body.len >= sizeof(buf)) {
-    mg_http_reply(c, 413, "Content-Type: application/json\r\n",
+    mg_http_reply(c, 413, PID_POST_HDR,
                   "{\"error\":\"payload too large\"}");
     return;
   }
@@ -11166,14 +11623,14 @@ void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
 
   long id_val = mg_json_get_long(body, "$.id", -1);
   if (id_val < 0) {
-    mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+    mg_http_reply(c, 400, PID_POST_HDR,
                   "{\"error\":\"missing id\"}");
     return;
   }
 
   int id = (int)id_val - 1;
   if (id < 0 || id >= PID_MAX_SLOTS) {
-    mg_http_reply(c, 400, "Content-Type: application/json\r\n",
+    mg_http_reply(c, 400, PID_POST_HDR,
                   "{\"error\":\"invalid id\"}");
     return;
   }
@@ -11194,7 +11651,7 @@ void handle_pid_tune_set(struct mg_connection *c, struct mg_http_message *hm) {
 
   if (my_DgnTaskHandle)
     xTaskNotifyGive(my_DgnTaskHandle);
-  mg_http_reply(c, 200, "Content-Type: application/json\r\n",
+  mg_http_reply(c, 200, PID_POST_HDR,
                 "{\"status\":\"ok\"}");
 }
 /****************** End Zerg section **************************/
@@ -11280,15 +11737,78 @@ void calc_zigbee_display_id(int index, char *out, size_t out_size) {
     }
 }
 
-void handle_zigbee_get(struct mg_connection *c, long offset_req, long limit_req) {
+/* Тип слота для /api/zigbee/get. Логика определения типа не менялась: вынесена из
+   handle_zigbee_get, чтобы одна и та же функция работала и для фильтра ?type=,
+   и для записи в ответе. icon_out может быть NULL. */
+static const char *zbee_slot_type(int i, const char **icon_out) {
+  const char *type = "unknown";
+  const char *icon = "?";
+  if (ZigbeeConf[i].zbee_ieee[0] != '\0') {
+    if (zbee_probe_active_for(ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint)) {
+      type = "detecting"; icon = "*";
+    } else if (zbee_is_pir(&ZigbeeConf[i])) {
+      type = "pir"; icon = "P";
+    } else if (ZigbeeConf[i].device_type_override == 1) {
+      type = "socket"; icon = "!";
+    } else if (ZigbeeConf[i].device_type_override == 2) {
+      type = "dimmer"; icon = "%";
+    } else if (ZigbeeConf[i].device_type_override == 3) {
+      type = "dimmer"; icon = "%";
+    } else if (ZigbeeConf[i].device_type_override == 4) {
+      type = "color_lamp"; icon = "#";
+    } else if (ZigbeeConf[i].cluster_flags & ZBEE_CL_COLOR) {
+      type = "color_lamp"; icon = "#";
+    } else if (ZigbeeConf[i].cluster_flags & ZBEE_CL_DIMMER) {
+      type = "dimmer"; icon = "%";
+    } else if (ZigbeeConf[i].cluster_flags & ZBEE_CL_ONOFF) {
+      type = "socket"; icon = "!";
+    } else if (ZigbeeConf[i].zbee_role == ZBEE_ROLE_SENSOR) {
+      /* Сенсор без override: температура/влажность и т.п. */
+      type = "sensor"; icon = "S";
+    }
+  }
+  if (icon_out) *icon_out = icon;
+  return type;
+}
+
+/* true, если type входит в список filter через запятую ("dimmer,color_lamp") */
+static bool zbee_type_match(const char *filter, const char *type) {
+  size_t tl = strlen(type);
+  const char *p = filter;
+  while (*p) {
+    const char *e = strchr(p, ',');
+    size_t n = e ? (size_t)(e - p) : strlen(p);
+    if (n == tl && strncmp(p, type, tl) == 0) return true;
+    if (!e) break;
+    p = e + 1;
+  }
+  return false;
+}
+
+/* /api/zigbee/get?offset=0&limit=12&type=dimmer,color_lamp
+   offset - порядковый номер среди подходящих записей (пустые слоты и записи, не прошедшие
+            фильтр type, не считаются);
+   limit  - максимум записей в одном ответе;
+   type   - необязательный список типов через запятую (NULL или пустая строка - все).
+   Размер одного ответа дополнительно ограничен по байтам (ZBEE_GET_BUDGET): ответ целиком
+   укладывается в два блока MG_IO_SIZE (4096 байт), пик кучи при сборке около 6 КБ.
+   В конце ответа поле "next": offset для продолжения или -1, если всё отдано. Клиент
+   обязан идти по "next", иначе записи за границей страницы потеряются. */
+#define ZBEE_GET_BUDGET  3400
+
+void handle_zigbee_get(struct mg_connection *c, long offset_req, long limit_req,
+                       const char *type_filter) {
   if (offset_req < 0) offset_req = 0;
   if (limit_req <= 0) limit_req = 30;
 
-  /* Считаем total (только записи с реальным IEEE-адресом) */
+  const bool filtered = (type_filter != NULL && type_filter[0] != '\0');
+
+  /* Считаем total (только записи с реальным IEEE-адресом и подходящие под фильтр) */
   long total = 0;
   for (int i = 0; i < NUMZBEE; i++) {
-    if (ZigbeeConf[i].zbee_ieee[0] != '\0')
-      total++;
+    if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
+    if (filtered && !zbee_type_match(type_filter, zbee_slot_type(i, NULL))) continue;
+    total++;
   }
 
   mg_printf(c,
@@ -11312,52 +11832,38 @@ void handle_zigbee_get(struct mg_connection *c, long offset_req, long limit_req)
     SetSettings.lang, (unsigned long)g_ver_zigbee,
     total, offset_req, limit_req, probe_count);
 
-  if (offset_req >= total) {
-    mg_http_printf_chunk(c, "]}");
-    mg_http_write_chunk(c, "", 0);
-    return;
-  }
-
-  long emitted = 0;
+  long seen = 0;      /* подходящих записей пройдено (пропущено + выдано) */
+  long emitted = 0;   /* выдано в этом ответе */
+  long next = -1;
   int first = 1;
   static char clbuf[32];
+  const size_t body_start = c->send.len;  /* бюджет считается от начала записей */
 
-  for (int i = 0; i < NUMZBEE && emitted < offset_req + limit_req; i++) {
+  for (int i = 0; i < NUMZBEE; i++) {
     if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
-    if (emitted < offset_req) { emitted++; continue; }
+
+    const char *icon = "?";
+    const char *type = zbee_slot_type(i, &icon);
+    if (filtered && !zbee_type_match(type_filter, type)) continue;
+    if (seen < offset_req) { seen++; continue; }
+
+/* Остановка по числу записей или по размеру ответа. Хотя бы одна запись
+   выдаётся всегда, иначе клиент не продвинулся бы по "next". */
+    if (emitted >= limit_req ||
+        (emitted > 0 && (c->send.len - body_start) >= ZBEE_GET_BUDGET)) {
+      next = seen;
+      break;
+    }
 
     clusters_flags_to_json(ZigbeeConf[i].cluster_flags, clbuf, sizeof(clbuf));
 
     char display_id[24];
     calc_zigbee_display_id(i, display_id, sizeof(display_id));
 
-    /* Определяем тип устройства */
-    const char *type = "unknown";
-    const char *icon = "?";
-    if (ZigbeeConf[i].zbee_ieee[0] != '\0') {
-      if (zbee_probe_active_for(ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint)) {
-        type = "detecting"; icon = "*";
-      } else if (zbee_is_pir(&ZigbeeConf[i])) {
-        type = "pir"; icon = "P";
-      } else if (ZigbeeConf[i].device_type_override == 1) {
-        type = "socket"; icon = "!";
-      } else if (ZigbeeConf[i].device_type_override == 2) {
-        type = "dimmer"; icon = "%";
-      } else if (ZigbeeConf[i].device_type_override == 3) {
-        type = "dimmer"; icon = "%";
-      } else if (ZigbeeConf[i].device_type_override == 4) {
-        type = "color_lamp"; icon = "#";
-      } else if (ZigbeeConf[i].cluster_flags & ZBEE_CL_COLOR) {
-        type = "color_lamp"; icon = "#";
-      } else if (ZigbeeConf[i].cluster_flags & ZBEE_CL_DIMMER) {
-        type = "dimmer"; icon = "%";
-      } else if (ZigbeeConf[i].cluster_flags & ZBEE_CL_ONOFF) {
-        type = "socket"; icon = "!";
-      } else if (ZigbeeConf[i].zbee_role == ZBEE_ROLE_SENSOR) {
-        /* Сенсор без override: температура/влажность и т.п. */
-        type = "sensor"; icon = "S";
-      }
-    }
+    /* Имя задаёт пользователь: кавычка или обратный слэш в нём ломали бы весь JSON.
+       29 символов * 6 байт (\u00XX) + 1 = 175 байт, буфер с запасом. */
+    char esc_label[184];
+    json_escape_str(esc_label, ZigbeeConf[i].zbee_label, sizeof(esc_label));
 
     mg_http_printf_chunk(c,
       "%s{\"id\":%d,\"display_id\":\"%s\",\"ieee\":\"%s\",\"ep\":%d,\"clusters\":%s,"
@@ -11369,17 +11875,18 @@ void handle_zigbee_get(struct mg_connection *c, long offset_req, long limit_req)
       clbuf, type, icon,
       ZigbeeConf[i].onoff, ZigbeeConf[i].dvalue,
       ZigbeeConf[i].color_hex & 0xFFFFFF,
-      ZigbeeConf[i].zbee_label,
+      esc_label,
       ZigbeeConf[i].zbee_role,
       ZigbeeConf[i].ep_onoff,
       ZigbeeConf[i].ep_brightness,
       ZigbeeConf[i].ep_color,
       ZigbeeConf[i].device_type_override);
     first = 0;
+    seen++;
     emitted++;
   }
 
-  mg_http_printf_chunk(c, "]}");
+  mg_http_printf_chunk(c, "],\"next\":%ld}", next);
   mg_http_write_chunk(c, "", 0);
 }
 

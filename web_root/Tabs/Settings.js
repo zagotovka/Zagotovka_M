@@ -1,8 +1,9 @@
 
+
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
-import { registerPoll, unregisterPoll } from '../pollQueue.js';
+import { registerPoll, unregisterPoll, pauseAll, resumeAll } from '../pollQueue.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote, pageSetting, Toast } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, rulangsettings } from '../rulang.js';
@@ -947,6 +948,17 @@ function Settings({ }) {
   const [isTelegramTokenHidden, setIsTelegramTokenHidden] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const lastInputTime = useRef(0);
+  const alive = useRef(true);              // компонент смонтирован
+  const loadedRef = useRef(false);         // первая загрузка завершена
+  const lastSig = useRef(null);            // "ver" (или подпись JSON) последних применённых данных
+  const dirtyRef = useRef(false);          // в форме есть несохранённые правки
+  const submittingRef = useRef(false);     // идёт отправка формы
+  const needRestart = useRef(false);       // ответ опроса отброшен: ETag в pollQueue надо сбросить
+  const flushTimer = useRef(null);
+  const serverSnap = useRef(null);         // последние данные с сервера (сравнение conds при Save)
+  const logInflight = useRef(false);       // идёт POST /api/logfilter
+  const logPending = useRef(null);         // последняя маска, ещё не отправленная
+  const [loadFailed, setLoadFailed] = useState(false);
   const [logFilterOpen, setLogFilterOpen] = useState(false);
   const [mqttSectionOpen, setMqttSectionOpen] = useState(false);
   const mqttSectionInit = useRef(false);
@@ -1136,7 +1148,7 @@ function Settings({ }) {
       case 'ip_addr':
       case 'gateway':
       case 'mqtt_hst':
-        if (value.length > 50) error = 'Слишком длинное имя хоста';
+        if (value.length > 49) error = 'Слишком длинное имя хоста (не более 49 символов)';
         break;
       case 'slzb_host':
         // Опциональное поле: пусто = SLZB watchdog выключен (валидной считается и пустота).
@@ -1153,6 +1165,12 @@ function Settings({ }) {
       case 'offtime':
         if (!validateTimeFormat(value)) error = 'Неверный формат времени (чч:мм:сс)';
         break;
+      case 'adm_name':
+        if (value && value.length > 9) error = 'Логин не длиннее 9 символов';
+        break;
+      case 'adm_pswd':
+        if (value && value.length > 14) error = 'Пароль не длиннее 14 символов';
+        break;
       case 'sunrise_pins':
         error = validateSunActions(value, false, (settings.lang || 'ru') === 'ru');
         break;
@@ -1160,27 +1178,27 @@ function Settings({ }) {
         error = validateSunActions(value, false, (settings.lang || 'ru') === 'ru');
         break;
       case 'domain':
-        if (value.length > 50) {
-          error = 'Домен не должен превышать 50 символов';
+        if (value.length > 49) {
+          error = 'Домен не должен превышать 49 символов';
         } else if (!value.match(/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/)) {
           error = 'Неверный формат домена';
         }
         break;
       case 'tls_key':
         if (value && value.trim() !== '') {
-          if (value.length > 512) error = 'Private Key не должен превышать 512 символов';
+          if (value.length > 511) error = 'Private Key не должен превышать 511 символов';
           else if (!value.includes('BEGIN EC PRIVATE KEY') || !value.includes('END EC PRIVATE KEY')) error = 'Неверный формат Private Key';
         }
         break;
       case 'tls_cert':
         if (value && value.trim() !== '') {
-          if (value.length > 1024) error = 'Public Key не должен превышать 1024 символов';
+          if (value.length > 1023) error = 'Public Key не должен превышать 1023 символов';
           else if (!value.includes('BEGIN CERTIFICATE') || !value.includes('END CERTIFICATE')) error = 'Неверный формат Public Key';
         }
         break;
       case 'tls_ca':
         if (value && value.trim() !== '') {
-          if (value.length > 1024) error = 'Secret Key не должен превышать 1024 символов';
+          if (value.length > 1023) error = 'Secret Key не должен превышать 1023 символов';
           else if (!value.includes('BEGIN CERTIFICATE') || !value.includes('END CERTIFICATE')) error = 'Неверный формат Secret Key';
         }
         break;
@@ -1188,13 +1206,18 @@ function Settings({ }) {
     return error;
   };
 
-  const handleLogMaskChange = (newMask) => {
+  // Маска логов: один POST за раз. Быстрые клики по чекбоксам не открывают по новому
+  // соединению на каждый клик (MAX_CONNS ограничен): отправляется только последняя маска.
+  const sendLogMask = () => {
+    if (logInflight.current || logPending.current === null) return;
+    const mask = logPending.current;
+    logPending.current = null;
+    logInflight.current = true;
     const isRu = (settings.lang || 'ru') === 'ru';
-    setSettings(prev => ({ ...prev, log_filter_mask: newMask }));
     fetch('/api/logfilter', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mask: newMask })
+      body: JSON.stringify({ mask })
     })
       .then(r => {
         if (!r.ok) throw new Error('Network error');
@@ -1208,7 +1231,17 @@ function Settings({ }) {
       .catch(err => {
         console.error('Error applying log filter in RAM:', err);
         showToast(isRu ? 'Ошибка обновления RAM фильтра' : 'Error updating RAM log filter', 'error');
+      })
+      .finally(() => {
+        logInflight.current = false;
+        sendLogMask();
       });
+  };
+
+  const handleLogMaskChange = (newMask) => {
+    setSettings(prev => ({ ...prev, log_filter_mask: newMask }));
+    logPending.current = newMask;
+    sendLogMask();
   };
 
   const handleSubmit = (e) => {
@@ -1223,6 +1256,7 @@ function Settings({ }) {
         return;
       }
     }
+    if (submittingRef.current) return;   // повторное нажатие во время отправки
     const formData = new FormData(formRef.current);
     let jsonData = { ...settings };
     for (const [key, value] of formData.entries()) {
@@ -1250,6 +1284,18 @@ function Settings({ }) {
     jsonData.check_mqtt_srv = jsonData.check_mqtt_srv ? 1 : 0;
     jsonData.usehttps   = jsonData.usehttps   ? 1 : 0;
 
+    // Служебные поля ответа прошивке не нужны. Библиотека условий общая с другими
+    // страницами: отправляем её только если её правили именно здесь, иначе устаревшая
+    // копия в форме затёрла бы ячейки, изменённые на другой странице.
+    ['ver', 'conds_used', 'cond_pool', 'macaddr'].forEach((k) => { delete jsonData[k]; });
+    const snap = serverSnap.current;
+    if (snap && JSON.stringify(jsonData.conds || []) === JSON.stringify(snap.conds || [])) {
+      delete jsonData.conds;
+    }
+
+    let saved = false;
+    submittingRef.current = true;
+    pauseAll();   // на время отправки опрос стоит
     fetch('/api/mysett/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1257,6 +1303,8 @@ function Settings({ }) {
     })
       .then((r) => { if (!r.ok) throw new Error('Ошибка сети'); return r.json(); })
       .then((data) => {
+        saved = true;
+        dirtyRef.current = false;
         setSubmissionStatus('success');
         setSaveResult(data);
         showToast('Данные успешно сохранены', 'success');
@@ -1268,6 +1316,12 @@ function Settings({ }) {
         setSaveResult(error);
         showToast('Ошибка при сохранении данных', 'error');
         showTopNotification('Ошибка при сохранении данных');
+      })
+      .finally(() => {
+        submittingRef.current = false;
+        resumeAll();
+        // Перезагрузка только после успешного сохранения: сброс ETag даёт свежие данные
+        if (saved) { needRestart.current = false; startPoll(); }
       });
   };
 
@@ -1306,6 +1360,7 @@ function Settings({ }) {
     }
     setSettings(prev => ({ ...prev, [key]: processedValue }));
     lastInputTime.current = Date.now();
+    dirtyRef.current = true;
     if (key === 'usehttps') {
       setErrors({});
       setSubmitButtonDisabled(false);
@@ -1314,52 +1369,77 @@ function Settings({ }) {
 
   // FIX: handleDelete удалён — нигде не вызывается, вместо него везде используется handleChange(key, '')
 
-  const refresh = () =>
-    fetch('/api/mysett/get', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((r) => {
-        if (r !== null && r !== undefined) {
-          if (r.offldt) {
-            const { date, time } = parseOfflineDateTime(r.offldt);
-            r.offdate = date;
-            r.offtime = time;
-          }
-          setSettings(r);
-        }
-        return r;
-      })
-      .catch(error => {
-        console.error('Error fetching settings:', error);
-        showToast('Ошибка при загрузке настроек', 'error');
-      });
+  // Держим ответ опроса, пока в форме есть правки: иначе polling затёр бы несохранённые поля.
+  const isHeld = () => {
+    if (!loadedRef.current) return false;   // первую загрузку не задерживаем никогда
+    if (dirtyRef.current || submittingRef.current) return true;
+    if (Date.now() - lastInputTime.current < 8000) return true;
+    const el = document.activeElement;
+    return !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT'));
+  };
+
+  const applyServer = (r, sig) => {
+    if (r.offldt) {
+      const dt = parseOfflineDateTime(r.offldt);
+      r.offdate = dt.date;
+      r.offtime = dt.time;
+    }
+    lastSig.current = sig;
+    serverSnap.current = r;
+    dirtyRef.current = false;
+    loadedRef.current = true;
+    setSettings(r);
+    setIsLoading(false);
+    setLoadFailed(false);
+    if (r.tls_key)        setIsPrivateKeyHidden(true);
+    if (r.tls_cert)       setIsPublicKeyHidden(true);
+    if (r.tls_ca)         setIsSecretKeyHidden(true);
+    if (r.telegram_token) setIsTelegramTokenHidden(true);
+  };
+
+  // Сброс ETag опроса: повторная регистрация даёт полный ответ первым же запросом.
+  const startPoll = () => {
+    unregisterPoll('settings');
+    registerPoll('settings', '/api/mysett/get', onPoll, { immediate: true });
+  };
+
+  // Отброшенный ответ нельзя просто забыть: pollQueue уже запомнил его ETag и дальше
+  // получит 304. Когда форма освободится, опрос перезапускается.
+  const scheduleFlush = () => {
+    if (flushTimer.current) return;
+    flushTimer.current = setTimeout(() => {
+      flushTimer.current = null;
+      if (!alive.current || !needRestart.current) return;
+      if (dirtyRef.current || submittingRef.current) return;   // после Save перезапуск явный
+      if (isHeld()) { scheduleFlush(); return; }
+      needRestart.current = false;
+      startPoll();
+    }, 2000);
+  };
+
+  const onPoll = (r) => {
+    if (!alive.current) return;
+    // Пустой ответ, ответ об истёкшей сессии и объект ошибки не становятся настройками
+    if (!r || typeof r !== 'object' || r.__session_expired || r.error) return;
+    if (isHeld()) { needRestart.current = true; scheduleFlush(); return; }
+    // Версия "ver" из прошивки; для старой прошивки без неё - подпись всего JSON
+    const sig = (r.ver !== undefined) ? ('v' + r.ver) : JSON.stringify(r);
+    if (loadedRef.current && sig === lastSig.current) return;
+    applyServer(r, sig);
+  };
 
   useEffect(() => {
-    let active = true;
-
-    registerPoll('settings', '/api/mysett/get', function(r) {
-      if (!active) return;
-      if (Date.now() - lastInputTime.current < 8000) return;
-      var activeEl = document.activeElement;
-      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
-        return;
-      }
-      if (r !== null && r !== undefined) {
-        if (r.offldt) {
-          var dt = parseOfflineDateTime(r.offldt);
-          r.offdate = dt.date;
-          r.offtime = dt.time;
-        }
-        setSettings(r);
-        setIsLoading(false);
-        if (r.tls_key)        setIsPrivateKeyHidden(true);
-        if (r.tls_cert)       setIsPublicKeyHidden(true);
-        if (r.tls_ca)         setIsSecretKeyHidden(true);
-        if (r.telegram_token) setIsTelegramTokenHidden(true);
-      }
-    }, {immediate: true});
+    alive.current = true;
+    registerPoll('settings', '/api/mysett/get', onPoll, { immediate: true });
+    // Если за 12 секунд данных нет, показываем сообщение и кнопку повтора
+    const failTimer = setTimeout(() => {
+      if (alive.current && !loadedRef.current) setLoadFailed(true);
+    }, 12000);
 
     return function() {
-      active = false;
+      alive.current = false;
+      clearTimeout(failTimer);
+      if (flushTimer.current) { clearTimeout(flushTimer.current); flushTimer.current = null; }
       unregisterPoll('settings');
     };
   }, []);
@@ -1376,7 +1456,19 @@ function Settings({ }) {
     }
   }, [isLoading]);
 
-  if (isLoading) return html`<div>Loading...</div>`;
+  if (isLoading) {
+    if (!loadFailed) return html`<div>Loading...</div>`;
+    return html`
+      <div class="p-6 text-slate-700">
+        <div class="mb-3">${(settings.lang || 'ru') === 'ru' ? 'Не удалось загрузить настройки' : 'Failed to load settings'}</div>
+        <button type="button" class="px-4 py-2 rounded-lg bg-teal-600 text-white"
+          onClick=${() => {
+            setLoadFailed(false);
+            startPoll();
+            setTimeout(() => { if (alive.current && !loadedRef.current) setLoadFailed(true); }, 12000);
+          }}>Retry</button>
+      </div>`;
+  }
   if (!settings) return '';
 
   // Проверка полей Sunrise/Sunset на каждом рендере: ошибка видна и для значения,
@@ -1399,6 +1491,7 @@ function Settings({ }) {
       return { ...prev, conds: arr };
     });
     lastInputTime.current = Date.now();
+    dirtyRef.current = true;
   };
   const condsArr = Array.isArray(settings.conds) ? settings.conds : [];
 
@@ -1590,9 +1683,9 @@ function Settings({ }) {
                 ${mqttSectionOpen ? html`
                   <tbody>
                 ${[
-                  { label: 'TX topic',  key: 'txmqttop', type: 'text', maxlength: 32 },
-                  { label: 'RX topic',  key: 'rxmqttop', type: 'text', maxlength: 32 },
-                  { label: 'Z2M topic', key: 'rxzbtop',  type: 'text', maxlength: 32, tipLabel: 'RX Z2M topic', placeholder: 'zigbee2mqtt' }
+                  { label: 'TX topic',  key: 'txmqttop', type: 'text', maxlength: 31 },
+                  { label: 'RX topic',  key: 'rxmqttop', type: 'text', maxlength: 31 },
+                  { label: 'Z2M topic', key: 'rxzbtop',  type: 'text', maxlength: 31, tipLabel: 'RX Z2M topic', placeholder: 'zigbee2mqtt' }
                 ].map((item, index) => html`
                   <${FieldRow} label=${item.label} tip=${gt(item.tipLabel || item.label)} index=${index}>
                     <${pageSetting}
@@ -1631,11 +1724,11 @@ function Settings({ }) {
                   ${settings.check_mqtt ? html`
                     <tbody>
                   ${[
-                    { label: 'Host',     key: 'mqtt_hst',  type: 'text',     maxlength: 50 },
+                    { label: 'Host',     key: 'mqtt_hst',  type: 'text',     maxlength: 49 },
                     { label: 'Port',     key: 'mqtt_prt',  type: 'number'   },
-                    { label: 'Client',   key: 'mqtt_clt',  type: 'text',     maxlength: 32 },
-                    { label: 'User',     key: 'mqtt_usr',  type: 'text',     maxlength: 32 },
-                    { label: 'Password', key: 'mqtt_pswd', type: 'password', maxlength: 32, tipLabel: 'Password (MQTT)' }
+                    { label: 'Client',   key: 'mqtt_clt',  type: 'text',     maxlength: 31 },
+                    { label: 'User',     key: 'mqtt_usr',  type: 'text',     maxlength: 31 },
+                    { label: 'Password', key: 'mqtt_pswd', type: 'password', maxlength: 31, tipLabel: 'Password (MQTT)' }
                   ].map((item, index) => html`
                     <${FieldRow} label=${item.label} tip=${gt(item.tipLabel || item.label)} index=${index}>
                       <${pageSetting}
@@ -1672,8 +1765,8 @@ function Settings({ }) {
                   ${[
                     { label: 'Port',        key: 'mqtt_srv_prt',    type: 'number',   tipLabel: 'Port (srv)',     min: 1, max: 65535 },
                     { label: 'Max clients', key: 'mqtt_srv_maxcli', type: 'number',   tipLabel: 'Max clients',    min: 1, max: 6 },
-                    { label: 'User',        key: 'mqtt_srv_usr',    type: 'text',     maxlength: 32, tipLabel: 'User (srv)' },
-                    { label: 'Password',    key: 'mqtt_srv_pswd',   type: 'password', maxlength: 32, tipLabel: 'Password (srv)' },
+                    { label: 'User',        key: 'mqtt_srv_usr',    type: 'text',     maxlength: 31, tipLabel: 'User (srv)' },
+                    { label: 'Password',    key: 'mqtt_srv_pswd',   type: 'password', maxlength: 31, tipLabel: 'Password (srv)' },
                     { label: 'SLZB IP',     key: 'slzb_host',       type: 'text',     maxlength: 15, tipLabel: 'SLZB IP', placeholder: '192.168.1.115' }
                   ].map((item, index) => html`
                     <${FieldRow} label=${item.label} tip=${gt(item.tipLabel || item.label)} index=${index}>
@@ -1760,7 +1853,7 @@ function Settings({ }) {
                               value=${settings[item.key] || ''}
                               onInput=${(e) => handleChange(item.key, e.target.value)}
                               class=${`w-full px-3 py-2 bg-white/50 border ${errors[item.key] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
-                              maxlength="30"
+                              maxlength="49"
                               placeholder="Enter domain (e.g., zagotovka.ddns.net)"
                             />
                           `}
@@ -2101,4 +2194,6 @@ function Settings({ }) {
 }
 
 export { Settings };
+
+
 

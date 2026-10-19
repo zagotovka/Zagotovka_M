@@ -1,3 +1,4 @@
+
 // CondLibrary.js - панель "Библиотека условий (Conditions)": 12 общих ячеек C1..C12.
 //
 // Показывается на страницах Switch, Encoder и PID под таблицей и позволяет
@@ -95,14 +96,16 @@ export async function saveCondCell(index, text) {
 }
 
 // Хук: подписка на стор. Возвращает снимок состояния.
-export function useCondLibrary() {
+// autoload=false: только подписка на стор, без собственного запроса
+// (страница сама решает, когда загрузить - чтобы не было параллельных fetch).
+export function useCondLibrary(autoload = true) {
   const [, setTick] = useState(0);
   useEffect(() => {
     const fn = () => setTick((t) => t + 1);
     store.listeners.add(fn);
-    if (!store.loaded) refreshCondLibrary();
+    if (autoload && !store.loaded) refreshCondLibrary();
     return () => { store.listeners.delete(fn); };
-  }, []);
+  }, [autoload]);
   return store;
 }
 

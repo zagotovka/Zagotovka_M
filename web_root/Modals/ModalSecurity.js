@@ -1,4 +1,5 @@
 
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -13,8 +14,12 @@ const ModalSecurity = ({
   title,
   selectedSecurity,
   onSecurityChange,
+  language,
+  runSave = (fn) => fn(),
   SliderComponent = MyPolzunok
 }) => {
+  const uiLang = language || selectedSecurity?.lang || 'ru';
+  const [saving, setSaving] = useState(false);
   const [mecurityInfo, setSecurityInfo] = useState(
     selectedSecurity?.info || ''
   );
@@ -61,8 +66,9 @@ const ModalSecurity = ({
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return;
 
     if (Object.values(errors).some((error) => error !== null)) {
       setSubmitError('Please correct the errors before submitting.');
@@ -79,28 +85,31 @@ const ModalSecurity = ({
       ptype
     };
 
-    fetch('/api/security/set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedSecurity)
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        return response.json();
-      })
-      .then((data) => {
-        if (data.error) {
-          throw new Error(data.error);
-        }
-        onSecurityChange(updatedSecurity);
-        hideModal();
-      })
-      .catch((error) => {
-        console.error('Error:', error);
-        setSubmitError('Failed to save changes. Please try again.');
+    setSaving(true);
+    setSubmitError(null);
+    let ok = false;
+    try {
+      // runSave ставит опрос страницы на паузу на время запроса
+      ok = await runSave(async () => {
+        const response = await fetch('/api/security/set', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedSecurity)
+        });
+        if (!response.ok) return false;
+        const data = await response.json();
+        return !(data && (data.error || data.status === false));
       });
+    } catch (error) {
+      console.error('Error:', error);
+    }
+    setSaving(false);
+    if (ok) {
+      onSecurityChange(updatedSecurity);
+      hideModal();
+    } else {
+      setSubmitError('Failed to save changes. Please try again.');
+    }
   };
 
   const handleResetPin = () => {
@@ -155,9 +164,9 @@ const ModalSecurity = ({
       : ''}"
                   placeholder="None, 6:1, 6:1?D6"
                 />
-                <p class="text-gray-500 text-xs mt-1">${condHint((selectedSecurity?.lang || 'ru') === 'ru')}</p>
+                <p class="text-gray-500 text-xs mt-1">${condHint(uiLang === 'ru')}</p>
                 ${hasDisabledCond(action) &&
-      html`<p class="text-amber-600 text-xs mt-1 font-medium">${DISABLED_COND_WARN[(selectedSecurity?.lang || 'ru') === 'ru' ? 'ru' : 'en']}</p>`}
+      html`<p class="text-amber-600 text-xs mt-1 font-medium">${DISABLED_COND_WARN[uiLang === 'ru' ? 'ru' : 'en']}</p>`}
                 ${errors.action &&
     html`<p class="text-red-500 text-sm">${errors.action}</p>`}
               </td>
@@ -212,7 +221,8 @@ const ModalSecurity = ({
         </button>
         <button
           type="submit"
-          class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          disabled=${saving}
+          class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${saving ? 'opacity-60 cursor-not-allowed' : ''}"
         >
           Save changes
         </button>
@@ -271,3 +281,5 @@ const ModalSecurity = ({
 };
 
 export { ModalSecurity };
+
+

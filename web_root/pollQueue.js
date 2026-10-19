@@ -1,3 +1,4 @@
+
 /**
  * pollQueue — глобальный sequential poller.
  *
@@ -19,7 +20,7 @@
  *   }, []);
  */
 
-const _registered = new Map();  // key → { url, callback, etag, oneShot, failCount, backoffMs }
+const _registered = new Map();  // key → { url, callback, etag, oneShot, failCount, backoffMs, method, body }
 let _active = false;
 let _paused = false;
 let _timer = null;
@@ -41,11 +42,13 @@ const MAX_QUEUE = 8;          // максимальная глубина оче�
 
 /**
  * @param {string} key
- * @param {string} url
+ * @param {string|function} url  — строка либо функция, возвращающая строку (вызывается перед каждым запросом)
  * @param {function} callback  — вызывается с данными (или null)
  * @param {object} [opts]
  * @param {boolean} [opts.immediate] — вставить в начало очереди и выполнить немедленно
  * @param {boolean} [opts.oneShot]   — удалить после первого успешного ответа
+ * @param {string}  [opts.method]    — HTTP-метод (по умолчанию GET)
+ * @param {string|function} [opts.body] — тело запроса либо функция, возвращающая тело (только вместе с method)
  */
 export function registerPoll(key, url, callback, opts = {}) {
   // Ограничение глубины очереди: вытесняем самую старую запись, кроме 'common'
@@ -61,7 +64,7 @@ export function registerPoll(key, url, callback, opts = {}) {
     }
   }
 
-  _registered.set(key, { url, callback, etag: null, oneShot: opts.oneShot || false, failCount: 0, backoffMs: 0 });
+  _registered.set(key, { url, callback, etag: null, oneShot: opts.oneShot || false, failCount: 0, backoffMs: 0, method: opts.method || null, body: opts.body });
   _keys = Array.from(_registered.keys());
   // immediate: этот ключ будет опрошен СЛЕДУЮЩИМ тиком
   if (opts.immediate) {
@@ -75,6 +78,9 @@ export function registerPoll(key, url, callback, opts = {}) {
   }
   if (!_timer) _schedule();
 }
+
+/** true, если ключ ещё зарегистрирован (после MAX_FAILS ошибок подряд опрос снимается сам). */
+export function isPollActive(key) { return _registered.has(key); }
 
 export function unregisterPoll(key) {
   // НЕ абортим in-flight запрос — даём ему завершиться,
@@ -117,11 +123,18 @@ async function _tick() {
       const headers = {};
       if (entry.etag) headers['If-None-Match'] = entry.etag;
 
-      const r = await fetch(entry.url, {
+      const init = {
         signal: controller.signal,
         cache: 'no-store',
         headers: headers
-      });
+      };
+      if (entry.method) {
+        init.method = entry.method;
+        if (entry.body !== undefined) {
+          init.body = (typeof entry.body === 'function') ? entry.body() : entry.body;
+        }
+      }
+      const r = await fetch((typeof entry.url === 'function') ? entry.url() : entry.url, init);
       clearTimeout(timeoutId);
 
       const newEtag = r.headers.get('ETag');

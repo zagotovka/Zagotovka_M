@@ -1,11 +1,12 @@
 
+
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
 import { ModalEncoder } from '../Modals/ModalEncoder.js';
 import { condInfo, condBadgeProps, condHelpTitle } from '../condlib.js';
-import { CondLibraryPanel, useCondLibrary } from '../CondLibrary.js';
+import { CondLibraryPanel, useCondLibrary, refreshCondLibrary } from '../CondLibrary.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
-import { registerPoll, unregisterPoll } from '../pollQueue.js';
+import { registerPoll, unregisterPoll, pauseAll, resumeAll } from '../pollQueue.js';
 import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -122,53 +123,124 @@ function TabEncoder({ }) {
     const [selectedEncoder, setSelectedEncoder] = useState(null);
     const [showHelp, setShowHelp] = useState(false);
     const [language, setLanguage] = useState('ru');
-    const [pintopin, setPintopin] = useState([]);
-    const condLib = useCondLibrary();
+    // Библиотека условий (общий стор CondLibrary.js). Автозагрузка выключена:
+    // первая загрузка идёт после первого ответа опроса, чтобы не было двух запросов сразу.
+    const condLib = useCondLibrary(false);
     const condsList = condLib.loaded ? condLib.conds : [];
     const isPendingOnOff = useRef(false);
     const isModalOpenRef = useRef(false);
+    const alive = useRef(true);          // компонент смонтирован
+    const lastVer = useRef(null);        // версия таблицы (поле "ver") последних применённых данных
+    const reloading = useRef(false);     // идёт ли сейчас полная перезагрузка таблицы
+    const reloadAgain = useRef(false);   // во время перезагрузки пришёл ещё один запрос на неё
+    const needRestart = useRef(false);   // ответ опроса был отброшен: ETag в pollQueue надо сбросить
+    const condsStarted = useRef(false);  // первая загрузка библиотеки условий уже начата
 
     // Инициализируем глобальный tooltip один раз при монтировании
     useEffect(() => { initGlobalTooltip(); }, []);
 
-    // Библиотека условий (общий стор CondLibrary.js) - для показа текста условия связи
-    
+    // Одна страница состояния. Размер страницы ограничивает прошивка (поле "next").
+    const fetchPage = (from) =>
+      fetch(`/api/state/encoder?from=${from}`, { cache: 'no-store' }).then((r) => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      });
 
-    const refresh = () =>
-      Promise.all([
-        fetch('/api/encoder/get').then((r) => r.json()),
-        fetch('/api/pintopin/get').then((r) => r.json())
-      ])
-        .then(([encoderData, pintopinData]) => {
-          setLanguage(encoderData.lang);
-          setEncoder(encoderData.encoders);
-          setPintopin(pintopinData);
-          console.log('Encoder data:', encoderData.encoders);
-          console.log('Pintopin data:', pintopinData);
-        })
-        .catch((error) => {
-          console.error('Error fetching data:', error);
-        });
+    // Полная загрузка страницами подряд (по одному запросу). Если "ver" изменился
+    // между страницами, начинаем сначала (не более 3 попыток).
+    const loadAll = async (firstPage) => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const page = (firstPage && attempt === 0) ? firstPage : await fetchPage(0);
+        const rows = [...(page.encoders || [])];
+        let next = page.next;
+        let consistent = true;
+        for (let guard = 0; typeof next === 'number' && next >= 0 && guard < 20; guard++) {
+          const p = await fetchPage(next);
+          if (p.ver !== undefined && page.ver !== undefined && p.ver !== page.ver) { consistent = false; break; }
+          rows.push(...(p.encoders || []));
+          next = p.next;
+        }
+        if (consistent) return { lang: page.lang, ver: page.ver, encoders: rows };
+      }
+      throw new Error('encoder state changes too fast');
+    };
+
+    const applyData = (d) => {
+      if (!alive.current) return;
+      lastVer.current = d.ver !== undefined ? String(d.ver) : null;
+      if (d.lang) setLanguage(d.lang);
+      setEncoder(d.encoders);
+    };
+
+    // Первая загрузка библиотеки условий - строго после таблицы, когда другие запросы стоят.
+    const ensureConds = async () => {
+      if (condsStarted.current) return;
+      condsStarted.current = true;
+      try { await refreshCondLibrary(); } catch (e) { console.error('conds:', e); }
+    };
+
+    const onPoll = (data) => {
+      if (!alive.current || !data || !Array.isArray(data.encoders)) return;
+      // Ответ нельзя просто выбросить: pollQueue уже запомнил его ETag и дальше получит 304.
+      if (isPendingOnOff.current || isModalOpenRef.current) { needRestart.current = true; return; }
+      const complete = !(typeof data.next === 'number' && data.next >= 0);
+      const sig = data.ver !== undefined ? String(data.ver) : null;
+      if (complete && sig !== null && sig === lastVer.current) return;
+      if (complete) {
+        applyData(data);
+        if (!condsStarted.current) { pauseAll(); ensureConds().finally(resumeAll); }
+      } else {
+        reloadSafe(data);
+      }
+    };
+
+    // Сброс ETag опроса: повторная регистрация даёт полный ответ первой страницей.
+    const startPoll = () => {
+      unregisterPoll('encoders');
+      registerPoll('encoders', '/api/state/encoder', onPoll, { immediate: true });
+    };
+
+    // Безопасная перезагрузка: не запускается параллельно сама с собой и на время
+    // работы ставит опрос на паузу (в каждый момент идёт один запрос).
+    const reloadSafe = async (firstPage) => {
+      if (reloading.current) { reloadAgain.current = true; return; }
+      reloading.current = true;
+      pauseAll();
+      let failed = false;
+      try {
+        let fp = firstPage;
+        do {
+          reloadAgain.current = false;
+          const d = await loadAll(fp);
+          fp = null;
+          applyData(d);
+        } while (reloadAgain.current && alive.current);
+        await ensureConds();
+      } catch (e) {
+        console.error('encoder reload:', e);
+        failed = true;
+      } finally {
+        reloading.current = false;
+        if (failed && alive.current) startPoll();
+        resumeAll();
+      }
+    };
 
     useEffect(() => {
-      let active = true;
-
-      // ── Загрузка + polling через pollQueue (одно соединение, без нового handshake) ──
-      registerPoll('encoders', '/api/state/encoder', function(data) {
-        if (!active) return;
-        if (isPendingOnOff.current) return;
-        if (isModalOpenRef.current) return; // Не обновлять пока модалка открыта
-        if (data !== null && data !== undefined) {
-          if (data.encoders) { setEncoder(data.encoders); setLanguage(data.lang); }
-          if (data.pintopin) setPintopin(data.pintopin);
-        }
-      }, { immediate: true });
-
+      alive.current = true;
+      registerPoll('encoders', '/api/state/encoder', onPoll, { immediate: true });
       return function() {
-        active = false;
+        alive.current = false;
         unregisterPoll('encoders');
       };
     }, []);
+
+    const flushHeldPoll = () => {
+      if (needRestart.current && alive.current) {
+        needRestart.current = false;
+        startPoll();
+      }
+    };
 
     const handleEncoderChange = (updatedEncoder) => {
       setEncoder((prevEncoders) =>
@@ -178,6 +250,7 @@ function TabEncoder({ }) {
       );
 
       isPendingOnOff.current = true;
+      pauseAll();
 
       fetch('/api/onoff/set', {
         method: 'POST',
@@ -192,8 +265,11 @@ function TabEncoder({ }) {
           console.error('Error calling /api/onoff/set (Encoder):', error);
         })
         .finally(() => {
+          resumeAll();
           setTimeout(() => {
             isPendingOnOff.current = false;
+            needRestart.current = true;   // после окна игнорирования берём свежие данные
+            if (!isModalOpenRef.current) flushHeldPoll();
           }, 1500);
         });
     };
@@ -205,6 +281,7 @@ function TabEncoder({ }) {
     // в таблице по-прежнему использует handleEncoderChange.
     const handleEncoderSaved = (updatedEncoder) => {
       console.log('handleEncoderSaved:', updatedEncoder);
+      needRestart.current = true;   // после закрытия модалки загрузим данные заново
       // Строка PWM без энкодера: /api/encoder/set уже применил On/Off на самом PWM-пине
       if (updatedEncoder.kind !== 'pwm' && updatedEncoder.onoff !== selectedEncoder?.onoff) {
         handleEncoderChange(updatedEncoder);
@@ -281,11 +358,16 @@ function TabEncoder({ }) {
       console.log('Deleting connection:', id, pinInfo);
 
       const pinName = pinInfo.split('(')[0].trim();
+      // "PB1(5)" -> idout = 5: без него прошивка удалит первую связь энкодера, а не выбранную
+      const m = /\((\d+)\)\s*$/.exec(pinInfo);
+      const body = { id: id, pin: pinName };
+      if (m) body.idout = parseInt(m[1], 10);
 
+      pauseAll();
       fetch('/api/connection/del', {
         method: 'post',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: id, pin: pinName })
+        body: JSON.stringify(body)
       })
         .then((response) => {
           if (!response.ok) {
@@ -307,18 +389,15 @@ function TabEncoder({ }) {
               return enc;
             })
           );
-          setPintopin((prevPintopin) =>
-            prevPintopin.filter(
-              (item) => !(item.idin === id && item.pins === pinName)
-            )
-          );
-        })
-        .then(() => {
           console.log('Connection deleted successfully');
-          refresh();
+          // Прошивка уже изменила связи в памяти: перезагрузка берёт актуальные поля
+          // строки (частота, шаги, условие) одним последовательным запросом.
+          resumeAll();
+          return reloadSafe();
         })
         .catch((error) => {
           console.error('Error deleting connection:', error);
+          resumeAll();
         });
     };
 
@@ -335,6 +414,7 @@ function TabEncoder({ }) {
       setModalType(null);
       setSelectedEncoder(null);
       isModalOpenRef.current = false;
+      flushHeldPoll();
     };
 
     const helpContent = {
@@ -1346,19 +1426,9 @@ function TabEncoder({ }) {
       </th>
     `;
 
-    // Номер условия связи энкодера: из состояния энкодера, иначе из /api/pintopin/get
-    const condOf = (d) => {
-      if (d.cond !== undefined && d.cond !== null) return parseInt(d.cond, 10) || 0;
-      const l = pintopin.find((p) => p.idin === d.id);
-      return l ? (parseInt(l.cond, 10) || 0) : 0;
-    };
-
-    // Текст условия: сначала из состояния энкодера, иначе из /api/pintopin/get
-    const cexprOf = (d) => {
-      if (d.cexpr) return d.cexpr;
-      const l = pintopin.find((p) => p.idin === d.id);
-      return l ? l.cexpr || '' : '';
-    };
+    // Условие связи энкодера приходит в самой строке /api/state/encoder (cond, cexpr)
+    const condOf = (d) => parseInt(d.cond, 10) || 0;
+    const cexprOf = (d) => d.cexpr || '';
 
     // Строка PWM без энкодера (kind:"pwm"): без Encoder A/B/Condition,
     // остаются PWM, рубильник, Zigbee и полярность (в Edit).
@@ -1374,7 +1444,7 @@ function TabEncoder({ }) {
         ? 'Идёт автотюн PID: настройки заблокированы.'
         : 'PID autotune is running: settings are locked.';
       return html`
-        <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
+        <tr key=${d.id} class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
           <td class="px-6 py-2 text-sm text-slate-800 font-medium">
             ${d.pins}(${d.id})
             <span class="ml-2 text-xs font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200">PWM</span>
@@ -1419,7 +1489,7 @@ function TabEncoder({ }) {
     };
 
     const ArrayEncoder = ({ d, index }) => {
-      if (d.kind === 'pwm') return html`<${ArrayPwmRow} d=${d} index=${index} />`;
+      if (d.kind === 'pwm') return ArrayPwmRow({ d, index });
       const connectedPins = getConnectedPins(d.id);
       const fStatus = getFreqStatus(d.pwm || 0);
 
@@ -1428,7 +1498,7 @@ function TabEncoder({ }) {
         .filter((t, i, arr) => t && arr.indexOf(t) === i);
 
       return html`
-        <tr class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
+        <tr key=${d.id} class="${index % 2 === 1 ? 'bg-white/80' : 'bg-sky-200/40'} hover:bg-slate-200/80 transition-colors">
           <td class="px-6 py-2 text-sm text-slate-800 font-medium">${d.pins}(${d.id})</td>
           <td class="px-6 py-2 text-sm text-slate-700">
             ${d.encdrbpin ? `${d.encdrbpin}(${d.encoderb})` : 'Not set'}
@@ -1531,24 +1601,24 @@ function TabEncoder({ }) {
                   <table class="w-full text-left border-collapse whitespace-nowrap">
                     <thead>
                       <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                        <${Th} title="Encoder A (ID)" tooltipIndex=${3} />
-                        <${Th} title="Encoder B (ID)" tooltipIndex=${4} />
-                        <${Th} title="PWM connection" tooltipIndex=${5} />
-                        <${Th} title="Condition" tooltipIndex=${14} />
-                        <${Th} title="PWM Frequency" tooltipIndex=${11} />
-                        <${Th} title="Resolution (steps)" tooltipIndex=${12} />
-                        <${Th} title="Dimmer value (0-100)" tooltipIndex=${6} />
-                        <${Th} title="Duty on restore" tooltipIndex=${7} />
-                        <${Th} title="INFO" tooltipIndex=${8} />
-                        <${Th} title="On/Off" tooltipIndex=${9} />
-                        <${Th} title="Zigbee" tooltipIndex=${13} />
-                        <${Th} title="Action" tooltipIndex=${10} />
+                        ${Th({ title: "Encoder A (ID)", tooltipIndex: 3 })}
+                        ${Th({ title: "Encoder B (ID)", tooltipIndex: 4 })}
+                        ${Th({ title: "PWM connection", tooltipIndex: 5 })}
+                        ${Th({ title: "Condition", tooltipIndex: 14 })}
+                        ${Th({ title: "PWM Frequency", tooltipIndex: 11 })}
+                        ${Th({ title: "Resolution (steps)", tooltipIndex: 12 })}
+                        ${Th({ title: "Dimmer value (0-100)", tooltipIndex: 6 })}
+                        ${Th({ title: "Duty on restore", tooltipIndex: 7 })}
+                        ${Th({ title: "INFO", tooltipIndex: 8 })}
+                        ${Th({ title: "On/Off", tooltipIndex: 9 })}
+                        ${Th({ title: "Zigbee", tooltipIndex: 13 })}
+                        ${Th({ title: "Action", tooltipIndex: 10 })}
                       </tr>
                     </thead>
                     <tbody id="tab1" class="divide-y divide-white/40">
                       ${varencoder.map(
       (d, index) =>
-        html`<${ArrayEncoder} d=${d} index=${index} key=${d.id} />`
+        ArrayEncoder({ d, index })
     )}
                     </tbody>
                   </table>
@@ -1592,4 +1662,6 @@ function TabEncoder({ }) {
 }
 
 export { TabEncoder };
+
+
 

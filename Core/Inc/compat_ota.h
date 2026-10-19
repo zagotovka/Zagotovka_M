@@ -32,6 +32,12 @@ void mg_device_reset(void);
 #define MG_FIRMWARE_PREVIOUS 1
 #endif
 
+/* Метка в ota_bank_?_version: в банк идёт запись или загрузка была прервана
+ * (образ неполный). Ставит mg_ota_reset_status() в начале загрузки, снимает
+ * mg_ota_set_pending_bank() после успешной проверки CRC+size. Строка должна
+ * совпадать с BANK_PARTIAL_MARK в web_root/Tabs/update_page.js. */
+#define OTA_BANK_VERSION_PARTIAL "!partial"
+
 /* Помечает "первая загрузка после OTA / не подтверждено" и возвращает
  * ПРЕДЫДУЩЕЕ значение флага (для отката в mg_ota_cancel_pending(),
  * если своп в итоге не состоялся).
@@ -73,6 +79,9 @@ bool mg_ota_switch_bank(void);
  * bootloader'а "грузить/не грузить". Образ, залитый напрямую через ST-Link
  * (без OTA-меток и без версии), считается валидным — версия появляется
  * только после mg_ota_commit(), т.е. только для образов, залитых через OTA.
+ * Дополнительно (отличие от bootloader): банк с меткой OTA_BANK_VERSION_PARTIAL
+ * в версии считается НЕвалидным, даже если MSP выглядит нормально: после
+ * первого же записанного чанка MSP уже "правильный", а образ ещё неполный.
  * bank: 0 = Bank A (0x08040000), 1 = Bank B (0x08100000). */
 bool mg_ota_bank_image_valid(uint8_t bank);
 

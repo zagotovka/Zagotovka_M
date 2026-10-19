@@ -1,11 +1,12 @@
 
+
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
 import { ModalPid } from '../Modals/ModalPid.js';
 import { condInfo, condBadgeProps, condHelpTitle } from '../condlib.js';
-import { CondLibraryPanel, useCondLibrary } from '../CondLibrary.js';
+import { CondLibraryPanel, useCondLibrary, refreshCondLibrary } from '../CondLibrary.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
-import { registerPoll, unregisterPoll } from '../pollQueue.js';
+import { registerPoll, unregisterPoll, pauseAll, resumeAll, isPollActive } from '../pollQueue.js';
 import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -1349,6 +1350,96 @@ function initTuneStyles() {
   document.head.appendChild(style);
 }
 
+// ---------------------------------------------------------------------------
+// Загрузка списка PID постранично (экономия кучи контроллера).
+// Прошивка отдаёт страницу слотов с полем "next" (-1 или отсутствует = всё отдано).
+// Старая прошивка параметры from/limit игнорирует и отдаёт все слоты сразу - это
+// тоже работает (next отсутствует).
+// ---------------------------------------------------------------------------
+const PID_PAGE_SLOTS = 8;      // слотов на страницу (на прошивке ещё и лимит по байтам)
+const PID_MAX_PAGES = 8;       // защита от бесконечного цикла по "next"
+const PID_FETCH_TIMEOUT = 8000;
+const PID_POLL_URL = '/api/state/pid?from=0&limit=' + PID_PAGE_SLOTS;
+
+// pauseAll()/resumeAll() из pollQueue - булев флаг и не вкладываются.
+// Счётчик гарантирует, что вложенные участки (сохранение + перезагрузка + модалка)
+// не снимут паузу раньше времени.
+let _holdDepth = 0;
+function holdPoll() {
+  if (_holdDepth++ === 0) pauseAll();
+}
+function releasePoll() {
+  if (_holdDepth > 0 && --_holdDepth === 0) resumeAll();
+}
+
+async function fetchPidPage(from) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), PID_FETCH_TIMEOUT);
+  try {
+    const r = await fetch('/api/state/pid?from=' + from + '&limit=' + PID_PAGE_SLOTS,
+      { cache: 'no-store', signal: ctrl.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    if (!data || !Array.isArray(data.pid)) throw new Error('bad PID response');
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Догружает страницы после первой (first уже получена). Возвращает массив страниц.
+async function loadPidRest(first) {
+  const pages = [first];
+  let next = first.next;
+  let guard = 0;
+  while (typeof next === 'number' && next > 0 && next < PID_MAX_SLOTS && guard < PID_MAX_PAGES) {
+    const page = await fetchPidPage(next);
+    pages.push(page);
+    const n = page.next;
+    if (typeof n === 'number' && n <= next) break;   // сервер не продвинулся
+    next = n;
+    guard++;
+  }
+  return pages;
+}
+
+// Склеивает страницы в плотный массив слотов. Пустые слоты приходят как {"id":N}.
+function mergePidPages(pages) {
+  const out = [];
+  pages.forEach((pg) => {
+    pg.pid.forEach((s) => {
+      const idx = Number(s.id) - 1;
+      if (idx >= 0 && idx < PID_MAX_SLOTS) out[idx] = s;
+    });
+  });
+  let last = out.length;
+  const res = [];
+  for (let i = 0; i < last; i++) res.push(out[i] || { id: i + 1 });
+  return res;
+}
+
+// Сигнатура версии: "ver" из прошивки, запасной вариант для старой прошивки - сам JSON.
+function pidSig(page) {
+  return page.ver !== undefined ? 'v' + page.ver : 'j' + JSON.stringify(page.pid);
+}
+
+async function postJson(url, body) {
+  holdPoll();
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { message: String((e && e.message) || e) } };
+  } finally {
+    releasePoll();
+  }
+}
+
 function TabPid({ }) {
   const [varpid, setPid] = useState(null);
   const [saveResult, setSaveResult] = useState(null);
@@ -1360,63 +1451,150 @@ function TabPid({ }) {
   const [showHelp, setShowHelp] = useState(false);
   const [visiblePids, setVisiblePids] = useState(0);
   const [pidline, setPidline] = useState(0);
-  const condLib = useCondLibrary();
+  // autoload=false: свой запрос библиотеки условий делаем сами, после первых данных PID
+  const condLib = useCondLibrary(false);
   const condsList = condLib.loaded ? condLib.conds : [];
 
-  const isPendingOnOff = useRef(false);
+  const active = useRef(true);
+  const refreshing = useRef(false);     // идёт перезагрузка
+  const refreshAgain = useRef(false);   // во время перезагрузки пришёл ещё один запрос
+  const lastSig = useRef(null);         // версия последних применённых данных
+  const ignoreUntil = useRef(0);        // до этого момента данные опроса не применяем
+  const submitting = useRef(false);     // идёт отправка (Submit / On-Off)
+  const resyncTimer = useRef(null);
+  const retryTimer = useRef(null);
+  const retryCount = useRef(0);
+  const condsRequested = useRef(false);
+  const pidlineSending = useRef(false);
+  const pidlinePending = useRef(null);
+  const pidlineLocalUntil = useRef(0);  // до этого момента pidline с сервера не применяем
+  const refreshRef = useRef(null);
 
   useEffect(() => {
     initGlobalTooltip();
     initTuneStyles();
   }, []);
 
-  // Библиотека условий (общий стор CondLibrary.js) - для показа текста условия PID-слота
-  
+  const applyPages = (pages) => {
+    const first = pages[0];
+    setPid(mergePidPages(pages));
+    setLanguage(first.lang || 'ru');
+    if (typeof first.pidline === 'number' && Date.now() >= pidlineLocalUntil.current) {
+      setPidline(first.pidline);
+      setVisiblePids(first.pidline);
+    }
+  };
+
+  // Безопасная перезагрузка: один процесс за раз (флаг "идёт"), повторный запрос
+  // во время работы только взводит флаг "повторить". Опрос на время работы на паузе.
+  // firstPage - уже полученная первая страница (из опроса), иначе грузим с нуля.
+  const refreshSafe = async (firstPage) => {
+    if (!active.current) return;
+    if (refreshing.current) { refreshAgain.current = true; return; }
+    refreshing.current = true;
+    holdPoll();
+    let failed = false;
+    try {
+      let first = firstPage || null;
+      do {
+        refreshAgain.current = false;
+        if (!first) first = await fetchPidPage(0);
+        const pages = await loadPidRest(first);
+        if (!active.current) return;
+        lastSig.current = pidSig(first);
+        applyPages(pages);
+        first = null;
+        // Библиотека условий - один раз, строго после данных PID (не параллельно с ними).
+        if (!condsRequested.current) {
+          condsRequested.current = true;
+          await refreshCondLibrary(true);
+        }
+      } while (refreshAgain.current && active.current);
+      retryCount.current = 0;
+    } catch (e) {
+      failed = true;
+      console.error('PID refresh failed:', e);
+    } finally {
+      refreshing.current = false;
+      releasePoll();
+    }
+    // Опрос при неизменной версии получит 304 и не вызовет колбэк - повторяем сами (до 3 раз).
+    if (failed && active.current && retryCount.current < 3) {
+      retryCount.current++;
+      clearTimeout(retryTimer.current);
+      retryTimer.current = setTimeout(() => refreshRef.current && refreshRef.current(), 3000);
+    }
+  };
+  refreshRef.current = refreshSafe;
+
+  // Данные опроса пришли во время отправки: не применяем, но запоминаем, что нужна сверка.
+  const scheduleResync = () => {
+    if (resyncTimer.current) return;
+    const wait = Math.max(200, ignoreUntil.current - Date.now() + 100);
+    resyncTimer.current = setTimeout(() => {
+      resyncTimer.current = null;
+      if (!active.current) return;
+      if (submitting.current) { scheduleResync(); return; }
+      refreshRef.current && refreshRef.current();
+    }, wait);
+  };
 
   useEffect(() => {
-    let active = true;
+    active.current = true;
 
-    registerPoll('pid', '/api/state/pid', function(data) {
-      if (!active || isPendingOnOff.current) return;
-      if (data !== null && data !== undefined && Array.isArray(data.pid)) {
-        setPid(data.pid);
-        setLanguage(data.lang || 'ru');
-        if (typeof data.pidline === 'number') {
-          setPidline(data.pidline);
-          setVisiblePids(data.pidline);
-        }
+    const onPoll = (data) => {
+      if (!active.current) return;
+      if (!data || !Array.isArray(data.pid)) return;
+      if (submitting.current || Date.now() < ignoreUntil.current) {
+        scheduleResync();
+        return;
       }
-    }, {immediate: true});
+      if (pidSig(data) === lastSig.current) return;
+      refreshRef.current(data);
+    };
+
+    const start = () => registerPoll('pid', PID_POLL_URL, onPoll, { immediate: true });
+    start();
+
+    // После MAX_FAILS ошибок подряд pollQueue снимает ключ и больше не возвращает.
+    // Сторож заново регистрирует опрос, чтобы таблица не замирала до перезагрузки страницы.
+    const watchdog = setInterval(() => {
+      if (active.current && !isPollActive('pid')) {
+        lastSig.current = null;
+        start();
+      }
+    }, 10000);
 
     return function() {
-      active = false;
+      active.current = false;
+      clearInterval(watchdog);
+      clearTimeout(resyncTimer.current);
+      clearTimeout(retryTimer.current);
       unregisterPoll('pid');
     };
   }, []);
 
-  const isFirstPidlineMount = useRef(true);
-  useEffect(() => {
-    if (isFirstPidlineMount.current) {
-      isFirstPidlineMount.current = false;
-      return;
+  // pidline отправляем только по действию пользователя (+/-). Раньше useEffect по pidline
+  // отправлял его и после первого ответа сервера (эхо): лишний POST и запись настроек
+  // во flash при каждом открытии страницы.
+  const sendPidline = async (value) => {
+    if (pidlineSending.current) { pidlinePending.current = value; return; }
+    pidlineSending.current = true;
+    pidlineLocalUntil.current = Date.now() + 60000;
+    holdPoll();
+    try {
+      let v = value;
+      while (v !== null && v !== undefined) {
+        pidlinePending.current = null;
+        const res = await postJson('/api/pidline/set', { pidline: v });
+        if (!res.ok) console.error('Error sending PID line to stm32:', res.data);
+        v = pidlinePending.current;
+      }
+    } finally {
+      pidlineSending.current = false;
+      pidlineLocalUntil.current = Date.now() + 1500;
+      releasePoll();
     }
-    sendPidlineToStm32(pidline);
-  }, [pidline]);
-
-  const sendPidlineToStm32 = (value) => {
-    isPendingOnOff.current = true;
-    fetch('/api/pidline/set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pidline: value })
-    })
-      .then((response) => response.json())
-      .catch((error) => console.error('Error sending PID line to stm32:', error))
-      .finally(() => {
-        setTimeout(() => {
-          isPendingOnOff.current = false;
-        }, 1500);
-      });
   };
 
   const addPid = () => {
@@ -1424,6 +1602,7 @@ function TabPid({ }) {
       const newVisible = visiblePids + 1;
       setVisiblePids(newVisible);
       setPidline(newVisible);
+      sendPidline(newVisible);
     }
   };
 
@@ -1432,6 +1611,7 @@ function TabPid({ }) {
       const newVisible = visiblePids - 1;
       setVisiblePids(newVisible);
       setPidline(newVisible);
+      sendPidline(newVisible);
     }
   };
 
@@ -1468,88 +1648,70 @@ function TabPid({ }) {
     setSelectedPid(null);
   };
 
-  const handlePidChange = (updatedPid) => {
-    console.log('handlePidChange:', updatedPid);
+  // Ползунок On/Off в таблице: шлём только id и onoff. Прошивка при частичном запросе не трогает
+  // условие, датчик и привязку пина (раньше уходил весь объект слота).
+  const handlePidChange = async (updatedPid) => {
     setPid(varpid.map((b) => (b.id === updatedPid.id ? updatedPid : b)));
-
-    isPendingOnOff.current = true;
-
-    // Ползунок On/Off в таблице условие не меняет - не отправляем его,
-    // иначе /api/pid/set перезапишет условие слота на устаревшее.
-    const { cond, cexpr, ...body } = updatedPid;
-
-    fetch('/api/pid/set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-      .then(response => response.json())
-      .then(data => { console.log('PID job updated successfully:', data); })
-      .catch(error => { console.error('Error updating PID job:', error); })
-      .finally(() => {
-        setTimeout(() => {
-          isPendingOnOff.current = false;
-        }, 1500);
-      });
+    submitting.current = true;
+    let res;
+    try {
+      res = await postJson('/api/pid/set', { id: updatedPid.id, onoff: updatedPid.onoff });
+    } finally {
+      submitting.current = false;
+      ignoreUntil.current = Date.now() + 1500;
+    }
+    if (!res.ok) {
+      console.error('Error updating PID job:', res.data);
+      refreshSafe();   // откатываем оптимистичное значение реальным состоянием
+    }
   };
 
-  // Сохранение из модалки "Edit PID": /api/pid/set уже записал поля и условие,
-  // второй POST не нужен - просто подтягиваем реальное состояние слота
-  // (в нём есть cond/cexpr, которых нет в оптимистичном объекте).
-  const reloadPid = () =>
-    fetch('/api/state/pid', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data && Array.isArray(data.pid)) {
-          setPid(data.pid);
-          setLanguage(data.lang || 'ru');
-        }
-      })
-      .catch((error) => console.error('Error reloading PID state:', error));
-
-  const handlePidSaved = () => {
-    reloadPid();
+  // Сохранение из модалки "Edit PID". Весь цикл (POST, перезагрузка, обновление библиотеки
+  // условий) идёт под одной паузой опроса; во время отправки данные опроса игнорируются.
+  // Возвращает { ok, message } - модалка закрывается только при ok.
+  const savePid = async (body, info) => {
+    submitting.current = true;
+    holdPoll();
+    try {
+      const res = await postJson('/api/pid/set', body);
+      if (!res.ok) {
+        return { ok: false, message: (res.data && res.data.message) || ('Ошибка ' + res.status) };
+      }
+      ignoreUntil.current = Date.now() + 1500;
+      submitting.current = false;
+      await refreshSafe();
+      if (info && info.condChanged) await refreshCondLibrary(true);
+      return { ok: true };
+    } finally {
+      submitting.current = false;
+      releasePoll();
+    }
   };
 
   // -------------------------------------------------------------------------
-  // Auto Tune: запуск (Run) — отправляет команду на прошивку
+  // Auto Tune: запуск (Run) и остановка (Stop) - команда на прошивку
   // -------------------------------------------------------------------------
+  const sendTune = async (id, action) => {
+    const res = await postJson('/api/pid/tune', { id, action });
+    if (!res.ok) console.error('Tune ' + action + ' failed:', res.data);
+  };
+
   const handleRunTune = (d) => {
     const id = d.id;
-    // Если уже идёт тюн — игнорируем
+    // Если уже идёт тюн - игнорируем
     const ts = d.tune_state || 0;
     if (ts === TUNE_STEP || ts === TUNE_BIAS) return;
 
-    /* Если была ошибка — сбрасываем состояние, пользователь может попробовать снова */
+    /* Если была ошибка - сбрасываем состояние, пользователь может попробовать снова */
     if (ts === TUNE_ERROR) {
       handleStopTune(id);
       return;
     }
-
-    console.log('Run tune for id:', id);
-    fetch('/api/pid/tune', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, action: 'start' }),
-    })
-      .then(response => response.json())
-      .then(data => { console.log('Tune start response:', data); })
-      .catch(error => { console.error('Error starting tune:', error); });
+    sendTune(id, 'start');
   };
 
-  // -------------------------------------------------------------------------
-  // Auto Tune: остановка (Stop) — отправляет команду на прошивку
-  // -------------------------------------------------------------------------
   const handleStopTune = (id) => {
-    console.log('Stop tune for id:', id);
-    fetch('/api/pid/tune', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, action: 'stop' }),
-    })
-      .then(response => response.json())
-      .then(data => { console.log('Tune stop response:', data); })
-      .catch(error => { console.error('Error stopping tune:', error); });
+    sendTune(id, 'stop');
   };
 
   const getPresetLabel = (value) => presetName(language, value);
@@ -1778,7 +1940,11 @@ function TabPid({ }) {
           hideModal=${closeModal}
           title="Edit PID"
           selectedPid=${selectedPid}
-          handlePidChange=${handlePidSaved}
+          onSave=${savePid}
+          holdPoll=${holdPoll}
+          releasePoll=${releasePoll}
+          condsInit=${condLib.loaded ? condLib.conds : null}
+          poolInit=${condLib.loaded ? condLib.pool : null}
           language=${language}
           presetList=${presetOptions(language)}
           PresetHintComponent=${PresetHint}

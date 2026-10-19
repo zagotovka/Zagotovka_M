@@ -1,23 +1,29 @@
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
+import { postJson } from '../safeFetch.js';
 
 function ModalOneWire({
   oneWire,
   onClose,
   onUpdate,
   refresh,
+  holdPoll = () => {},    // пауза опроса на время POST (счётчик в TabOneWire)
+  releasePoll = () => {},
   closeOnOverlayClick = true
 }) {
   console.log('oneWire object:', oneWire);
 
+  // Сервер отдаёт typsensr и numsens (gen/ow_build_page), поэтому читаем их как запасной вариант.
   const [formData, setFormData] = useState({
-    typsensor: oneWire.typsensor,
-    numdevices: oneWire.numdevices
+    typsensor: oneWire.typsensor ?? oneWire.typsensr ?? 0,
+    numdevices: oneWire.numdevices ?? oneWire.numsens ?? 0
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [onoff, setOnOff] = useState(oneWire.onoff || 0);
 
   const handleOverlayClick = (e) => {
@@ -47,33 +53,39 @@ function ModalOneWire({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setIsSubmitting(true);
+    setSubmitError('');
 
+    // Пустое поле даёт NaN (parseInt), в JSON это null - отправляем 0.
+    const typsensor = Number.isFinite(formData.typsensor) ? formData.typsensor : 0;
+    const numdevices = Number.isFinite(formData.numdevices) ? formData.numdevices : 0;
     const dataToSend = {
       id: oneWire.id,
-      pin: oneWire.pin,
-      typsensor: formData.typsensor,
-      numdevices: formData.numdevices,
+      pin: oneWire.pin || oneWire.pins,
+      typsensor: typsensor,
+      numdevices: numdevices,
       onoff: onoff
     };
 
     console.log('Sending data:', dataToSend);
 
+    holdPoll();
     try {
-      const response = await fetch('api/onewire/set', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dataToSend)
-      });
+      const response = await postJson('/api/onewire/set', dataToSend);
+      if (!response.ok) throw new Error('HTTP ' + response.status);
 
-      if (!response.ok) throw new Error('Network response was not ok');
-
-      const updatedOneWire = { ...oneWire, ...formData, onoff };
+      // Страница после сохранения перезагружает данные с контроллера (TabOneWire),
+      // локальная копия нужна только для мгновенной отрисовки.
+      const updatedOneWire = { ...oneWire, typsensr: typsensor, numsens: numdevices, onoff };
       onUpdate(updatedOneWire);
       onClose();
     } catch (error) {
       console.error('Error updating OneWire:', error);
+      setSubmitError('Не удалось сохранить: ' + (error && error.message ? error.message : error) +
+        '. Контроллер отклонил запрос или не ответил, настройки не изменены.');
     } finally {
+      releasePoll();
       setIsSubmitting(false);
     }
   };
@@ -192,6 +204,7 @@ function ModalOneWire({
             <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mt-4">
               После сохранения повторный поиск датчиков на шине выполняется только при перезагрузке контроллера — перезагрузите устройство, чтобы изменения вступили в силу.
             </p>
+            ${submitError && html`<p class="text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2 mt-2">${submitError}</p>`}
           </div>
           <div class="modal-footer flex justify-end mt-4">
             <button

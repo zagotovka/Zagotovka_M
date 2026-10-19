@@ -546,8 +546,6 @@ const HelpInfo = ({ language }) => {
   `;
 };
 
-const FIRMWARE_UPLOAD_CHUNK_SIZE = 4096; // байт на POST; лимит тела запроса для /api/firmware/upload на устройстве не действует
-
 export const pageSetting = ({ value, setfn, type, options, error, ...props }) => {
   let inputElement;
   const inputClass = `w-full px-3 py-2 border rounded-md ${error ? 'border-red-500' : 'border-gray-300'

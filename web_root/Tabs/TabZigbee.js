@@ -1,8 +1,8 @@
-
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
 import { h, useState, useEffect, useRef, html } from '../bundle.js';
-import { registerPoll, unregisterPoll } from '../pollQueue.js';
+import { registerPoll, unregisterPoll, pauseAll, resumeAll } from '../pollQueue.js';
+import { fetchZigbeeAll } from '../condlib.js';
 import { Icons } from '../components.js';
 import { MyPolzunok } from '../main.js';
 import { ModalZigbee } from '../Modals/ModalZigbee.js';
@@ -321,12 +321,51 @@ export function TabZigbee({}) {
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [learnIeee, setLearnIeee] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState({});
-  const isPending = useRef(false);
+  const [loadState, setLoadState] = useState('loading');   // 'loading' | 'ok' | 'error'
+  const pendingPosts = useRef(0);          // POST-запросов в очереди или в полёте
+  const holdUntil = useRef(0);             // до этого момента ответы опроса не применяются
   const lastChangeTime = useRef(0);
   const serverSnapshot = useRef({});
   const dirtyIds = useRef(new Set());
   const pendingConfigSave = useRef(null);
   const modalOpenRef = useRef(false);
+  const mounted = useRef(true);
+  const lastVer = useRef(null);            // версия таблицы, которую страница уже загрузила
+  const refreshing = useRef(false);        // идёт полная перезагрузка таблицы
+  const refreshAgain = useRef(false);      // во время перезагрузки попросили ещё одну
+  const refreshCtl = useRef(null);         // AbortController текущей перезагрузки
+  const reloadAfterModal = useRef(false);  // таблицу нужно перечитать после закрытия окна
+  const deferredTimer = useRef(null);
+  const retryTimer = useRef(null);
+  const retryCount = useRef(0);
+  const closeTimer = useRef(null);
+  const postChain = useRef(Promise.resolve());
+
+  /* Идут ли сейчас наши изменения (POST в работе или недавно завершились) */
+  const guardActive = () =>
+    pendingPosts.current > 0 ||
+    Date.now() < holdUntil.current ||
+    (Date.now() - lastChangeTime.current < 3000);
+
+  /* Все POST страницы идут строго по одному. Раньше переключение группы запускало
+     N+1 параллельных POST (головная строка входит в группу и отправлялась дважды), а сервер
+     закрывает соединение после каждого POST и держит не больше 5 соединений. Каждый запрос
+     с таймаутом 8 с, чтобы зависший POST не блокировал очередь. */
+  const enqueuePost = (url, body) => {
+    const run = () => {
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), 8000);
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: ctl.signal
+      }).then(r => r.json()).finally(() => clearTimeout(t));
+    };
+    const p = postChain.current.then(run);
+    postChain.current = p.catch(() => {});
+    return p;
+  };
 
   const clusterToDeviceType = (clusters, override) => {
     if (override === 7) return 'pir';
@@ -367,65 +406,131 @@ export function TabZigbee({}) {
     override: d.override || 0,
   });
 
-  const refresh = () =>
-    fetch('/api/zigbee/get', { cache: 'no-store' })
-      .then(r => r.json())
-      .then(r => {
-        const zigbee = r.zigbee || [];
-        const normalized = zigbee.map(normalizeDevice);
-        setDevices(normalized);
-        setLanguage(r.lang || 'ru');
-        const snap = {};
-        zigbee.forEach(d => { snap[d.id] = buildSnapshot(d); });
-        serverSnapshot.current = snap;
-        dirtyIds.current.clear();
-      })
-      .catch(err => console.error('Error fetching zigbee data:', err));
+  /* Применение загруженной таблицы */
+  const applyData = (res) => {
+    const zigbee = res.zigbee || [];
+    setDevices(zigbee.map(normalizeDevice));
+    if (res.lang) setLanguage(res.lang);
+    const snap = {};
+    zigbee.forEach(d => { snap[d.id] = buildSnapshot(d); });
+    serverSnapshot.current = snap;
+    dirtyIds.current.clear();
+  };
+
+  /* Полная загрузка: страницы по одной (см. fetchZigbeeAll). Раньше один запрос без параметров
+     получал только первые 30 записей из 200, остальные устройства пропадали молча. */
+  const refresh = async (signal) => {
+    const res = await fetchZigbeeAll({ signal });
+    if (signal && signal.aborted) return;
+    if (res.ver !== undefined) lastVer.current = String(res.ver);
+    applyData(res);
+  };
+
+  const scheduleRetry = () => {
+    if (retryCount.current >= 3) {
+      setLoadState(prev => (prev === 'ok' ? 'ok' : 'error'));
+      return;
+    }
+    retryCount.current++;
+    clearTimeout(retryTimer.current);
+    retryTimer.current = setTimeout(() => refreshSafe(), 3000 * retryCount.current);
+  };
+
+  /* Безопасная перезагрузка: не запускается параллельно сама с собой (флаг "идёт" и флаг
+     "повторить"), на время работы ставит опрос на паузу, не трогает таблицу при открытом окне
+     управления. Повторы при ошибках ограничены тремя. */
+  const refreshSafe = async () => {
+    if (!mounted.current) return;
+    if (modalOpenRef.current) { reloadAfterModal.current = true; return; }
+    if (refreshing.current) { refreshAgain.current = true; return; }
+    refreshing.current = true;
+    pauseAll();
+    const ctl = new AbortController();
+    refreshCtl.current = ctl;
+    try {
+      do {
+        refreshAgain.current = false;
+        await refresh(ctl.signal);
+      } while (refreshAgain.current && mounted.current && !ctl.signal.aborted);
+      if (!ctl.signal.aborted) {
+        retryCount.current = 0;
+        setLoadState('ok');
+      }
+    } catch (err) {
+      if (!ctl.signal.aborted) {
+        console.error('Error fetching zigbee data:', err);
+        lastVer.current = null;
+        scheduleRetry();
+      }
+    } finally {
+      refreshing.current = false;
+      refreshCtl.current = null;
+      resumeAll();
+    }
+  };
+
+  /* Ответ опроса, пришедший во время наших изменений, нельзя просто выбросить: pollQueue уже
+     запомнил его ETag и больше не вызовет колбэк, пока версия не изменится снова. Откладываем
+     перезагрузку до конца защитного окна. */
+  const scheduleDeferred = () => {
+    if (deferredTimer.current) return;
+    deferredTimer.current = setTimeout(() => {
+      deferredTimer.current = null;
+      if (!mounted.current) return;
+      if (guardActive()) { scheduleDeferred(); return; }
+      refreshSafe();
+    }, 1000);
+  };
 
   useEffect(() => {
-    refresh();
+    mounted.current = true;
     let active = true;
-    registerPoll('zigbee', '/api/zigbee/get', function(data) {
+    /* Опрос лёгкий: одна запись (limit=1) и ETag по версии таблицы. Версия "ver" в заголовке
+       ответа покрывает ВСЮ таблицу, а не одну страницу. Первый ответ опроса (версия ещё не
+       известна) запускает первую загрузку, отдельного refresh() при монтировании больше нет. */
+    registerPoll('zigbee', '/api/zigbee/get?offset=0&limit=1', function(data) {
       if (!active) return;
-      if (isPending.current) return;
-      if (Date.now() - lastChangeTime.current < 3000) return;
-      if (data) {
-        const zigbee = data.zigbee || [];
-        const normalized = zigbee.map(normalizeDevice);
-        const snap = {};
-        zigbee.forEach(d => { snap[d.id] = buildSnapshot(d); });
-        serverSnapshot.current = snap;
+      if (!data || !Array.isArray(data.zigbee)) return;
+      /* Запасной вариант для прошивки без поля ver: сравнение первой записи и total */
+      const sig = (data.ver !== undefined)
+        ? String(data.ver)
+        : JSON.stringify([data.total, data.zigbee]);
+      if (sig === lastVer.current) return;
+      if (guardActive()) { scheduleDeferred(); return; }
+      if (data.ver === undefined) lastVer.current = sig;
+      refreshSafe();
+    }, { immediate: true });
 
-        if (!modalOpenRef.current) {
-          setDevices(normalized);
-          setLanguage(data.lang || 'ru');
-          dirtyIds.current.clear();
-          setSelectedDevice(prev => {
-            if (!prev) return null;
-            const updated = normalized.find(d => d.id === prev.id);
-            return updated || prev;
-          });
-        }
-      }
-    });
-    return () => { active = false; unregisterPoll('zigbee'); };
+    /* Страховка: если опрос не доставил первый ответ (три ошибки подряд снимают запись
+       из очереди), загрузка всё равно стартует */
+    const startGuard = setTimeout(() => {
+      if (active && lastVer.current === null && !refreshing.current) refreshSafe();
+    }, 6000);
+
+    return () => {
+      active = false;
+      mounted.current = false;
+      clearTimeout(startGuard);
+      clearTimeout(deferredTimer.current);
+      clearTimeout(retryTimer.current);
+      clearTimeout(closeTimer.current);
+      if (refreshCtl.current) refreshCtl.current.abort();
+      unregisterPoll('zigbee');
+    };
   }, []);
 
   const handleToggle = (device, onoff) => {
     const updated = { ...device, onoff: onoff ? 1 : 0 };
     setDevices(prev => prev.map(d => d.id === device.id ? updated : d));
-    isPending.current = true;
+    pendingPosts.current++;
     lastChangeTime.current = Date.now();
 
     /* Master enable/disable — только onoff, без MQTT-команды */
-    fetch('/api/zigbee/enable', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: device.id, onoff: onoff ? 1 : 0 })
-    })
-      .then(r => r.json())
+    enqueuePost('/api/zigbee/enable', { id: device.id, onoff: onoff ? 1 : 0 })
+      .catch(err => console.error('Error toggling zigbee device:', err))
       .finally(() => {
-        setTimeout(() => { isPending.current = false; }, 1500);
+        pendingPosts.current--;
+        holdUntil.current = Date.now() + 1500;
       });
   };
 
@@ -444,10 +549,19 @@ export function TabZigbee({}) {
     setIsModalOpen(false);
     setSelectedDevice(null);
     modalOpenRef.current = false;
-    setTimeout(() => refresh(), 300);
+    /* Перечитываем таблицу только если в окне что-то менялось или пока оно было открыто пришла
+       новая версия. Задержка больше 300 мс отложенной отправки в окне, чтобы чтение не обогнало запись. */
+    if (reloadAfterModal.current) {
+      reloadAfterModal.current = false;
+      clearTimeout(closeTimer.current);
+      closeTimer.current = setTimeout(() => {
+        if (guardActive()) scheduleDeferred(); else refreshSafe();
+      }, 600);
+    }
   };
 
   const handleDeviceUpdate = (updatedDevice) => {
+    reloadAfterModal.current = true;
     const snap = serverSnapshot.current[updatedDevice.id] || {};
     const typeToClusters = { socket: [6], dimmer: [6, 8], lamp: [6, 8, 768] };
     const clusters = updatedDevice.clusters || typeToClusters[updatedDevice.zbee_device_type] || [6];
@@ -483,30 +597,32 @@ export function TabZigbee({}) {
     lastChangeTime.current = Date.now();
     setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d));
 
+    /* Запросы идут по очереди (command, затем set), а не параллельно */
+    const track = (p) => {
+      pendingPosts.current++;
+      p.catch(err => console.error('Error saving zigbee device:', err))
+        .finally(() => {
+          pendingPosts.current--;
+          holdUntil.current = Date.now() + 1500;
+        });
+    };
+
     if (onoffChanged) {
       /* Физическое управление — MQTT-команда, без master enable */
-      fetch('/api/zigbee/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: updatedDevice.id, onoff: cur.onoff })
-      }).catch(err => console.error('Error sending command:', err));
+      track(enqueuePost('/api/zigbee/command', { id: updatedDevice.id, onoff: cur.onoff }));
     }
 
     if (configChanged) {
-      fetch('/api/zigbee/set', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: updatedDevice.id,
-          ieee: cur.zbee_ieee,
-          ep: cur.zbee_endpoint,
-          clusters: JSON.stringify(cur.clusters),
-          info: cur.zbee_label,
-          ...(cur.brightness !== snap.brightness && { brightness: cur.brightness }),
-          ...(cur.color_hex !== snap.color_hex && { color_hex: cur.color_hex }),
-          override: updatedDevice.override
-        })
-      }).catch(err => console.error('Error saving config:', err));
+      track(enqueuePost('/api/zigbee/set', {
+        id: updatedDevice.id,
+        ieee: cur.zbee_ieee,
+        ep: cur.zbee_endpoint,
+        clusters: JSON.stringify(cur.clusters),
+        info: cur.zbee_label,
+        ...(cur.brightness !== snap.brightness && { brightness: cur.brightness }),
+        ...(cur.color_hex !== snap.color_hex && { color_hex: cur.color_hex }),
+        override: updatedDevice.override
+      }));
     }
 
     dirtyIds.current.delete(updatedDevice.id);
@@ -515,12 +631,8 @@ export function TabZigbee({}) {
   };
 
   const handleRescan = (device) => {
-    fetch('/api/zigbee/rescan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: device.id })
-    })
-      .then(r => r.json())
+    reloadAfterModal.current = true;
+    enqueuePost('/api/zigbee/rescan', { id: device.id })
       .then(() => {
         /* Сбрасываем тип устройства до определения зонда */
         setDevices(prev => prev.map(d =>
@@ -554,7 +666,11 @@ export function TabZigbee({}) {
         </div>
         <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Беспроводная кнопка у кровати гасит лампу на кухне, и без единого провода. Здесь собраны ваши Zigbee-устройства: лампочки, розетки, датчики. Видно их состояние, ими можно управлять и учить новому.' : 'A wireless button by your bed turns off the kitchen lamp, with no wire at all. Your Zigbee devices live here: bulbs, plugs, sensors. See their state, control them and teach them new tricks.'}</p>
         <div class="text-center text-slate-500 text-lg py-12">
-          ${language === 'ru' ? 'Нет настроенных Zigbee устройств. Добавьте их на странице Select pin.' : 'No Zigbee devices configured. Add them on the Select pin page.'}
+          ${loadState === 'loading'
+            ? (language === 'ru' ? 'Загрузка...' : 'Loading...')
+            : loadState === 'error'
+              ? (language === 'ru' ? 'Не удалось загрузить список устройств. Проверьте связь с контроллером.' : 'Failed to load the device list. Check the connection to the controller.')
+              : (language === 'ru' ? 'Нет настроенных Zigbee устройств. Добавьте их на странице Select pin.' : 'No Zigbee devices configured. Add them on the Select pin page.')}
         </div>
       </div>
 
@@ -629,12 +745,14 @@ export function TabZigbee({}) {
                             <td class="px-6 py-2 text-sm text-slate-600">${head.zbee_label || ''}</td>
                             <td class="px-6 py-2" onClick=${(e) => e.stopPropagation()}>
                               <${MyPolzunok} value=${head.onoff || 0} disabled=${dirtyIds.current.has(head.id)} onChange=${(val) => {
+                                /* Группа включает головную строку: каждый слот переключается один раз */
                                 if (hasMultiDp) {
                                   group.forEach(d => {
                                     handleToggle(d, val === 1);
                                   });
+                                } else {
+                                  handleToggle(head, val);
                                 }
-                                handleToggle(head, val);
                               }} />
                             </td>
                             <td class="px-6 py-2 text-sm flex gap-2" onClick=${(e) => e.stopPropagation()}>
@@ -701,6 +819,7 @@ export function TabZigbee({}) {
           onClose=${closeModal}
           onUpdate=${handleDeviceUpdate}
           onRescan=${handleRescan}
+          onTouched=${() => { reloadAfterModal.current = true; }}
           language=${language}
         />
       `}
@@ -715,7 +834,7 @@ export function TabZigbee({}) {
           onClose=${() => setLearnIeee(null)}
           onSaved=${() => {
             setLearnIeee(null);
-            refresh();
+            refreshSafe();
           }}
           onGoToButtonPin=${() => {
             setLearnIeee(null);

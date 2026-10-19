@@ -1,10 +1,9 @@
-
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
-import { fetchConditions, fetchCondPool, condPayload, validateCondExpr, CondInput } from '../condlib.js';
+import { fetchCondData, fetchPinsByType, condPayload, validateCondExpr, CondInput } from '../condlib.js';
 
 function ModalSwitch({
   modalType,
@@ -16,6 +15,8 @@ function ModalSwitch({
   onSwitchChange,
   connectionOptions,
   pintopin = [],
+  condsLib = null,   // библиотека условий из общего стора страницы (если есть)
+  condPool = null,   // заполненность пула выражений из того же стора
   SliderComponent = MyPolzunok
 }) {
   const [switchInfo, setSwitchInfo] = useState(selectedSwitch?.info || '');
@@ -25,8 +26,8 @@ function ModalSwitch({
     selectedSwitch?.setrpins || ''
   );
   const [pinOptions, setPinOptions] = useState([]);
-  const [condsList, setCondsList] = useState([]);
-  const [poolInfo, setPoolInfo] = useState(null);
+  const [condsList, setCondsList] = useState(condsLib || []);
+  const [poolInfo, setPoolInfo] = useState(condPool || null);
   // Свободное выражение условия связи (текст) + исходное состояние, чтобы
   // не превращать ссылку на ячейку библиотеки в собственное выражение при
   // простом пересохранении.
@@ -73,32 +74,30 @@ function ModalSwitch({
     const signal = controller.signal;
 
     const loadData = async () => {
+      // 1. Реле и выключатели (topin 2, 11, 3): постранично, по одному запросу.
+      //    Фильтр на стороне прошивки; Zigbee-слоты с ID от 100 больше не теряются.
       try {
-        const response = await fetchWithRetry('/api/select/get?limit=200', {
-          method: 'GET',
-          cache: 'no-store',
-          headers: { 'Content-Type': 'application/json' },
-          signal
-        });
-        const data = await response.json();
-        if (!data || !data.data || !Array.isArray(data.data)) {
-          console.error('Invalid data format:', data);
-          setPinOptions([]);
-          return;
-        }
-        const relayPins = data.data.filter((pin) => pin.topin === 2 || pin.topin === 11 || pin.topin === 3);
-        setPinOptions(relayPins);
+        const pins = await fetchPinsByType([2, 11, 3], { signal });
+        if (signal.aborted) return;
+        setPinOptions(pins);
       } catch (error) {
         if (error.name !== 'AbortError') {
           console.error('Error fetching pin config:', error);
           setPinOptions([]);
         }
       }
+      if (signal.aborted) return;
+
+      // 2. Условия: страница уже держит библиотеку в общем сторе и передаёт её
+      //    пропсами - отдельный запрос /api/mysett/get тогда не нужен.
+      if (condsLib && condsLib.length > 0) return;
+      const cd = await fetchCondData();
+      if (signal.aborted) return;
+      setCondsList(cd.conds);
+      setPoolInfo(cd.pool);
     };
 
     loadData();
-    fetchConditions().then(setCondsList);
-    fetchCondPool().then(setPoolInfo);
     return () => controller.abort();
   }, []);
 
@@ -162,7 +161,7 @@ function ModalSwitch({
         jsonData.pinact = {};
       } else {
         // selectedConnection не пустой, но совпадения в pinOptions нет
-        // (гонка/фильтр /api/select/get). НЕ отправляем "setrpins" вовсе —
+        // (гонка/фильтр /api/pins/get). НЕ отправляем "setrpins" вовсе —
         // backend (parse_switch_json, Zigbee-ветка) стирает PinsLinks
         // безусловным memset() как только видит ключ "setrpins" в теле,
         // независимо от того, есть ли рядом валидный "pinact". Раз нам

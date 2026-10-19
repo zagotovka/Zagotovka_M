@@ -2,9 +2,12 @@
 import { h, useState, useEffect, useRef, html } from '../bundle.js';
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
+import { registerPoll, unregisterPoll } from '../pollQueue.js';
 
 const LOG_RING_MAX_CHARS = 4000; // лимит на клиенте — не даём тексту расти бесконечно в DOM
-const LOG_POLL_MS = 1000;        // опрос раз в секунду, пока не поставлено на паузу
+// Частота опроса (раз в секунду) задаётся pollQueue: все запросы страницы идут через общую
+// очередь, в полёте не больше одного. Раньше здесь был собственный setInterval с голым fetch.
+const LOG_CONN_LOST_MS = 10000;  // нет удачного ответа дольше - показать предупреждение и кнопку Retry
 
 // ---------------------------------------------------------------------------
 // Help Content
@@ -450,51 +453,78 @@ const LOGGER_HELP = {
   `
 };
 
-function LogsTerminal({ language }) {
+function LogsTerminal({ language, onLang }) {
   const [text, setText] = useState('');
   const [paused, setPaused] = useState(false);
+  const [hidden, setHidden] = useState(typeof document !== 'undefined' && !!document.hidden);
+  const [connLost, setConnLost] = useState(false);
+  const [expired, setExpired] = useState(false);
+  const [epoch, setEpoch] = useState(0);     // увеличивается кнопкой Retry: перерегистрирует опрос
   const cursorRef = useRef(0);
   const boxRef = useRef(null);
+  const langRef = useRef(language);
+  const lastOkRef = useRef(Date.now());
+  langRef.current = language;
+
+  // Скрытая вкладка не опрашивается (как и раньше).
+  useEffect(() => {
+    const onVis = () => setHidden(!!document.hidden);
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
 
   useEffect(() => {
-    if (paused) return;
-    let stopped = false;
+    if (paused || hidden) return undefined;
+    let active = true;
+    lastOkRef.current = Date.now();
 
-    const tick = () => {
-      if (stopped || document.hidden) return;
-      fetch('api/logs/get', {
-        method: 'POST',
-        cache: 'no-store',
-        body: JSON.stringify({ since: cursorRef.current }),
-      })
-        .then((r) => r.json())
-        .then((d) => {
-          if (stopped || !d) return;
-          cursorRef.current = d.cursor || 0;
-          if (d.text) {
-            setText((prev) => {
-              const chunk = d.dropped
-                ? (language === 'ru'
-                    ? '\n… [пропуск — буфер устройства переполнен] …\n'
-                    : '\n… [gap — device buffer overflowed] …\n') + d.text
-                : d.text;
-              const next = prev + chunk;
-              return next.length > LOG_RING_MAX_CHARS
-                ? next.slice(next.length - LOG_RING_MAX_CHARS)
-                : next;
-            });
-          }
-        })
-        .catch(() => {});
-    };
+    // Запрос идёт через pollQueue (в полёте не больше одного запроса на всю страницу, вместе с
+    // опросом common). URL и тело вычисляются перед каждым запросом, поэтому курсор всегда свежий.
+    // Данные не теряются при паузе или уходе со страницы: курсор двигается только в этом колбэке,
+    // а прошивка хранит хвост лога и отдаёт его заново, начиная с последнего принятого места.
+    registerPoll('logs', () => '/api/logs/get', (d) => {
+      if (!active) return;
+      if (d && d.__session_expired) { setExpired(true); return; }
+      // Ответ без числового cursor (ошибка, пустой или чужой JSON) курсор не трогает.
+      // Раньше стояло "d.cursor || 0": любой такой ответ сбрасывал курсор в 0,
+      // и весь буфер дописывался в окно повторно.
+      if (!d || typeof d.cursor !== 'number' || typeof d.text !== 'string') return;
+      cursorRef.current = d.cursor;
+      lastOkRef.current = Date.now();
+      setConnLost(false);
+      setExpired(false);
+      onLang(d.lang || null);
+      if (d.text) {
+        setText((prev) => {
+          const chunk = d.dropped
+            ? (langRef.current === 'ru'
+                ? '\n… [пропуск — буфер устройства переполнен] …\n'
+                : '\n… [gap — device buffer overflowed] …\n') + d.text
+            : d.text;
+          const next = prev + chunk;
+          return next.length > LOG_RING_MAX_CHARS
+            ? next.slice(next.length - LOG_RING_MAX_CHARS)
+            : next;
+        });
+      }
+    }, {
+      immediate: true,
+      method: 'POST',
+      body: () => JSON.stringify({ since: cursorRef.current }),
+    });
 
-    tick();
-    const id = setInterval(tick, LOG_POLL_MS);
+    // pollQueue после нескольких ошибок подряд молча снимает опрос с регистрации,
+    // поэтому отсутствие удачных ответов отслеживаем сами.
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastOkRef.current > LOG_CONN_LOST_MS) setConnLost(true);
+    }, 2000);
+
     return () => {
-      stopped = true;
-      clearInterval(id);
+      active = false;
+      clearInterval(watchdog);
+      unregisterPoll('logs');
     };
-  }, [paused, language]);
+  }, [paused, hidden, epoch]);
 
   useEffect(() => {
     if (boxRef.current) boxRef.current.scrollTop = boxRef.current.scrollHeight;
@@ -516,6 +546,18 @@ function LogsTerminal({ language }) {
             : (language === 'ru' ? 'Пауза' : 'Pause')}
         </button>
       </div>
+      ${(connLost || expired) && html`
+        <div class="p-3 rounded-xl bg-amber-100 border border-amber-300 text-amber-900 text-sm flex items-center justify-between gap-4">
+          <span>${expired
+            ? (language === 'ru' ? 'Сессия истекла. Войдите заново.' : 'Session expired. Please sign in again.')
+            : (language === 'ru' ? 'Нет ответа от устройства.' : 'No response from the device.')}</span>
+          <button
+            type="button"
+            onClick=${() => { setConnLost(false); setExpired(false); setEpoch((e) => e + 1); }}
+            class="px-4 py-1.5 rounded-full text-sm font-bold text-white bg-teal-600 hover:bg-teal-700"
+          >Retry</button>
+        </div>
+      `}
       <div
         ref=${boxRef}
         class="bg-slate-900 text-amber-300 text-xs font-mono p-3 rounded-xl overflow-auto whitespace-pre-wrap selection:bg-amber-300 selection:text-slate-900"
@@ -530,20 +572,22 @@ function LogsTerminal({ language }) {
 export function Logger({ }) {
   const [language, setLanguage] = useState('ru');
   const [showHelp, setShowHelp] = useState(false);
+  const langFallbackAsked = useRef(false);
 
-  // Страница не хранит свои данные и не содержит /api/mysett/get — язык
-  // берётся из общих настроек устройства (как на Firmware Update / Zigbee
-  // Devices), чтобы переключатель языка на Global Settings управлял и
-  // этой страницей тоже.
-  const refreshLang = () =>
-    fetch('api/mysett/get', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((r) => setLanguage(r.lang || 'ru'))
-      .catch(() => { });
+  // Язык приходит в ответе /api/logs/get (поле "lang"), поэтому отдельный запрос
+  // /api/mysett/get (весь JSON настроек ради двух символов) не нужен: раньше он шёл
+  // параллельно с первым запросом лога. Запасной вариант для старой прошивки без этого
+  // поля: один запрос настроек через pollQueue, то есть после запроса лога, а не вместе с ним.
+  const handleLang = (lang) => {
+    if (lang) { setLanguage(lang); return; }
+    if (langFallbackAsked.current) return;
+    langFallbackAsked.current = true;
+    registerPoll('logs-lang', '/api/mysett/get', (r) => {
+      if (r && r.lang) setLanguage(r.lang);
+    }, { oneShot: true });
+  };
 
-  useEffect(() => {
-    refreshLang();
-  }, []);
+  useEffect(() => () => unregisterPoll('logs-lang'), []);
 
   return html`
     <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex flex-col gap-6">
@@ -558,7 +602,7 @@ export function Logger({ }) {
           <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Ночь, реле не щёлкнуло, а в интерфейсе всё выглядит правильно. Что на самом деле произошло? Откройте эту страницу: здесь «дневник» контроллера в реальном времени, и ответ обычно уже в нём.' : 'It is midnight, the relay did not click, and the interface says everything is fine. What really happened? Open this page: here is the diary of the controller in real time, and the answer is usually already there.'}</p>
         </div>
 
-        <${LogsTerminal} language=${language} />
+        <${LogsTerminal} language=${language} onLang=${handleLang} />
 
         <div class="w-full flex justify-between items-center bg-white/40 backdrop-blur-md border border-white/60 shadow-sm p-4 rounded-2xl">
           <button

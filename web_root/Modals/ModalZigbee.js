@@ -1,27 +1,22 @@
 import { h, render, useState, useEffect, useRef, html } from '../bundle.js';
 import { MyPolzunok } from '../main.js';
 
-function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language }) {
+function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, onTouched, language }) {
   const lang = language || 'ru';
   const [isScanning, setIsScanning] = useState(false);
 
   const isTrigger = device.zbee_role === 3 || device.override === 6;
   const isSwitch = device.zbee_role === 5 || device.override === 5;
-  const [triggers, setTriggers] = useState([]);
+  /* Раньше здесь при каждом открытии кнопки/выключателя запрашивался весь /api/button/get
+     (все физические кнопки и все Zigbee-триггеры в одном ответе), а затем отбирались записи
+     с полем payload. Прошивка это поле не отдаёт, поэтому список всегда оказывался пустым,
+     а ответ собирался в куче впустую. Запрос убран, поведение экрана не изменилось:
+     блок тестирования показывает подсказку "Нет триггеров". */
+  const triggers = [];
 
-  useEffect(() => {
-    if (!isTrigger && !isSwitch) return;
-    fetch('/api/button/get')
-      .then(r => r.json())
-      .then(data => {
-        const btns = data.data || data;
-        if (Array.isArray(btns)) {
-          const myTriggers = btns.filter(b => b.is_zigbee && b.payload);
-          setTriggers(myTriggers);
-        }
-      })
-      .catch(() => {});
-  }, [isTrigger, isSwitch, device.id]);
+  /* Сообщаем странице, что в окне что-то отправлялось на контроллер: после закрытия
+     нужна перезагрузка таблицы (без этого страница не перегружает таблицу зря). */
+  const touch = () => { if (typeof onTouched === 'function') onTouched(); };
 
   /* Определяем, мульти-EP группа или одиночное устройство */
   const siblings = (allDevices || []).filter(d => d.zbee_ieee === device.zbee_ieee);
@@ -43,13 +38,14 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
   const applyOverrideType = (e) => {
     const val = parseInt(e.target.value, 10);
     setOverrideType(val);
+    touch();
     fetch('/api/zigbee/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: device.id, override: val })
     }).then(() => {
         onUpdate({ ...device, override: val });
-    });
+    }).catch(err => console.error('Error saving override:', err));
   };
 
   /* Маршрут и подписи для кнопки перехода (Switch pin vs Button pin) */
@@ -131,6 +127,7 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
   const applyOnOff = (value) => {
     const val = value ? 1 : 0;
     setOnoff(val);
+    touch();
     fetch('/api/zigbee/command', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -153,6 +150,7 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
   const applyDpOnOff = (slotId, value) => {
     const val = value ? 1 : 0;
     setDpSlots(prev => prev.map(s => s.id === slotId ? { ...s, onoff: val } : s));
+    touch();
     fetch('/api/zigbee/command', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -160,23 +158,43 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, language
     }).catch(err => console.error('Error sending ep command:', err));
   };
 
-  const applyDpBrightness = (slotId, value) => {
-    setDpSlots(prev => prev.map(s => s.id === slotId ? { ...s, brightness: value } : s));
+  /* Ползунок и палитра мульти-EP слота вызывают обработчик на каждое событие input
+     (десятки в секунду при перетаскивании). Раньше на каждое событие уходил отдельный POST,
+     а сервер закрывает соединение после каждого POST: поток новых соединений (лимит 5) и
+     при HTTPS поток рукопожатий. Теперь экран обновляется сразу, а на контроллер уходит
+     один POST после паузы 300 мс (так же работает одиночное устройство). */
+  const dpPending = useRef({});   // ключ -> { timer, body }
+  const sendDpSet = (key) => {
+    const p = dpPending.current[key];
+    if (!p) return;
+    clearTimeout(p.timer);
+    delete dpPending.current[key];
+    touch();
     fetch('/api/zigbee/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: slotId, brightness: value })
-    }).catch(err => console.error('Error sending ep brightness:', err));
+      body: JSON.stringify(p.body)
+    }).catch(err => console.error('Error sending ep set:', err));
+  };
+  const scheduleDpSet = (key, body) => {
+    const prev = dpPending.current[key];
+    if (prev) clearTimeout(prev.timer);
+    dpPending.current[key] = { body, timer: setTimeout(() => sendDpSet(key), 300) };
+  };
+  /* Закрытие окна не теряет последнее значение: отправляем отложенное сразу */
+  useEffect(() => () => {
+    Object.keys(dpPending.current).forEach(k => sendDpSet(k));
+  }, []);
+
+  const applyDpBrightness = (slotId, value) => {
+    setDpSlots(prev => prev.map(s => s.id === slotId ? { ...s, brightness: value } : s));
+    scheduleDpSet('b' + slotId, { id: slotId, brightness: value });
   };
 
   const applyDpColor = (slotId, value) => {
     const hex = parseInt(value.replace('#', ''), 16);
     setDpSlots(prev => prev.map(s => s.id === slotId ? { ...s, color: value, color_hex: hex } : s));
-    fetch('/api/zigbee/set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: slotId, color_hex: hex })
-    }).catch(err => console.error('Error sending ep color:', err));
+    scheduleDpSet('c' + slotId, { id: slotId, color_hex: hex });
   };
 
   const handleOverlayClick = (e) => {

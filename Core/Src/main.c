@@ -1938,9 +1938,12 @@ void StartConfigTask(void *argument)
 	        case 1:
 	          SetPinConfig(); // Сохранение конфигурации пинов в "pins.ini"
 	          break;
-	        case 2:
-	          SetSettingsConfig(); // Когда сохраняем форму в файл "setings.ini"
-	          break;
+case 2:
+          SetSettingsConfig(); // Когда сохраняем форму в файл "setings.ini"
+          /* Конфигурация сохранена: счётчики использования условий и пул
+           * выражений на странице Global Settings изменились. */
+          mark_slice_dirty(&g_ver_settings);
+          break;
 	        case 3:
 	          SetCronConfig(); // Сохранение конфигурации cron в "cron.ini"
 	          break;
@@ -2549,6 +2552,30 @@ void StartOutputTask(void *argument)
  * @retval None
  */
 #define CRON_POLL_MS  50   /* период проверки смены секунды в CronTask, мс */
+
+extern volatile uint8_t g_cron_dirty[NUMTASK];
+
+/* Разбор одной строки Cron в её контекст. Вызывается только из CronTask, поэтому
+ * сам контекст не требует защиты; строка копируется под критической секцией.
+ * Ошибка разбора или пустая строка: контекст обнуляется, строка не срабатывает,
+ * остальные строки не затрагиваются. */
+static void cron_reparse_one(lwdtc_cron_ctx_t *ctxs, int idx)
+{
+  char tmp[sizeof(dbCrontxt[0].cron)];
+
+  taskENTER_CRITICAL();
+  memcpy(tmp, dbCrontxt[idx].cron, sizeof(tmp));
+  taskEXIT_CRITICAL();
+  tmp[sizeof(tmp) - 1] = '\0';
+
+  memset(&ctxs[idx], 0, sizeof(ctxs[idx]));
+  if (tmp[0] == '\0') return;
+  if (lwdtc_cron_parse_with_len(&ctxs[idx], tmp, strlen(tmp)) != lwdtcOK) {
+    memset(&ctxs[idx], 0, sizeof(ctxs[idx]));
+    printf("Failed to parse cron at index %d\r\n", idx);
+  }
+}
+
 /* USER CODE END Header_StartCronTask */
 void StartCronTask(void *argument)
 {
@@ -2566,14 +2593,10 @@ void StartCronTask(void *argument)
   base_timestamp = initializeTime(); // Инициализация базового времени
 
   /* Define context for CRON, used to parse data to */
-  size_t fail_index = 0;
-
-  taskENTER_CRITICAL();
-  if (lwdtc_cron_parse_multi(cron_ctxs, dbCrontxt, NUMTASK, &fail_index) !=
-      lwdtcOK) { // Parse all cron strings
-    printf("Failed to parse cron at index %d\r\n", (int)fail_index);
+  for (int ci = 0; ci < NUMTASK; ci++) {
+    g_cron_dirty[ci] = 0;
+    cron_reparse_one(cron_ctxs, ci);  // каждая строка независимо: ошибка не блокирует остальные
   }
-  taskEXIT_CRITICAL();
   printf("CRONs parsed and ready to go\r\n");
   /* Infinite loop */
   for (;;) {
@@ -2675,6 +2698,13 @@ void StartCronTask(void *argument)
           i++;
         }
         timez_copy.tm_mon -= 1;
+      }
+    }
+    /* Строки Cron, изменённые через веб (/api/cron/set) или загруженные из cron.ini */
+    for (int di = 0; di < NUMTASK; di++) {
+      if (g_cron_dirty[di]) {
+        g_cron_dirty[di] = 0;
+        cron_reparse_one(cron_ctxs, di);
       }
     }
     /* Cron работает с точностью до секунды: проверка раз в CRON_POLL_MS (50 мс)
@@ -3236,6 +3266,7 @@ static void svc_printResults(void) {
              dayLengthHours,
              dayLengthMinutes);
   }
+  mark_slice_dirty(&g_ver_settings);   /* пересчитаны полнолуние, восход/закат */
 }
 
 /* ── Определение изменений для ETag-слайсов и карта cron для PWM fade ──
@@ -3367,17 +3398,23 @@ void StartServiceTask(void *argument)
 	  static uint32_t fade_tick = 0;
 	  /* Карта «какие cron-таймеры управляют этим PWM» (см. svc_build_cron_mask).
 	   * Считается один раз при старте fade, а не каждую секунду. */
-	  static uint64_t svc_cron_mask[NUMPIN];
-	  /* Infinite loop */
+static uint64_t svc_cron_mask[NUMPIN];
+ 	  static uint32_t svc_cron_gen = 0;   /* поколение cron-текста, для которого посчитаны карты */
+    /* Infinite loop */
 
   /* Infinite loop */
   for (;;) {
 	  /* ═══════════════════════════════════════════════
 	   *  БЛОК PWM Fade — каждые 1000 мс (НОВОЕ)
 	   * ═══════════════════════════════════════════════ */
-	  	    if (HAL_GetTick() - fade_tick >= 1000) {
-	  	      fade_tick = HAL_GetTick();
-	            /* common несёт uptime, heap и время - меняется каждую секунду.
+if (HAL_GetTick() - fade_tick >= 1000) {
+  	      fade_tick = HAL_GetTick();
+  	      /* Текст cron-действий изменили (Save, удаление пина): карты устарели */
+  	      if (svc_cron_gen != g_cron_gen) {
+  	        svc_cron_gen = g_cron_gen;
+  	        memset(svc_cron_mask, 0, sizeof(svc_cron_mask));
+  	      }
+            /* common несёт uptime, heap и время - меняется каждую секунду.
 	             * Остальные слайсы помечаются в конце блока, только если данные
 	             * реально изменились (svc_mark_changed_slices). */
 	            mark_slice_dirty(&g_ver_common);
@@ -3481,13 +3518,14 @@ void StartServiceTask(void *argument)
 	          if (len < 0 || (size_t)len >= sizeof(SetSettings.fullmoon)) {
 	            printf("ERROR: len > setsettings.fullmoon! \n");
 	          }
-	        }
-	        if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
-	          Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" after system
-	                                         // reboot
-	        }
-	      }
-	      if (timez_copy.tm_min != prevmin) { // Проверка раз в минуту
+}
+        mark_slice_dirty(&g_ver_settings);   /* пересчитаны полнолуние, восход/закат */
+        if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
+          Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" after system
+                                         // reboot
+        }
+      }
+      if (timez_copy.tm_min != prevmin) { // Проверка раз в минуту
 	        prevmin = timez_copy.tm_min;
 	        if (timez_copy.tm_hour == 0 && timez_copy.tm_min == 1 && year != 0000) {
 	          //          if (moonflag < 3) { // Для уверенности 3 раза!
@@ -3511,11 +3549,12 @@ void StartServiceTask(void *argument)
 	            }
 	          }
 	        }
-	        if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
-	          Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" один раз в
-	                                         // минуту.
-	        }
-	      }
+if (SetSettings.lat_de != 0.0 && SetSettings.lon_de != 0.0) {
+          Check_SunriseSunset_Actions(); // Проверка "Sunrise/Sunset" один раз в
+                                         // минуту.
+        }
+        mark_slice_dirty(&g_ver_settings);   /* пересчитаны полнолуние, восход/закат */
+      }
 	      // === ПЕРИОДИЧЕСКИЙ ДАМП PWM РЕГИСТРОВ (каждые 10 секунд) ===
 	  //    {
 	  //      static uint32_t pwm_dbg_tick = 0;

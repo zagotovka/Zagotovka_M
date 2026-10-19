@@ -1,10 +1,9 @@
-
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
 import { ModalCron } from '../Modals/ModalCron.js';
 import { ModalPwmCron } from '../Modals/ModalPwmCron.js';
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
-import { registerPoll, unregisterPoll } from '../pollQueue.js';
+import { registerPoll, unregisterPoll, pauseAll, resumeAll } from '../pollQueue.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
@@ -101,6 +100,47 @@ function initGlobalTooltip() {
 }
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Сетевые помощники страницы Timer(s)
+// ---------------------------------------------------------------------------
+const CRON_FETCH_TIMEOUT = 8000;  // мс, таймаут одного запроса к /api/cron/* и /api/numline/*
+const NUMLINE_DEBOUNCE = 500;     // мс, пауза после последнего нажатия + или - перед отправкой
+const CRON_PAGES_GUARD = 60;      // предохранитель цикла по страницам (в таблице не больше 50 строк)
+
+// Прошивка отдаёт пустые строки таймеров компактно ({"id":N}) - добавляем недостающие поля.
+function normTimer(t) {
+  return {
+    id: t.id,
+    cron: typeof t.cron === 'string' ? t.cron : '',
+    activ: typeof t.activ === 'string' ? t.activ : '',
+    info: typeof t.info === 'string' ? t.info : '',
+    onoff: t.onoff ? 1 : 0,
+  };
+}
+
+// fetch с таймаутом, внешним сигналом отмены и понятным текстом ошибки сервера.
+function fetchJsonTimed(url, opts, outerSignal) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), CRON_FETCH_TIMEOUT);
+  if (outerSignal) {
+    if (outerSignal.aborted) ctl.abort();
+    else outerSignal.addEventListener('abort', () => ctl.abort(), { once: true });
+  }
+  return fetch(url, { ...(opts || {}), signal: ctl.signal })
+    .then((r) => {
+      if (r.ok) return r.json();
+      return r.text().then((txt) => {
+        let msg = 'HTTP ' + r.status;
+        try {
+          const j = JSON.parse(txt);
+          if (j && j.message) msg = j.message;
+        } catch (e) { /* тело не JSON - оставляем код статуса */ }
+        throw new Error(msg);
+      });
+    })
+    .finally(() => clearTimeout(timer));
+}
+
 function TabCron({ }) {
   const [varcron, setCron] = useState(null);
   const [saveResult, setSaveResult] = useState(null);
@@ -112,68 +152,223 @@ function TabCron({ }) {
   const [showHelp, setShowHelp] = useState(false);
   const [visibleCrons, setVisibleCrons] = useState(1);
   const [numline, setNumline] = useState(0);
-  const isPendingOnOff = useRef(false);
+
+  const mounted = useRef(true);
+  const refreshing = useRef(false);      // идёт ли сейчас полная перезагрузка таблицы
+  const refreshAgain = useRef(false);    // во время перезагрузки пришёл ещё один запрос на неё
+  const writing = useRef(0);             // сколько отправок (POST) сейчас в работе
+  const lastVer = useRef(null);          // подпись последней загруженной версии таблицы
+  const retryAfter = useRef(0);          // не запускать перезагрузку из опроса до этого момента (мс)
+  const pauseDepth = useRef(0);          // счётчик пауз опроса (pauseAll/resumeAll)
+  const modalHeld = useRef(false);       // опрос поставлен на паузу на время открытой модалки
+  const netChain = useRef(Promise.resolve()); // очередь запросов страницы: не больше одного в полёте
+  const abortRef = useRef(null);         // AbortController текущей перезагрузки
+  const visRef = useRef(1);              // актуальное число видимых строк (быстрые нажатия + и -)
+  const totalRef = useRef(0);            // сколько строк таймеров всего в прошивке
+  const numlineTimer = useRef(null);     // отложенная отправка numline
+  const numlineDirty = useRef(false);    // есть неотправленное или отправляемое изменение numline
 
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => { initGlobalTooltip(); }, []);
 
-  useEffect(() => {
-    let active = true;
+  // Пауза опроса со счётчиком: перезагрузка, отправка и открытая модалка не мешают друг другу.
+  const holdPoll = () => { if (pauseDepth.current++ === 0) pauseAll(); };
+  const releasePoll = () => { if (pauseDepth.current > 0 && --pauseDepth.current === 0) resumeAll(); };
 
-    registerPoll('cron', '/api/cron/get', function(r) {
-      if (!active || isPendingOnOff.current) return;
-      if (r !== null && r !== undefined && Array.isArray(r.timers)) {
-        setCron(r.timers);
-        setLanguage(r.lang || 'ru');
-        if (typeof r.numline === 'number') {
-          setNumline(r.numline);
-          setVisibleCrons(r.numline);
-        }
+  // Все запросы страницы (страницы таблицы и POST) идут по очереди.
+  const enqueue = (fn) => {
+    const p = netChain.current.then(fn, fn);
+    netChain.current = p.catch(() => {});
+    return p;
+  };
+
+  const postJson = (url, payload) =>
+    enqueue(() => fetchJsonTimed(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }));
+
+  // Загрузка всей таблицы страницами. Размер страницы ограничивает прошивка (поле "next").
+  const loadAll = async (signal) => {
+    const getPage = (from) =>
+      enqueue(() => fetchJsonTimed('/api/cron/get?from=' + from, { cache: 'no-store' }, signal));
+    const first = await getPage(0);
+    if (!first || !Array.isArray(first.timers)) throw new Error('bad /api/cron/get response');
+    const list = first.timers.slice();
+    let next = (typeof first.next === 'number') ? first.next : -1;
+    let consistent = true;
+    for (let guard = 0; next >= 0 && guard < CRON_PAGES_GUARD; guard++) {
+      const page = await getPage(next);
+      if (!page || !Array.isArray(page.timers) || page.timers.length === 0) break;
+      if (page.ver !== undefined && first.ver !== undefined && page.ver !== first.ver) consistent = false;
+      list.push(...page.timers);
+      next = (typeof page.next === 'number') ? page.next : -1;
+    }
+    return { first, list, consistent };
+  };
+
+  const applyTable = (first, list) => {
+    const total = (typeof first.total === 'number' && first.total > 0) ? first.total : list.length;
+    const arr = [];
+    for (let i = 0; i < total; i++) arr.push(normTimer({ id: i }));
+    list.forEach((item) => {
+      if (typeof item.id === 'number' && item.id >= 0 && item.id < total) arr[item.id] = normTimer(item);
+    });
+    totalRef.current = total;
+    setCron(arr);
+    if (first.lang) setLanguage(first.lang);
+    if (typeof first.numline === 'number' && !numlineDirty.current) {
+      visRef.current = first.numline;
+      setNumline(first.numline);
+      setVisibleCrons(first.numline);
+    }
+    // Версия из первой страницы: опрос не запустит повторную перезагрузку из-за того,
+    // что мы уже загрузили. Для старой прошивки без "ver" - запасная подпись по данным.
+    lastVer.current = (first.ver !== undefined) ? String(first.ver) : JSON.stringify(list);
+  };
+
+  // Безопасная перезагрузка: не запускается параллельно сама с собой и на время
+  // работы ставит опрос на паузу, чтобы в каждый момент шёл один запрос.
+  const refreshSafe = async () => {
+    if (refreshing.current) { refreshAgain.current = true; return; }
+    refreshing.current = true;
+    holdPoll();
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        refreshAgain.current = false;
+        const ctl = new AbortController();
+        abortRef.current = ctl;
+        const { first, list, consistent } = await loadAll(ctl.signal);
+        if (!mounted.current) return;
+        applyTable(first, list);
+        if (!consistent) refreshAgain.current = true;
+        if (!refreshAgain.current) break;
       }
-    }, {immediate: true});
+    } catch (e) {
+      if (!e || e.name !== 'AbortError') console.error('cron refresh:', e);
+      retryAfter.current = Date.now() + 5000;  // после ошибки опрос не долбит устройство 5 секунд
+    } finally {
+      refreshing.current = false;
+      abortRef.current = null;
+      releasePoll();
+    }
+  };
+
+  useEffect(() => {
+    mounted.current = true;
+
+    // Опрос просит только заголовок (limit=0): версия таблицы, numline, lang.
+    // Пока версия не менялась, прошивка отвечает 304 без тела.
+    registerPoll('cron', '/api/cron/get?limit=0', function(r) {
+      if (!mounted.current) return;
+      if (writing.current > 0 || numlineDirty.current || modalHeld.current) return;
+      if (Date.now() < retryAfter.current) return;
+      if (r === null || r === undefined || !Array.isArray(r.timers)) return;
+      const sig = (r.ver !== undefined) ? String(r.ver) : JSON.stringify(r.timers);
+      if (sig !== lastVer.current) refreshSafe();
+    });
+
+    // Первая загрузка сразу, без лишнего запроса-заголовка: опрос потом только сверяет версию.
+    refreshSafe();
 
     return function() {
-      active = false;
+      mounted.current = false;
       unregisterPoll('cron');
+      if (abortRef.current) abortRef.current.abort();
+      if (numlineTimer.current) {
+        // Не теряем последнее нажатие + или -, если ушли со страницы до отправки.
+        clearTimeout(numlineTimer.current);
+        numlineTimer.current = null;
+        fetch('/api/numline/set', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ numline: visRef.current }),
+          keepalive: true,
+        }).catch(() => {});
+      }
+      while (pauseDepth.current > 0) releasePoll();
     };
   }, []);
 
-  const sendNumlineToStm32 = (value) => {
-    isPendingOnOff.current = true;
-    fetch('/api/numline/set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ numline: value })
-    })
-      .then((response) => response.json())
-      .catch((error) => console.error('Error sending Crone line to stm32:', error))
-      .finally(() => {
-        setTimeout(() => {
-          isPendingOnOff.current = false;
-        }, 1500);
-      });
-  };
-
-  const addCron = () => {
-    if (visibleCrons < varcron.length) {
-      const newVisibleCrons = visibleCrons + 1;
-      setVisibleCrons(newVisibleCrons);
-      setNumline(newVisibleCrons);
-      sendNumlineToStm32(newVisibleCrons);
+  // Отправка одной строки таймера. Возвращает { ok, ver, message }.
+  const saveCron = async (record) => {
+    writing.current++;
+    holdPoll();
+    try {
+      const resp = await postJson('/api/cron/set', record);
+      return { ok: true, ver: (resp && typeof resp.ver === 'number') ? resp.ver : undefined };
+    } catch (e) {
+      console.error('cron save:', e);
+      return { ok: false, message: (e && e.message) ? e.message : 'Save failed' };
+    } finally {
+      writing.current--;
+      releasePoll();
     }
   };
 
-  const deleteCron = () => {
-    if (visibleCrons > 0) {
-      const newVisibleCrons = visibleCrons - 1;
-      setVisibleCrons(newVisibleCrons);
-      setNumline(newVisibleCrons);
-      sendNumlineToStm32(newVisibleCrons);
+  // Ползунок On/Off в строке: отправляем только id и onoff, чтобы не затереть
+  // чужие правки остальных полей устаревшей копией строки.
+  const handleToggle = async (d, value) => {
+    const v = value ? 1 : 0;
+    setCron((prev) => (prev ? prev.map((b) => (b.id === d.id ? { ...b, onoff: v } : b)) : prev));
+    const res = await saveCron({ id: d.id, onoff: v });
+    if (!mounted.current) return;
+    if (!res.ok) { refreshSafe(); return; }  // откат: перечитать то, что реально на устройстве
+    // Если версия выросла ровно на единицу, это только наше изменение: перезагрузка не нужна.
+    const prevVer = Number(lastVer.current);
+    if (res.ver !== undefined && Number.isFinite(prevVer) && res.ver === prevVer + 1) {
+      lastVer.current = String(res.ver);
+    } else {
+      refreshSafe();
     }
   };
+
+  // Сохранение из модалок Edit Timer / Edit PWM Timer. Единственный POST на Submit.
+  const handleCronSave = async (record) => {
+    const res = await saveCron(record);
+    if (res.ok && mounted.current) {
+      setCron((prev) => (prev ? prev.map((b) => (b.id === record.id ? normTimer(record) : b)) : prev));
+      refreshSafe();  // подтянуть то, что реально сохранила прошивка (обрезка, нормализация)
+    }
+    return res;
+  };
+
+  // Отправка numline: одна отправка после серии быстрых нажатий + и -.
+  const flushNumline = async () => {
+    numlineTimer.current = null;
+    const value = visRef.current;
+    writing.current++;
+    holdPoll();
+    try {
+      await postJson('/api/numline/set', { numline: value });
+    } catch (e) {
+      console.error('numline save:', e);
+    } finally {
+      writing.current--;
+      releasePoll();
+    }
+    if (numlineTimer.current === null) numlineDirty.current = false;
+    if (mounted.current && numlineTimer.current === null) refreshSafe();  // данные новых видимых строк
+  };
+
+  const stepNumline = (delta) => {
+    const cap = totalRef.current || (varcron ? varcron.length : 0);
+    const next = Math.max(1, Math.min(cap, visRef.current + delta));
+    if (next === visRef.current) return;
+    visRef.current = next;
+    numlineDirty.current = true;
+    setVisibleCrons(next);
+    setNumline(next);
+    if (numlineTimer.current) clearTimeout(numlineTimer.current);
+    numlineTimer.current = setTimeout(flushNumline, NUMLINE_DEBOUNCE);
+  };
+
+  const addCron = () => stepNumline(1);
+  const deleteCron = () => stepNumline(-1);
 
   const helpContent = {
-    ru: html`
+    get ru() { return html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
         <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Как подключить таймер (пошагово)</h2>
@@ -701,8 +896,8 @@ function TabCron({ }) {
           </ul>
         </section>
       </div>
-    `,
-    en: html`
+    `; },
+    get en() { return html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
         <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">How to connect a timer (step by step)</h2>
@@ -1230,7 +1425,7 @@ function TabCron({ }) {
           </ul>
         </section>
       </div>
-    `,
+    `; },
   };
 
   if (varcron === null) {
@@ -1254,36 +1449,18 @@ function TabCron({ }) {
   };
 
   const openModal = (type, cronData) => {
+    // Пока модалка открыта, опрос на паузе: единственный запрос - загрузка списка PWM пинов.
+    if (!modalHeld.current) { modalHeld.current = true; holdPoll(); }
     setModalType(type);
     setSelectedCron(cronData);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
+    if (modalHeld.current) { modalHeld.current = false; releasePoll(); }
     setIsModalOpen(false);
     setModalType(null);
     setSelectedCron(null);
-  };
-
-  const handleCronChange = (updatedCron) => {
-    console.log('handleCronChange:', updatedCron);
-
-    setCron(varcron.map((b) => (b.id === updatedCron.id ? updatedCron : b)));
-    isPendingOnOff.current = true;
-
-    fetch('/api/cron/set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedCron),
-    })
-      .then(response => response.json())
-      .then(data => { console.log('Cron job updated successfully:', data); })
-      .catch(error => { console.error('Error updating cron job:', error); })
-      .finally(() => {
-        setTimeout(() => {
-          isPendingOnOff.current = false;
-        }, 1500);
-      });
   };
 
   // -------------------------------------------------------------------------
@@ -1317,7 +1494,7 @@ const ArrayCron = ({ d, index }) => {
       <td class="px-6 py-4">
         <${MyPolzunok}
           value=${d.onoff}
-          onChange=${(value) => handleCronChange({ ...d, onoff: value })}
+          onChange=${(value) => handleToggle(d, value)}
         />
       </td>
      <td class="px-6 py-4 text-center">
@@ -1418,7 +1595,7 @@ const ArrayCron = ({ d, index }) => {
                   >+</button>
                 `
       : null}
-            ${visibleCrons > 0
+            ${visibleCrons > 1
       ? html`
                   <button
                     class="bg-rose-500 hover:bg-rose-600 shadow-md text-white font-black text-xl w-10 h-10 rounded-full transition-transform hover:scale-110 active:scale-95 flex items-center justify-center pb-1 shadow-rose-500/30"
@@ -1442,7 +1619,7 @@ const ArrayCron = ({ d, index }) => {
           hideModal=${closeModal}
           title="Edit PWM Timer(s)"
           selectedCron=${selectedCron}
-          handleCronChange=${handleCronChange}
+          onSave=${handleCronSave}
           modalClass="mt-24"
         />
       ` : isModalOpen ? html`
@@ -1452,7 +1629,7 @@ const ArrayCron = ({ d, index }) => {
           hideModal=${closeModal}
           title="Edit Timer(s)"
           selectedCron=${selectedCron}
-          handleCronChange=${handleCronChange}
+          onSave=${handleCronSave}
           modalClass="mt-24"
         />
       ` : null}

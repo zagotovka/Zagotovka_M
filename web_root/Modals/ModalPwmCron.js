@@ -1,5 +1,7 @@
 import { h, render, useState, useEffect, useRef, html } from '../bundle.js';
 import { MyPolzunok } from '../main.js';
+import { fetchPinsByType } from '../condlib.js';
+import { validateTimerFields } from './ModalCron.js';
 
 function ModalPwmCron({
     modalType,
@@ -8,7 +10,7 @@ function ModalPwmCron({
     closeOnOverlayClick = true,
     title,
     selectedCron,
-    handleCronChange,
+    onSave,
     modalClass,
     SliderComponent = MyPolzunok
 }) {
@@ -39,49 +41,64 @@ function ModalPwmCron({
 
     const [pwmOptions, setPwmOptions] = useState([]);
 
-	useEffect(() => {
-	    // limit=100 обязателен: без него бэкенд отдает только пины с ID 0-29
-	    // (по умолчанию limit=30 в обработчике /api/select/get), и PWM-пины
-	    // с ID >= 30 (например PF9, ID=70) не попадают в список.
-	    fetch('/api/select/get?limit=100', { method: 'GET', cache: 'no-store' })
-		.then(res => res.json())
-		.then(res => {
-		    if (res && res.data && Array.isArray(res.data)) {
-		        const pwms = res.data.filter(pin => pin.topin === 5);
-		        setPwmOptions(pwms);
-		        if (!pwmId && pwms.length > 0) {
-		            setPwmId(pwms[0].id.toString());
-		        }
-		    }
-		})
-		.catch(err => console.error("Error fetching pin config:", err));
-	}, []);
+    const [pwmLoading, setPwmLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [errMsg, setErrMsg] = useState('');
+    const aliveRef = useRef(true);
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        const jsonData = Object.fromEntries(formData);
-
-        jsonData.id = selectedCron.id;
-        jsonData.pins = selectedCron.pins;
-
-        jsonData.onoff = onoff ? 1 : 0;
-        jsonData.info = cronInfo;
-        jsonData.cron = cronExpression;
-        jsonData.activ = `pwm:${pwmId},${duration},${startDuty},${endDuty}`;
-
-        fetch('/api/cron/set', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(jsonData)
-        })
-            .then((response) => response.json())
-            .then((data) => {
-                handleCronChange({ ...selectedCron, ...jsonData });
-                hideModal();
-                window.location.href = '/#/cron';
+    // Список PWM пинов: один запрос при открытии (страница на это время держит опрос на паузе).
+    // Запрос отменяется, если модалку закрыли раньше, чем пришёл ответ.
+    useEffect(() => {
+        aliveRef.current = true;
+        const ctl = new AbortController();
+        fetchPinsByType([5], { signal: ctl.signal })
+            .then((pwms) => {
+                if (!aliveRef.current) return;
+                setPwmOptions(pwms);
+                setPwmLoading(false);
+                if (!pwmId && pwms.length > 0) {
+                    setPwmId(pwms[0].id.toString());
+                }
             })
-            .catch((error) => console.error('Error:', error));
+            .catch((err) => {
+                if (!aliveRef.current || (err && err.name === 'AbortError')) return;
+                console.error('Error fetching pin config:', err);
+                setPwmLoading(false);
+                setErrMsg('Failed to load PWM pins');
+            });
+        return () => { aliveRef.current = false; ctl.abort(); };
+    }, []);
+
+    // Единственный POST на Submit: сохранение выполняет страница (onSave), модалка только ждёт результат.
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (saving) return;
+
+        const activ = `pwm:${pwmId},${duration},${startDuty},${endDuty}`;
+        const problem = validateTimerFields(cronExpression, activ, cronInfo);
+        if (problem) {
+            setErrMsg(problem);
+            return;
+        }
+        setErrMsg('');
+        setSaving(true);
+
+        const res = await onSave({
+            id: selectedCron.id,
+            cron: cronExpression,
+            activ: activ,
+            info: cronInfo,
+            onoff: onoff ? 1 : 0
+        });
+
+        if (!aliveRef.current) return;
+        if (res && res.ok) {
+            hideModal();
+            window.location.href = '/#/cron';
+        } else {
+            setSaving(false);
+            setErrMsg((res && res.message) || 'Save failed');
+        }
     };
 
     const renderModalContent = () => {
@@ -182,8 +199,13 @@ function ModalPwmCron({
             </tbody>
           </table>
         </div>
+        ${errMsg && html`<p class="text-red-600 text-sm mt-2">${errMsg}</p>`}
         <div class="modal-footer flex justify-end mt-4">
-          <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+          <button
+            type="submit"
+            disabled=${saving || pwmLoading}
+            class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${(saving || pwmLoading) ? 'opacity-60 cursor-not-allowed' : ''}"
+          >
             Save PWM Cron
           </button>
         </div>

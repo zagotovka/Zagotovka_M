@@ -95,6 +95,11 @@ void mg_ota_set_pending_bank(uint8_t target_bank, uint8_t prev_bank) {
     tmp.ota_active_bank = target_bank;
     tmp.ota_prev_active_bank = prev_bank;
     tmp.ota_state = OTA_STATE_FIRST_BOOT;
+    /* Образ в целевом банке записан полностью и прошёл CRC+size
+     * (эта функция вызывается ПОСЛЕ успешного mg_ota_end()): снимаем метку
+     * "записан не полностью". Версия остаётся пустой до mg_ota_commit(). */
+    memset(target_bank ? tmp.ota_bank_b_version : tmp.ota_bank_a_version, 0,
+           sizeof(tmp.ota_bank_a_version));
     /* Явное обнуление: каждый новый OTA-цикл стартует с чистым счётчиком
      * попыток, независимо от того, чем закончился предыдущий цикл
      * (иначе, например, перепрошивка поверх незавершённого trial-цикла
@@ -125,7 +130,33 @@ void mg_ota_cancel_pending(uint32_t prev_state) {
 
 /* ---- Сброс статуса в 0 при старте новой записи прошивки -------------- */
 void mg_ota_reset_status(void) {
-    ota_flag_write(0); // 0 = Нет данных / флаг сброшен
+    /* Начало записи в целевой банк: помечаем его как "образ записан не
+     * полностью". Метка лежит в настройках (flash), поэтому переживает обрыв
+     * питания посреди загрузки: пока запись не завершена и CRC не сошёлся,
+     * банк не считается рабочим (mg_ota_bank_image_valid()), а кнопка
+     * переключения на него на странице неактивна. Метку снимает
+     * mg_ota_set_pending_bank() после успешного mg_ota_end(). Старая версия
+     * целевого банка стирается: образ в нём уже перезаписывается. */
+    const HTTPSsettings *cur = get_valid_settings();
+    HTTPSsettings tmp;
+    if (cur) memcpy(&tmp, cur, sizeof(tmp));
+    else     memset(&tmp, 0, sizeof(tmp));
+
+    uint8_t target = mg_ota_get_active_bank() ? 0 : 1;   /* противоположный активному */
+    char *slot = target ? tmp.ota_bank_b_version : tmp.ota_bank_a_version;
+    memset(slot, 0, sizeof(tmp.ota_bank_a_version));
+    strncpy(slot, OTA_BANK_VERSION_PARTIAL, sizeof(tmp.ota_bank_a_version) - 1);
+
+    tmp.ota_state = 0;   /* 0 = Нет данных / флаг сброшен (как и раньше) */
+    bool ok = update_and_write_settings(&tmp);
+
+    if (g_log_filter_mask & LOG_MASK_OTA) {
+        const char *prefix = cat_prefixes[LOG_CAT_OTA];
+        const char *msg = ok ? "reset_status: target bank marked partial -> OK\r\n"
+                             : "reset_status: FAILED\r\n";
+        HAL_UART_Transmit(&huart3, (uint8_t *) prefix, strlen(prefix), 50);
+        HAL_UART_Transmit(&huart3, (uint8_t *) msg, strlen(msg), 200);
+    }
 }
 
 /* ---- OTA query stubs ---------------------------------------------------- */
@@ -199,7 +230,19 @@ bool mg_ota_commit(void) {
 bool mg_ota_bank_image_valid(uint8_t bank) {
     uint32_t addr = bank ? 0x08100000u : 0x08040000u;
     uint32_t msp  = *(volatile uint32_t *)addr;
-    return (msp & 0xFFF00000u) == 0x20000000u;
+    if ((msp & 0xFFF00000u) != 0x20000000u) return false;
+
+    /* Запись в банк не завершена (или была прервана): после первого же
+     * чанка MSP уже выглядит верно, но образ неполный. Такой банк не должен
+     * ни предлагаться для переключения, ни приниматься mg_ota_switch_bank(). */
+    const HTTPSsettings *s = get_valid_settings();
+    if (s) {
+        const char *ver = bank ? s->ota_bank_b_version : s->ota_bank_a_version;
+        if (strncmp(ver, OTA_BANK_VERSION_PARTIAL, sizeof(s->ota_bank_a_version)) == 0) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /* Переключение на противоположный банк без заливки нового образа

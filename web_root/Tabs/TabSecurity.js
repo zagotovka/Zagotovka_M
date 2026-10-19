@@ -1,10 +1,11 @@
 
+
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
 import { ModalSIM800L, maskPhone, EyeIcon, EyeSlashIcon } from '../Modals/ModalSIM800L.js';
 import { ModalSecurity } from '../Modals/ModalSecurity.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
-import { registerPoll, unregisterPoll } from '../pollQueue.js';
+import { registerPoll, unregisterPoll, pauseAll, resumeAll } from '../pollQueue.js';
 import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -61,10 +62,14 @@ const TabSecurity = () => {
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [modalType, setModalType] = useState('');
   const [selectedSecurity, setSelectedSecurity] = useState(null);
-  const [isSaving, setIsSaving] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connected');
-  const [lastSaveTime, setLastSaveTime] = useState(0);
   const [revealTablePhone, setRevealTablePhone] = useState(false); // по умолчанию номер скрыт
+  const loadingRef = useRef(false);   // идёт полная перезагрузка
+  const againRef = useRef(false);     // во время перезагрузки пришла просьба повторить
+  const lastVerRef = useRef(null);    // версия таблицы, уже показанная на экране
+  const savingRef = useRef(0);        // сколько записей сейчас в полёте
+  const missedRef = useRef(false);    // опрос принёс данные, пока шла запись
+  const holdRef = useRef(0);          // счётчик пауз опроса (запись и перезагрузка)
 
   const i18n = {
     ru: {
@@ -73,6 +78,7 @@ const TabSecurity = () => {
       colId: 'ID', colPin: 'Pin', colType: 'Type of sensor', colSendSms: 'Send SMS', colEditPin: 'Edit Pin',
       notConfigured: 'Не настроено', notSet: 'Не задан', noInfo: 'Нет инфо', noData: 'Нет доступных данных мониторинга',
       edit: 'Ред.', showHelp: 'Показать справку', hideHelp: 'Скрыть справку',
+      modalSim: 'Настройки SIM800L', modalSensor: 'Датчик охраны', modalZbeeSensor: 'Zigbee-датчик движения (PIR)',
       showNumber: 'Показать номер', hideNumber: 'Скрыть номер',
       connRetry: 'Connection problems. Retrying...', connLost: 'Connection lost. Check your internet connection.'
     },
@@ -82,14 +88,18 @@ const TabSecurity = () => {
       colId: 'ID', colPin: 'Pin', colType: 'Type of sensor', colSendSms: 'Send SMS', colEditPin: 'Edit Pin',
       notConfigured: 'Not configured', notSet: 'Not set', noInfo: 'No info', noData: 'No monitoring data available',
       edit: 'Edit', showHelp: 'Show Help', hideHelp: 'Hide Help',
+      modalSim: 'SIM800L settings', modalSensor: 'Security sensor', modalZbeeSensor: 'Zigbee motion sensor (PIR)',
       showNumber: 'Show number', hideNumber: 'Hide number',
       connRetry: 'Connection problems. Retrying...', connLost: 'Connection lost. Check your internet connection.'
     }
   };
   const T = i18n[language] || i18n['en'];
+  const sensorModalTitle = (d) => d
+    ? (d.zbee ? `${T.modalZbeeSensor}: ID ${d.id}` : `${T.modalSensor}: ID ${d.id}, ${d.pins}`)
+    : T.modalSensor;
 
   const helpContentSim800L = {
-    ru: html`
+    ru: () => html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
         <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Как подключить модуль SIM800L (пошагово)</h2>
@@ -186,7 +196,7 @@ const TabSecurity = () => {
         </section>
       </div>
     `,
-    en: html`
+    en: () => html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
         <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">How to connect the SIM800L module (step by step)</h2>
@@ -286,7 +296,7 @@ const TabSecurity = () => {
   };
 
   const helpContentSecurity = {
-    ru: html`
+    ru: () => html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
         <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Как подключить датчик (пошагово)</h2>
@@ -676,7 +686,7 @@ const TabSecurity = () => {
         </section>
       </div>
     `,
-    en: html`
+    en: () => html`
       <div class="mytext space-y-6 font-sans text-base leading-relaxed text-slate-700 [&_code]:font-sans [&_code]:font-semibold [&_pre]:font-sans">
         <section class="rounded-2xl border-2 bg-indigo-50 border-indigo-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">How to connect a sensor (step by step)</h2>
@@ -1069,36 +1079,146 @@ const TabSecurity = () => {
   };
 
   useEffect(() => { initGlobalTooltip(); }, []);
-  const updateSecurityData = (data) => {
-    if (isSaving || Date.now() - lastSaveTime < 2000) return;
-    if (!data) { setConnectionStatus('error'); return; }
+  // ---- Загрузка и опрос --------------------------------------------------------
+  // Опрос берёт только первую страницу. Версия таблицы приходит в поле "ver" (оно же
+  // ETag), поэтому изменения любой из 289 строк видны по одному числу. Полная
+  // перезагрузка идёт страницами по PAGE_SIZE строк и только при смене версии:
+  // в худшем случае (все слоты заполнены) один ответ весит около 4 КБ, а не десятки КБ.
+  const POLL_PAGE = 20;
+  const PAGE_SIZE = 20;
+  const MAX_PAGES = 30;   // 289 строк / 20 = 15 страниц; запас защищает от бесконечного цикла
+
+  // Пауза опроса со счётчиком: запись и перезагрузка могут пересекаться.
+  const holdPoll = () => { if (holdRef.current++ === 0) pauseAll(); };
+  const releasePoll = () => { if (holdRef.current > 0 && --holdRef.current === 0) resumeAll(); };
+
+  const sigOf = (d) => (d.ver !== undefined)
+    ? String(d.ver)
+    : JSON.stringify([d.lang, d.sim800l, d.onoff, d.tel, d.info, d.pins]); // старая прошивка без "ver"
+
+  const applyData = (data) => {
+    setLanguage(data.lang || 'ru');
     setSim800lData({ lang: data.lang, sim800l: data.sim800l, onoff: data.onoff, tel: data.tel, info: data.info });
-    setMonitoring(data.pins || []); setConnectionStatus('connected');
+    setMonitoring(data.pins || []);
+    setConnectionStatus('connected');
+  };
+
+  const fetchPage = (from) =>
+    fetch(`/api/state/security?from=${from}&limit=${PAGE_SIZE}`, { cache: 'no-store' })
+      .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+
+  // Одна полная загрузка. null - таблица изменилась между страницами, нужен повтор.
+  const loadAll = async () => {
+    const first = await fetchPage(0);
+    if (!first || !Array.isArray(first.pins)) throw new Error('bad security response');
+    const rows = [...first.pins];
+    let next = (first.next === undefined) ? -1 : first.next; // без "next": всё в первом ответе
+    let guard = 0;
+    while (next >= 0 && guard++ < MAX_PAGES) {
+      const page = await fetchPage(next);
+      if (!page || !Array.isArray(page.pins)) throw new Error('bad security page');
+      if (page.ver !== first.ver) { againRef.current = true; return null; }
+      rows.push(...page.pins);
+      const n = (page.next === undefined) ? -1 : page.next;
+      if (n >= 0 && n <= next) break;   // сервер не продвигается - не зацикливаемся
+      next = n;
+    }
+    return { ...first, pins: rows };
+  };
+
+  // Безопасная перезагрузка: не запускается параллельно сама с собой, на время работы
+  // опрос стоит на паузе, чтобы в каждый момент шёл один запрос.
+  const reloadSafe = async () => {
+    if (loadingRef.current) { againRef.current = true; return; }
+    loadingRef.current = true;
+    holdPoll();
+    try {
+      let attempts = 0;
+      do {
+        againRef.current = false;
+        const full = await loadAll();
+        if (full) {
+          if (savingRef.current > 0) {
+            missedRef.current = true;     // идёт запись: не затираем её результат, повторим после
+          } else {
+            lastVerRef.current = sigOf(full);
+            applyData(full);
+          }
+        }
+      } while (againRef.current && ++attempts < 3);
+    } catch (e) {
+      console.error('security reload:', e);
+      setConnectionStatus('error');
+    } finally {
+      loadingRef.current = false;
+      releasePoll();
+    }
   };
 
   useEffect(() => {
     let active = true;
 
-    registerPoll('security', '/api/state/security', function(data) {
+    registerPoll('security', `/api/state/security?from=0&limit=${POLL_PAGE}`, function(data) {
       if (!active) return;
-      if (data !== null && data !== undefined) {
-        setLanguage(data.lang || 'ru');
-        updateSecurityData(data);
+      if (data === null || data === undefined || data.__session_expired) return;
+      if (!Array.isArray(data.pins)) return;
+      if (savingRef.current > 0) { missedRef.current = true; return; }
+      const sig = sigOf(data);
+      if (sig === lastVerRef.current) { setConnectionStatus('connected'); return; }
+      if (data.next === undefined || data.next < 0) {
+        lastVerRef.current = sig;     // всё уместилось в первую страницу: доп. запросы не нужны
+        applyData(data);
+      } else {
+        reloadSafe();
       }
-    }, {immediate: true});
+    }, { immediate: true });
 
     return function() {
       active = false;
       unregisterPoll('security');
+      if (holdRef.current > 0) { holdRef.current = 0; resumeAll(); }
     };
   }, []);
 
-  const handleSim800lSave = async (updated) => {
-    setIsSaving(true);
+  // ---- Запись -------------------------------------------------------------------
+  // Любая запись (ползунки, обе модалки): опрос на паузе, ответ проверяется. Если за время
+  // записи опрос что-то принёс или запись не удалась, данные перечитываются с устройства.
+  const withSave = async (fn) => {
+    savingRef.current++;
+    holdPoll();
+    let ok = false;
     try {
-      await fetch('/api/security/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'sim800l', ...updated }) });
-      setSim800lData(updated); setLastSaveTime(Date.now());
-    } finally { setIsSaving(false); }
+      ok = await fn();
+    } catch (e) {
+      console.error('security save:', e);
+    } finally {
+      savingRef.current--;
+      releasePoll();
+    }
+    if (savingRef.current === 0 && (missedRef.current || !ok)) {
+      missedRef.current = false;
+      reloadSafe();
+    }
+    return ok;
+  };
+
+  const postJson = async (url, body) => {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) return false;
+    try { const j = await r.json(); return !(j && (j.error || j.status === false)); } catch (e) { return true; }
+  };
+
+  // Один POST на сохранение SIM800L (раньше модалка и родитель слали одно и то же дважды).
+  const handleSim800lSave = (updated) => withSave(async () => {
+    const { tel, info, onoff } = updated;
+    const ok = await postJson('/api/security/set', { type: 'sim800l', tel, info, onoff });
+    if (ok) setSim800lData((prev) => ({ ...prev, tel, info, onoff }));
+    return ok;
+  });
+
+  const handlePinOnoff = (d, v) => {
+    setMonitoring((prev) => prev.map((item) => item.id === d.id ? { ...item, onoff: v } : item));
+    return withSave(() => postJson('/api/onoff/set', { id: d.id, onoff: v }));
   };
 
   const getTooltipText = (langArr, index) => {
@@ -1165,7 +1285,7 @@ const TabSecurity = () => {
             </table>
           </div>
           <div class="flex justify-end mt-6 w-full"><button onclick=${(e) => { lockToggle(e); setShowHelpSim800L(!showHelpSim800L); }} class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40">${showHelpSim800L ? T.hideHelp : T.showHelp}</button></div>
-          ${showHelpSim800L && html`<${HelpBox} language=${language} class="mt-6" boxClass="text-slate-700">${helpContentSim800L[language]}<//>`}
+          ${showHelpSim800L && html`<${HelpBox} language=${language} class="mt-6" boxClass="text-slate-700">${helpContentSim800L[language]()}<//>`}
         </div>
 
         <div class="w-full">
@@ -1192,20 +1312,22 @@ const TabSecurity = () => {
                     <td class="px-6 py-4 text-sm text-slate-800 font-medium">${['PIR', 'Normal open', 'Normal close'][d.ptype]}</td>
                     <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.action}</td><td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.send_sms}</td>
                     <td class="px-6 py-4 text-sm text-slate-800 font-medium">${d.info}</td>
-                    <td class="px-6 py-4 text-sm text-slate-800 font-medium"><${MyPolzunok} value=${d.onoff} onChange=${(v) => { setLastSaveTime(Date.now()); fetch('/api/onoff/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: d.id, onoff: v }) }); setMonitoring(prev => prev.map(item => item.id === d.id ? { ...item, onoff: v } : item)); }} /></td>
+                    <td class="px-6 py-4 text-sm text-slate-800 font-medium"><${MyPolzunok} value=${d.onoff} onChange=${(v) => handlePinOnoff(d, v)} /></td>
                     <td class="px-6 py-4 text-sm text-slate-800 font-medium"><button onClick=${() => { setSelectedSecurity(d); setModalType('edit'); setIsSecurityModalOpen(true); }} class="text-teal-600 hover:text-cyan-600 font-bold transition-colors">${T.edit}</button></td>
                   </tr>`) : html`<tr><td colspan="8" class="px-6 py-4 text-center text-sm text-slate-600 font-medium">${T.noData}</td></tr>`}
               </tbody>
             </table>
           </div>
           <div class="flex justify-end mt-6 w-full"><button onclick=${(e) => { lockToggle(e); setShowHlp(!showHelpSecurity); }} class="px-8 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600 hover:shadow-cyan-500/40">${showHelpSecurity ? T.hideHelp : T.showHelp}</button></div>
-          ${showHelpSecurity && html`<${HelpBox} language=${language} class="mt-6" boxClass="text-slate-700">${helpContentSecurity[language]}<//>`}
+          ${showHelpSecurity && html`<${HelpBox} language=${language} class="mt-6" boxClass="text-slate-700">${helpContentSecurity[language]()}<//>`}
         </div>
       </div>
-      ${isModalOpenSim800L && html`<${ModalSIM800L} hideModal=${() => setIsModalOpenSim800L(false)} title=${T.edit} selectedGps=${sim800lData} onSave=${handleSim800lSave} language=${language} />`}
-      ${isSecurityModalOpen && html`<${ModalSecurity} modalType=${modalType} page="TabSecurity" hideModal=${() => setIsSecurityModalOpen(false)} title=${T.edit} selectedSecurity=${selectedSecurity} onSecurityChange=${(upd) => { setMonitoring(prev => prev.map(i => i.id === upd.id ? upd : i)); setIsSecurityModalOpen(false); }} />`}
+      ${isModalOpenSim800L && html`<${ModalSIM800L} hideModal=${() => setIsModalOpenSim800L(false)} title=${T.modalSim} selectedGps=${sim800lData} onSave=${handleSim800lSave} language=${language} />`}
+      ${isSecurityModalOpen && html`<${ModalSecurity} modalType=${modalType} page="TabSecurity" hideModal=${() => setIsSecurityModalOpen(false)} title=${sensorModalTitle(selectedSecurity)} language=${language} runSave=${withSave} selectedSecurity=${selectedSecurity} onSecurityChange=${(upd) => { setMonitoring(prev => prev.map(i => i.id === upd.id ? upd : i)); setIsSecurityModalOpen(false); }} />`}
     </div>
   `;
 };
 
 export { TabSecurity };
+
+

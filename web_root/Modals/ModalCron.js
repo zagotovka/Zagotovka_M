@@ -1,10 +1,24 @@
-
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
 import { condHint, hasDisabledCond, DISABLED_COND_WARN } from '../condlib.js';
+
+// Границы полей строки таймера = размеры в struct dbCron (Core/Inc/db.h):
+// cron[35], activ[255], info[30]. Лимиты считаются в байтах UTF-8.
+// Прошивка режет cron и info молча, а activ длиннее 254 байт отклоняет (HTTP 400).
+const TIMER_LIMITS = { cron: 34, activ: 254, info: 29 };
+
+const utf8Len = (s) => new TextEncoder().encode(s || '').length;
+
+// Возвращает текст ошибки или '' если поля подходят по размеру.
+function validateTimerFields(cron, activ, info) {
+  if (utf8Len(cron) > TIMER_LIMITS.cron) return 'Cron is too long: max ' + TIMER_LIMITS.cron + ' bytes';
+  if (utf8Len(activ) > TIMER_LIMITS.activ) return 'Script is too long: max ' + TIMER_LIMITS.activ + ' bytes';
+  if (utf8Len(info) > TIMER_LIMITS.info) return 'INFO is too long: max ' + TIMER_LIMITS.info + ' bytes';
+  return '';
+}
 
 function ModalCron({
   modalType,
@@ -13,7 +27,7 @@ function ModalCron({
   closeOnOverlayClick = true,
   title,
   selectedCron,
-  handleCronChange,
+  onSave,
   modalClass,
   SliderComponent = MyPolzunok
 }) {
@@ -25,52 +39,43 @@ function ModalCron({
     selectedCron?.cron || ''
   );
 
-  const handleSubmit = (e) => {
+  const [saving, setSaving] = useState(false);
+  const [errMsg, setErrMsg] = useState('');
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
+
+  // Единственный POST на Submit: сохранение выполняет страница (onSave), модалка только ждёт результат.
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const formData = new FormData(e.target);
-    const jsonData = Object.fromEntries(formData);
+    if (saving) return;
 
-    // Добавляем дополнительные поля, которые не входят в форму
-    jsonData.id = selectedCron.id;
-    jsonData.pins = selectedCron.pins;
-
-    if (modalType === 'edit') {
-      jsonData.onoff = onoff ? 1 : 0;
-      jsonData.info = cronInfo;
-      jsonData.cron = cronExpression;
-      jsonData.activ = activValue;
+    const problem = validateTimerFields(cronExpression, activValue, cronInfo);
+    if (problem) {
+      setErrMsg(problem);
+      return;
     }
+    setErrMsg('');
+    setSaving(true);
 
-    // Перед отправкой проверим...
-    console.log('Data being sent to server:');
-    console.log(jsonData);
-    console.log('Stringified data:');
-    console.log(JSON.stringify(jsonData));
+    const res = await onSave({
+      id: selectedCron.id,
+      cron: cronExpression,
+      activ: activValue,
+      info: cronInfo,
+      onoff: onoff ? 1 : 0
+    });
 
-    fetch('/api/cron/set', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(jsonData)
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        console.log('Success:', data);
-        // Обновляем состояние переключателя
-        handleCronChange({
-          ...selectedCron,
-          ...jsonData
-        });
-        // Закрываем модальное окно
-        hideModal();
-        // Перенаправляем пользователя
-        window.location.href = '/#/cron';
-      })
-      .catch((error) => {
-        console.error('Error:', error);
-        // Можно добавить обработку ошибок, например, показать сообщение пользователю
-      });
+    if (!aliveRef.current) return;
+    if (res && res.ok) {
+      hideModal();
+      window.location.href = '/#/cron';
+    } else {
+      setSaving(false);
+      setErrMsg((res && res.message) || 'Save failed');
+    }
   };
 
   // Добавляем useEffect для обновления состояния при изменении selectedSwitch
@@ -127,7 +132,7 @@ function ModalCron({
                           class="border rounded p-2 w-full"
                           placeholder="5:1, pwm:5,60,0,100, p60, 5:1?D2"
                         />
-                        <p class="text-gray-500 text-xs mt-1 text-right">${(activValue || '').length}/255</p>
+                        <p class="text-gray-500 text-xs mt-1 text-right">${utf8Len(activValue)}/${TIMER_LIMITS.activ}</p>
                         ${hasDisabledCond(activValue) &&
       html`<p class="text-amber-600 text-xs mt-1 font-medium">${DISABLED_COND_WARN[(selectedCron?.lang || 'ru') === 'ru' ? 'ru' : 'en']}</p>`}
                         <p class="text-gray-500 text-xs mt-1">${condHint((selectedCron?.lang || 'ru') === 'ru')}</p>
@@ -164,10 +169,12 @@ function ModalCron({
                 </tbody>
               </table>
             </div>
+            ${errMsg && html`<p class="text-red-600 text-sm mt-2">${errMsg}</p>`}
             <div class="modal-footer flex justify-end mt-4">
               <button
                 type="submit"
-                class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                disabled=${saving}
+                class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${saving ? 'opacity-60 cursor-not-allowed' : ''}"
               >
                 Save changes
               </button>
@@ -234,4 +241,4 @@ function ModalCron({
 
 }
 
-export { ModalCron };
+export { ModalCron, validateTimerFields };

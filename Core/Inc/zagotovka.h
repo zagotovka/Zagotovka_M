@@ -169,16 +169,19 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf, int 
 void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm);
 
 void handle_pintopin_get(struct mg_connection *c);
+bool handle_pintopin_get_ex(struct mg_connection *c, struct mg_http_message *hm);
 
 void handle_select_get(struct mg_connection *c, long offset, long limit);
 void handle_select_set(struct mg_connection *c, struct mg_http_message *hm);
-void handle_pwmpins_get(struct mg_connection *c);
+void handle_pins_get(struct mg_connection *c, struct mg_http_message *hm);
+void handle_sensors_get(struct mg_connection *c, struct mg_http_message *hm);
 
 void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf, uint8_t num_pins);
 
 void handle_switch_get(struct mg_connection *c);
 void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm);
-void handle_zigbee_get(struct mg_connection *c, long offset, long limit);
+void handle_zigbee_get(struct mg_connection *c, long offset, long limit,
+                       const char *type_filter);
 void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_zigbee_enable(struct mg_connection *c, struct mg_http_message *hm);
 void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm);
@@ -260,7 +263,7 @@ void parse_relay_json(char* json_string, struct dbPinsConf* PinsConf,const struc
 
 void parse_pwm_json(char* json_string, struct dbPinsConf* PinsConf,const struct dbPinsInfo* PinsInfo, int count);
 
-void handle_timers_get(struct mg_connection *c);
+void handle_timers_get(struct mg_connection *c, struct mg_http_message *hm);
 void parse_numline_json(char* json_string, struct dbSettings* SetSettings);
 void handle_numline_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm);
@@ -285,7 +288,8 @@ bool parse_onewire_json(const char* json_string, struct dbPinsConf *PinsConf);
 void handle_sensor_set(struct mg_connection *c, struct mg_http_message *hm);
 bool parse_sensor_json(const char* json_string);
 
-void handle_onewire_get(struct mg_connection *c);
+void handle_onewire_get(struct mg_connection *c, struct mg_http_message *hm, uint32_t ver);
+uint32_t onewire_cfg_ver(void);
 
 //void handle_onewire_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_onewire_set(struct mg_connection *c, struct mg_http_message *hm);
@@ -381,7 +385,9 @@ void handle_firmware_rollback(struct mg_connection *c, struct mg_http_message *h
 void handle_firmware_switch_bank(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_status(struct mg_connection *c);
 void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm);
-void handle_device_eraselast(struct mg_connection *c);
+#ifdef ENABLE_ERASE_LAST_SECTOR
+void handle_device_eraselast(struct mg_connection *c, struct mg_http_message *hm);
+#endif
 void handle_select_get(struct mg_connection *c, long offset, long limit);
 void handle_pintopin_get(struct mg_connection *c);
 void handle_select_set(struct mg_connection *c, struct mg_http_message *hm);
@@ -392,7 +398,7 @@ void handle_button_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_button_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_encoder_get(struct mg_connection *c);
 void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm);
-void handle_timers_get(struct mg_connection *c);
+void handle_timers_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_numline_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_timers_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_mysett_get(struct mg_connection *c);
@@ -403,7 +409,7 @@ void handle_stm32time_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_temp_get(struct mg_connection *c);
 void handle_security_get(struct mg_connection *c);
 void handle_security_set(struct mg_connection *c, struct mg_http_message *hm);
-void handle_onewire_get(struct mg_connection *c);
+void handle_onewire_get(struct mg_connection *c, struct mg_http_message *hm, uint32_t ver);
 void handle_sensor_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_onewire_set(struct mg_connection *c, struct mg_http_message *hm);
 void api_handler(struct mg_connection *c, struct mg_http_message *hm);
@@ -413,6 +419,7 @@ extern volatile uint32_t g_ver_common;
 extern volatile uint32_t g_ver_sensors;
 extern volatile uint32_t g_ver_pid;
 extern volatile uint32_t g_ver_encoder;
+extern volatile uint32_t g_cron_gen;
 extern volatile uint32_t g_ver_onewire;
 extern volatile uint32_t g_ver_switch;
 extern volatile uint32_t g_ver_button;
@@ -420,6 +427,11 @@ extern volatile uint32_t g_ver_security;
 extern volatile uint32_t g_ver_pins;
 extern volatile uint32_t g_ver_zigbee;
 extern volatile uint32_t g_ver_select;
+extern volatile uint32_t g_ver_timers;
+extern volatile uint32_t g_ver_settings;
+
+/* Флаги "строку Cron нужно разобрать заново" (читает и сбрасывает CronTask) */
+extern volatile uint8_t g_cron_dirty[NUMTASK];
 
 /* ─── Mark slice dirty ─── */
 void mark_slice_dirty(volatile uint32_t *ver);
@@ -433,7 +445,7 @@ void json_escape_send(struct mg_connection *c, const char *src);
 /* Content-Length HTTP handlers from net.c (Keep-Alive polling) */
 void handle_buttons(struct mg_connection *c, struct mg_http_message *hm);
 void handle_switches(struct mg_connection *c);
-void handle_encoders(struct mg_connection *c);
+void handle_encoders(struct mg_connection *c, struct mg_http_message *hm);
 
 void gen_pintopin_json(struct dbPinToPin *PinsLinks, char *buffer, int buffer_size);
 

@@ -1,3 +1,4 @@
+
 /**
  * safeFetch — обёртка над fetch с таймаутом, дедупликацией и защитой от retry-storm.
  *
@@ -61,4 +62,29 @@ export function safeFetch(url, key, opts = {}, timeoutMs = DEFAULT_TIMEOUT) {
       clearTimeout(timer);
       _inflight.delete(key);
     });
+}
+
+/**
+ * postJson — POST с JSON-телом и таймаутом. Возвращает Response (статус проверяет
+ * вызывающий код). Для отправок из модалок: один запрос, без повторов.
+ *
+ * @param {string} url
+ * @param {object} body
+ * @param {number} [timeoutMs=8000]
+ * @returns {Promise<Response>}
+ */
+export async function postJson(url, body, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }

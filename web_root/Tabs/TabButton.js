@@ -1,9 +1,10 @@
 
+
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
 import { ModalButton } from '../Modals/ModalButton.js';
 import { h, render, useState, useEffect, useRef, useContext, html, Router } from '../bundle.js';
-import { registerPoll, unregisterPoll } from '../pollQueue.js';
+import { registerPoll, unregisterPoll, pauseAll, resumeAll } from '../pollQueue.js';
 import { StateContext } from '../context.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
@@ -196,6 +197,81 @@ const ArrayButton = ({ d, index, onToggle, onEdit }) => {
 };
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Загрузка таблицы кнопок.
+// Сервер отдаёт /api/state/button страницами: ответ собирается целиком в куче контроллера
+// (буфер растёт кратно MG_IO_SIZE с копированием), поэтому один ответ ограничен ~4 КБ.
+// Продолжение - поле "next" (id первой не отданной записи, -1 если всё отдано).
+// Поле "ver" - версия всей таблицы (меняется при любом изменении любой кнопки).
+// Старая прошивка не знает ни "limit", ни "next", ни "ver": она отдаёт всю таблицу
+// одним ответом, и клиент это переносит (нет "next" - значит страница последняя).
+// ---------------------------------------------------------------------------
+const BTN_PAGE_LIMIT = 40;        // верхняя граница числа записей на страницу (байтовый лимит ставит сервер)
+const BTN_MAX_PAGES = 64;         // защита от бесконечного цикла при некорректном "next"
+const BTN_FETCH_TIMEOUT = 8000;   // таймаут одного GET, мс
+const BTN_POST_TIMEOUT = 10000;   // таймаут одного POST, мс
+const BTN_RETRY_MAX = 3;          // число автоповторов после неудачной загрузки
+const BTN_ZB_COLLAPSE_FROM = 10;  // если Zigbee-кнопок больше - их строки свёрнуты до раскрытия
+
+const btnPageUrl = (from) => `/api/state/button?from=${from}&limit=${BTN_PAGE_LIMIT}`;
+const BTN_POLL_URL = btnPageUrl(0);
+
+const btnSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Недостающие поля (сервер не отдаёт пустые строки и ptype=0 у Zigbee) заполняем значениями по умолчанию.
+const normalizeButton = (d) => ({
+  ...d,
+  ptype: d.ptype || 0,
+  sclick: d.sclick || '',
+  dclick: d.dclick || '',
+  lpress: d.lpress || '',
+  info: d.info || '',
+});
+
+// Подпись состояния таблицы: поле "ver" либо (старая прошивка) содержимое всей таблицы.
+const btnSignature = (page) =>
+  page.ver !== undefined ? String(page.ver) : JSON.stringify(page.buttons);
+
+// Один GET страницы с таймаутом; внешний signal отменяет запрос при уходе со страницы.
+const fetchButtonsPage = async (from, outerSignal) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), BTN_FETCH_TIMEOUT);
+  const onOuterAbort = () => controller.abort();
+  if (outerSignal) {
+    if (outerSignal.aborted) controller.abort();
+    else outerSignal.addEventListener('abort', onOuterAbort);
+  }
+  try {
+    const r = await fetch(btnPageUrl(from), { cache: 'no-store', signal: controller.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const page = await r.json();
+    if (!page || !Array.isArray(page.buttons)) throw new Error('bad response');
+    return page;
+  } finally {
+    clearTimeout(timer);
+    if (outerSignal) outerSignal.removeEventListener('abort', onOuterAbort);
+  }
+};
+
+// Полная загрузка таблицы: страницы строго по одной. firstPage - уже полученная первая страница
+// (из опроса), чтобы не запрашивать её повторно.
+const loadAllButtons = async (firstPage, outerSignal) => {
+  let page = firstPage || await fetchButtonsPage(0, outerSignal);
+  const buttons = [...page.buttons];
+  const result = { buttons, lang: page.lang, sig: btnSignature(page) };
+  let pages = 1;
+  while (typeof page.next === 'number' && page.next >= 0) {
+    if (++pages > BTN_MAX_PAGES) throw new Error('too many pages');
+    const from = page.next;
+    page = await fetchButtonsPage(from, outerSignal);
+    if (typeof page.next === 'number' && page.next >= 0 && page.next <= from) {
+      throw new Error('no progress');
+    }
+    buttons.push(...page.buttons);
+  }
+  return result;
+};
+
 const TabButton = () => {
   const [varbutton, setButton] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -203,7 +279,19 @@ const TabButton = () => {
   const [selectedButton, setSelectedButton] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
   const [language, setLanguage] = useState('ru');
-  const isPendingOnOff = useRef(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [zbOpen, setZbOpen] = useState(false);
+  const alive = useRef(true);            // страница смонтирована
+  const lastVer = useRef(null);          // подпись последней загруженной таблицы
+  const refreshing = useRef(false);      // идёт полная перезагрузка таблицы
+  const refreshAgain = useRef(false);    // во время перезагрузки пришёл ещё один запрос на неё
+  const busy = useRef(0);                // число идущих сейчас POST (On/Off, Save)
+  const missedPoll = useRef(false);      // во время POST опрос принёс новые данные, а мы его пропустили
+  const pauseDepth = useRef(0);          // счётчик вложенных пауз опроса
+  const postQueue = useRef(Promise.resolve());
+  const abortRef = useRef(null);
+  const retryTimer = useRef(null);
+  const retryCount = useRef(0);
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => { initGlobalTooltip(); }, []);
 
@@ -1079,24 +1167,153 @@ const TabButton = () => {
     `,
   };
 
-  useEffect(() => {
-    let active = true;
+  // ── Пауза опроса: вложенная, чтобы окончание одной операции не снимало паузу другой ──
+  const holdPoll = () => {
+    if (!alive.current) return;
+    pauseDepth.current += 1;
+    pauseAll();
+  };
+  const releasePoll = () => {
+    if (!alive.current) return;
+    if (pauseDepth.current > 0) pauseDepth.current -= 1;
+    if (pauseDepth.current === 0) resumeAll();
+  };
 
-    // ── Загрузка + polling через pollQueue (одно соединение, без нового handshake) ──
-    registerPoll('buttons', '/api/state/button', (data) => {
-      if (!active) return;
-      if (isPendingOnOff.current) return;
-      if (data !== null && data !== undefined && data.buttons) {
-        setButton(data.buttons);
-        setLanguage(data.lang);
+  const applyLoaded = (r) => {
+    lastVer.current = r.sig;
+    setButton(r.buttons.map(normalizeButton));
+    if (r.lang) setLanguage(r.lang);
+    retryCount.current = 0;
+    setLoadFailed(false);
+  };
+
+  // Безопасная перезагрузка: не запускается параллельно сама с собой, не пересекается с POST
+  // и на время работы ставит опрос на паузу - в каждый момент идёт один запрос.
+  const refreshSafe = async (firstPage) => {
+    if (!alive.current) return;
+    if (busy.current > 0) { missedPoll.current = true; return; }
+    if (refreshing.current) { refreshAgain.current = true; return; }
+    refreshing.current = true;
+    holdPoll();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      let fp = firstPage || null;
+      do {
+        refreshAgain.current = false;
+        const r = await loadAllButtons(fp, controller.signal);
+        fp = null;
+        if (!alive.current) return;
+        applyLoaded(r);
+      } while (refreshAgain.current);
+    } catch (e) {
+      if (alive.current && e.name !== 'AbortError') {
+        console.error('buttons refresh:', e);
+        scheduleRetry();
       }
+    } finally {
+      refreshing.current = false;
+      if (abortRef.current === controller) abortRef.current = null;
+      releasePoll();
+    }
+  };
+
+  const startPoll = () => {
+    registerPoll('buttons', BTN_POLL_URL, (data) => {
+      if (!alive.current) return;
+      if (!data || !Array.isArray(data.buttons)) return;
+      // Опрос видит версию всей таблицы ("ver"), а не только первой страницы.
+      // Старая прошивка без "ver": запасной вариант - сравнение содержимого.
+      if (btnSignature(data) === lastVer.current) return;
+      if (busy.current > 0) { missedPoll.current = true; return; }
+      refreshSafe(data);
     }, { immediate: true });
+  };
+
+  // После неудачной загрузки: до BTN_RETRY_MAX повторов с растущей паузой, затем кнопка Retry.
+  // Повтор = перерегистрация опроса (сбрасывает ETag), поэтому сервер снова вернёт 200.
+  const scheduleRetry = () => {
+    if (!alive.current) return;
+    if (retryCount.current >= BTN_RETRY_MAX) { setLoadFailed(true); return; }
+    retryCount.current += 1;
+    clearTimeout(retryTimer.current);
+    retryTimer.current = setTimeout(() => { if (alive.current) startPoll(); }, 2000 * retryCount.current);
+  };
+
+  const retryNow = () => {
+    retryCount.current = 0;
+    setLoadFailed(false);
+    startPoll();
+  };
+
+  useEffect(() => {
+    alive.current = true;
+    startPoll();
+
+    // Если за 15 с таблица так и не появилась (опрос мог остановиться после серии ошибок) - показать Retry.
+    const watchdog = setTimeout(() => {
+      if (alive.current && lastVer.current === null) setLoadFailed(true);
+    }, 15000);
 
     return () => {
-      active = false;
+      alive.current = false;
+      clearTimeout(watchdog);
+      clearTimeout(retryTimer.current);
+      if (abortRef.current) abortRef.current.abort();
       unregisterPoll('buttons');
+      if (pauseDepth.current > 0) { pauseDepth.current = 0; resumeAll(); }
     };
   }, []);
+
+  // ── POST: по одному, после окончания перезагрузки, опрос на паузе и его ответы пропускаются ──
+  const beginBusy = () => { busy.current += 1; holdPoll(); };
+  const endBusy = () => {
+    busy.current = Math.max(0, busy.current - 1);
+    if (busy.current === 0 && missedPoll.current) {
+      missedPoll.current = false;
+      refreshSafe();   // догоняем изменения, которые опрос принёс во время POST
+    }
+    releasePoll();
+  };
+
+  const postJson = async (url, body) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), BTN_POST_TIMEOUT);
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      let data = null;
+      try { data = await r.json(); } catch (e) { data = null; }
+      if (!r.ok || (data && data.status === false)) {
+        throw new Error(data && data.message ? data.message : 'HTTP ' + r.status);
+      }
+      return data;
+    } catch (e) {
+      if (e.name === 'AbortError') throw new Error('Request timed out');
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const runPost = (task) => {
+    const run = async () => {
+      for (let i = 0; i < 100 && refreshing.current; i++) await btnSleep(100);
+      beginBusy();
+      try { return await task(); } finally { endBusy(); }
+    };
+    const p = postQueue.current.then(run, run);
+    postQueue.current = p.catch(() => {});
+    return p;
+  };
+
+  // Сохранение строки из модалки: сервер отвечает 400 (поле слишком длинное), 507 (нет места
+  // в пуле действий Zigbee или в PinsLinks) - тогда бросаем ошибку, и модалка остаётся открытой.
+  const saveButton = (payload) => runPost(() => postJson('/api/button/set', payload));
 
   const openModal = (type, buttonData) => {
     setModalType(type);
@@ -1110,9 +1327,7 @@ const TabButton = () => {
     setSelectedButton(null);
   };
 
-  const handleButtonChange = (updatedButton) => {
-    console.log('handleButtonChange:', updatedButton);
-
+  const mergeButton = (updatedButton) => {
     setButton((prevButtons) =>
       prevButtons.map((button) =>
         button.id === updatedButton.id
@@ -1120,25 +1335,15 @@ const TabButton = () => {
           : button
       )
     );
+  };
 
-    isPendingOnOff.current = true;
+  const handleButtonChange = (updatedButton) => {
+    mergeButton(updatedButton);
 
-    fetch('/api/onoff/set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: updatedButton.id, onoff: updatedButton.onoff })
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        console.log('Response from /api/onoff/set:', data);
-      })
+    runPost(() => postJson('/api/onoff/set', { id: updatedButton.id, onoff: updatedButton.onoff }))
       .catch((error) => {
         console.error('Error calling /api/onoff/set:', error);
-      })
-      .finally(() => {
-        setTimeout(() => {
-          isPendingOnOff.current = false;
-        }, 1500);
+        refreshSafe();   // вернуть таблицу к тому, что реально хранит контроллер
       });
 
     closeModal();
@@ -1151,22 +1356,43 @@ const TabButton = () => {
   // физического — выставлял ШИМ-выходам dvalue. Ползунок в таблице
   // по-прежнему использует handleButtonChange.
   const handleButtonSaved = (updatedButton) => {
-    console.log('handleButtonSaved:', updatedButton);
     if (updatedButton.onoff !== selectedButton?.onoff) {
       handleButtonChange(updatedButton);
     } else {
-      setButton((prevButtons) =>
-        prevButtons.map((button) =>
-          button.id === updatedButton.id
-            ? { ...button, ...updatedButton }
-            : button
-        )
-      );
+      mergeButton(updatedButton);
       closeModal();
     }
   };
 
-  if (!varbutton) return '';
+  const isRuLang = language === 'ru';
+  const retryBanner = loadFailed && html`
+    <div class="mb-4 p-3 rounded-xl bg-amber-100 border border-amber-300 text-amber-900 text-sm flex items-center justify-between gap-4">
+      <span>${isRuLang ? 'Не удалось загрузить таблицу кнопок.' : 'Failed to load the button table.'}</span>
+      <button onclick=${retryNow} class="px-4 py-1.5 rounded-full text-sm font-bold text-white bg-teal-600 hover:bg-teal-700">Retry</button>
+    </div>
+  `;
+
+  if (!varbutton) {
+    return html`
+      <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 text-slate-600">
+        ${retryBanner || (isRuLang ? 'Загрузка...' : 'Loading...')}
+      </div>
+    `;
+  }
+
+  // Физические кнопки показываем сразу. Если Zigbee-кнопок много (до 200 слотов), их строки
+  // рисуются только по раскрытию: иначе браузер строит сотни строк с ползунками при каждом обновлении.
+  const physRows = varbutton.filter((d) => !d.is_zigbee);
+  const zbRows = varbutton.filter((d) => d.is_zigbee);
+  const zbCollapsible = zbRows.length > BTN_ZB_COLLAPSE_FROM;
+  const zbVisible = !zbCollapsible || zbOpen;
+  const renderRow = (d, index) => html`<${ArrayButton}
+    d=${d}
+    index=${index}
+    key=${d.id}
+    onToggle=${handleButtonChange}
+    onEdit=${openModal}
+  />`;
 
   return html`
     <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-start items-center" style="overflow-anchor:none;">
@@ -1182,6 +1408,7 @@ const TabButton = () => {
 
         <div class="flex-grow flex flex-col justify-center items-center w-full">
           <div class="w-full">
+            ${retryBanner}
             <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6 overflow-auto">
               <div class="overflow-x-auto w-full">
                 <table class="w-full text-left border-collapse whitespace-nowrap">
@@ -1199,15 +1426,18 @@ const TabButton = () => {
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-white/40">
-                    ${varbutton.map(
-                      (d, index) => html`<${ArrayButton}
-                        d=${d}
-                        index=${index}
-                        key=${d.id}
-                        onToggle=${handleButtonChange}
-                        onEdit=${openModal}
-                      />`
-                    )}
+                    ${physRows.map((d, index) => renderRow(d, index))}
+                    ${zbCollapsible && html`
+                      <tr
+                        class="bg-gradient-to-r from-cyan-100 to-cyan-50 cursor-pointer hover:from-cyan-200 hover:to-cyan-100 transition-colors"
+                        onclick=${() => setZbOpen(!zbOpen)}
+                      >
+                        <td colspan="9" class="px-6 py-3 text-sm font-bold text-slate-700">
+                          ${zbOpen ? '[-]' : '[+]'} Zigbee (${zbRows.length})
+                        </td>
+                      </tr>
+                    `}
+                    ${zbVisible && zbRows.map((d, index) => renderRow(d, physRows.length + index))}
                   </tbody>
                 </table>
               </div>
@@ -1239,6 +1469,7 @@ const TabButton = () => {
           hideModal=${closeModal}
           title="Edit Button pin"
           selectedButton=${selectedButton}
+          onSubmit=${saveButton}
           onButtonChange=${handleButtonSaved}
         />
       `}

@@ -1,25 +1,33 @@
+# Сборка и бинарники (STM32CubeIDE build output)
 /Debug/
 /Release/
 /Release_OTA/
-
-# STM32CubeIDE build output
 Bank_A/
 Bank_B/
-/.settings/stm32cubeide.project.prefs
+*.o
 
-# Generated build artifacts
+# Локальные настройки и история STM32CubeIDE (Eclipse)
+.settings/
+.project
+.cproject
+.launch
+
+# Временные бэкапы файлов и редакторов
+*.bak
+*~
+
+# Сгенерированные артефакты сборки
 /Core/Src/packed_fs.c
 /scripts/_pack_work/
 /scripts/.web_build_status
+mx.scratch
 
-# Web build
+# Веб-сборка и зависимости
 /web_root/dist/
 /web_root/node_modules/
-*.o
-.aider*
 
-# STM32CubeMX temp file
-mx.scratch
+# Разное (AI-ассистенты и логи)
+.aider*
 
 # Принудительное отслеживание папки Proshivka и её содержимого
 !**/Proshivka/

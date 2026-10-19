@@ -1,10 +1,26 @@
+
 import { h, render, useState, useEffect, useRef, html, Router } from '../bundle.js';
 import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored, Notification, Pagination, UploadFileButton, textSection } from '../components.js';
 import { MyPolzunok, Chart, DeveloperNote } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire } from '../enlang.js';
 import { pwmTimerMap } from '../Tabs/TabEncoder.js';
-import { fetchConditions, fetchCondPool, condPayload, validateCondExpr, CondInput, condHint } from '../condlib.js';
+import { fetchPinsByType, fetchZigbeeAll, condPayload, validateCondExpr, CondInput, condHint } from '../condlib.js';
+import { useCondLibrary, refreshCondLibrary } from '../CondLibrary.js';
+import { pauseAll, resumeAll } from '../pollQueue.js';
+
+let _loadPauseCount = 0;
+function pauseForLoad() {
+  if (_loadPauseCount === 0) pauseAll();
+  _loadPauseCount++;
+}
+function resumeForLoad() {
+  _loadPauseCount--;
+  if (_loadPauseCount <= 0) {
+    _loadPauseCount = 0;
+    resumeAll();
+  }
+}
 
 function ModalEncoder({
   modalType,
@@ -26,12 +42,15 @@ function ModalEncoder({
   const [selectedConnection, setSelectedConnection] = useState(
     Object.entries(selectedEncoder.pinact || {})[0] || ['', '']
   );
-  const [pinOptions, setPinOptions] = useState([]);
   const [encoderBOptions, setEncoderBOptions] = useState([]);
   const [pwmOptions, setPwmOptions] = useState([]);
   const [zbeeBind, setZbeeBind] = useState(selectedEncoder?.zbee_bind || 0);
-  const [condsList, setCondsList] = useState([]);
-  const [poolInfo, setPoolInfo] = useState(null);
+  const [zbDimmers, setZbDimmers] = useState([]);
+  const submitting = useRef(false);
+  // Библиотека условий берётся из общего стора страницы (уже загружена): без запроса
+  const condLib = useCondLibrary();
+  const condsList = condLib.loaded ? condLib.conds : [];
+  const poolInfo = condLib.loaded ? condLib.pool : null;
   // Условие связи энкодера - свободное выражение. Исходные значения нужны,
   // чтобы не отвязать ссылку на ячейку библиотеки (cond 1..12) без правки.
   const [linkExpr, setLinkExpr] = useState(selectedEncoder?.cexpr || '');
@@ -52,81 +71,64 @@ function ModalEncoder({
 
   const percentToSteps = (percent) => Math.round((percent * pwmmax) / 100);
 
+  // Что нужно окну. Edit Encoder не требует ни пинов, ни Zigbee; Edit PWM - только
+  // Zigbee-диммеры; Connection - пины Encoder B (9) и PWM (5) и Zigbee-диммеры.
+  const needPins = modalType === 'connection';
+  const needZbee = modalType === 'connection' || (modalType === 'edit' && isPwmRow);
+
   useEffect(() => {
-    fetchConditions().then(setCondsList);
-    fetchCondPool().then(setPoolInfo);
-    fetch('/api/select/get?limit=100', {
-      // limit=100 обязателен: без него бэкенд отдаёт только пины с ID 0-29
-      // (дефолт offset=0, limit=30 в handle_select_get), из-за чего пины
-      // Encoder B / PWM с ID >= 30 не попадали в encoderBOptions/pwmOptions,
-      // и Save тихо сбрасывал encoderb в 255 ("не задано").
-      method: 'GET',
-      cache: 'no-store',
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((response) => {
-        if (!response || !response.data || !Array.isArray(response.data)) {
-          console.error('Invalid data format:', response);
-          setPinOptions([]);
+    let cancelled = false;
+    const ac = new AbortController();
+    pauseForLoad();
+
+    (async () => {
+      if (needPins) {
+        try {
+          const pins = await fetchPinsByType([9, 5], { signal: ac.signal });
+          if (cancelled) return;
+          const encoderBPins = pins.filter((pin) => pin.topin === 9);
+          const pwmPins = pins.filter((pin) => pin.topin === 5);
+          setEncoderBOptions(encoderBPins);
+          setPwmOptions(pwmPins);
+
+          if (selectedEncoder.encoderb || selectedEncoder.encdrbpin) {
+            const selectedOption = encoderBPins.find(
+              (option) => String(option.id) === String(selectedEncoder.encoderb)
+                || option.pins === selectedEncoder.encdrbpin
+            );
+            setEncoderB({
+              pin: selectedOption ? selectedOption.pins : (selectedEncoder.encdrbpin || ''),
+              id: selectedOption ? selectedOption.id : (selectedEncoder.encoderb || '')
+            });
+          }
+        } catch (error) {
+          if (cancelled || error.name === 'AbortError') return;
+          console.error('Error fetching pin config:', error);
           setEncoderBOptions([]);
           setPwmOptions([]);
-          return;
         }
+      }
 
-        const relayPins = response.data.filter((pin) => pin.topin === 2 || pin.topin === 11);
-        const encoderBPins = response.data.filter((pin) => pin.topin === 9);
-        const pwmPins = response.data.filter((pin) => pin.topin === 5);
-
-        setPinOptions(relayPins);
-        setEncoderBOptions(encoderBPins);
-        setPwmOptions(pwmPins);
-
-	if (selectedEncoder.encoderb || selectedEncoder.encdrbpin) {
-	  const selectedOption = encoderBPins.find(
-	    (option) => String(option.id) === String(selectedEncoder.encoderb) 
-		     || option.pins === selectedEncoder.encdrbpin
-	  );
-	  setEncoderB({
-	    // fallback на исходные данные, а не на пустую строку
-	    pin: selectedOption ? selectedOption.pins : (selectedEncoder.encdrbpin || ''),
-	    id: selectedOption ? selectedOption.id : (selectedEncoder.encoderb || '')
-	  });
+      if (needZbee && !cancelled) {
+        try {
+          const zb = await fetchZigbeeAll({ type: 'dimmer', signal: ac.signal });
+          if (!cancelled && zb && zb.zigbee) {
+            setZbDimmers(zb.zigbee.filter(z => z && z.type === 'dimmer'));
+          }
+        } catch (e) {
+          if (!cancelled && e.name !== 'AbortError') console.error('Error fetching zigbee:', e);
         }
-      })
-      .catch((error) => {
-        console.error('Error fetching pin config:', error);
-        setPinOptions([]);
-        setEncoderBOptions([]);
-        setPwmOptions([]);
-      });
+      }
+    })().finally(() => { resumeForLoad(); });
 
-    // Загружаем Zigbee устройства для выпадающего списка
-    fetch('/api/zigbee/get?offset=0&limit=50', {
-      method: 'GET',
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' }
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data && data.zigbee) {
-          window.__zigbeeConf = data.zigbee;
-        }
-      })
-      .catch(e => console.error('Error fetching zigbee:', e));
+    return () => { cancelled = true; ac.abort(); };
   }, [selectedEncoder]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const form = e.target;
     if (!(form instanceof HTMLFormElement)) return;
+    if (submitting.current) return;   // повторное нажатие во время отправки
 
     let jsonData = {};
 
@@ -188,6 +190,8 @@ function ModalEncoder({
 
     console.log('Sending JSON to STM32:', JSON.stringify(jsonData));
 
+    submitting.current = true;
+    pauseAll();   // на время отправки опрос стоит
     fetch('/api/encoder/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -200,10 +204,15 @@ function ModalEncoder({
           alert(data.message || `Ошибка ${r.status}`);
           return;
         }
+        // Занятость пула выражений изменилась: обновляем общий стор (один запрос)
+        if (modalType === 'connection') {
+          try { await refreshCondLibrary(true); } catch (err) { console.error('conds refresh:', err); }
+        }
         handleEncoderChange({ ...selectedEncoder, ...jsonData });
         hideModal();
       })
-      .catch(err => console.error('Error saving encoder:', err));
+      .catch(err => console.error('Error saving encoder:', err))
+      .finally(() => { submitting.current = false; resumeAll(); });
   };
 
   const handleEncoderInfoChange = (e) => {
@@ -244,6 +253,11 @@ function ModalEncoder({
   const handlePwmFreqChange = (e) => {
     setPwmFreq(e.target.value);
   };
+
+  // Привязанное устройство, которого нет в списке диммеров, не должно молча пропасть из select
+  const zbOptions = (zbeeBind > 0 && !zbDimmers.some((z) => z.id === zbeeBind))
+    ? [...zbDimmers, { id: zbeeBind }]
+    : zbDimmers;
 
   const getFreqStatus = (mhz) => {
     const hz = mhz / 1000;
@@ -339,7 +353,7 @@ function ModalEncoder({
                         class="border rounded p-2 w-full"
                       >
                         <option value="0">None</option>
-                        ${(window.__zigbeeConf || []).filter(z => z.ieee && z.type === 'dimmer').map(z => html`
+                        ${zbOptions.map(z => html`
                           <option value=${z.id || 0}>
                             ID: ${z.id}
                           </option>
@@ -482,7 +496,7 @@ function ModalEncoder({
                           class="border rounded p-2 w-full"
                         >
                           <option value="0">None</option>
-                          ${(window.__zigbeeConf || []).filter(z => z.ieee && z.type === 'dimmer').map(z => html`
+                          ${zbOptions.map(z => html`
                             <option value=${z.id || 0}>ID: ${z.id}</option>
                           `)}
                         </select>
@@ -555,3 +569,5 @@ function ModalEncoder({
 }
 
 export { ModalEncoder };
+
+

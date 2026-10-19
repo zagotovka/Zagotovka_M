@@ -312,9 +312,14 @@ void logger_ring_read(uint32_t since, char *out, size_t out_cap,
     uint32_t avail  = (total > LOG_RING_SIZE) ? LOG_RING_SIZE : total;
     uint32_t oldest = total - avail;               /* самый старый ещё доступный курсор */
 
-    if (since > total) since = total;              /* клиент "из будущего" - отдаём пусто */
+    /* Курсор клиента больше текущего: счётчик начался заново, то есть устройство
+     * перезагрузилось (либо счётчик прошёл 2^32). Раньше отдавался пустой ответ и
+     * строки загрузки, которые прошивка успела записать до следующего запроса,
+     * терялись. Теперь отдаём весь доступный буфер и помечаем пропуск. */
+    bool restarted = (since > total);
+    if (restarted) since = 0;
     uint32_t start = (since > oldest) ? since : oldest;
-    bool     lost  = (since > 0) && (since < oldest);
+    bool     lost  = restarted || ((since > 0) && (since < oldest));
 
     uint32_t n = total - start;
     if (n > out_cap) {                             /* буфер вызывающего меньше накопленного */
