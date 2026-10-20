@@ -14,6 +14,7 @@
 #include <stdarg.h>   // va_list for ota_log_direct()
 #include "cond_eval.h" /* текст условия связи для /api/state/encoder */
 #include "dtcm_alloc.h"
+#include "net_limits.h"  /* единый бюджет соединений + пороги heap */
 
 struct user {
   const char *name, *pass;
@@ -743,11 +744,7 @@ void handle_device_eraselast(struct mg_connection *c, struct mg_http_message *hm
   mg_http_reply(c, 200, s_json_header, "true\n");
 }
 #endif
-// Определяем типы соединений
-#define CONN_TYPE_HTTP     1
-#define CONN_TYPE_HTTPS    2
-#define CONN_TYPE_MQTT     3
-#define CONN_TYPE_LISTENER 0xFF  // уникальное значение, не пересекается с HTTP/HTTPS/MQTT
+// Типы соединений (CONN_TYPE_*) и лимиты — см. net_limits.h
 
 // Rate limiter для /api/login: блокировка на 30 сек после 5 неудачных попыток
 #define LOGIN_MAX_FAILS   5
@@ -818,6 +815,156 @@ static uint64_t tls_hs_track_finish(unsigned long conn_id, uint32_t *out_cycles)
 	return 0;
 }
 
+/* ═══════════════ [NETLIM-BEGIN] единый бюджет соединений ═══════════════
+ * Пороги и объяснения — в net_limits.h. */
+
+/* Текущий лимит простоя web-соединения: 1 соединение — держим долго (keep-alive,
+ * новый handshake дорог), >1 — лишние закрываем быстро. Обновляется в
+ * MG_EV_ACCEPT / MG_EV_CLOSE, читается в MG_EV_POLL (без обхода списка). */
+static uint32_t s_web_idle_limit_ms = NET_WEB_IDLE_SOLO_MS;
+
+/* Счётчики для диагностики (видны в строке [NET] REJECT и из отладчика). */
+volatile uint32_t g_net_syn_drops = 0;  /* SYN отброшены фильтром (уровень 1) */
+volatile uint32_t g_net_rejects   = 0;  /* RST после accept (уровень 2)       */
+
+bool net_heap_ok(uint32_t min_free, uint32_t min_largest) {
+  HeapStats_t st;
+  vPortGetHeapStats(&st);
+  return st.xAvailableHeapSpaceInBytes >= min_free &&
+         st.xSizeOfLargestFreeBlockInBytes >= min_largest;
+}
+
+static bool same_remote(const struct mg_addr *a, const struct mg_addr *b) {
+  if (a->is_ip6 != b->is_ip6) return false;
+  if (a->is_ip6)
+    return a->addr.ip6[0] == b->addr.ip6[0] && a->addr.ip6[1] == b->addr.ip6[1];
+  return a->addr.ip4 == b->addr.ip4;
+}
+
+void net_census(struct mg_mgr *mgr, const struct mg_connection *skip,
+                const struct mg_addr *rem, net_census_t *o) {
+  uint32_t oldest_any = UINT32_MAX, oldest_same = UINT32_MAX;
+  memset(o, 0, sizeof(*o));
+  for (struct mg_connection *t = mgr->conns; t != NULL; t = t->next) {
+    if (t == skip || t->is_listening || t->is_udp) continue;
+    if (t->is_closing || t->is_draining) continue;  /* умирающие не считаем */
+
+    uintptr_t type = (uintptr_t) t->fn_data;
+    bool web = (type == CONN_TYPE_HTTP || type == CONN_TYPE_HTTPS);
+
+    if (t->is_tls_hs && o->hs_total < 255) o->hs_total++;
+
+    if (!web) {
+      if (t->is_accepted) { if (o->mqtt_srv < 255) o->mqtt_srv++; }
+      else                { if (o->mqtt_out < 255) o->mqtt_out++; }
+      continue;
+    }
+
+    bool same = (rem != NULL) && same_remote(&t->rem, rem);
+    if (same && o->same_ip < 255) o->same_ip++;
+
+    if (t->is_tls_hs) {
+      uint32_t age = tls_hs_get_age_ms(t->id);
+      if (o->web_hs < 255) o->web_hs++;
+      if (o->hs_oldest == NULL || age >= o->hs_oldest_age) {
+        o->hs_oldest = t;
+        o->hs_oldest_age = age;
+      }
+      continue;
+    }
+    if (o->web_est < 255) o->web_est++;
+
+    /* Кандидат на вытеснение: idle, буферы пусты, был хотя бы 1 запрос,
+     * не владелец OTA-сессии. */
+    uint32_t last_used = *(uint32_t *) t->data;
+    if (t->send.len == 0 && t->recv.len == 0 && last_used > 0 &&
+        !(s_ota_expected != 0 && t->id == s_ota_owner_id)) {
+      if (last_used < oldest_any) { oldest_any = last_used; o->idle_any = t; }
+      if (same && last_used < oldest_same) {
+        oldest_same = last_used;
+        o->idle_same_ip = t;
+      }
+    }
+  }
+}
+
+/* SYN-фильтр (уровень 1): вызывается из mongoose.c ДО выделения соединения.
+ * false => SYN молча отбрасывается, клиент повторит его через 1-3 с. */
+static bool net_syn_filter_impl(struct mg_connection *lsn, size_t backlog_pending) {
+  static uint16_t s_https = 0;
+  if (s_https == 0) s_https = (uint16_t) atoi(HTTPS_PORT);
+
+  if (mg_ntohs(lsn->loc.port) == s_https) {
+    if (!net_heap_ok(NET_HEAP_HS_MIN, NET_HEAP_LARGEST_MIN)) return false;
+    net_census_t cs;
+    net_census(lsn->mgr, NULL, NULL, &cs);
+    /* handshake в процессе + уже принятые, но ещё не пришедшие в ACCEPT (backlog) */
+    return ((size_t) cs.hs_total + backlog_pending) < NET_HS_MAX_PARALLEL;
+  }
+  /* HTTP :8000 и MQTT-сервер: без TLS, достаточно heap */
+  return net_heap_ok(NET_HEAP_CONN_MIN, 4096u);
+}
+
+bool net_syn_filter(struct mg_connection *lsn, size_t backlog_pending) {
+  bool ok = net_syn_filter_impl(lsn, backlog_pending);
+  if (!ok) g_net_syn_drops++;
+  return ok;
+}
+
+/* MQTT-сервер: можно ли принять ещё одного клиента. MQTT (сервер+клиент)
+ * не заходит в последние NET_WEB_RESERVED слотов — web-сессия всегда войдёт. */
+bool net_mqtt_srv_may_accept(struct mg_connection *c) {
+  net_census_t cs;
+  net_census(c->mgr, c, NULL, &cs);
+  uint32_t mqtt = (uint32_t) cs.mqtt_srv + cs.mqtt_out;
+  uint32_t web  = (uint32_t) cs.web_est + cs.web_hs;
+  if (!net_heap_ok(NET_HEAP_CONN_MIN, 4096u)) return false;
+  if (mqtt + 1 > NET_TOTAL_CONNS_MAX - NET_WEB_RESERVED) return false;
+  if (web + mqtt + 1 > NET_TOTAL_CONNS_MAX) return false;
+  return true;
+}
+
+/* MQTT-клиент: можно ли открыть исходящее соединение (не раньше, чем
+ * закончится идущий handshake — пики не складываются). */
+bool net_mqtt_cli_may_connect(struct mg_mgr *mgr, bool tls) {
+  net_census_t cs;
+  net_census(mgr, NULL, NULL, &cs);
+  uint32_t mqtt = (uint32_t) cs.mqtt_srv + cs.mqtt_out;
+  uint32_t web  = (uint32_t) cs.web_est + cs.web_hs;
+  if (cs.hs_total >= NET_HS_MAX_PARALLEL) return false;
+  if (tls ? !net_heap_ok(NET_HEAP_HS_MIN, NET_HEAP_LARGEST_MIN)
+          : !net_heap_ok(NET_HEAP_CONN_MIN, 4096u)) return false;
+  if (mqtt + 1 > NET_TOTAL_CONNS_MAX - NET_WEB_RESERVED) return false;
+  if (web + mqtt + 1 > NET_TOTAL_CONNS_MAX) return false;
+  return true;
+}
+
+/* Отказ принятому соединению: TCP RST (уровень 2). Лог — не чаще раза в 2 с,
+ * чтобы сканер/шторм не забил UART. */
+static void net_reject_conn(struct mg_connection *c, const char *why,
+                            const char *rem, const net_census_t *cs) {
+  static uint32_t s_last_log = 0;
+  uint32_t now = (uint32_t) mg_millis();
+  g_net_rejects++;
+  if (now - s_last_log > 2000u) {
+    s_last_log = now;
+    printf("[NET] REJECT %s conn=%lu client=%s heap=%lu hs=%u web=%u mqtt=%u "
+           "(rst=%lu syn_drop=%lu)\r\n",
+           why, (unsigned long) c->id, rem,
+           (unsigned long) xPortGetFreeHeapSize(), (unsigned) cs->hs_total,
+           (unsigned) (cs->web_est + cs->web_hs),
+           (unsigned) (cs->mqtt_srv + cs->mqtt_out),
+           (unsigned long) g_net_rejects, (unsigned long) g_net_syn_drops);
+  }
+#if MG_ENABLE_TCPIP
+  mg_tcpip_rst_conn(c);
+#else
+  c->is_draining = 1;
+  c->is_closing  = 1;
+#endif
+}
+/* ═══════════════ [NETLIM-END] ═══════════════ */
+
 static bool check_etag_304(struct mg_connection *c, struct mg_http_message *hm,
                            volatile uint32_t *ver);
 void handle_buttons(struct mg_connection *c, struct mg_http_message *hm);
@@ -855,106 +1002,82 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
     case MG_EV_ACCEPT: {
         // ПЕРВЫМ ДЕЛОМ — определяем тип соединения до любого цикла.
-        // Примечание: баг отсутствует (t==c guard в цикле), но явное назначение
-        // fn_data здесь устраняет дублирование кода и future-proof на случай
-        // если guard когда-либо уберут. Listener имеет CONN_TYPE_LISTENER=0xFF —
-        // в цикл подсчёта не попадёт.
+        // Listener имеет CONN_TYPE_LISTENER=0xFF — в подсчёт не попадёт.
         unsigned int local_port = mg_ntohs(c->loc.port);
         if (local_port == atoi(HTTP_PORT)) {
             c->fn_data = (void *)CONN_TYPE_HTTP;
         } else if (local_port == atoi(HTTPS_PORT)) {
             c->fn_data = (void *)CONN_TYPE_HTTPS;
         }
+        const bool is_https = (local_port == atoi(HTTPS_PORT));
 
-        // Лимиты соединений:
-        // cnt_active + cnt_hs >= 5 — вытесняем idle или отвергаем
-        //   (2 браузера × 2 Keep-Alive + 1 запасной = 5)
-        // cnt_hs >= 2 — доп. лимит на одновременные handshake:
-        //   вытесняем только ЗАВИСШИЙ (>1000 мс), свежий не трогаем
-        // Целевой пик: 2 listeners + 1 MQTT + 2 hs + 3 active = 8
-        int cnt_active = 0;       // установленные (не в handshake)
-        int cnt_hs     = 0;       // в процессе TLS handshake
-        struct mg_connection *oldest_idle = NULL;
-        struct mg_connection *oldest_hs   = NULL;  // кандидат на вытеснение среди hs
-        uint32_t oldest_time = UINT32_MAX;
-
-        for (struct mg_connection *t = c->mgr->conns; t; t = t->next) {
-            if (t == c) continue;
-            if ((uintptr_t)t->fn_data != CONN_TYPE_HTTP &&
-                (uintptr_t)t->fn_data != CONN_TYPE_HTTPS) continue;
-
-            if (t->is_tls_hs) {
-                if (t->is_closing || t->is_draining) continue;  // умирающие не считаем
-                cnt_hs++;
-                // Берём первый попавшийся как кандидата (timestamp в data ещё 0 до HTTP msg)
-                if (oldest_hs == NULL) oldest_hs = t;
-                continue;
-            }
-
-            if (t->is_closing || t->is_draining) continue;
-
-            cnt_active++;
-
-            // Кандидат на вытеснение: idle, буферы пусты, был хотя бы 1 запрос
-            uint32_t last_used = *(uint32_t *)t->data;
-            if (t->send.len == 0 && t->recv.len == 0 && last_used > 0 &&
-                !(s_ota_expected != 0 && t->id == s_ota_owner_id)) {
-                if (last_used < oldest_time) {
-                    oldest_time  = last_used;
-                    oldest_idle  = t;
-                }
-            }
-        }
-
-        // Общий лимит: active + handshake.
-        // Раньше active и hs считались раздельно → hs-соединения,
-        // завершив handshake, переходили в active без проверки общего
-        // лимита. active накапливались (active=3 в логах) — баг.
-        // Теперь общий лимит не даёт накопиться больше 5.
+        /* ── Единый бюджет соединений (см. net_limits.h) ──────────────────
+         * Уровень 1 (SYN-фильтр в mongoose.c) отсекает почти всё ДО выделения
+         * памяти. Здесь — страховка от гонки (несколько SYN приняты в одном
+         * poll) и от лимитов, которые SYN-фильтр не видит. Все отказы — TCP RST
+         * ДО mg_tls_init(): x25519/ECDSA и буферы TLS не тратятся. */
         s_active_conns++;
         char buf_rem[32];
         mg_snprintf(buf_rem, sizeof(buf_rem), "%M", mg_print_ip_port, &c->rem);
 
-        if (cnt_active + cnt_hs >= 5) {
-            if (oldest_idle != NULL) {
-                MG_INFO(("Evict idle conn %lu to free slot (deferred close)", oldest_idle->id));
-                oldest_idle->is_draining = 1;
-                oldest_idle->is_closing  = 1;
+        net_census_t cs;
+        net_census(c->mgr, c, &c->rem, &cs);
+
+        /* [1] FreeRTOS heap: не начинаем handshake, если свободно < 30 КБ
+         *     (или самый большой блок мал — фрагментация). */
+        if (!net_heap_ok(is_https ? NET_HEAP_HS_MIN : NET_HEAP_CONN_MIN,
+                         is_https ? NET_HEAP_LARGEST_MIN : 4096u)) {
+            net_reject_conn(c, "heap", buf_rem, &cs);
+            return;
+        }
+
+        /* [2] Параллельных TLS-handshake — ВСЕГДА не больше NET_HS_MAX_PARALLEL (1).
+         *     Вытесняем только ЗАВИСШИЙ (> NET_HS_TIMEOUT_MS); свежий не трогаем —
+         *     обрыв середины handshake тратит CPU впустую. */
+        if (is_https && cs.hs_total >= NET_HS_MAX_PARALLEL) {
+            if (cs.hs_oldest != NULL && cs.hs_oldest_age > NET_HS_TIMEOUT_MS) {
+                printf("[NET] Evict stale hs conn %lu, age=%lu ms\r\n",
+                       (unsigned long)cs.hs_oldest->id,
+                       (unsigned long)cs.hs_oldest_age);
+                cs.hs_oldest->is_draining = 1;
+                cs.hs_oldest->is_closing  = 1;
             } else {
-                MG_INFO(("Rejected conn %lu: %d active + %d hs, no idle",
-                         c->id, cnt_active, cnt_hs));
-                printf("[NET] REJECT conn %lu: active=%d hs=%d\r\n",
-                               c->id, cnt_active, cnt_hs);
-                c->is_draining = 1;
-                c->is_closing  = 1;
+                net_reject_conn(c, "hs", buf_rem, &cs);
                 return;
             }
         }
 
-        // Доп. лимит на одновременные handshake: не более 2.
-        // Два параллельных x25519 (~400 мс каждый) уже дают exec=826 мс.
-        // Больше 2 — вытесняем только ЗАВИСШИЙ handshake (>1000 мс).
-        // Свежий не трогаем — мгновенное вытеснение на середине handshake
-        // обрывает x25519 (CPU насмарку) и провоцирует шторм переподключений.
-        // Пик: 2 listeners + 1 MQTT + 2 hs + 2 active = 7 max
-        if (cnt_hs >= 2) {
-            uint32_t hs_age = (oldest_hs != NULL)
-                            ? tls_hs_get_age_ms(oldest_hs->id) : 0;
-            if (oldest_hs != NULL && hs_age > 1000) {
-                MG_INFO(("Evict STALE hs conn %lu (age=%lu ms, cnt_hs=%d)",
-                         oldest_hs->id, (unsigned long)hs_age, cnt_hs));
-                printf("[NET] Evict stale hs conn %lu, age=%lu ms, client=%s\r\n",
-                       oldest_hs->id, (unsigned long)hs_age, buf_rem);
-                oldest_hs->is_draining = 1;
-                oldest_hs->is_closing  = 1;
-            } else {
-                MG_INFO(("Rejected conn %lu: hs in progress (age=%lu ms, cnt_hs=%d)",
-                         c->id, (unsigned long)hs_age, cnt_hs));
-                printf("[NET] REJECT hs conn=%lu, client=%s, age=%lu ms, cnt_hs=%d\r\n",
-                       c->id, buf_rem, (unsigned long)hs_age, cnt_hs);
-                c->is_draining = 1;
-                c->is_closing  = 1;
-                return;
+        /* [3] Бюджет web-соединений: per-IP, общий web, общий web+MQTT.
+         *     Новая сессия всегда проходит, если есть простаивающее соединение
+         *     (вытесняем самое старое); иначе RST. */
+        {
+            const uint32_t web_now = (uint32_t)cs.web_est + cs.web_hs;
+            const uint32_t all_now = web_now + cs.mqtt_srv + cs.mqtt_out;
+            struct mg_connection *victim = NULL;
+            bool need_evict = false;
+
+            if (cs.same_ip >= NET_WEB_PER_IP_MAX) {
+                need_evict = true;
+                victim = cs.idle_same_ip;
+            } else if (web_now >= NET_WEB_CONNS_MAX ||
+                       all_now >= NET_TOTAL_CONNS_MAX) {
+                need_evict = true;
+                victim = cs.idle_any;
+            }
+            if (need_evict) {
+                if (victim == NULL) {
+                    net_reject_conn(c, "budget", buf_rem, &cs);
+                    return;
+                }
+                MG_INFO(("Evict idle conn %lu to free slot", victim->id));
+                victim->is_draining = 1;
+                victim->is_closing  = 1;
+            }
+            /* Лимит простоя: 1 web-соединение — держим долго, >1 — лишние быстро */
+            {
+                const uint32_t web_after = web_now + 1u - ((need_evict && victim) ? 1u : 0u);
+                s_web_idle_limit_ms = (web_after > 1u) ? NET_WEB_IDLE_EXTRA_MS
+                                                       : NET_WEB_IDLE_SOLO_MS;
             }
         }
 
@@ -1614,6 +1737,12 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		if (s_active_conns > 0) s_active_conns--;
 		// Освобождаем слот трекинга handshake, если соединение было в процессе
 		tls_hs_track_finish(c->id, NULL);
+		{	/* пересчёт лимита простоя без закрывающегося соединения */
+			net_census_t cs_close;
+			net_census(c->mgr, c, NULL, &cs_close);
+			s_web_idle_limit_ms = ((uint32_t)cs_close.web_est + cs_close.web_hs > 1)
+			                    ? NET_WEB_IDLE_EXTRA_MS : NET_WEB_IDLE_SOLO_MS;
+		}
 		MG_INFO(("%lu Connection closed (TLS: %d, listening: %d)",
 		         c->id, c->is_tls, c->is_listening));
 		break;
@@ -1645,11 +1774,26 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
              * здесь опасен — после возврата в mg_mgr_poll будет use-after-free.
              * HTTP  без TLS: браузер держит keep-alive, но может уйти без FIN.
              * HTTPS с TLS:  то же самое + возможны зависшие handshake. */
+            /* Зависший TLS-handshake (клиент замолчал / сканер) держит
+             * единственный слот handshake — закрываем по таймауту. */
+            if (conn_type == CONN_TYPE_HTTPS && c->is_tls_hs && !c->is_closing &&
+                !c->is_listening &&
+                tls_hs_get_age_ms(c->id) > NET_HS_TIMEOUT_MS) {
+                printf("[NET] hs timeout conn=%lu (%lu ms) - RST\r\n",
+                       (unsigned long)c->id,
+                       (unsigned long)tls_hs_get_age_ms(c->id));
+#if MG_ENABLE_TCPIP
+                mg_tcpip_rst_conn(c);
+#else
+                c->is_closing = 1;
+#endif
+            }
             if (!c->is_listening &&
                 (conn_type == CONN_TYPE_HTTP || conn_type == CONN_TYPE_HTTPS)) {
                 uint32_t last_used = *(uint32_t *)c->data;
                 uint32_t now = (uint32_t)mg_millis();
-                if (last_used > 0 && (now - last_used) > 8000 && c->send.len == 0) {
+                if (last_used > 0 && (now - last_used) > s_web_idle_limit_ms &&
+                    c->send.len == 0) {
                     MG_INFO(("%lu %s idle watchdog: force close (idle %lu ms)",
                              c->id,
                              conn_type == CONN_TYPE_HTTPS ? "HTTPS" : "HTTP",
@@ -2057,6 +2201,22 @@ void timer_fn_mqtt(void *arg) {
   if (s_tcp_backoff > 0) {
     s_tcp_backoff--;
     return;
+  }
+
+  /* Единый бюджет соединений: MQTT-клиент тоже соединение. Не открываем его,
+   * пока идёт TLS-handshake, мало heap или заняты слоты (MQTT не заходит в
+   * резерв web). Без счётчиков backoff - проверка повторится на следующем тике. */
+  {
+    static bool s_budget_logged = false;
+    if (!net_mqtt_cli_may_connect(mgr, mg_url_is_ssl(get_mqtt_url()))) {
+      if (!s_budget_logged) {
+        printf("[MQTT] connect deferred: conn budget / heap=%lu\r\n",
+               (unsigned long)xPortGetFreeHeapSize());
+        s_budget_logged = true;
+      }
+      return;
+    }
+    s_budget_logged = false;
   }
 
   char url[70];
@@ -3426,6 +3586,12 @@ void web_init(struct mg_mgr *mgr) {
 
     // Подключение упакованной файловой системы
     mg_mem_files = mg_packed_files;
+
+#if MG_ENABLE_TCPIP
+    /* Уровень 1 защиты: SYN-фильтр (heap + 1 handshake + бюджет) до выделения
+     * памяти под соединение. Ставим ДО mg_http_listen(). */
+    mg_tcpip_syn_filter = net_syn_filter;
+#endif
 
     // Формируем URL для HTTP и HTTPS
     char http_url[32], https_url[32];

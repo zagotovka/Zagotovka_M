@@ -1,4 +1,5 @@
 
+import './netGate.js'; // ПЕРВЫМ: лимит параллельных fetch (меньше сокетов/TLS-handshake)
 import { registerPoll, unregisterPoll, pauseAll, resumeAll } from './pollQueue.js';
 import { StateContext } from './context.js';
 

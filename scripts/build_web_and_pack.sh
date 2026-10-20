@@ -106,8 +106,8 @@ cp "$NEW_JS" "$PACK_DIR/web_root/assets/"
 echo "  OK: JS: $JS_NAME (contains v${VER})"
 
 # CSS
-NEW_CSS=$(ls -t "$WEB_ROOT"/dist/assets/index-*.css 2>/dev/null | head -1 || true)
-[ -n "$NEW_CSS" ] || die "no index-*.css in dist/assets"
+NEW_CSS=$(ls -t "$WEB_ROOT"/dist/assets/*.css 2>/dev/null | head -1 || true)
+[ -n "$NEW_CSS" ] || die "no *.css in dist/assets"
 CSS_NAME=$(basename "$NEW_CSS")
 [ -s "$NEW_CSS" ] || die "stylesheet $CSS_NAME is empty"
 grep -qF "$CSS_NAME" "$WEB_ROOT/dist/index.html" || die "dist/index.html does not reference $CSS_NAME"

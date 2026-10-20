@@ -7174,6 +7174,18 @@ static size_t tx_tcp_rst(struct mg_tcpip_if *ifp, struct pkt *pkt, bool toack) {
                          toack ? pkt->tcp->ack : 0);
 }
 
+// [ZG] Abort an accepted TCP connection with RST (no FIN, no TLS alert).
+// Safe to call from MG_EV_ACCEPT: seq/ack are already initialised by
+// accept_conn(). The connection is closed on the next mg_mgr_poll().
+void mg_tcpip_rst_conn(struct mg_connection *c) {
+  struct connstate *s = (struct connstate *) (c + 1);
+  if (!c->is_udp && !c->is_listening && !c->is_connecting && c->is_accepted) {
+    tx_tcp(c->mgr->ifp, s->mac, &c->loc, &c->rem, TH_RST | TH_ACK,
+           mg_htonl(s->seq), mg_htonl(s->ack), NULL, 0);
+  }
+  c->is_closing = 1;
+}
+
 static struct mg_connection *accept_conn(struct mg_connection *lsn,
                                          struct pkt *pkt, uint16_t mss) {
   struct connstate *s;
@@ -7447,6 +7459,20 @@ static void backlog_maintain(struct mg_connection *c) {
   }
 }
 
+// [ZG] SYN admission hook. When set and returning false, the SYN is dropped
+// silently BEFORE any mg_connection is allocated: zero memory cost, and the
+// client simply retransmits the SYN (1s, 3s, 7s...), i.e. a natural queue.
+bool (*mg_tcpip_syn_filter)(struct mg_connection *lsn,
+                            size_t backlog_pending) = NULL;
+
+static size_t backlog_count(struct mg_connection *c) {
+  struct mg_backlog *p = (struct mg_backlog *) c->data;
+  size_t i, n = 0;
+  for (i = 0; i < sizeof(c->data) / sizeof(*p); i++)
+    if (p[i].port != 0) n++;
+  return n;
+}
+
 static void backlog_poll(struct mg_mgr *mgr) {
   struct mg_connection *c = NULL;
   for (c = mgr->conns; c != NULL; c = c->next) {
@@ -7525,6 +7551,9 @@ static void rx_tcp(struct mg_tcpip_if *ifp, struct pkt *pkt) {
       if (pkt->tcp->sport != 0) {
         if (!handle_opt(&cs, pkt->tcp, pkt->ip6 != NULL))
           return;  // process options (MSS)
+        if (mg_tcpip_syn_filter != NULL &&
+            !mg_tcpip_syn_filter(c, backlog_count(c)))
+          return;  // [ZG] over budget: drop SYN silently, client retries
         key = backlog_insert(c, pkt->tcp->sport,
                              cs.dmss);  // backlog options (MSS)
         if (key < 0) return;  // no room in backlog, discard SYN, client retries

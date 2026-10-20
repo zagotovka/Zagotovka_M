@@ -30,6 +30,7 @@
 #include "mongoose.h"
 #include "multi_button.h"
 #include "net.h"
+#include "net_limits.h"  /* g_net_syn_drops / g_net_rejects */
 #include "setings.h"
 #include "logger.h"
 #include "ds18b20.h"
@@ -3894,6 +3895,8 @@ static void heap_diagnostic(void)
     static uint32_t last_req_total = 0;
     static uint32_t last_req_encoder = 0;
     static uint32_t last_req_api = 0;
+    static uint32_t last_net_syn_drops = 0;
+    static uint32_t last_net_rejects = 0;
     static uint8_t first_run = 1;
 
     unsigned current_free = (unsigned)xPortGetFreeHeapSize();
@@ -3916,7 +3919,9 @@ static void heap_diagnostic(void)
         mg_poll_gap_over_50ms_cnt != last_mg_poll_gap_over_50ms_cnt ||
         req_total != last_req_total ||
         req_encoder != last_req_encoder ||
-        req_api != last_req_api) {
+        req_api != last_req_api ||
+        g_net_syn_drops != last_net_syn_drops ||
+        g_net_rejects != last_net_rejects) {
 
         printf("\r\n=== DIAGNOSTIC REPORT [FW:%s] ===\r\n", FW_VERSION);
         if (first_run) {
@@ -3971,6 +3976,8 @@ static void heap_diagnostic(void)
         printf("Mongoose gap peak:   %lu ms (starvation cnt: %lu)\r\n", mg_poll_gap_peak, (unsigned long)mg_poll_gap_over_50ms_cnt);
         printf("HTTP(s) Requests:   Total=%lu, API=%lu, Encoder=%lu\r\n",
                (unsigned long)req_total, (unsigned long)req_api, (unsigned long)req_encoder);
+        printf("Net SYN drops:      %lu (RST after accept: %lu)\r\n",
+               (unsigned long)g_net_syn_drops, (unsigned long)g_net_rejects);
         printf("=========================\r\n");
 
         last_free = current_free;
@@ -3987,6 +3994,8 @@ static void heap_diagnostic(void)
         last_req_total = req_total;
         last_req_encoder = req_encoder;
         last_req_api = req_api;
+        last_net_syn_drops = g_net_syn_drops;
+        last_net_rejects = g_net_rejects;
     }
 }
 
@@ -4138,6 +4147,8 @@ void StartDgnTask(void *argument)
 			       mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other,
 			       (unsigned long)mg_conn_mqttsrv);
 			printf("Poll gap peak: %lu ms (starvation cnt: %lu)\r\n", mg_poll_gap_peak, (unsigned long)mg_poll_gap_over_50ms_cnt);
+			printf("Net SYN drops: %lu (RST after accept: %lu)\r\n",
+			       (unsigned long)g_net_syn_drops, (unsigned long)g_net_rejects);
 
 			printf("\r\n""=== RUNTIME ===\r\n");
 			printf("Tick=%lu\r\n",

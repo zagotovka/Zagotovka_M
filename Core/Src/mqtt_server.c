@@ -21,6 +21,7 @@
 #include "main.h"        /* MqttRxMsg_t + mqttRxQueueHandle (Этап 3.3) */
 #include "cmsis_os2.h"   /* osMessageQueueId_t */
 #include "queue.h"       /* xQueueSend (FreeRTOS.h уже приходит через mongoose.h) */
+#include "net_limits.h"  /* единый бюджет соединений (web + MQTT) */
 #include <string.h>
 #include <stdio.h>
 
@@ -637,6 +638,20 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
 
   switch (ev) {
     case MG_EV_ACCEPT:
+      /* Единый бюджет соединений (net_limits.h): MQTT не занимает последние
+       * NET_WEB_RESERVED слотов (web-сессия всегда войдёт) и не принимается
+       * при нехватке heap. RST ДО выделения слота - клиент переподключится. */
+      if (!net_mqtt_srv_may_accept(c)) {
+        char peer[48];
+        mg_snprintf(peer, sizeof(peer), "%M", mg_print_ip_port, &c->rem);
+        SRV_LOG("[server] REFUSED: conn budget / heap, peer=%s\r\n", peer);
+#if MG_ENABLE_TCPIP
+        mg_tcpip_rst_conn(c);
+#else
+        c->is_closing = 1;
+#endif
+        return;
+      }
       /* Лимит: заняты все слоты -> сразу отказ, соединение не открывается */
       {
         int slot = srv_slot_alloc(c);
