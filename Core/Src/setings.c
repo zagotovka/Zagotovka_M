@@ -1842,29 +1842,40 @@ void InitPin() {
       GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW; // Скорость
       GPIO_InitStruct.Pull = GPIO_NOPULL;          // Подтяжка
       switch (PinsConf[i].ptype) {
-      case 0: // PIR датчик движения
+      case 0: /* PIR: датчик движения.
+               * Подключение: выход PIR -> пин.
+               * Покой: 0, движение: 1. */
         GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
         GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-        PinsConf[i].state = 0;    // Начальное состояние - нет движения
-        PinsConf[i].prvstate = 0; // Предыдущее состояние
         break;
-      case 1: // Геркон NC (нормально замкнутый)
+      case 1: /* Normal open: нормально открытый геркон.
+               * Подключение: 3.3V -> геркон -> пин.
+               * Магнит рядом: контакты замкнуты, на пине 1.
+               * Магнита нет: контакты разомкнуты, на пине 0. */
         GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
         GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-        PinsConf[i].state =
-            1; // Начальное состояние - магнит поднесен (контакты замкнуты)
-        PinsConf[i].prvstate = 1; // Предыдущее состояние
         break;
-      case 2: // Геркон NO (нормально разомкнутый)
+      case 2: /* Normal close: нормально закрытый геркон.
+               * Подключение: 3.3V -> геркон -> пин.
+               * Магнит рядом: контакты разомкнуты, на пине 0.
+               * Магнита нет: контакты замкнуты, на пине 1. */
         GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
         GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-        PinsConf[i].state =
-            0; // Начальное состояние - магнит отсутствует (контакты разомкнуты)
-        PinsConf[i].prvstate = 0; // Предыдущее состояние
         break;
       }
-      // Инициализация порта
+      /* Инициализация порта */
       HAL_GPIO_Init(PinsInfo[i].gpio_name, &GPIO_InitStruct);
+
+
+      /* Начальное состояние берётся с реального пина, а не задаётся
+       * заранее. Иначе первое сравнение в StartSecurityTask даёт ложное
+       * срабатывание после каждой перезагрузки (и ложное SMS). */
+      {
+        uint8_t real = (uint8_t)HAL_GPIO_ReadPin(PinsInfo[i].gpio_name,
+                                                 PinsInfo[i].hal_pin);
+        PinsConf[i].state = real;
+        PinsConf[i].prvstate = real;
+      }
       /******************************************************************************************/
     }
   }

@@ -472,10 +472,10 @@ export function FirmwareUpdate({ }) {
             type: 'green',
             message:
               language === 'ru'
-                ? `Переключение на Bank ${targetBank}... Ожидание перезагрузки устройства...`
-                : `Switching to Bank ${targetBank}... Waiting for device to reboot...`
+                ? `Переключение на Bank ${targetBank}. Устройство перезагружается, страница обновится автоматически.`
+                : `Switching to Bank ${targetBank}. The device is rebooting, the page will refresh automatically.`
           });
-          setTimeout(() => window.location.reload(), 8000);
+          waitForDevice(8000);
         } else {
           setAlert({
             type: 'red',
@@ -562,8 +562,8 @@ export function FirmwareUpdate({ }) {
       type: 'green',
       message:
         language === 'ru'
-          ? 'Перезагрузка устройства... Ожидание ответа...'
-          : 'Rebooting the device... Waiting for it to come back...'
+          ? 'Устройство перезагружается. Страница обновится автоматически.'
+          : 'The device is rebooting. The page will update automatically.'
     });
     waitForDevice(5000);
   };
@@ -708,8 +708,8 @@ export function FirmwareUpdate({ }) {
         type: 'green',
         message:
           language === 'ru'
-            ? 'Прошивка успешно загружена! Ожидание перезагрузки устройства...'
-            : 'Firmware uploaded successfully! Waiting for device to reboot...'
+            ? 'Прошивка успешно загружена! Устройство перезагружается, страница обновится автоматически.'
+            : 'Firmware uploaded successfully! The device is rebooting, the page will refresh automatically.'
       });
 
       waitForDevice(3000);

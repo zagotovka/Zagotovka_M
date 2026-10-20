@@ -186,6 +186,9 @@ const ModalSecurity = ({
                   <option value="NO">NO</option>
                   <option value="YES">YES</option>
                 </select>
+                <p class="text-gray-500 text-xs mt-1">${uiLang === 'ru'
+      ? 'SMS отправляется независимо от поля Action: даже если Action = None.'
+      : 'The SMS is sent regardless of the Action field: even if Action = None.'}</p>
                 ${errors.send_sms &&
     html` <p class="text-red-500 text-sm">${errors.send_sms}</p> `}
               </td>

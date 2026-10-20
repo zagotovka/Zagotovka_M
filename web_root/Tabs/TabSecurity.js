@@ -329,7 +329,7 @@ const TabSecurity = () => {
           <table class="w-full bg-white/70">
             <thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Значение в столбце "Send SMS"</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Что произойдёт</th></tr></thead>
             <tbody>
-              <tr><td class="border px-4 py-2 whitespace-nowrap"><b>YES</b></td><td class="border px-4 py-2">SMS-тревога будет отправлена.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><b>YES</b></td><td class="border px-4 py-2">SMS-тревога будет отправлена при срабатывании датчика. Это не зависит от поля Action: SMS уйдёт, даже если Action = None.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><b>NO</b></td><td class="border px-4 py-2">SMS-тревога не будет отправлена.</td></tr>
             </tbody>
           </table>
@@ -337,9 +337,9 @@ const TabSecurity = () => {
           <div class="p-4 rounded-xl bg-white/80 border border-emerald-300">
             <h4 class="text-lg font-bold text-black mb-2">Примечание</h4>
             <ul class="list-disc ml-6 space-y-1">
+              <li>Send SMS и Action работают независимо друг от друга. Action - это действие самого устройства (например, включить сирену), а SMS - уведомление на телефон. Поэтому SMS уйдёт, даже если Action = None.</li>
               <li>Действия в столбце 'Action' зависят от ползунка 'OnOff' выбранного пина.</li>
               <li>SMS-тревога отправляется, только если включены ползунок 'OnOFF' выбранного пина и общий ползунок 'OnOFF' в блоке SIM800L Settings.</li>
-              <li>Send SMS не зависит от поля Action: SMS уйдёт, даже если Action = None.</li>
               <li>Текст тревоги: <code>${'ALARM:ID=14:Corridor'}</code>, где 14 - ID датчика, а Corridor - содержимое поля INFO. Для Zigbee-датчика движения то же самое, например <code>${'ALARM:ID=89:Hall'}</code>.</li>
               <li>Пишите INFO латиницей и цифрами: SMS отправляется в кодировке GSM, и кириллица может не отобразиться.</li>
             </ul>
@@ -719,7 +719,7 @@ const TabSecurity = () => {
           <table class="w-full bg-white/70">
             <thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Value in the "Send SMS" column</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">What happens</th></tr></thead>
             <tbody>
-              <tr><td class="border px-4 py-2 whitespace-nowrap"><b>YES</b></td><td class="border px-4 py-2">An SMS alert will be sent.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><b>YES</b></td><td class="border px-4 py-2">An SMS alert will be sent when the sensor triggers. This does not depend on the Action field: the SMS is sent even if Action = None.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><b>NO</b></td><td class="border px-4 py-2">An SMS alert will not be sent.</td></tr>
             </tbody>
           </table>
@@ -727,9 +727,9 @@ const TabSecurity = () => {
           <div class="p-4 rounded-xl bg-white/80 border border-emerald-300">
             <h4 class="text-lg font-bold text-black mb-2">Note</h4>
             <ul class="list-disc ml-6 space-y-1">
+              <li>Send SMS and Action work independently of each other. Action is what the device itself does (for example, turn on a siren), while SMS is a notification to your phone. So the SMS is sent even if Action = None.</li>
               <li>Actions in the 'Action' column depend on the 'OnOff' slider of the selected pin.</li>
               <li>An SMS alert is sent only when both the pin 'OnOFF' slider and the common 'OnOFF' slider in the SIM800L Settings block are ON.</li>
-              <li>Send SMS does not depend on the Action field: the SMS is sent even if Action = None.</li>
               <li>The alert text is <code>${'ALARM:ID=14:Corridor'}</code>, where 14 is the sensor ID and Corridor is the content of the INFO field. For a Zigbee motion sensor it is the same, for example <code>${'ALARM:ID=89:Hall'}</code>.</li>
               <li>Write INFO in Latin letters and digits: the SMS is sent in the GSM charset, and Cyrillic may not display.</li>
             </ul>

@@ -82,7 +82,9 @@ struct dbPinsConf {     // Создали структуру с необходи
 	uint8_t pwm_flags;	// PWM: bit0 - polarity inverted, bit1 - On/Off gate owned by PWM row (лежит в паддинге, sizeof не меняется)
 	int dvalue;		    // Dimmer value
 	uint8_t ponr;		// Power on restore
-	uint8_t ptype;		// Pullup type 0 - NONE; 1 - GPIO_PULLUP; 2 - GPIO_PULLDOWN
+	uint8_t ptype;		/* Зависит от topin. Security: 0 - PIR, 1 - Normal open,
+				 * 2 - Normal close. Прочие режимы (кнопки/переключатели):
+				 * тип подтяжки 0 - нет, 1 - pull-up, 2 - pull-down. */
 	char sclick[125];	// SINGLE CLICK, (где 125 - 25-27 пар)
 	char dclick[125];	// DOUBLE CLICK,(где 125 - 25-27 пар) где 255 это 51 пара ключ занчение (15:2).
 	char lpress[125];	// LONG PRESS, (где 125 - 25-27 пар) где 255 это 51 пара ключ занчение (15:2).

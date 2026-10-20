@@ -257,7 +257,7 @@ export const enLangsecuritypins = [
   'Pin - The unique number of the digital or analog pin.', // 2
   'Type of sensor - Type of connected sensor (PIR, Normal open, Normal close).', // 3
   'Action - Action to perform when the sensor is triggered.', // 4
-  'Send SMS - Whether to send SMS when the sensor is triggered (YES/NO).', // 5
+  'Send SMS - Whether to send SMS when the sensor is triggered (YES/NO). Independent of the Action column: the SMS is sent even if Action = None.', // 5
   'INFO - Additional information for quick navigation.', // 6
   'On/Off - Enable or disable the security pin.', // 7
   'Edit Pin - The Edit button allows you to access the security pin settings.' // 8

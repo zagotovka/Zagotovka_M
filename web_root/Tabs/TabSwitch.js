@@ -475,6 +475,7 @@ function TabSwitch({ }) {
           <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
             <b>Как он работает:</b> выключатель просто повторяет своё положение. Замкнули (при GPIO_PULLUP - на землю) - всё подключённое включается,
             разомкнули - выключается. Срабатывание происходит примерно через 0.2 секунды: так прошивка защищается от дребезга контактов.
+            <div class="mt-2">После перезагрузки выходы устанавливаются по положению выключателя: замкнут - включено, разомкнут - выключено.</div>
           </div>
 
           <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
@@ -868,6 +869,7 @@ function TabSwitch({ }) {
           <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
             <b>How it works:</b> the switch simply repeats its position. Closed (with GPIO_PULLUP - to ground) - everything connected turns on,
             open - it turns off. It reacts after about 0.2 seconds: this is how the firmware protects itself from contact bounce.
+            <div class="mt-2">After a reboot the outputs are set according to the switch position: closed - on, open - off.</div>
           </div>
 
           <div class="mt-4 p-3 rounded-xl bg-white/80 border border-indigo-300">
