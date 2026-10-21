@@ -60,7 +60,8 @@ function ModalEncoder({
   // dvalue хранится как ПРОЦЕНТ 0-100. C-код сам масштабирует в шаги таймера.
   const pwmmax = selectedEncoder.pwmmax || 100;
   const [dvalue, setDvalue] = useState(selectedEncoder.dvalue || 0);
-  const [ponr, setPonr] = useState(selectedEncoder.ponr || 0);
+  // Power On State: 2 OFF, 3 ON, 4 LAST (по умолчанию LAST - сохранённое значение)
+  const [ponr, setPonr] = useState(selectedEncoder.ponr >= 2 && selectedEncoder.ponr <= 4 ? selectedEncoder.ponr : 4);
   const [pwmFreq, setPwmFreq] = useState(selectedEncoder.pwm || 10000000);
   // Строка PWM без энкодера (kind:"pwm"): настройки пишутся в сам PWM-пин
   const isPwmRow = selectedEncoder.kind === 'pwm';
@@ -433,15 +434,16 @@ function ModalEncoder({
                     </td>
                   </tr>
                   <tr class="bg-white">
-                    <td class="p-2 font-bold">Duty on restore</td>
+                    <td class="p-2 font-bold">Power on state</td>
                     <td class="p-2">
                       <select
                         value=${ponr}
                         onchange=${handlePonrChange}
                         class="border rounded p-2 w-full"
                       >
-                        <option value="0">OFF</option>
-                        <option value="1">ON</option>
+                        <option value="2">OFF</option>
+                        <option value="3">ON</option>
+                        <option value="4">LAST</option>
                       </select>
                     </td>
                   </tr>

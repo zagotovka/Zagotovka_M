@@ -1899,6 +1899,12 @@ void StartConfigTask(void *argument)
 	          SetZigbeeConfig(); // "zigbee.ini" не существует — создаём его
 	        }
 
+	        /* Последнее состояние выходов (режим Power On State = LAST). Файла
+	         * может не быть - тогда все выходы считаются выключенными. */
+	        if (f_stat("laststate.ini", &finfo) == FR_OK) {
+	          GetLastState();
+	        }
+
 	        InitPin(); // Инициализация пинов — теперь всегда выполняется после всех загрузок,
 	                   // независимо от того, какие файлы нашлись, а какие были созданы заново
 
@@ -1962,6 +1968,9 @@ case 2:
 	          break;
 	        case 8:
 	          SetCondPool(); // Сохранение встроенных выражений условий в "cond.ini"
+	          break;
+	        case 9:
+	          SetLastState(); // Сохранение последнего состояния выходов в "laststate.ini"
 	          break;
 	        default:
 	          printf("xQueueReceive get wrong data! \r\n");
@@ -2758,11 +2767,23 @@ void StartInputTask(void *argument)
 	   * при старте был 0, поэтому применялось только разомкнутое положение
 	   * (OFF), а замкнутое игнорировалось. Инвертированное значение заставляет
 	   * первый проход вызвать processPins с реальным положением. */
+	  /* Power On State: положение выключателя на старте применяется только к
+	   * выходам с режимом SWITCH (фильтр в processPins по g_ponr_boot_pass).
+	   * Остальные выходы (OFF / ON / LAST) выключатель при старте не трогает,
+	   * их начальное состояние уже задано в InitPin. Текущее положение
+	   * запоминается в pinLevel, поэтому ложного фронта в цикле не будет. */
 	  for (uint8_t n = 0; n < n_inp; n++) {
 	    uint8_t i = inp_ids[n];
 	    if (PinsConf[i].topin == 3) {
-	      pinLevel[i] = (uint8_t)!HAL_GPIO_ReadPin(PinsInfo[i].gpio_name,
-	                                               PinsInfo[i].hal_pin);
+	      pinLevel[i] = (uint8_t)HAL_GPIO_ReadPin(PinsInfo[i].gpio_name,
+	                                              PinsInfo[i].hal_pin);
+	      if (PinsConf[i].onoff != 0) {
+	        uint8_t act = (pinLevel[i] == GPIO_PIN_RESET) ? 1 : 0;
+	        g_ponr_boot_pass = 1;
+	        processPins(i, act);
+	        g_ponr_boot_pass = 0;
+	        mqtt_queue_send_safe(2, i, act, 0);
+	      }
 	    }
 	  }
   /* Infinite loop */
@@ -2853,6 +2874,10 @@ void StartInputTask(void *argument)
 
 	    /* Process Zigbee virtual buttons (RAW mode state machine) */
 	    zbee_vbtn_tick();
+
+	    /* Power On State: отслеживание последнего состояния и применение режима
+	     * для Zigbee после подключения к MQTT (внутри троттлинг до 1 раза в секунду) */
+	    ponr_poll();
 
 	    vTaskDelayUntil(&xLastWake, pdMS_TO_TICKS(5));
   }

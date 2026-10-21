@@ -3,6 +3,7 @@
 
 #include "net.h"
 #include "zagotovka.h"
+#include "setings.h" /* Power On State: ponr_eff_*() */
 #include "logger.h"
 #include "ds18b20.h"
 #include "ds18b20Config.h"
@@ -2450,7 +2451,7 @@ static void handle_get_pins(struct mg_connection *c,
                 "\"ponr\":%d,\"onoff\":%d,\"info\":\"%s\"}",
                 i, esc_pins,
                 PinsConf[i].dvalue, PinsConf[i].pwm, PinsConf[i].pwmmax,
-                PinsConf[i].ponr, PinsConf[i].onoff, esc_info);
+                (int)ponr_eff_enc(i), PinsConf[i].onoff, esc_info);
             break;
 
         case 10: /* SECURITY */
@@ -2932,7 +2933,7 @@ void handle_encoders(struct mg_connection *c, struct mg_http_message *hm) {
             PinsConf[i].topin, i, esc_pins,
             encoderb_id, esc_encb,
             pwm_dvalue, pwm_freq, pwm_max,
-            PinsConf[i].ponr,
+            (int)ponr_eff_enc(i),
             pinact, esc_info, PinsConf[i].onoff,
 			PinsConf[i].zbee_bind_id, enc_cond, ce_expr, pwm_pol);
 
@@ -2984,7 +2985,7 @@ void handle_encoders(struct mg_connection *c, struct mg_http_message *hm) {
             "\"pol\":%d,\"owner\":\"%s\",\"locked\":%d}",
             first ? "" : ",", i, esc_pins,
             PinsConf[i].dvalue, PinsConf[i].pwm, PinsConf[i].pwmmax,
-            PinsConf[i].ponr, esc_info, onoff_eff,
+            (int)ponr_eff_pin(i), esc_info, onoff_eff,
             PinsConf[i].zbee_bind_id,
             (PinsConf[i].pwm_flags & PWMF_INVERT) ? 1 : 0,
             by_pid ? "pid" : "", locked ? 1 : 0);

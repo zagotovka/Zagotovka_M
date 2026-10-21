@@ -9,6 +9,18 @@
 #define INC_DB_H_
 
 #define NUMPIN 89 // количество пинов
+
+/* Power On State (аналог Tasmota PowerOnState) - значение поля ponr.
+ * Значения 0 и 1 - наследие старых ini-файлов ("Duty on restore" 0/1, в прошивке
+ * не использовалось): трактуются как раньше, см. ponr_eff_pin() в setings.c.
+ * Device: OFF / ON / LAST / SWITCH.  PWM: OFF / ON / LAST.
+ * Zigbee-актуатор: NONE (по умолчанию), OFF, ON, LAST, SWITCH. */
+#define PONR_LEGACY  0
+#define PONR_OFF     2  /* выключить */
+#define PONR_ON      3  /* включить */
+#define PONR_LAST    4  /* последнее состояние */
+#define PONR_SWITCH  5  /* по положению выключателя */
+#define PONR_NONE    6  /* ничего не делать (только Zigbee) */
 #define PID_MAX_SLOTS 24 // макс. число PID-каналов
 #define NUMPINLINKS 1024 // количество pin to pin (связь = 10 байт в DTCM)
 #define NUMTASK 50 // кол-во CRON task
@@ -81,7 +93,7 @@ struct dbPinsConf {     // Создали структуру с необходи
 	uint8_t istate;		// Invert state
 	uint8_t pwm_flags;	// PWM: bit0 - polarity inverted, bit1 - On/Off gate owned by PWM row (лежит в паддинге, sizeof не меняется)
 	int dvalue;		    // Dimmer value
-	uint8_t ponr;		// Power on restore
+	uint8_t ponr;		// Power on state: PONR_* (см. выше)
 	uint8_t ptype;		/* Зависит от topin. Security: 0 - PIR, 1 - Normal open,
 				 * 2 - Normal close. Прочие режимы (кнопки/переключатели):
 				 * тип подтяжки 0 - нет, 1 - pull-up, 2 - pull-down. */
@@ -362,6 +374,10 @@ typedef struct {
     uint16_t dimmer_max;         // Максимальное значение яркости
     uint16_t dimmer_cluster;     // Cluster: 0x0008=Level, 0xEF00=Manufacturer
     uint8_t  dimmer_attr;        // Attribute: 0x0000=Level, DP# for Manufacturer
+
+    /* Power On State: PONR_* (по умолчанию PONR_LEGACY = PONR_NONE, ничего не делать).
+     * Поле лежит в паддинге, sizeof(ZigbeeVirtualPin) не меняется. */
+    uint8_t  ponr;
 } ZigbeeVirtualPin;
 
 extern ZigbeeVirtualPin ZigbeeConf[NUMZBEE];  /* в .bss — в DTCM не помещается вместе с g_body/MQTT */

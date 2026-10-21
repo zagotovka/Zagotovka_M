@@ -125,17 +125,48 @@ const RadioOption = ({ id, value, label, disabled = false, onChange, checked }) 
   </div>
 `;
 
-const Th = ({ title, tooltipIndex, center, getTooltipText }) => html`
+// shrink: колонка сжимается до ширины содержимого (ID, Pin, Состояние при старте);
+// колонка типов забирает всё оставшееся место. Размеры шрифта и отступов адаптивные.
+const Th = ({ title, tooltipIndex, center, getTooltipText, shrink, wrap }) => html`
   <th
-    class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
-    style=${center ? 'text-align: center' : ''}
+    class="px-3 md:px-6 py-3 md:py-4 text-base md:text-2xl font-bold text-slate-700 tracking-wide cursor-help ${wrap ? 'whitespace-normal leading-tight md:px-4' : 'whitespace-nowrap'}"
+    style=${(center ? 'text-align: center;' : '') + (shrink ? 'width: 1%;' : '')}
     data-tip=${getTooltipText('langselect', tooltipIndex)}
   >
     ${title}
   </th>
 `;
 
-const ArraySelect = ({ d, selectedValues, isRowDisabled, handleRadioChange, handleFieldChange }) => {
+// ---------------------------------------------------------------------------
+// Power On State: режим начального состояния выхода после перезагрузки.
+// Значения совпадают с PONR_* в db.h: 2 OFF, 3 ON, 4 LAST, 5 SWITCH, 6 NONE.
+// Device: OFF/ON/LAST/SWITCH; PWM: OFF/ON/LAST; Zigbee: NONE/OFF/ON/LAST/SWITCH.
+// ---------------------------------------------------------------------------
+const PONR_LABELS = {
+  ru: { title: 'Состояние при старте', 6: 'Ничего', 2: 'Выключить', 3: 'Включить', 4: 'Последнее состояние', 5: 'По положению выключателя' },
+  en: { title: 'State on power-up', 6: 'Nothing', 2: 'Turn off', 3: 'Turn on', 4: 'Last state', 5: 'By switch position' },
+};
+const PONR_OPTIONS = { '2': [2, 3, 4, 5], '5': [2, 3, 4], '11': [6, 2, 3, 4, 5] };
+const PONR_DEFAULT = { '2': '2', '5': '4', '11': '6' };
+
+const PonrSelect = ({ id, topin, language, selectedValues, handleFieldChange }) => {
+  const opts = PONR_OPTIONS[topin];
+  if (!opts) return '';
+  const L = PONR_LABELS[language] || PONR_LABELS.en;
+  const stored = selectedValues[`ponr_${id}`];
+  const cur = stored !== undefined && stored !== '' ? String(stored) : PONR_DEFAULT[topin];
+  return html`
+    <select
+      value=${cur}
+      title=${L.title}
+      onChange=${(e) => handleFieldChange(id, 'ponr', e.target.value)}
+      class="text-xs px-2 md:px-3 py-1.5 rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-teal-400 w-full max-w-[10.5rem] md:max-w-none">
+      ${opts.map((v) => html`<option value=${String(v)}>${L[v]}</option>`)}
+    </select>
+  `;
+};
+
+const ArraySelect = ({ d, selectedValues, isRowDisabled, handleRadioChange, handleFieldChange, language }) => {
   const isPhysicalPin = d.id < 89;
   const isZigbeePin = d.id >= 89;
   const currentTopin = selectedValues[`topin_${d.id}`];
@@ -147,8 +178,8 @@ const ArraySelect = ({ d, selectedValues, isRowDisabled, handleRadioChange, hand
         ? 'bg-white/80'
         : 'bg-sky-200/40'
     } hover:bg-slate-200/80 transition-colors">
-    <td class="px-6 py-2 text-sm text-slate-800">${d.id}</td>
-    <td class="px-6 py-2 text-sm text-slate-800 font-medium">${isZigbeePin ? 'Z2M' : d.pins}</td>
+    <td class="px-3 md:px-6 py-2 text-sm text-slate-800 whitespace-nowrap">${d.id}</td>
+    <td class="px-3 md:px-6 py-2 text-sm text-slate-800 font-medium whitespace-nowrap">${isZigbeePin ? 'Z2M' : d.pins}</td>
     <td class="px-2 py-2">
       <div class="flex flex-wrap items-center justify-center gap-x-1 gap-y-1">
         ${isPhysicalPin ? html`
@@ -167,10 +198,15 @@ const ArraySelect = ({ d, selectedValues, isRowDisabled, handleRadioChange, hand
         `}
       </div>
     </td>
+    <td class="px-2 md:px-4 py-2 text-center">
+      ${((isPhysicalPin && (currentTopin === '2' || currentTopin === '5')) || (isZigbeePin && currentTopin === '11')) && html`
+        <${PonrSelect} id=${d.id} topin=${currentTopin} language=${language} selectedValues=${selectedValues} handleFieldChange=${handleFieldChange} />
+      `}
+    </td>
   </tr>
   ${isZigbeePin && currentTopin === '11' && html`
   <tr class="bg-slate-50/80">
-    <td colspan="3" class="px-6 py-3">
+    <td colspan="4" class="px-6 py-3">
       <div class="flex flex-col gap-2">
         <div class="flex flex-col sm:flex-row gap-2">
           <input type="text" placeholder="IEEE Address (e.g. 588e81fffe36a343)"
@@ -285,6 +321,18 @@ const HELP_CONTENT = {
         <div class="mt-2 text-slate-700">
           Если переключатель <b>PWM</b> или <b>Security</b> у пина неактивен, этот пин такую роль выполнять не может.
         </div>
+      </section>
+
+      <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">Состояние при старте</h2>
+        <p>Для пинов типа <b>DEVICE</b>, <b>PWM</b> и для Zigbee-устройств под переключателем типа появляется список, с каким состоянием выход стартует после перезагрузки контроллера (аналог PowerOnState в Tasmota).</p>
+        <ul class="list-disc pl-6 space-y-1">
+          <li><b>Ничего</b> (только Zigbee, по умолчанию): контроллер не посылает устройству команд при старте.</li>
+          <li><b>Выключить</b> / <b>Включить</b>: выход всегда стартует выключенным или включенным.</li>
+          <li><b>Последнее состояние</b>: возвращается то, что было перед перезагрузкой. Состояние сохраняется на флешку с задержкой около 5 секунд после изменения.</li>
+          <li><b>По положению выключателя</b> (DEVICE и Zigbee): выход повторяет положение привязанного выключателя со страницы Switch. Сами Button и Switch состояния не хранят, у них нечего восстанавливать: режим задаётся у управляемого ими выхода.</li>
+        </ul>
+        <p>Для PWM доступны Выключить, Включить и Последнее состояние. Zigbee-устройства получают команду примерно через 15 секунд после подключения к MQTT. В прежних конфигурациях поведение не меняется, пока вы не выберете режим явно.</p>
       </section>
 
       <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
@@ -473,6 +521,18 @@ const HELP_CONTENT = {
         </div>
       </section>
 
+      <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
+        <h2 class="text-xl font-bold text-black">State on power-up</h2>
+        <p>For <b>DEVICE</b> and <b>PWM</b> pins and for Zigbee devices a list appears under the type switch. It sets the state the output starts with after the controller reboots (like PowerOnState in Tasmota).</p>
+        <ul class="list-disc pl-6 space-y-1">
+          <li><b>Nothing</b> (Zigbee only, the default): the controller sends no commands to the device at start.</li>
+          <li><b>Turn off</b> / <b>Turn on</b>: the output always starts off or on.</li>
+          <li><b>Last state</b>: the state before the reboot is restored. It is saved to the USB drive about 5 seconds after a change.</li>
+          <li><b>By switch position</b> (DEVICE and Zigbee): the output follows the position of the linked switch from the Switch page. Buttons and switches store no state, so there is nothing to restore on them: the mode is set on the output they control.</li>
+        </ul>
+        <p>PWM offers Turn off, Turn on and Last state. Zigbee devices get the command about 15 seconds after the MQTT connection is up. Existing configurations keep their behavior until you pick a mode explicitly.</p>
+      </section>
+
       <section class="rounded-2xl border-2 bg-emerald-50 border-emerald-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">Virtual pins of Zigbee</h2>
         <p>Each Zigbee device takes one virtual pin. Such a pin has only two types: <b>NONE</b> (free) and <b>Zigbee</b> (taken by a device).</p>
@@ -595,6 +655,7 @@ function TabSelect({ }) {
     zbee_endpoint: d.zbee_endpoint || 1,
     clusters: d.clusters || [6],
     zbee_label: d.zbee_label || '',
+    ponr: d.ponr !== undefined ? String(d.ponr) : '',
   });
 
   // Инициализируем глобальный tooltip один раз при монтировании
@@ -647,6 +708,7 @@ function TabSelect({ }) {
         if (d.zbee_ieee !== undefined) initialValues[`zbee_ieee_${d.id}`] = d.zbee_ieee;
         if (d.zbee_endpoint !== undefined) initialValues[`zbee_endpoint_${d.id}`] = d.zbee_endpoint;
         if (d.zbee_label !== undefined) initialValues[`zbee_label_${d.id}`] = d.zbee_label;
+        if (d.ponr !== undefined) initialValues[`ponr_${d.id}`] = String(d.ponr);
       });
       setSelectedValues(initialValues);
 
@@ -721,8 +783,14 @@ function TabSelect({ }) {
       if (d.id < 89) {
         const raw = selectedValues[`topin_${d.id}`];
         const cur = raw !== undefined ? raw : d.topin.toString();
-        if (cur !== snap.topin) {
-          changed.push({ id: d.id, topin: parseInt(cur) });
+        // Power On State: режим уходит вместе с типом пина (только Device и PWM)
+        const rawPonr = selectedValues[`ponr_${d.id}`];
+        const hasPonr = (cur === '2' || cur === '5') && rawPonr !== undefined && rawPonr !== '';
+        const ponrChanged = hasPonr && String(rawPonr) !== (snap.ponr || '');
+        if (cur !== snap.topin || ponrChanged) {
+          const item = { id: d.id, topin: parseInt(cur) };
+          if (hasPonr) item.ponr = parseInt(rawPonr);
+          changed.push(item);
         }
       } else {
         const curTopin = selectedValues[`topin_${d.id}`] !== undefined
@@ -731,11 +799,13 @@ function TabSelect({ }) {
         const cur = {
           zbee_ieee: selectedValues[`zbee_ieee_${d.id}`] || '',
           zbee_label: selectedValues[`zbee_label_${d.id}`] || '',
+          ponr: selectedValues[`ponr_${d.id}`] !== undefined ? String(selectedValues[`ponr_${d.id}`]) : '',
         };
         const isDirty =
           curTopin !== snap.topin ||
           cur.zbee_ieee !== snap.zbee_ieee ||
-          cur.zbee_label !== snap.zbee_label;
+          cur.zbee_label !== snap.zbee_label ||
+          (cur.ponr !== '' && cur.ponr !== (snap.ponr || ''));
         if (isDirty) {
             if (curTopin === '0') {
               changed.push({
@@ -753,6 +823,7 @@ function TabSelect({ }) {
                 zbee_endpoint: 1,
                 clusters: d.clusters || [6],
                 zbee_label: cur.zbee_label,
+                ponr: cur.ponr !== '' ? parseInt(cur.ponr) : undefined,
               });
             }
         }
@@ -805,6 +876,7 @@ function TabSelect({ }) {
         if (item.topin !== undefined) updatedValues[`topin_${item.id}`] = item.topin.toString();
         if (item.zbee_ieee !== undefined) updatedValues[`zbee_ieee_${item.id}`] = item.zbee_ieee;
         if (item.zbee_label !== undefined) updatedValues[`zbee_label_${item.id}`] = item.zbee_label;
+        if (item.ponr !== undefined) updatedValues[`ponr_${item.id}`] = String(item.ponr);
       });
       setSelectedValues((prevState) => ({ ...prevState, ...updatedValues }));
       lastChangeTime.current = 0;
@@ -822,7 +894,13 @@ function TabSelect({ }) {
 
   const handleRadioChange = (e) => {
     const { name, value } = e.target;
-    setSelectedValues((prevState) => ({ ...prevState, [name]: value }));
+    setSelectedValues((prevState) => {
+      const next = { ...prevState, [name]: value };
+      // Смена типа физического пина: режим предыдущего типа не переносится
+      const pid = parseInt(name.replace('topin_', ''), 10);
+      if (!isNaN(pid) && pid < 89) delete next[`ponr_${pid}`];
+      return next;
+    });
     lastChangeTime.current = Date.now();
   };
 
@@ -909,35 +987,36 @@ function TabSelect({ }) {
 
             <div class="rounded-2xl bg-white/50 backdrop-blur-xl border border-white/60 shadow-inner w-full mb-6 overflow-auto">
               <div class="overflow-x-auto w-full">
-                <table class="w-full text-left border-collapse whitespace-nowrap">
+                <table class="w-full text-left border-collapse">
                   <thead>
                     <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                      <${Th} title="ID" tooltipIndex=${1} getTooltipText=${getTooltipText} />
-                      <${Th} title="Pin" tooltipIndex=${2} getTooltipText=${getTooltipText} />
+                      <${Th} title="ID" tooltipIndex=${1} shrink=${true} getTooltipText=${getTooltipText} />
+                      <${Th} title="Pin" tooltipIndex=${2} shrink=${true} getTooltipText=${getTooltipText} />
                       <${Th} title="Type(s) of pin(s)" tooltipIndex=${3} center=${true} getTooltipText=${getTooltipText} />
+                      <${Th} title=${(PONR_LABELS[language] || PONR_LABELS.en).title} tooltipIndex=${4} center=${true} shrink=${true} wrap=${true} getTooltipText=${getTooltipText} />
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-white/40">
                     ${varselect && html`
                       <!-- Physical pins section -->
                       <tr class="bg-gradient-to-r from-slate-100 to-slate-50 cursor-pointer hover:from-slate-200 hover:to-slate-100 transition-colors" onclick=${() => toggleSection('physical')}>
-                        <td colspan="3" class="px-6 py-3 text-lg font-bold text-slate-700">
+                        <td colspan="4" class="px-6 py-3 text-lg font-bold text-slate-700">
                           <span class="mr-2 text-slate-500">${expandedSections.physical ? '▼' : '▶'}</span>
                           ${language === 'ru' ? 'Физические пины STM32' : 'Physical pins of STM32'}
                           <span class="ml-2 text-sm font-normal text-slate-500">(${varselect.filter(d => d.id < 89).length})</span>
                         </td>
                       </tr>
-                      ${expandedSections.physical && varselect.filter(d => d.id < 89).map((d) => html`<${ArraySelect} d=${d} selectedValues=${selectedValues} isRowDisabled=${isRowDisabled} handleRadioChange=${handleRadioChange} handleFieldChange=${handleFieldChange} />`)}
+                      ${expandedSections.physical && varselect.filter(d => d.id < 89).map((d) => html`<${ArraySelect} d=${d} selectedValues=${selectedValues} isRowDisabled=${isRowDisabled} handleRadioChange=${handleRadioChange} handleFieldChange=${handleFieldChange} language=${language} />`)}
                       
                       <!-- Zigbee virtual pins section -->
                       <tr class="bg-gradient-to-r from-cyan-100 to-cyan-50 cursor-pointer hover:from-cyan-200 hover:to-cyan-100 transition-colors" onclick=${() => toggleSection('zigbee')}>
-                        <td colspan="3" class="px-6 py-3 text-lg font-bold text-cyan-700">
+                        <td colspan="4" class="px-6 py-3 text-lg font-bold text-cyan-700">
                           <span class="mr-2 text-cyan-500">${expandedSections.zigbee ? '▼' : '▶'}</span>
                           ${language === 'ru' ? 'Виртуальные пины Zigbee' : 'Virtual pins of Zigbee'}
                           <span class="ml-2 text-sm font-normal text-cyan-500">(${varselect.filter(d => d.id >= 89).length})</span>
                         </td>
                       </tr>
-                      ${expandedSections.zigbee && varselect.filter(d => d.id >= 89).map((d) => html`<${ArraySelect} d=${d} selectedValues=${selectedValues} isRowDisabled=${isRowDisabled} handleRadioChange=${handleRadioChange} handleFieldChange=${handleFieldChange} />`)}
+                      ${expandedSections.zigbee && varselect.filter(d => d.id >= 89).map((d) => html`<${ArraySelect} d=${d} selectedValues=${selectedValues} isRowDisabled=${isRowDisabled} handleRadioChange=${handleRadioChange} handleFieldChange=${handleFieldChange} language=${language} />`)}
                     `}
                   </tbody>
                 </table>

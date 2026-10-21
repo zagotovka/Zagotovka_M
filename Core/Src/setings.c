@@ -1609,9 +1609,18 @@ void InitPin() {
       checkPortClockStatus(PinsInfo[i].gpio_name);
       // сбрасываем биты для данного пина
       HAL_GPIO_DeInit(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
-      /*Configure GPIO pin Output Level */ // ???zerg???
-      HAL_GPIO_WritePin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin,
-                        GPIO_PIN_RESET);
+      /* Начальный уровень выхода по режиму Power On State. Уровень задаётся ДО
+       * перевода пина в режим выхода, чтобы не было короткого импульса.
+       * OFF и SWITCH стартуют с низкого уровня (SWITCH уточнит StartInputTask),
+       * ON - высокий, LAST - из laststate.ini. ONEWIRE всегда стартует с RESET. */
+      GPIO_PinState lvl0 = GPIO_PIN_RESET;
+      if (PinsConf[i].topin == 2) {
+        uint8_t pm = ponr_eff_pin(i);
+        if (pm == PONR_ON || (pm == PONR_LAST && ponr_last_get(i))) {
+          lvl0 = GPIO_PIN_SET;
+        }
+      }
+      HAL_GPIO_WritePin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin, lvl0);
       // инициализация пина OUTPUT
       GPIO_InitStruct.Pin = PinsInfo[i].hal_pin;  // вывод
       GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP; // режим – выход
@@ -1750,6 +1759,19 @@ void InitPin() {
        * PWM не должен выдавать dvalue. Бит снимается при привязке к энкодеру. */
       if ((PinsConf[i].pwm_flags & PWMF_SWITCH) && PinsConf[i].onoff == 0)
         pulse = 0;
+      /* Power On State: OFF - старт с нулевой скважностью, ON - со значением
+       * dvalue (и включённым рубильником), LAST - как сохранено (поведение по
+       * умолчанию для старых конфигураций). */
+      {
+        uint8_t pm = ponr_eff_pin(i);
+        if (pm == PONR_OFF) {
+          pulse = 0;
+          if (PinsConf[i].pwm_flags & PWMF_SWITCH) PinsConf[i].onoff = 0;
+        } else if (pm == PONR_ON) {
+          pulse = (uint32_t)((uint64_t)PinsConf[i].dvalue * period / 100ULL);
+          if (PinsConf[i].pwm_flags & PWMF_SWITCH) PinsConf[i].onoff = 1;
+        }
+      }
       sConfigOC.Pulse = pulse;
       /* CH Polarity из сохранённого бита: Inverted = активный уровень LOW.
        * ConfigChannel выполняется до включения GPIO AF и Start, поэтому
@@ -2876,6 +2898,8 @@ void GetZigbeeConfig(void) {
     ZigbeeConf[idx].dimmer_attr = (uint8_t)mg_json_get_long(elem, "$.dimmer_attr", 0);
     ZigbeeConf[idx].device_type_override = (uint8_t)mg_json_get_long(elem, "$.override", 0);
     ZigbeeConf[idx].sec_send_sms = (uint8_t)mg_json_get_long(elem, "$.sec_sms", 0);
+    /* Power On State: в старых zigbee.ini ключа нет, 0 трактуется как NONE */
+    ZigbeeConf[idx].ponr = (uint8_t)mg_json_get_long(elem, "$.ponr", PONR_LEGACY);
 
     idx++;
   }
@@ -2926,7 +2950,7 @@ void SetZigbeeConfig(void) {
         "\"pt_single\":\"%s\",\"pt_double\":\"%s\",\"pt_long\":\"%s\","
         "\"switch_payload_on\":\"%s\",\"switch_payload_off\":\"%s\","
         "\"dimmer_min\":%d,\"dimmer_max\":%d,\"dimmer_cluster\":%d,\"dimmer_attr\":%d,"
-        "\"override\":%d,\"sec_sms\":%d}",
+        "\"override\":%d,\"sec_sms\":%d,\"ponr\":%d}",
         ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint, clbuf,
         ZigbeeConf[i].zbee_attribute, ZigbeeConf[i].zbee_label, ZigbeeConf[i].onoff,
         ZigbeeConf[i].dvalue, (unsigned)ZigbeeConf[i].color_hex,
@@ -2941,7 +2965,7 @@ void SetZigbeeConfig(void) {
         ZigbeeConf[i].dimmer_min, ZigbeeConf[i].dimmer_max,
         ZigbeeConf[i].dimmer_cluster, ZigbeeConf[i].dimmer_attr,
         ZigbeeConf[i].device_type_override,
-        ZigbeeConf[i].sec_send_sms);
+        ZigbeeConf[i].sec_send_sms, ZigbeeConf[i].ponr);
     if (len <= 0 || len >= (int)DTCM_BUF_SETTINGS_C) continue;
 
     fresult = f_write(&USBHFile, buf, (UINT)len, &byteswritten);
@@ -2965,3 +2989,350 @@ cleanup:
   printf("[ZIGBEE] Config saved to zigbee.ini\r\n");
 }
 /***********************************************************************************************/
+
+/*********************** Power On State (ponr) ***********************
+ * Режим начального состояния выходов после перезагрузки (как PowerOnState в
+ * Tasmota). Значения PONR_* - в db.h.
+ *
+ * Хранение:
+ *  - режим: поле ponr в pins.ini (физические пины) и zigbee.ini (Zigbee);
+ *  - "последнее состояние": битовые карты s_last_pin / s_last_zbee (около 40 байт
+ *    RAM) в маленьком файле laststate.ini на USB-флешке (usbnum 9). Запись
+ *    отложенная (5 с тишины, не чаще раза в 30 с), чтобы не изнашивать флешку.
+ *  - Zerg_Flash (сектор 11) НЕ используется: он целиком занят 94 слотами
+ *    HTTPSsettings и разделён с загрузчиком.
+ */
+extern osMessageQueueId_t outputQueueHandle;
+extern volatile bool mqtt_connected_reported;
+
+volatile uint8_t g_ponr_boot_pass = 0;
+
+#define PONR_PIN_BYTES   ((NUMPIN + 7) / 8)
+#define PONR_ZBEE_BYTES  ((NUMZBEE + 7) / 8)
+
+static uint8_t s_last_pin[PONR_PIN_BYTES];
+static uint8_t s_last_zbee[PONR_ZBEE_BYTES];
+static uint8_t s_pwm_prev[NUMPIN]; /* dvalue (7 бит) | onoff << 7 для PWM в режиме LAST */
+
+static inline bool ponr_bm_get(const uint8_t *b, int i) {
+  return ((b[i >> 3] >> (i & 7)) & 1u) != 0;
+}
+static inline void ponr_bm_set(uint8_t *b, int i, bool v) {
+  if (v) b[i >> 3] |= (uint8_t)(1u << (i & 7));
+  else   b[i >> 3] &= (uint8_t)~(1u << (i & 7));
+}
+
+/* true, если выход out_id привязан к физическому выключателю (Switch, topin == 3) */
+static bool ponr_is_switch_output(int out_id) {
+  if (out_id <= 0) return false;
+  for (int a = 0; a < NUMPINLINKS; a++) {
+    if (PinsLinks[a].idout != (short)out_id) continue;
+    int in = PinsLinks[a].idin;
+    if (in > 0 && in < NUMPIN && PinsConf[in].topin == 3) return true;
+  }
+  return false;
+}
+
+/* Эффективный режим физического пина. Значения 0 и 1 (старые ini) трактуются
+ * как раньше: Device, привязанный к выключателю, следует за выключателем,
+ * остальные Device стартуют выключенными; PWM восстанавливает сохранённое
+ * значение (LAST). */
+uint8_t ponr_eff_pin(int i) {
+  if (i < 0 || i >= NUMPIN) return PONR_OFF;
+  uint8_t t = PinsConf[i].topin;
+  uint8_t v = PinsConf[i].ponr;
+  if (t != 2 && t != 5) return v;
+  if (v < PONR_OFF || v > PONR_NONE) {
+    if (t == 2) return ponr_is_switch_output(i) ? PONR_SWITCH : PONR_OFF;
+    return PONR_LAST;
+  }
+  if (t == 5 && v > PONR_LAST) return PONR_LAST;  /* PWM: только OFF / ON / LAST */
+  if (t == 2 && v == PONR_NONE) return PONR_OFF;  /* физический выход обязан иметь уровень */
+  return v;
+}
+
+/* Эффективный режим Zigbee-слота: по умолчанию NONE (ничего не делать). */
+uint8_t ponr_eff_zbee(int zbi) {
+  if (zbi < 0 || zbi >= NUMZBEE) return PONR_NONE;
+  uint8_t v = ZigbeeConf[zbi].ponr;
+  return (v < PONR_OFF || v > PONR_NONE) ? PONR_NONE : v;
+}
+
+/* Режим для любого id выхода (физический пин или Zigbee-слот) */
+uint8_t ponr_eff_out(int id) {
+  if (id >= 0 && id < NUMPIN) return ponr_eff_pin(id);
+  if (id >= NUMPIN && id < NUMPIN + NUMZBEE) return ponr_eff_zbee(id - NUMPIN);
+  return PONR_OFF;
+}
+
+/* Режим для строки энкодера (topin 8): собственное значение, если оно новое;
+ * иначе значение первого привязанного PWM; иначе LAST. */
+uint8_t ponr_eff_enc(int enc_id) {
+  if (enc_id < 0 || enc_id >= NUMPIN) return PONR_LAST;
+  uint8_t v = PinsConf[enc_id].ponr;
+  if (v >= PONR_OFF && v <= PONR_LAST) return v;
+  for (int a = 0; a < NUMPINLINKS; a++) {
+    if (PinsLinks[a].idin != (short)enc_id) continue;
+    int out = PinsLinks[a].idout;
+    if (out > 0 && out < NUMPIN && PinsConf[out].topin == 5) return ponr_eff_pin(out);
+  }
+  return PONR_LAST;
+}
+
+/* Проверка значения, пришедшего из веба. topin: 2 Device, 5 PWM, 11 Zigbee. */
+uint8_t ponr_sanitize(int topin, long v) {
+  if (topin == 11) return (v >= PONR_OFF && v <= PONR_NONE) ? (uint8_t)v : PONR_NONE;
+  if (topin == 5)  return (v >= PONR_OFF && v <= PONR_LAST) ? (uint8_t)v : PONR_LAST;
+  if (v == PONR_NONE) return PONR_OFF;
+  return (v >= PONR_OFF && v <= PONR_SWITCH) ? (uint8_t)v : PONR_OFF;
+}
+
+/* Последнее сохранённое состояние физического выхода (для InitPin) */
+bool ponr_last_get(int i) {
+  return (i >= 0 && i < NUMPIN) && ponr_bm_get(s_last_pin, i);
+}
+
+/* Фильтр начального прохода по выключателям: на старте положение выключателя
+ * применяется только к физическим выходам с режимом SWITCH. */
+bool ponr_boot_pass_allows(int out_id) {
+  return out_id > 0 && out_id < NUMPIN && ponr_eff_pin(out_id) == PONR_SWITCH;
+}
+
+/* Положение физического выключателя, привязанного к выходу out_id:
+ * 1 - замкнут (ON), 0 - разомкнут (OFF), -1 - выключателя нет. */
+static int ponr_switch_position(int out_id) {
+  for (int a = 0; a < NUMPINLINKS; a++) {
+    if (PinsLinks[a].idout != (short)out_id) continue;
+    int in = PinsLinks[a].idin;
+    if (in <= 0 || in >= NUMPIN) continue;
+    if (PinsConf[in].topin != 3 || PinsConf[in].onoff == 0) continue;
+    if (!cond_eval_ref(PinsLinks[a].cond)) continue;
+    return (HAL_GPIO_ReadPin(PinsInfo[in].gpio_name, PinsInfo[in].hal_pin) == GPIO_PIN_RESET) ? 1 : 0;
+  }
+  return -1;
+}
+
+/* ---- laststate.ini: {"p":"<hex 12 байт>","z":"<hex 25 байт>"} ---- */
+static void ponr_hex_encode(const uint8_t *src, int n, char *dst) {
+  static const char d[] = "0123456789abcdef";
+  for (int i = 0; i < n; i++) {
+    dst[2 * i]     = d[src[i] >> 4];
+    dst[2 * i + 1] = d[src[i] & 15];
+  }
+  dst[2 * n] = '\0';
+}
+
+static int ponr_hex_nibble(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+static void ponr_hex_decode(const char *s, uint8_t *dst, int n) {
+  for (int i = 0; i < n; i++) {
+    int hi = ponr_hex_nibble(s[2 * i]);
+    if (hi < 0) return;
+    int lo = ponr_hex_nibble(s[2 * i + 1]);
+    if (lo < 0) return;
+    dst[i] = (uint8_t)((hi << 4) | lo);
+  }
+}
+
+void GetLastState(void) {
+  FILINFO finfo;
+  UINT bytesRead = 0;
+  char buf[256];
+
+  if (f_stat("laststate.ini", &finfo) != FR_OK || finfo.fsize == 0 ||
+      finfo.fsize >= sizeof(buf)) {
+    return;
+  }
+  if (f_open(&USBHFile, "laststate.ini", FA_READ) != FR_OK) {
+    LOG_SYSTEM("[USB] Cannot open laststate.ini");
+    return;
+  }
+  FRESULT fr = f_read(&USBHFile, buf, finfo.fsize, &bytesRead);
+  f_close(&USBHFile);
+  if (fr != FR_OK || bytesRead == 0) return;
+  buf[bytesRead] = '\0';
+
+  struct mg_str body = mg_str_n(buf, strlen(buf));
+  char *hp = mg_json_get_str(body, "$.p");
+  if (hp) {
+    if (strlen(hp) >= 2u * PONR_PIN_BYTES) ponr_hex_decode(hp, s_last_pin, PONR_PIN_BYTES);
+    mg_free(hp);
+  }
+  char *hz = mg_json_get_str(body, "$.z");
+  if (hz) {
+    if (strlen(hz) >= 2u * PONR_ZBEE_BYTES) ponr_hex_decode(hz, s_last_zbee, PONR_ZBEE_BYTES);
+    mg_free(hz);
+  }
+  LOG_SYSTEM("[USB] GetLastState: loaded laststate.ini");
+}
+
+void SetLastState(void) {
+  uint8_t pp[PONR_PIN_BYTES];
+  uint8_t zz[PONR_ZBEE_BYTES];
+  char hp[2 * PONR_PIN_BYTES + 1];
+  char hz[2 * PONR_ZBEE_BYTES + 1];
+  char buf[2 * PONR_PIN_BYTES + 2 * PONR_ZBEE_BYTES + 24];
+  UINT bytesWritten = 0;
+
+  taskENTER_CRITICAL();
+  memcpy(pp, s_last_pin, sizeof(pp));
+  memcpy(zz, s_last_zbee, sizeof(zz));
+  taskEXIT_CRITICAL();
+
+  ponr_hex_encode(pp, PONR_PIN_BYTES, hp);
+  ponr_hex_encode(zz, PONR_ZBEE_BYTES, hz);
+  int len = snprintf(buf, sizeof(buf), "{\"p\":\"%s\",\"z\":\"%s\"}", hp, hz);
+  if (len <= 0 || len >= (int)sizeof(buf)) return;
+
+  if (f_open(&USBHFile, (const TCHAR *)"laststate.ini", FA_CREATE_ALWAYS | FA_WRITE) != FR_OK) {
+    LOG_SYSTEM("[USB] SetLastState open failed");
+    return;
+  }
+  FRESULT fr = f_write(&USBHFile, buf, (UINT)len, &bytesWritten);
+  if (fr != FR_OK || (int)bytesWritten != len) {
+    LOG_SYSTEM("[USB] SetLastState write failed");
+  }
+  f_sync(&USBHFile);
+  f_close(&USBHFile);
+}
+
+/* ---- Zigbee: применение режима после подключения к MQTT (пачками, чтобы не
+ * переполнить outputQueue) ---- */
+#define PONR_ZB_DELAY_MS   15000u  /* пауза после подключения к MQTT */
+#define PONR_ZB_BATCH      8       /* слотов за один шаг (шаг - раз в секунду) */
+#define PONR_ZB_TRACK_MS   60000u  /* пауза перед отслеживанием state Zigbee */
+
+static bool     s_zb_applied   = false;
+static int      s_zb_cursor    = 0;
+static bool     s_zb_wait      = false;
+static uint32_t s_zb_wait_tick = 0;
+static uint32_t s_zb_done_tick = 0;
+
+/* Возвращает action (0/1) или -1, если для слота ничего делать не нужно */
+static int ponr_zbee_action(int zbi) {
+  ZigbeeVirtualPin *z = &ZigbeeConf[zbi];
+  if (z->topin != 11 || z->zbee_ieee[0] == '\0' || z->onoff == 0) return -1;
+  if (z->zbee_role == ZBEE_ROLE_SWITCH || z->zbee_role == ZBEE_ROLE_TRIGGER ||
+      z->zbee_role == ZBEE_ROLE_SENSOR) return -1;
+  if (!(z->cluster_flags & (ZBEE_CL_ONOFF | ZBEE_CL_DIMMER))) return -1;
+  switch (ponr_eff_zbee(zbi)) {
+  case PONR_OFF:    return 0;
+  case PONR_ON:     return 1;
+  case PONR_LAST:   return ponr_bm_get(s_last_zbee, zbi) ? 1 : 0;
+  case PONR_SWITCH: return ponr_switch_position(NUMPIN + zbi);
+  default:          return -1;
+  }
+}
+
+static void ponr_apply_zigbee_step(void) {
+  int sent = 0;
+  while (s_zb_cursor < NUMZBEE && sent < PONR_ZB_BATCH) {
+    int action = ponr_zbee_action(s_zb_cursor);
+    if (action >= 0) {
+      data_pin_t dp = {0};
+      dp.id = NUMPIN + s_zb_cursor;
+      dp.action = action;
+      if (xQueueSend(outputQueueHandle, (void *)&dp, 0) != pdPASS) return; /* очередь занята - повтор на следующем шаге */
+      sent++;
+    }
+    s_zb_cursor++;
+  }
+  if (s_zb_cursor >= NUMZBEE) {
+    s_zb_applied = true;
+    s_zb_done_tick = HAL_GetTick();
+  }
+}
+
+/* ---- Отслеживание последнего состояния. Вызывается из StartInputTask каждые
+ * 5 мс, внутри троттлинг до раза в секунду. ---- */
+static bool     s_poll_first   = true;
+static bool     s_dirty_last   = false;
+static bool     s_dirty_pwm    = false;
+static uint32_t s_dirty_last_tick = 0;
+static uint32_t s_dirty_pwm_tick  = 0;
+static uint32_t s_save_last_tick  = 0;
+static uint32_t s_save_pwm_tick   = 0;
+static bool     s_saved_last_once = false;
+static bool     s_saved_pwm_once  = false;
+static uint32_t s_poll_tick = 0;
+
+void ponr_poll(void) {
+  uint32_t now = HAL_GetTick();
+  if ((uint32_t)(now - s_poll_tick) < 1000u) return;
+  s_poll_tick = now;
+
+  bool ch_last = false;
+  bool ch_pwm = false;
+
+  for (int i = 0; i < NUMPIN; i++) {
+    uint8_t t = PinsConf[i].topin;
+    if (t == 2 && ponr_eff_pin(i) == PONR_LAST) {
+      bool lvl = HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin) != GPIO_PIN_RESET;
+      if (lvl != ponr_bm_get(s_last_pin, i)) {
+        ponr_bm_set(s_last_pin, i, lvl);
+        ch_last = true;
+      }
+    } else if (t == 5 && ponr_eff_pin(i) == PONR_LAST) {
+      uint8_t cur = (uint8_t)((PinsConf[i].dvalue & 0x7F) | (PinsConf[i].onoff ? 0x80 : 0));
+      if (cur != s_pwm_prev[i]) {
+        s_pwm_prev[i] = cur;
+        if (!s_poll_first) ch_pwm = true; /* первый проход - только базовое значение */
+      }
+    }
+  }
+  s_poll_first = false;
+
+  /* Zigbee: state отслеживается только после применения режима при старте */
+  if (s_zb_applied && (uint32_t)(now - s_zb_done_tick) >= PONR_ZB_TRACK_MS) {
+    for (int z = 0; z < NUMZBEE; z++) {
+      if (ZigbeeConf[z].topin != 11 || ponr_eff_zbee(z) != PONR_LAST) continue;
+      bool st = ZigbeeConf[z].state != 0;
+      if (st != ponr_bm_get(s_last_zbee, z)) {
+        ponr_bm_set(s_last_zbee, z, st);
+        ch_last = true;
+      }
+    }
+  }
+
+  if (ch_last) { s_dirty_last = true; s_dirty_last_tick = now; }
+  if (ch_pwm)  { s_dirty_pwm = true;  s_dirty_pwm_tick = now; }
+
+  /* Отложенная запись: 5 с после последнего изменения, не чаще раза в 30 с */
+  if (s_dirty_last && (uint32_t)(now - s_dirty_last_tick) >= 5000u &&
+      (!s_saved_last_once || (uint32_t)(now - s_save_last_tick) >= 30000u)) {
+    uint8_t u = 9;
+    if (xQueueSend(usbQueueHandle, &u, 0) == pdPASS) {
+      s_dirty_last = false;
+      s_saved_last_once = true;
+      s_save_last_tick = now;
+    }
+  }
+  if (s_dirty_pwm && (uint32_t)(now - s_dirty_pwm_tick) >= 5000u &&
+      (!s_saved_pwm_once || (uint32_t)(now - s_save_pwm_tick) >= 30000u)) {
+    uint8_t u = 1; /* PWM хранит dvalue и onoff в pins.ini */
+    if (xQueueSend(usbQueueHandle, &u, 0) == pdPASS) {
+      s_dirty_pwm = false;
+      s_saved_pwm_once = true;
+      s_save_pwm_tick = now;
+    }
+  }
+
+  /* Zigbee: режим применяется один раз после подключения к MQTT */
+  if (!s_zb_applied) {
+    bool link = mqtt_connected_reported || (SetSettings.check_mqtt_srv == 1);
+    if (!link) {
+      s_zb_wait = false;
+    } else if (!s_zb_wait) {
+      s_zb_wait = true;
+      s_zb_wait_tick = now;
+    } else if ((uint32_t)(now - s_zb_wait_tick) >= PONR_ZB_DELAY_MS) {
+      ponr_apply_zigbee_step();
+    }
+  }
+}
+

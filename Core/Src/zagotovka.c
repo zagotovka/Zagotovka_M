@@ -515,9 +515,17 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
     char esc_pins[48];
     json_escape_str(esc_pins, info->pins, sizeof(esc_pins));
     
-    mg_http_printf_chunk(c,
-      "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d,\"pwm\":%d}",
-      (first ? "" : ","), i, esc_pins, conf.topin, info->pwm);
+    if (conf.topin == 2 || conf.topin == 5) {
+      /* Power On State: только для Device и PWM (эффективное значение) */
+      mg_http_printf_chunk(c,
+        "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d,\"pwm\":%d,\"ponr\":%d}",
+        (first ? "" : ","), i, esc_pins, conf.topin, info->pwm,
+        (int)ponr_eff_pin((int)i));
+    } else {
+      mg_http_printf_chunk(c,
+        "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d,\"pwm\":%d}",
+        (first ? "" : ","), i, esc_pins, conf.topin, info->pwm);
+    }
     first = 0;
     emitted++;
   }
@@ -551,14 +559,15 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
     "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d,"
     "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
     "\"clusters\":%s,\"zbee_attribute\":%d,"
-    "\"zbee_label\":\"%s\",\"role\":%d}",
+    "\"zbee_label\":\"%s\",\"role\":%d,\"ponr\":%d}",
     (first ? "" : ","), (long)NUMPIN + i,
     zb.zbee_ieee[0] != '\0' ? esc_zbee_label : "",
     zb.topin,
     esc_zbee_ieee, zb.zbee_endpoint,
     clbuf, zb.zbee_attribute,
     esc_zbee_label,
-    zb.zbee_role);
+    zb.zbee_role,
+    (int)ponr_eff_zbee(i));
     first = 0;
     emitted++;
   }
@@ -1108,7 +1117,17 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
       if (new_topin == 0 && PinsConf[id].topin != 0) {
         cascade_delete_pin_id((int)id);
       }
+      uint8_t old_topin = PinsConf[id].topin;
       PinsConf[id].topin = new_topin;
+      /* Power On State: значение из веба (только Device и PWM). При смене типа
+       * без явного значения режим сбрасывается в "по умолчанию" (0 = как раньше). */
+      long pv = mg_json_get_long(elem, "$.ponr", -1);
+      if (new_topin == 2 || new_topin == 5) {
+        if (pv >= 0) PinsConf[id].ponr = ponr_sanitize(new_topin, pv);
+        else if (old_topin != new_topin) PinsConf[id].ponr = PONR_LEGACY;
+      } else if (old_topin != new_topin && (old_topin == 2 || old_topin == 5)) {
+        PinsConf[id].ponr = PONR_LEGACY;
+      }
     } else if (id >= num_pins) {
       int zbi = id - num_pins;
       if (zbi < 0 || zbi >= NUMZBEE) {
@@ -1161,6 +1180,11 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
           ZigbeeConf[zbi].cluster_flags = ZBEE_CL_ONOFF;
         }
         ZigbeeConf[zbi].topin = (ZigbeeConf[zbi].zbee_ieee[0] != '\0') ? 11 : 0;
+        {
+          /* Power On State Zigbee-слота (по умолчанию NONE - ничего не делать) */
+          long pv = mg_json_get_long(elem, "$.ponr", -1);
+          if (pv >= 0) ZigbeeConf[zbi].ponr = ponr_sanitize(11, pv);
+        }
 
         /* Зонд запускаем ПОСЛЕ назначения всех полей */
         if (ieee_changed && ZigbeeConf[zbi].zbee_ieee[0] != '\0') {
@@ -2487,7 +2511,13 @@ static void parse_pwm_row_edit(struct mg_str body, int id) {
     printf("PWM row %d: hardware settings locked by AutoTune\r\n", id);
   }
 
-  PinsConf[id].ponr = (uint8_t)mg_json_get_long(body, "$.ponr", PinsConf[id].ponr);
+  {
+    long pv = mg_json_get_long(body, "$.ponr", -1);
+    if (pv >= 0) {
+      PinsConf[id].ponr = ponr_sanitize(5, pv);
+      mark_slice_dirty(&g_ver_select); /* страница выбора пинов показывает режим */
+    }
+  }
   char *info = json_get_str_allow_empty(body, "$.info");
   if (info) {
     strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
@@ -2585,7 +2615,20 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
         }
       }
     }
-    PinsConf[id].ponr = (uint8_t)mg_json_get_long(body, "$.ponr", PinsConf[id].ponr);
+    {
+      long pv = mg_json_get_long(body, "$.ponr", -1);
+      if (pv >= 0) {
+        uint8_t pm = ponr_sanitize(5, pv);
+        PinsConf[id].ponr = pm;
+        /* Режим энкодера распространяется на привязанные PWM-пины */
+        for (int k = 0; k < NUMPINLINKS; k++) {
+          if (PinsLinks[k].idin != (short)id) continue;
+          int out = PinsLinks[k].idout;
+          if (out > 0 && out < NUMPIN && PinsConf[out].topin == 5) PinsConf[out].ponr = pm;
+        }
+        mark_slice_dirty(&g_ver_select);
+      }
+    }
     char *info = json_get_str_allow_empty(body, "$.info");
     if (info) {
       strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
@@ -8155,6 +8198,11 @@ void processPins(uint16_t i, uint8_t action) {
     if (PinsLinks[a].idin == i) {
       /* Условие на связь (библиотека условий): пропускаем ложные */
       if (!cond_eval_ref(PinsLinks[a].cond)) {
+        continue;
+      }
+      /* Начальный проход по выключателям на старте: только выходы с режимом
+       * Power On State = SWITCH (см. StartInputTask) */
+      if (g_ponr_boot_pass && !ponr_boot_pass_allows(PinsLinks[a].idout)) {
         continue;
       }
       data_pin_t data_pin = {0};

@@ -9,6 +9,7 @@
 #define INC_SETINGS_H_
 
 #include <stdbool.h>
+#include <stdint.h>
 
 void SetSettingsConfig(void);
 void StartSettingsConfig(void);
@@ -34,6 +35,19 @@ void SetPidConfig();
  * Читается ДО pintopin.ini/pid.ini: номера в них ссылаются на слоты пула. */
 void GetCondPool();
 void SetCondPool();
+
+/* Power On State (ponr): режим начального состояния выходов, см. PONR_* в db.h */
+extern volatile uint8_t g_ponr_boot_pass; /* 1 - идёт начальный проход по выключателям */
+uint8_t ponr_eff_pin(int i);              /* эффективный режим физического пина */
+uint8_t ponr_eff_zbee(int zbi);           /* эффективный режим Zigbee-слота */
+uint8_t ponr_eff_out(int id);             /* для любого id выхода */
+uint8_t ponr_eff_enc(int enc_id);         /* режим строки энкодера (PWM за ним) */
+uint8_t ponr_sanitize(int topin, long v); /* проверка значения из веба (topin 2, 5, 11) */
+bool    ponr_last_get(int i);             /* последнее сохранённое состояние пина */
+bool    ponr_boot_pass_allows(int out_id);
+void    ponr_poll(void);                  /* вызывать из StartInputTask */
+void    GetLastState(void);               /* laststate.ini */
+void    SetLastState(void);
 
 #define ADM_NAME "admin"
 #define ADM_PASS "12345678"

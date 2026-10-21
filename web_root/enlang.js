@@ -13,7 +13,8 @@ export const enLangselect = [
   '', // 0
   'ID - A unique numerical identifier. Assigned automatically.', // 1
   'Pin - The unique number of the digital or analog pin.', // 2
-  'Type(s) of pin(s) - Select the operating mode of this pin from the provided options.' // 3
+  'Type(s) of pin(s) - Select the operating mode of this pin from the provided options.', // 3
+  'State on power-up - What the output does after the controller reboots: nothing, off, on, last state or follow the linked switch. Shown only for DEVICE, PWM and Zigbee pins.' // 4
 ];
 
 export const enlangbutton = [
@@ -49,7 +50,7 @@ export const enencoder = [
   'Encoder B (ID) - Additional pin of encoder B (CLK).', // 4
   'PWM connection - PWM connection for brightness control (dimmer).', // 5
   'Dimmer value (0-100) - Current dimmer value from 0 to 100.', // 6
-  'Duty on restore - Value of duty cycle (brightness) to restore when the controller is turned on.', // 7
+  'Power on state - Output state after the controller powers up: Off (zero brightness), On (the Dimmer value brightness) or Last (the last saved value and switch position).', // 7
   'INFO - Give a name to this row (encoder or PWM) for quick navigation.', // 8
   'On/Off - Enable or disable the encoder handler. For a PWM row without an encoder it is the switch of the output itself (Off means 0% on the output).', // 9
   'Action - The Edit button allows you to access the settings menu of the encoder or PWM output.', // 10
