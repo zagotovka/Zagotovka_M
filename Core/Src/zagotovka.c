@@ -519,12 +519,12 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
       /* Power On State: только для Device и PWM (эффективное значение) */
       mg_http_printf_chunk(c,
         "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d,\"pwm\":%d,\"ponr\":%d}",
-        (first ? "" : ","), i, esc_pins, conf.topin, info->pwm,
+        (first ? "" : ","), i + 1, esc_pins, conf.topin, info->pwm,
         (int)ponr_eff_pin((int)i));
     } else {
       mg_http_printf_chunk(c,
         "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d,\"pwm\":%d}",
-        (first ? "" : ","), i, esc_pins, conf.topin, info->pwm);
+        (first ? "" : ","), i + 1, esc_pins, conf.topin, info->pwm);
     }
     first = 0;
     emitted++;
@@ -542,7 +542,7 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
     if (zb.topin == 0 && zb.zbee_ieee[0] == '\0' && zb.zbee_label[0] == '\0') {
       mg_http_printf_chunk(c,
         "%s{\"id\":%ld,\"pins\":\"\",\"topin\":0}",
-        (first ? "" : ","), (long)NUMPIN + i);
+        (first ? "" : ","), (long)ZbeeIdFromIdx(i));
       first = 0;
       emitted++;
       continue;
@@ -560,7 +560,7 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
     "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
     "\"clusters\":%s,\"zbee_attribute\":%d,"
     "\"zbee_label\":\"%s\",\"role\":%d,\"ponr\":%d}",
-    (first ? "" : ","), (long)NUMPIN + i,
+    (first ? "" : ","), (long)ZbeeIdFromIdx(i),
     zb.zbee_ieee[0] != '\0' ? esc_zbee_label : "",
     zb.topin,
     esc_zbee_ieee, zb.zbee_endpoint,
@@ -605,7 +605,8 @@ void handle_select_set(struct mg_connection *c, struct mg_http_message *hm) {
 
 /* ── /api/pins/get?topin=2,11,3&from=0&limit=40
    Только пины (физические и Zigbee), у которых topin входит в список.
-   За один ответ не больше limit записей; "next" - ID для продолжения или -1.
+   За один ответ не больше limit записей; "next" - позиция в объединённом
+   списке физических и Zigbee-записей для продолжения (параметр from) или -1.
    Необязательный zdim=1: из Zigbee-слотов только диммеры (тот же критерий, что
    type "dimmer" в /api/zigbee/get), чтобы окна не грузили полные записи Zigbee. */
 #define PINS_GET_MAX_TYPES  12
@@ -688,7 +689,8 @@ void handle_pins_get(struct mg_connection *c, struct mg_http_message *hm) {
     char esc_label[64];
     json_escape_str(esc_label, label, sizeof(esc_label));
     mg_http_printf_chunk(c, "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d}",
-                         first ? "" : ",", i,
+                         first ? "" : ",",
+                         (i < (long)NUMPIN) ? i + 1 : (long)ZbeeIdFromIdx((int)(i - (long)NUMPIN)),
                          (i < (long)NUMPIN) ? PinsInfo[i].pins : esc_label, topin);
     first = 0;
     emitted++;
@@ -750,7 +752,7 @@ void handle_sensors_get(struct mg_connection *c, struct mg_http_message *hm) {
 
     if (want_ds) {
       for (int j = 0; j < MAX_DS18B20_P && next < 0; j++) {
-        if (ds18b20[j].id != i || ds18b20[j].typsensr != 1) continue;
+        if (ds18b20[j].id != (uint8_t)(i + 1) || ds18b20[j].typsensr != 1) continue;
         for (int k = 0; k < ds18b20[j].numsens && k < MAX_DS18B20_PER_PIN; k++) {
           if (idx < from) { idx++; continue; }
           if (emitted >= limit) { next = idx; break; }
@@ -773,7 +775,7 @@ void handle_sensors_get(struct mg_connection *c, struct mg_http_message *hm) {
             "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":1,"
             "\"s_number\":\"%02X%02X%02X%02X%02X%02X%02X%02X\","
             "\"valid\":%d,\"t\":%s}",
-            first ? "" : ",", i, pin,
+            first ? "" : ",", i + 1, pin,
             addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7],
             valid, s_t);
           first = 0;
@@ -785,7 +787,7 @@ void handle_sensors_get(struct mg_connection *c, struct mg_http_message *hm) {
 
     if (want_dht && next < 0) {
       for (int j = 0; j < MAX_DHT22_P && next < 0; j++) {
-        if (dht22[j].id != i || dht22[j].typsensr != 2) continue;
+        if (dht22[j].id != (uint8_t)(i + 1) || dht22[j].typsensr != 2) continue;
         if (idx < from) { idx++; continue; }
         if (emitted >= limit) { next = idx; break; }
 
@@ -804,7 +806,7 @@ void handle_sensors_get(struct mg_connection *c, struct mg_http_message *hm) {
         mg_http_printf_chunk(c,
           "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":2,\"s_number\":\"\","
           "\"valid\":%d,\"t\":%s}",
-          first ? "" : ",", i, pin, valid, s_t);
+          first ? "" : ",", i + 1, pin, valid, s_t);
         first = 0;
         emitted++;
         idx++;
@@ -918,30 +920,32 @@ static void cascade_delete_pin_id(int deleted_id) {
   bool changed_zigbee = false;
   bool changed_settings = false;
 
+  int deleted_idx = PinIdxFromId((uint16_t)deleted_id);
+
   /* 0. Гасим физический выход ДО сброса topin (шаг 1): повторной
    * инициализации пинов при NONE нет — PWM держал бы последний CCR,
    * а DEVICE-выход последний уровень GPIO до перезагрузки */
-  if (deleted_id > 0 && deleted_id < NUMPIN) {
-    if (PinsConf[deleted_id].topin == 5) { /* PWM */
-      PinsConf[deleted_id].dvalue = 0;
-      __HAL_TIM_SET_COMPARE(&htim[deleted_id], PinsInfo[deleted_id].tim_channel, 0);
-    } else if (PinsConf[deleted_id].topin == 2) { /* DEVICE (GPIO-выход) */
-      HAL_GPIO_WritePin(PinsInfo[deleted_id].gpio_name,
-                        PinsInfo[deleted_id].hal_pin, GPIO_PIN_RESET);
+  if (deleted_idx >= 0 && deleted_idx < NUMPIN) {
+    if (PinsConf[deleted_idx].topin == 5) { /* PWM */
+      PinsConf[deleted_idx].dvalue = 0;
+      __HAL_TIM_SET_COMPARE(&htim[deleted_idx], PinsInfo[deleted_idx].tim_channel, 0);
+    } else if (PinsConf[deleted_idx].topin == 2) { /* DEVICE (GPIO-выход) */
+      HAL_GPIO_WritePin(PinsInfo[deleted_idx].gpio_name,
+                        PinsInfo[deleted_idx].hal_pin, GPIO_PIN_RESET);
     }
   }
 
   // 1. Физический пин: полная очистка собственных полей
-  if (deleted_id >= 0 && deleted_id < NUMPIN) {
-    PinsConf[deleted_id].topin = 0;
-    PinsConf[deleted_id].sclick[0] = '\0';
-    PinsConf[deleted_id].dclick[0] = '\0';
-    PinsConf[deleted_id].lpress[0] = '\0';
-    PinsConf[deleted_id].zbee_bind_id = 0;
-    PinsConf[deleted_id].info[0] = '\0';
-    PinsConf[deleted_id].onoff = 0;
-    PinsConf[deleted_id].dvalue = 0;
-    PinsConf[deleted_id].pwm_flags = 0;
+  if (deleted_idx >= 0 && deleted_idx < NUMPIN) {
+    PinsConf[deleted_idx].topin = 0;
+    PinsConf[deleted_idx].sclick[0] = '\0';
+    PinsConf[deleted_idx].dclick[0] = '\0';
+    PinsConf[deleted_idx].lpress[0] = '\0';
+    PinsConf[deleted_idx].zbee_bind_id = 0;
+    PinsConf[deleted_idx].info[0] = '\0';
+    PinsConf[deleted_idx].onoff = 0;
+    PinsConf[deleted_idx].dvalue = 0;
+    PinsConf[deleted_idx].pwm_flags = 0;
     changed_pins = true;
   }
 
@@ -1031,7 +1035,7 @@ static void cascade_delete_pin_id(int deleted_id) {
   // 9b. PID — слоты, привязанные к удаляемому пину
   bool changed_pid = false;
   for (int i = 0; i < PID_MAX_SLOTS; i++) {
-    if (PidConf[i].pwm_pin_id == (uint8_t)deleted_id) {
+    if (PidConf[i].pwm_pin_id == (uint16_t)deleted_id) {
       /* PWM-пин удалён: слот теряет смысл целиком */
       if (PidConf[i].tune_state == PID_TUNE_STEP ||
           PidConf[i].tune_state == PID_TUNE_BIAS) {
@@ -1042,7 +1046,7 @@ static void cascade_delete_pin_id(int deleted_id) {
       memset(&PidConf[i], 0, sizeof(PidConf[i]));
       taskEXIT_CRITICAL();
       changed_pid = true;
-    } else if (PidConf[i].sensor_pin_id == (uint8_t)deleted_id) {
+    } else if (PidConf[i].sensor_pin_id == (uint16_t)deleted_id) {
       /* Датчик удалён: отвязываем и выключаем регулятор, пресет сохраняем */
       PidConf[i].onoff = 0;
       PidConf[i].selsens = PID_SENS_NONE;
@@ -1112,24 +1116,25 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
   struct mg_str key, elem;
   while ((pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
     long id = mg_json_get_long(elem, "$.id", -1);
-    if (id >= 0 && id < num_pins) {
+    if (id >= 1 && id <= num_pins) {
+      int pin_idx = (int)id - 1;
       uint8_t new_topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
-      if (new_topin == 0 && PinsConf[id].topin != 0) {
+      if (new_topin == 0 && PinsConf[pin_idx].topin != 0) {
         cascade_delete_pin_id((int)id);
       }
-      uint8_t old_topin = PinsConf[id].topin;
-      PinsConf[id].topin = new_topin;
+      uint8_t old_topin = PinsConf[pin_idx].topin;
+      PinsConf[pin_idx].topin = new_topin;
       /* Power On State: значение из веба (только Device и PWM). При смене типа
        * без явного значения режим сбрасывается в "по умолчанию" (0 = как раньше). */
       long pv = mg_json_get_long(elem, "$.ponr", -1);
       if (new_topin == 2 || new_topin == 5) {
-        if (pv >= 0) PinsConf[id].ponr = ponr_sanitize(new_topin, pv);
-        else if (old_topin != new_topin) PinsConf[id].ponr = PONR_LEGACY;
+        if (pv >= 0) PinsConf[pin_idx].ponr = ponr_sanitize(new_topin, pv);
+        else if (old_topin != new_topin) PinsConf[pin_idx].ponr = PONR_LEGACY;
       } else if (old_topin != new_topin && (old_topin == 2 || old_topin == 5)) {
-        PinsConf[id].ponr = PONR_LEGACY;
+        PinsConf[pin_idx].ponr = PONR_LEGACY;
       }
-    } else if (id >= num_pins) {
-      int zbi = id - num_pins;
+    } else if (IsZigbeePin((uint16_t)id)) {
+      int zbi = ZbeeIdx((uint16_t)id);
       if (zbi < 0 || zbi >= NUMZBEE) {
         MG_ERROR(("select/set: id=%ld out of ZigbeeConf range (zbi=%d), dropped", id, zbi));
         continue;
@@ -1240,11 +1245,12 @@ static char *json_get_str_allow_empty(struct mg_str json, const char *path) {
 
 /* ===================== PWM helpers (PWM без энкодера) ===================== */
 
-/* true, если PWM-пином управляет PID-слот (как в pid_set_pwm: id 0 не бывает) */
+/* true, если PWM-пином управляет PID-слот. pwm_id - ИНДЕКС (0..NUMPIN-1),
+ * в PidConf хранится логический ID = индекс + 1 (0 = не назначен) */
 bool pwm_owned_by_pid(uint8_t pwm_id) {
-  if (pwm_id == 0 || pwm_id >= NUMPIN) return false;
+  if (pwm_id >= NUMPIN) return false;
   for (int p = 0; p < PID_MAX_SLOTS; p++) {
-    if (PidConf[p].pwm_pin_id == pwm_id) return true;
+    if (PidConf[p].pwm_pin_id == (uint16_t)(pwm_id + 1)) return true;
   }
   return false;
 }
@@ -1252,9 +1258,9 @@ bool pwm_owned_by_pid(uint8_t pwm_id) {
 /* true, если на PWM-пин ссылается связь от Encoder A (topin == 8) */
 bool pwm_has_encoder_link(uint8_t pwm_id) {
   for (int a = 0; a < NUMPINLINKS; a++) {
-    if (PinsLinks[a].idout != (short)pwm_id) continue;
+    if (PinsLinks[a].idout != (short)(pwm_id + 1)) continue;
     int e = PinsLinks[a].idin;
-    if (e >= 0 && e < NUMPIN && PinsConf[e].topin == 8) return true;
+    if (e >= 1 && e <= NUMPIN && PinsConf[e - 1].topin == 8) return true;
   }
   return false;
 }
@@ -1267,11 +1273,11 @@ bool pwm_gate_open(uint8_t pwm_id) {
   if (pwm_id >= NUMPIN) return false;
   bool has_enc = false;
   for (int a = 0; a < NUMPINLINKS; a++) {
-    if (PinsLinks[a].idout != (short)pwm_id) continue;
+    if (PinsLinks[a].idout != (short)(pwm_id + 1)) continue;
     int e = PinsLinks[a].idin;
-    if (e >= 0 && e < NUMPIN && PinsConf[e].topin == 8) {
+    if (e >= 1 && e <= NUMPIN && PinsConf[e - 1].topin == 8) {
       has_enc = true;
-      if (PinsConf[e].onoff == 0) return false;
+      if (PinsConf[e - 1].onoff == 0) return false;
     }
   }
   if (!has_enc && (PinsConf[pwm_id].pwm_flags & PWMF_SWITCH) &&
@@ -1293,6 +1299,7 @@ void pwm_write_duty(uint8_t pwm_id) {
 }
 
 /* Установить duty 0..100 % (Zigbee-диммер, API): dvalue + CCR */
+/* pwm_id - ИНДЕКС пина (0..NUMPIN-1), не логический ID */
 void pwm_set_percent(uint8_t pwm_id, int percent) {
   if (pwm_id >= NUMPIN || PinsConf[pwm_id].topin != 5) return;
   if (is_pin_in_autotune(pwm_id)) return; /* AutoTune lock */
@@ -1342,9 +1349,9 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
   uint8_t onoff = (uint8_t)onoff_val;
 
   int zbi = -1;
-  if (onoffid >= NUMPIN && onoffid < NUMPIN + NUMZBEE) {
-    /* ZigbeeConf slot: id = NUMPIN + slot_index */
-    zbi = onoffid - NUMPIN;
+  if (IsZigbeePin(onoffid)) {
+    /* ZigbeeConf slot: новые ID 90..289 */
+    zbi = ZbeeIdx(onoffid);
   }
 
   if (zbi >= 0) {
@@ -1352,7 +1359,7 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
     /* On/Off - только Master Enable для этого ID. Ползунок не управляет
      * устройством и не запускает связи/действия. Физическое управление идет
      * через /api/zigbee/command, флаг Zigbee-страницы - /api/zigbee/enable. */
-    LOG_Z2M("onoff: id=%d enable=%d (flag only)\r\n", NUMPIN + zbi, onoff);
+    LOG_Z2M("onoff: id=%d enable=%d (flag only)\r\n", ZbeeIdFromIdx(zbi), onoff);
 
     /* Сохраняем на USB */
     extern osMessageQueueId_t usbQueueHandle;
@@ -1367,26 +1374,28 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
     return;
   }
 
-  if (onoffid >= 0 && onoffid < num_pins) {
-    PinsConf[onoffid].onoff = onoff;
+  if (onoffid >= 1 && onoffid <= num_pins) {
+    int pin_idx = (int)onoffid - 1;
+    PinsConf[pin_idx].onoff = onoff;
     printf("Updated pin %" PRId32 ": onoff = %d\n", onoffid, onoff);
 
     /* PWM-строка без энкодера: рубильник живёт на самом PWM-пине. Бит
      * PWMF_SWITCH ставится при первом использовании ползунка, поэтому старые
      * PWM (cron, PID) не гаснут после обновления. PID-пин рубильника не имеет. */
-    if (PinsConf[onoffid].topin == 5 && !pwm_owned_by_pid((uint8_t)onoffid) &&
-        !pwm_has_encoder_link((uint8_t)onoffid) &&
-        !is_pin_in_autotune((uint8_t)onoffid)) {
-      PinsConf[onoffid].pwm_flags |= PWMF_SWITCH;
-      pwm_write_duty((uint8_t)onoffid);
+    if (PinsConf[pin_idx].topin == 5 && !pwm_owned_by_pid((uint8_t)pin_idx) &&
+        !pwm_has_encoder_link((uint8_t)pin_idx) &&
+        !is_pin_in_autotune((uint8_t)pin_idx)) {
+      PinsConf[pin_idx].pwm_flags |= PWMF_SWITCH;
+      pwm_write_duty((uint8_t)pin_idx);
     }
 
 /* Сброс связанного PWM в 0 при выключении - только у энкодера (мера
      * безопасности). У Switch/Button/Security ползунок - только флаг. */
-    for (int a = 0; PinsConf[onoffid].topin == 8 && a < NUMPINLINKS; a++) {
+    for (int a = 0; PinsConf[pin_idx].topin == 8 && a < NUMPINLINKS; a++) {
       if (PinsLinks[a].idin == (int)onoffid) {
-        int idpwm = PinsLinks[a].idout;
-        if (idpwm < 0 || idpwm >= NUMPIN) continue; /* Zigbee/мусор — не PWM */
+        int out_id = PinsLinks[a].idout;
+        if (out_id < 1 || out_id > NUMPIN) continue; /* Zigbee/мусор — не PWM */
+        int idpwm = out_id - 1;
         if (PinsConf[idpwm].topin == 5) {
           if (is_pin_in_autotune(idpwm)) continue;
           uint32_t pulse = 0;
@@ -1395,13 +1404,13 @@ void parse_onoff_json(const char *json_string, struct dbPinsConf *PinsConf,
                                PinsConf[idpwm].pwmmax / 100ULL);
           }
           __HAL_TIM_SET_COMPARE(&htim[idpwm], PinsInfo[idpwm].tim_channel, pulse);
-          printf("onoff->PWM pin %d: pulse=%lu\n", idpwm, (unsigned long)pulse);
+          printf("onoff->PWM pin %d: pulse=%lu\n", out_id, (unsigned long)pulse);
         }
       }
     }
 
     /*********************************************************/
-    mqtt_queue_send_safe(8, (uint8_t)onoffid, 0, 0);
+    mqtt_queue_send_safe(8, (uint8_t)pin_idx, 0, 0);
     /*********************************************************/
 
     /* Deferred USB save: debounce 5s — rapid on/off toggles batch into one write */
@@ -1432,8 +1441,8 @@ void handle_onoff_set(struct mg_connection *c, struct mg_http_message *hm) {
     /* Mark the relevant version counter dirty immediately so ETag changes.
        SetPinConfig() also does this, but only after the save queue drains;
        if the filesystem is unavailable the version would never increment. */
-    if (onoffid >= 0 && onoffid < NUMPIN) {
-      switch (PinsConf[onoffid].topin) {
+    if (onoffid >= 1 && onoffid <= NUMPIN) {
+      switch (PinsConf[onoffid - 1].topin) {
         case 1:  mark_slice_dirty(&g_ver_button);   break;
         case 3:  mark_slice_dirty(&g_ver_switch);    break;
         case 5:  mark_slice_dirty(&g_ver_encoder);   break;
@@ -1516,9 +1525,8 @@ void handle_pintopin_get(struct mg_connection *c) {
 #define PINTOPIN_PAGE_MAX_LIMIT 60
 
 static bool pintopin_idin_is_switch(int id) {
-  if (id >= 0 && id < NUMPIN) return PinsConf[id].topin == 3;
-  if (id >= NUMPIN && id < NUMPIN + NUMZBEE)
-    return ZigbeeConf[id - NUMPIN].zbee_role == ZBEE_ROLE_SWITCH;
+  if (IsPinId(id)) return PinsConf[id - 1].topin == 3;
+  if (IsZigbeePin(id)) return ZigbeeConf[ZbeeIdx(id)].zbee_role == ZBEE_ROLE_SWITCH;
   return false;
 }
 
@@ -1664,7 +1672,7 @@ void gen_switch_json(const struct dbPinsInfo *pins_info,
           snprintf(buffer + offset, buffer_size - offset,
                    "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
                    "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d}",
-                   pins_conf[i].topin, i, pins_info[i].pins, pins_conf[i].ptype,
+                   pins_conf[i].topin, i + 1, pins_info[i].pins, pins_conf[i].ptype,
                    pins_conf[i].info, pins_conf[i].onoff);
     }
   }
@@ -1677,8 +1685,7 @@ void gen_switch_json(const struct dbPinsInfo *pins_info,
       } else {
         first_switch = 0;
       }
-      // ID для Zigbee: NUMPIN + i (виртуальные пины)
-      int zigbee_id = NUMPIN + i;
+      int zigbee_id = ZbeeIdFromIdx(i);
       
       // Payload: если vbtn_mode == PASSTHROUGH и pt_single задан, используем его
       char esc_pins[64];
@@ -1751,9 +1758,9 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
    * приходит весь pinact списка. -1 = старый веб, условие ко всем новым. */
   long condtarget = mg_json_get_long(body, "$.condtarget", -1);
 
-  /* ── Zigbee выключатель (id >= NUMPIN) ── */
-  if (id_val >= NUMPIN) {
-    int zbi = id_val - NUMPIN;
+  /* ── Zigbee выключатель (новые ID 90..289) ── */
+  if (IsZigbeePin((uint16_t)id_val)) {
+    int zbi = ZbeeIdx((uint16_t)id_val);
     if (zbi < 0 || zbi >= NUMZBEE) {
       printf("Zigbee switch ID out of bounds %ld\r\n", id_val);
       if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
@@ -1810,8 +1817,8 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
               if (findex != -1) {
                 PinsLinks[findex].idin = (short)id_val;
                 PinsLinks[findex].idout = (short)pin_id;
-                if (pin_id < NUMPIN) {
-                  strncpy(PinsLinks[findex].pins, PinsInfo[pin_id].pins,
+                if (pin_id >= 1 && pin_id <= NUMPIN) {
+                  strncpy(PinsLinks[findex].pins, PinsInfo[pin_id - 1].pins,
                           sizeof(PinsLinks[findex].pins) - 1);
                 } else {
                   /* Фиксированный маркер — реальное имя собирается в handle_switches() */
@@ -1840,34 +1847,35 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
     return;
   }
 
-  /* ── Физический пин (id < NUMPIN) ── */
+  /* ── Физический пин (id 1..NUMPIN) ── */
   int id = (int)id_val;
-  if (id >= count) {
+  if (id < 1 || id > count) {
     printf("switch ID out of bounds %d\r\n", id);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
+  int pin_idx = id - 1;
 
   if (mg_json_get(body, "$.ptype", NULL) >= 0) {
     long ptype_val = mg_json_get_long(body, "$.ptype", -1);
     if (ptype_val >= 0) {
-      PinsConf[id].ptype = (uint8_t)ptype_val;
+      PinsConf[pin_idx].ptype = (uint8_t)ptype_val;
     }
     char *info = json_get_str_allow_empty(body, "$.info");
     if (info) {
-      strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
-      PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
+      strncpy(PinsConf[pin_idx].info, info, sizeof(PinsConf[pin_idx].info) - 1);
+      PinsConf[pin_idx].info[sizeof(PinsConf[pin_idx].info) - 1] = '\0';
       mg_free(info);
     }
-    PinsConf[id].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[id].onoff);
+    PinsConf[pin_idx].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[pin_idx].onoff);
     int usbnum = 1;
     xQueueSend(usbQueueHandle, &usbnum, 0);
   } else if (mg_json_get(body, "$.setrpins", NULL) >= 0) {
     char *pins = mg_json_get_str(body, "$.pins");
     if (pins) {
-      strncpy(PinsLinks[id].pins, pins, sizeof(PinsLinks[id].pins) - 1);
-      PinsLinks[id].pins[sizeof(PinsLinks[id].pins) - 1] = '\0';
+      strncpy(PinsLinks[pin_idx].pins, pins, sizeof(PinsLinks[pin_idx].pins) - 1);
+      PinsLinks[pin_idx].pins[sizeof(PinsLinks[pin_idx].pins) - 1] = '\0';
       mg_free(pins);
     }
     int pa_ofs = mg_json_get(body, "$.pinact", NULL);
@@ -1914,8 +1922,8 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
           if (indextu != -1) {
             PinsLinks[indextu].idin = id;
             PinsLinks[indextu].idout = pin_id;
-            if (pin_id < NUMPIN) {
-              strncpy(PinsLinks[indextu].pins, PinsInfo[pin_id].pins,
+            if (pin_id >= 1 && pin_id <= NUMPIN) {
+              strncpy(PinsLinks[indextu].pins, PinsInfo[pin_id - 1].pins,
                       sizeof(PinsLinks[indextu].pins) - 1);
             } else {
               /* Фиксированный маркер — реальное имя собирается в handle_switches() */
@@ -2004,8 +2012,8 @@ void handle_button_set(struct mg_connection *c, struct mg_http_message *hm) {
       if (reply_if_str_too_long(c, body, act_paths, act_limits, 3)) return;
     }
 
-    if (id_val >= NUMPIN && id_val < NUMPIN + NUMZBEE) {
-      int zbi = (int)id_val - NUMPIN;
+    if (IsZigbeePin((int)id_val)) {
+      int zbi = ZbeeIdx((int)id_val);
       if (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_TRIGGER) {
         if (ZigbeeConf[zbi].action_pool_idx == ACTION_POOL_IDX_NONE &&
             (json_action_is_real(body, "$.sclick") ||
@@ -2115,7 +2123,7 @@ void gen_button_json(const struct dbPinsInfo *pins_info,
           "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
           "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
           "\"pinact\":{",
-          pins_conf[i].topin, i, pins_info[i].pins, pins_conf[i].ptype,
+          pins_conf[i].topin, i + 1, pins_info[i].pins, pins_conf[i].ptype,
           pins_conf[i].sclick, pins_conf[i].dclick, pins_conf[i].lpress);
 
       // ZERG, Здесь логика для заполнения pinact (pinact":{})
@@ -2144,20 +2152,21 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
     return;
   }
   int id = (int)id_val;
-  if (id < 0 || id >= count) {
+  if (id < 1 || id > count) {
     printf("button ID out of bounds %d\r\n", id);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
+  int pin_idx = id - 1;
 
   if (mg_json_get(body, "$.setrpins", NULL) >= 0) {
     int pa_ofs = mg_json_get(body, "$.pinact", NULL);
     if (pa_ofs >= 0) {
       char *pins = mg_json_get_str(body, "$.pins");
       if (pins) {
-        strncpy(PinsLinks[id].pins, pins, sizeof(PinsLinks[id].pins) - 1);
-        PinsLinks[id].pins[sizeof(PinsLinks[id].pins) - 1] = '\0';
+        strncpy(PinsLinks[pin_idx].pins, pins, sizeof(PinsLinks[pin_idx].pins) - 1);
+        PinsLinks[pin_idx].pins[sizeof(PinsLinks[pin_idx].pins) - 1] = '\0';
         mg_free(pins);
       }
       struct mg_str pa = mg_str_n(json + pa_ofs, strlen(json) - (size_t)pa_ofs);
@@ -2203,8 +2212,8 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
           if (indextu != -1) {
             PinsLinks[indextu].idin = id;
             PinsLinks[indextu].idout = pin_id;
-            if (pin_id < NUMPIN) {
-              strncpy(PinsLinks[indextu].pins, PinsInfo[pin_id].pins,
+            if (pin_id >= 1 && pin_id <= NUMPIN) {
+              strncpy(PinsLinks[indextu].pins, PinsInfo[pin_id - 1].pins,
                       sizeof(PinsLinks[indextu].pins) - 1);
             } else {
               strncpy(PinsLinks[indextu].pins, valbuf,
@@ -2228,33 +2237,33 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
   } else {
     long ptype_val = mg_json_get_long(body, "$.ptype", -1);
     if (ptype_val >= 0) {
-      PinsConf[id].ptype = (uint8_t)ptype_val;
+      PinsConf[pin_idx].ptype = (uint8_t)ptype_val;
     }
     char *sclick = mg_json_get_str(body, "$.sclick");
     if (sclick) {
-      strncpy(PinsConf[id].sclick, sclick, sizeof(PinsConf[id].sclick) - 1);
-      PinsConf[id].sclick[sizeof(PinsConf[id].sclick) - 1] = '\0';
+      strncpy(PinsConf[pin_idx].sclick, sclick, sizeof(PinsConf[pin_idx].sclick) - 1);
+      PinsConf[pin_idx].sclick[sizeof(PinsConf[pin_idx].sclick) - 1] = '\0';
       mg_free(sclick);
     }
     char *dclick = mg_json_get_str(body, "$.dclick");
     if (dclick) {
-      strncpy(PinsConf[id].dclick, dclick, sizeof(PinsConf[id].dclick) - 1);
-      PinsConf[id].dclick[sizeof(PinsConf[id].dclick) - 1] = '\0';
+      strncpy(PinsConf[pin_idx].dclick, dclick, sizeof(PinsConf[pin_idx].dclick) - 1);
+      PinsConf[pin_idx].dclick[sizeof(PinsConf[pin_idx].dclick) - 1] = '\0';
       mg_free(dclick);
     }
     char *lpress = mg_json_get_str(body, "$.lpress");
     if (lpress) {
-      strncpy(PinsConf[id].lpress, lpress, sizeof(PinsConf[id].lpress) - 1);
-      PinsConf[id].lpress[sizeof(PinsConf[id].lpress) - 1] = '\0';
+      strncpy(PinsConf[pin_idx].lpress, lpress, sizeof(PinsConf[pin_idx].lpress) - 1);
+      PinsConf[pin_idx].lpress[sizeof(PinsConf[pin_idx].lpress) - 1] = '\0';
       mg_free(lpress);
     }
     char *info = json_get_str_allow_empty(body, "$.info");
     if (info) {
-      strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
-      PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
+      strncpy(PinsConf[pin_idx].info, info, sizeof(PinsConf[pin_idx].info) - 1);
+      PinsConf[pin_idx].info[sizeof(PinsConf[pin_idx].info) - 1] = '\0';
       mg_free(info);
     }
-    PinsConf[id].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[id].onoff);
+    PinsConf[pin_idx].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[pin_idx].onoff);
     usbnum = 1;
     xQueueSend(usbQueueHandle, &usbnum, 0);
   }
@@ -2262,9 +2271,9 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
   {
     char *pins_val = mg_json_get_str(body, "$.pins");
     if (pins_val) {
-      if (strcmp(PinsInfo[id].pins, pins_val) != 0) {
+      if (strcmp(PinsInfo[pin_idx].pins, pins_val) != 0) {
         printf("Warning: Pins in JSON (%s) do not match PinsInfo (%s)\n",
-               pins_val, PinsInfo[id].pins);
+               pins_val, PinsInfo[pin_idx].pins);
       }
       mg_free(pins_val);
     }
@@ -2350,7 +2359,8 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
       for (uint8_t j = 0; j < num_pins; j++) {
         if (pins_conf[j].topin == 5) { // Проверяем, что это 'PWM'
           for (uint8_t k = 0; k < num_pin_links; k++) {
-            if (PinsLinks[k].idin == i && PinsLinks[k].idout == j) {
+            if (PinsLinks[k].idin == (short)(i + 1) &&
+                PinsLinks[k].idout == (short)(j + 1)) {
               pwm_dvalue = pins_conf[j].dvalue;
               pwm_freq = pins_conf[j].pwm;
               pwm_max = pins_conf[j].pwmmax;
@@ -2364,8 +2374,8 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
         }
       }
 
-      const char *encb_pin_name = (encoderb_id != 255 && encoderb_id < num_pins)
-                                      ? pins_info[encoderb_id].pins
+      const char *encb_pin_name = (encoderb_id != 255 && encoderb_id <= num_pins)
+                                      ? pins_info[encoderb_id - 1].pins
                                       : "";
 
       /* Текст условия выгружаем вместе с номером: при переносе конфига на
@@ -2387,7 +2397,7 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
                          "      \"zbee_bind\": %d,\n"
                          "      \"cond\": %d,\n"
                          "      \"cexpr\": \"%s\",\n",
-                         pins_conf[i].topin, i, pins_info[i].pins, encoderb_id,
+                         pins_conf[i].topin, i + 1, pins_info[i].pins, encoderb_id,
                          encb_pin_name, pwm_dvalue, pwm_freq, pwm_max,
                          pins_conf[i].ponr, pins_conf[i].zbee_bind_id,
                          enc_cond, ce_expr);
@@ -2398,7 +2408,8 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
       for (uint8_t j = 0; j < num_pins; j++) {
         if (pins_conf[j].topin == 5) { // Проверяем, что это 'PWM'.
           for (uint8_t k = 0; k < num_pin_links; k++) {
-            if (PinsLinks[k].idin == i && PinsLinks[k].idout == j &&
+            if (PinsLinks[k].idin == (short)(i + 1) &&
+                PinsLinks[k].idout == (short)(j + 1) &&
                 PinsLinks[k].pins[0] != '\0') {
               if (pinact_count > 0) {
                 offset += snprintf(buffer + offset, buffer_size - offset, ", ");
@@ -2437,6 +2448,7 @@ void gen_encoder_json(const struct dbPinsInfo *pins_info,
 }
 /* Применить частоту и dvalue к PWM-пину j (прежний код из Edit-ветки).
  * pwm_json - миллигерцы, dvalue_json - проценты 0..100. */
+/* j - ИНДЕКС пина в PinsConf[] (с нуля), не логический ID */
 static void pwm_apply_freq_duty(uint8_t j, long pwm_json, long dvalue_json) {
   uint64_t timer_clk_mhz;
   if (PinsInfo[j].tim == TIM1 || PinsInfo[j].tim == TIM8 ||
@@ -2472,7 +2484,7 @@ static void pwm_apply_freq_duty(uint8_t j, long pwm_json, long dvalue_json) {
 
   printf("Updated PWM [%d] %s: freq=%lu mHz, period=%lu, psc=%lu, "
          "dvalue=%d%% = %lu steps\r\n",
-         j, PinsInfo[j].pins, (unsigned long)PinsConf[j].pwm,
+         j + 1, PinsInfo[j].pins, (unsigned long)PinsConf[j].pwm,
          (unsigned long)period, (unsigned long)prescaler,
          new_dvalue, (unsigned long)pulse_json);
 }
@@ -2508,7 +2520,7 @@ static void parse_pwm_row_edit(struct mg_str body, int id) {
     }
     if (!pid) pwm_write_duty((uint8_t)id);
   } else {
-    printf("PWM row %d: hardware settings locked by AutoTune\r\n", id);
+    printf("PWM row %d: hardware settings locked by AutoTune\r\n", id + 1);
   }
 
   {
@@ -2528,7 +2540,7 @@ static void parse_pwm_row_edit(struct mg_str body, int id) {
       (uint16_t)mg_json_get_long(body, "$.zbee_bind", PinsConf[id].zbee_bind_id);
   printf("PWM row edit: id=%d, pins=%s, pwm=%d, dvalue=%d, flags=0x%02X, "
          "onoff=%d, zbee_bind=%d\r\n",
-         id, PinsInfo[id].pins, PinsConf[id].pwm, PinsConf[id].dvalue,
+         id + 1, PinsInfo[id].pins, PinsConf[id].pwm, PinsConf[id].dvalue,
          PinsConf[id].pwm_flags, PinsConf[id].onoff, PinsConf[id].zbee_bind_id);
   mark_slice_dirty(&g_ver_encoder);
   mark_slice_dirty(&g_ver_pins);
@@ -2552,12 +2564,13 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
     return;
   }
   int id = (int)id_val;
-  if (id < 0 || id >= count) {
+  if (id < 1 || id > count) {
     printf("encoder ID out of bounds %d\r\n", id);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
+  int pin_idx = id - 1;
 
   /* Условие на связь энкодера: свободное выражение "cexpr" либо номер
    * библиотеки "cond" (0 = нет). Применяется, только если ключ прислан;
@@ -2579,8 +2592,8 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
   long pol_json = mg_json_get_long(body, "$.pol", 0);
 
   /* Строка PWM без энкодера: пишем настройки в сам PWM-пин, topin не трогаем */
-  if (PinsConf[id].topin == 5) {
-    parse_pwm_row_edit(body, id);
+  if (PinsConf[pin_idx].topin == 5) {
+    parse_pwm_row_edit(body, pin_idx);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
@@ -2589,18 +2602,18 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
   if (is_edit_type) {
     char *pins = mg_json_get_str(body, "$.pins");
     if (pins) {
-      strncpy(PinsInfo[id].pins, pins, sizeof(PinsInfo[id].pins) - 1);
-      PinsInfo[id].pins[sizeof(PinsInfo[id].pins) - 1] = '\0';
+      strncpy(PinsInfo[pin_idx].pins, pins, sizeof(PinsInfo[pin_idx].pins) - 1);
+      PinsInfo[pin_idx].pins[sizeof(PinsInfo[pin_idx].pins) - 1] = '\0';
       mg_free(pins);
     }
-    PinsConf[id].topin = (uint8_t)mg_json_get_long(body, "$.topin", PinsConf[id].topin);
+    PinsConf[pin_idx].topin = (uint8_t)mg_json_get_long(body, "$.topin", PinsConf[pin_idx].topin);
 
     long dvalue_json = mg_json_get_long(body, "$.dvalue", -1);
     long pwm_json = mg_json_get_long(body, "$.pwm", -1);
     for (uint8_t j = 0; j < count; j++) {
       if (PinsConf[j].topin == 5) {
         for (int k = 0; k < NUMPINLINKS; k++) {
-          if (PinsLinks[k].idin == id && PinsLinks[k].idout == j) {
+          if (PinsLinks[k].idin == id && PinsLinks[k].idout == j + 1) {
             if (is_pin_in_autotune(j)) break;
             if (dvalue_json >= 0 && pwm_json >= 0)
               pwm_apply_freq_duty((uint8_t)j, pwm_json, dvalue_json);
@@ -2619,45 +2632,46 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
       long pv = mg_json_get_long(body, "$.ponr", -1);
       if (pv >= 0) {
         uint8_t pm = ponr_sanitize(5, pv);
-        PinsConf[id].ponr = pm;
+        PinsConf[pin_idx].ponr = pm;
         /* Режим энкодера распространяется на привязанные PWM-пины */
         for (int k = 0; k < NUMPINLINKS; k++) {
           if (PinsLinks[k].idin != (short)id) continue;
           int out = PinsLinks[k].idout;
-          if (out > 0 && out < NUMPIN && PinsConf[out].topin == 5) PinsConf[out].ponr = pm;
+          if (out >= 1 && out <= NUMPIN && PinsConf[out - 1].topin == 5)
+            PinsConf[out - 1].ponr = pm;
         }
         mark_slice_dirty(&g_ver_select);
       }
     }
     char *info = json_get_str_allow_empty(body, "$.info");
     if (info) {
-      strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
-      PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
+      strncpy(PinsConf[pin_idx].info, info, sizeof(PinsConf[pin_idx].info) - 1);
+      PinsConf[pin_idx].info[sizeof(PinsConf[pin_idx].info) - 1] = '\0';
       mg_free(info);
     }
-    PinsConf[id].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[id].onoff);
-    PinsConf[id].zbee_bind_id = (uint16_t)mg_json_get_long(body, "$.zbee_bind", PinsConf[id].zbee_bind_id);
+    PinsConf[pin_idx].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[pin_idx].onoff);
+    PinsConf[pin_idx].zbee_bind_id = (uint16_t)mg_json_get_long(body, "$.zbee_bind", PinsConf[pin_idx].zbee_bind_id);
     printf("Type 2 (Edit): id=%d, pins=%s, topin=%d, ponr=%d, info=%s, "
            "onoff=%d\r\n",
-           id, PinsInfo[id].pins, PinsConf[id].topin, PinsConf[id].ponr,
-           PinsConf[id].info, PinsConf[id].onoff);
+           id, PinsInfo[pin_idx].pins, PinsConf[pin_idx].topin, PinsConf[pin_idx].ponr,
+           PinsConf[pin_idx].info, PinsConf[pin_idx].onoff);
     usbnum = 1;
     xQueueSend(usbQueueHandle, &usbnum, 0);
 
   } else {
     char *pins = mg_json_get_str(body, "$.pins");
     if (pins) {
-      strncpy(PinsInfo[id].pins, pins, sizeof(PinsInfo[id].pins) - 1);
-      PinsInfo[id].pins[sizeof(PinsInfo[id].pins) - 1] = '\0';
+      strncpy(PinsInfo[pin_idx].pins, pins, sizeof(PinsInfo[pin_idx].pins) - 1);
+      PinsInfo[pin_idx].pins[sizeof(PinsInfo[pin_idx].pins) - 1] = '\0';
       mg_free(pins);
     }
 
-    PinsConf[id].encoderb = (uint8_t)mg_json_get_long(body, "$.encoderb", PinsConf[id].encoderb);
+    PinsConf[pin_idx].encoderb = (uint8_t)mg_json_get_long(body, "$.encoderb", PinsConf[pin_idx].encoderb);
 
     char *encdrbpin = mg_json_get_str(body, "$.encdrbpin");
     if (encdrbpin) {
-      strncpy(PinsConf[id].encbpin, encdrbpin, sizeof(PinsConf[id].encbpin) - 1);
-      PinsConf[id].encbpin[sizeof(PinsConf[id].encbpin) - 1] = '\0';
+      strncpy(PinsConf[pin_idx].encbpin, encdrbpin, sizeof(PinsConf[pin_idx].encbpin) - 1);
+      PinsConf[pin_idx].encbpin[sizeof(PinsConf[pin_idx].encbpin) - 1] = '\0';
       mg_free(encdrbpin);
     }
 
@@ -2682,8 +2696,8 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
           int value = (int)mg_json_get_long(
               mg_str_n(val.buf, val.len), "$", 0);
           /* PWM переходит под рубильник энкодера: свой рубильник снимаем */
-          if (value >= 0 && value < NUMPIN && PinsConf[value].topin == 5)
-            PinsConf[value].pwm_flags &= (uint8_t)~PWMF_SWITCH;
+          if (value >= 1 && value <= NUMPIN && PinsConf[value - 1].topin == 5)
+            PinsConf[value - 1].pwm_flags &= (uint8_t)~PWMF_SWITCH;
 
           bool found = false;
           for (int i = 0; i < NUMPINLINKS; i++) {
@@ -2725,10 +2739,10 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
         }
       }
     }
-    PinsConf[id].zbee_bind_id = (uint16_t)mg_json_get_long(body, "$.zbee_bind", PinsConf[id].zbee_bind_id);
+    PinsConf[pin_idx].zbee_bind_id = (uint16_t)mg_json_get_long(body, "$.zbee_bind", PinsConf[pin_idx].zbee_bind_id);
     printf("Type 1 (Connection): id=%d, pins=%s, encoderB=%d, encdrBpin=%s, zbee_bind=%d\r\n",
-           id, PinsInfo[id].pins, PinsConf[id].encoderb, PinsConf[id].encbpin,
-           PinsConf[id].zbee_bind_id);
+           id, PinsInfo[pin_idx].pins, PinsConf[pin_idx].encoderb, PinsConf[pin_idx].encbpin,
+           PinsConf[pin_idx].zbee_bind_id);
     usbnum = 1;
     xQueueSend(usbQueueHandle, &usbnum, 0);
     usbnum = 4;
@@ -4457,7 +4471,7 @@ void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm,
     *bracket_pos = '\0';
   }
 
-  if (id >= NUMPIN + NUMZBEE) {
+  if (id < 0 || id > ZBEE_ID_MAX) {
     MG_INFO(("Response headers for connection %ld:", c->id));
     log_headers(extra_headers);
     mg_http_reply(c, 400, extra_headers,
@@ -4553,11 +4567,12 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
 
     if (mg_http_get_var(&hm->query, "id", id_str, sizeof(id_str)) > 0) {
       id = atoi(id_str);
-      if (id >= 0 && id < NUMPIN) {
+      if (id >= 1 && id <= NUMPIN) {
+        int pin_idx = id - 1;
         if (strncmp(command, "switch", cmdlen) == 0) {
-          if (PinsConf[id].topin == 3) { // SWITCH
+          if (PinsConf[pin_idx].topin == 3) { // SWITCH
             /* Master Enable: если onoff == 0, отклоняем API-команду */
-            if (PinsConf[id].onoff == 0) {
+            if (PinsConf[pin_idx].onoff == 0) {
               mg_http_reply(c, 403, "Content-Type: text/plain\r\n",
                             "Switch %d DISABLED (master off)\n", id);
             } else if (mg_http_get_var(&hm->query, "state", value_str,
@@ -4574,13 +4589,13 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
                           "Error, switch with id = %d doesn't exist!\n", id);
           }
         } else if (strncmp(command, "button", cmdlen) == 0) {
-          if (PinsConf[id].topin == 1) { // BUTTON
+          if (PinsConf[pin_idx].topin == 1) { // BUTTON
             // Проверяем наличие параметров в URL
             if (strstr(full_uri, "single_click") != NULL) {
-              if (strlen(PinsConf[id].sclick) > 0) {
+              if (strlen(PinsConf[pin_idx].sclick) > 0) {
                 printf("Executing single click actions: '%s'\n",
-                       PinsConf[id].sclick);
-                action_handler(id, PinsConf[id].sclick, "SC");
+                       PinsConf[pin_idx].sclick);
+                action_handler((uint16_t)id, PinsConf[pin_idx].sclick, "SC");
                 mg_http_reply(
                     c, 200, "Content-Type: text/plain\r\n",
                     "Button %d: The 'SINGLE CLICK' action was performed!\r\n",
@@ -4590,10 +4605,10 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
                               "No single click actions configured\n");
               }
             } else if (strstr(full_uri, "double_click") != NULL) {
-              if (strlen(PinsConf[id].dclick) > 0) {
+              if (strlen(PinsConf[pin_idx].dclick) > 0) {
                 printf("Executing double click actions: '%s'\n",
-                       PinsConf[id].dclick);
-                action_handler(id, PinsConf[id].dclick, "DC");
+                       PinsConf[pin_idx].dclick);
+                action_handler((uint16_t)id, PinsConf[pin_idx].dclick, "DC");
                 mg_http_reply(
                     c, 200, "Content-Type: text/plain\r\n",
                     "Button %d: The 'DOUBLE CLICK' action was performed!\r\n",
@@ -4603,10 +4618,10 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
                               "No double click actions configured\n");
               }
             } else if (strstr(full_uri, "long_press") != NULL) {
-              if (strlen(PinsConf[id].lpress) > 0) {
+              if (strlen(PinsConf[pin_idx].lpress) > 0) {
                 printf("Executing long press actions: '%s'\n",
-                       PinsConf[id].lpress);
-                action_handler(id, PinsConf[id].lpress, "LP");
+                       PinsConf[pin_idx].lpress);
+                action_handler((uint16_t)id, PinsConf[pin_idx].lpress, "LP");
                 mg_http_reply(
                     c, 200, "Content-Type: text/plain\r\n",
                     "Button %d: The 'LONG PRESS' action was performed!\r\n",
@@ -4625,8 +4640,8 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
                           "Error, button with id = %d doesn't exist!\n", id);
           }
         } else if (strncmp(command, "pwm", cmdlen) == 0) {
-          if (PinsConf[id].topin == 5) { // PWM
-            if (is_pin_in_autotune(id)) { /* AutoTune lock */
+          if (PinsConf[pin_idx].topin == 5) { // PWM
+            if (is_pin_in_autotune(pin_idx)) { /* AutoTune lock */
               mg_http_reply(c, 409, "Content-Type: text/plain\r\n",
                             "PWM %d locked by AutoTune\n", id);
             } else if (mg_http_get_var(&hm->query, "dvalue", value_str,
@@ -4636,14 +4651,14 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
                 value = 0;
               if (value > 100)
                 value = 100;
-              PinsConf[id].dvalue = value;
-              uint32_t pulse_web = pwm_gate_open((uint8_t)id)
-                  ? (uint32_t)((uint64_t)value * PinsConf[id].pwmmax / 100ULL)
+              PinsConf[pin_idx].dvalue = value;
+              uint32_t pulse_web = pwm_gate_open((uint8_t)pin_idx)
+                  ? (uint32_t)((uint64_t)value * PinsConf[pin_idx].pwmmax / 100ULL)
                   : 0;
-              __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel,
+              __HAL_TIM_SET_COMPARE(&htim[pin_idx], PinsInfo[pin_idx].tim_channel,
                                     pulse_web);
               printf("PWM WEB [%d] %s: %d%% = %lu steps\r\n", id,
-                     PinsInfo[id].pins, value, (unsigned long)pulse_web);
+                     PinsInfo[pin_idx].pins, value, (unsigned long)pulse_web);
               mg_http_reply(c, 200, "Content-Type: text/plain\r\n",
                             "PWM %d set to %d%% (%lu steps)\n", id, value,
                             (unsigned long)pulse_web);
@@ -4707,7 +4722,7 @@ uint32_t onewire_cfg_ver(void) {
     h = ow_fnv(h, &i, sizeof(i));
     for (int j = 0; j < MAX_DS18B20_P; j++) {
       const ds18b20_pin_t *d = &ds18b20[j];
-      if (d->id != i || d->typsensr != 1) continue;
+      if (d->id != (uint8_t)(i + 1) || d->typsensr != 1) continue;
       int n = d->numsens;
       h = ow_fnv(h, &d->numsens, sizeof(d->numsens));
       h = ow_fnv(h, &d->onoff, sizeof(d->onoff));
@@ -4725,7 +4740,7 @@ uint32_t onewire_cfg_ver(void) {
     }
     for (int j = 0; j < MAX_DHT22_P; j++) {
       const dht22_pin_t *d = &dht22[j];
-      if (d->id != i || d->typsensr != 2) continue;
+      if (d->id != (uint8_t)(i + 1) || d->typsensr != 2) continue;
       h = ow_fnv(h, &d->numsens, sizeof(d->numsens));
       h = ow_fnv(h, &d->onoff, sizeof(d->onoff));
       h = ow_fnv_str(h, d->pin, sizeof(d->pin));
@@ -4847,24 +4862,25 @@ static int ow_build_page(char *buf, int size, uint32_t ver, long from,
   bool trunc = false;
   if (from < 0) from = 0;
 
-  for (long i = from; i < NUMPIN; i++) {
+  for (long id = (from < 1 ? 1 : from); id <= NUMPIN; id++) {
+    int i = (int)id - 1;
     if (PinsConf[i].topin != 4) continue;
     if (paged && emitted >= limit) {
-      next = i;
+      next = id;
       break;
     }
     int start = off;
     if (emitted > 0) buf[off++] = ',';
-    int r = ow_emit_row(buf, cap, off, (int)i);
+    int r = ow_emit_row(buf, cap, off, (int)id);
     if (r < 0) { /* строка не поместилась в буфер */
       off = start;
-      if (paged && emitted > 0) next = i;
+      if (paged && emitted > 0) next = id;
       else trunc = true;
       break;
     }
     if (paged && emitted > 0 && r > ONEWIRE_PAGE_BYTES) { /* бюджет страницы */
       off = start;
-      next = i;
+      next = id;
       break;
     }
     off = r;
@@ -4930,7 +4946,13 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
     return false;
   }
   uint8_t sensrtpe = (uint8_t)mg_json_get_long(body, "$.typsensor", 0);
-  uint8_t sensr_id = (uint8_t)mg_json_get_long(body, "$.id", 0);
+  long sensr_id_long = mg_json_get_long(body, "$.id", 0);
+  if (sensr_id_long < 1 || sensr_id_long > NUMPIN) {
+    fprintf(stderr, "Error: sensor id out of range: %ld\n", sensr_id_long);
+    if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+    return false;
+  }
+  uint8_t sensr_id = (uint8_t)sensr_id_long;
   char *pin_str = mg_json_get_str(body, "$.pin");
   if (!pin_str) {
     if (my_DgnTaskHandle)
@@ -5053,7 +5075,7 @@ bool parse_sensor_json(const char *json_string) {
 
   if (strcmp(sensorNumber, "DHT22") == 0) {
     long pin_id_val = mg_json_get_long(body, "$.id", -1);
-    if (pin_id_val < 0) {
+    if (pin_id_val < 1 || pin_id_val > NUMPIN) {
       fprintf(stderr, "Error: Invalid or missing id for DHT22\n");
       mg_free(sensorNumber);
       if (my_DgnTaskHandle)
@@ -5364,12 +5386,12 @@ void handle_security_get(struct mg_connection *c) {
                    "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
                    "\"action\":\"%s\",\"send_sms\":\"%s\","
                    "\"info\":\"%s\",\"onoff\":%d}",
-                   conf.topin, i, PinsInfo[i].pins, conf.ptype,
+                   conf.topin, i + 1, PinsInfo[i].pins, conf.ptype,
                    action, send_sms, conf.info, conf.onoff);
     mg_http_write_chunk(c, buf, (size_t)len);
   }
 
-  /* Zigbee-устройства (ID 89..NUMPIN+NUMZBEE-1): раньше сюда не попадали
+  /* Zigbee-устройства (ID 90..ZBEE_ID_MAX): раньше сюда не попадали
    * вовсе. Отдаём только реально сконфигурированные слоты (с непустым IEEE).
    * role нужен фронтенду (web_root/zigbeeRoles.js) для фильтрации
    * не-актуаторов (SENSOR/TRIGGER/SWITCH). */
@@ -5390,7 +5412,7 @@ void handle_security_get(struct mg_connection *c) {
     len = snprintf(buf, sizeof(buf),
                    "{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"role\":%d,"
                    "\"onoff\":%d}",
-                   zb.topin, NUMPIN + i, zb.zbee_label, zb.zbee_role,
+                   zb.topin, ZbeeIdFromIdx(i), zb.zbee_label, zb.zbee_role,
                    zb.onoff);
     mg_http_write_chunk(c, buf, (size_t)len);
   }
@@ -5811,6 +5833,27 @@ static int find_zbee_slot_by_attr(const char *ieee, uint8_t ep, uint16_t attr_nu
 static void clear_ep_subslots(const char *ieee, int parent_slot);
 static int alloc_zbee_slot(void);
 
+static int zbee_find_parent_onoff(const char *ieee, int child_slot) {
+    int best = -1;
+    int best_ep = 256;
+    for (int pi = 0; pi < NUMZBEE; pi++) {
+        ZigbeeVirtualPin *p = &ZigbeeConf[pi];
+        if (pi == child_slot) continue;
+        if (p->zbee_ieee[0] == '\0') continue;
+        if (strcmp(p->zbee_ieee, ieee) != 0) continue;
+        if (p->zbee_endpoint == 0) continue;
+        if (!(p->cluster_flags & ZBEE_CL_ONOFF)) continue;
+        if (p->zbee_role == ZBEE_ROLE_TRIGGER ||
+            p->zbee_role == ZBEE_ROLE_SWITCH  ||
+            p->zbee_role == ZBEE_ROLE_SENSOR) continue;
+        if ((int)p->zbee_endpoint < best_ep) {
+            best_ep = (int)p->zbee_endpoint;
+            best = pi;
+        }
+    }
+    return best;
+}
+
 static void mqtt_zigbee_handler(const char *topic, const char *payload) {
     struct mg_str body = mg_str_n(payload, strlen(payload));
 
@@ -5945,7 +5988,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                     } else {
                         ZigbeeConf[i].sec_last_trg = now;
                         if (ZigbeeConf[i].onoff && ZigbeeConf[i].sec_send_sms) {
-                            sms_alarm_request(NUMPIN + i);
+                            sms_alarm_request(ZbeeIdFromIdx(i));
                         }
                         if (!ZigbeeConf[i].onoff) {
                             LOG_Z2M("zbee: PIR slot=%d SKIP onoff=0\r\n", i);
@@ -5954,7 +5997,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                                     i, (unsigned)ZigbeeConf[i].action_pool_idx);
                         } else {
                             LOG_Z2M("zbee: PIR slot=%d FIRE act='%s'\r\n", i, act);
-                            action_handler((uint8_t)(NUMPIN + i), act, "Security action");
+                            action_handler((uint16_t)ZbeeIdFromIdx(i), act, "Security action");
                             /* cmd 11 = ZBEE_SECURITY, deviceId = индекс слота */
                             mqtt_queue_send_safe(11, (uint8_t)i, 1, 0);
                         }
@@ -5998,14 +6041,10 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                         bool child_on = (ZigbeeConf[dp_slot].cluster_flags & ZBEE_CL_ONOFF)
                                         ? ZigbeeConf[dp_slot].state : true;
                         bool parent_on = true;
-                        for (int pi = 0; pi < NUMZBEE; pi++) {
-                            if (pi == dp_slot) continue;
-                            if (ZigbeeConf[pi].zbee_ieee[0] == '\0') continue;
-                            if (strcmp(ZigbeeConf[pi].zbee_ieee, ZigbeeConf[dp_slot].zbee_ieee) == 0 &&
-                                ZigbeeConf[pi].zbee_endpoint == 0) {
-                                parent_on = ZigbeeConf[pi].state;
-                                break;
-                            }
+                        int parent_pi = zbee_find_parent_onoff(ZigbeeConf[dp_slot].zbee_ieee,
+                                                               dp_slot);
+                        if (parent_pi >= 0) {
+                            parent_on = ZigbeeConf[parent_pi].state;
                         }
 
                         if (child_on && parent_on) {
@@ -6019,7 +6058,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                                 if (mapped < 0) mapped = 0;
                                 if (mapped > 100) mapped = 100;
                             }
-                            int zbee_id = NUMPIN + dp_slot;
+                            int zbee_id = ZbeeIdFromIdx(dp_slot);
                             bool found_encoder = false;
                             bool found_pwm = false;
                             /* PWM без энкодера: привязка zbee_bind_id у самого PWM-пина */
@@ -6041,12 +6080,12 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                                     /* Ищем PWM пин через PinsLinks (как Cron и Encoder task) */
                                     for (int k = 0; k < NUMPINLINKS; k++) {
                                         int link_out = PinsLinks[k].idout;
-                                        if (PinsLinks[k].idin == e &&
-                                            link_out >= 0 && link_out < NUMPIN &&
-                                            PinsConf[link_out].topin == 5) {
+                                        if (PinsLinks[k].idin == (short)(e + 1) &&
+                                            IsPinId(link_out) &&
+                                            PinsConf[link_out - 1].topin == 5) {
                                             found_pwm = true;
-                                            int pwm_id = PinsLinks[k].idout;
-                                            pwm_set_percent((uint8_t)pwm_id, mapped);
+                                            int pwm_id = link_out;
+                                            pwm_set_percent((uint8_t)(pwm_id - 1), mapped);
                                             LOG_Z2M("dimmer id=%d PWM[%d]=%d%%\r\n",
                                                    zbee_id, pwm_id, mapped);
                                             break;
@@ -6060,7 +6099,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
             }
         } else {
                             LOG_Z2M("dimmer id=%d skipped (child=%d parent=%d)\r\n",
-                                   NUMPIN + dp_slot, child_on, parent_on);
+                                   ZbeeIdFromIdx(dp_slot), child_on, parent_on);
                         }
                     }
                     if (ZigbeeConf[dp_slot].cluster_flags & ZBEE_CL_COLOR) {
@@ -6124,7 +6163,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
         }
 
         LOG_Z2M("zbee[%d] ieee='%s' ep=%d cl=%d val='%.*s'\r\n",
-               NUMPIN + i, ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint,
+               ZbeeIdFromIdx(i), ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint,
                cluster, raw_len, raw);
 
         taskENTER_CRITICAL();
@@ -6151,14 +6190,9 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                 bool child_on = (ZigbeeConf[i].cluster_flags & ZBEE_CL_ONOFF)
                                 ? ZigbeeConf[i].state : true;
                 bool parent_on = true;
-                for (int pi = 0; pi < NUMZBEE; pi++) {
-                    if (pi == i) continue;
-                    if (ZigbeeConf[pi].zbee_ieee[0] == '\0') continue;
-                    if (strcmp(ZigbeeConf[pi].zbee_ieee, ZigbeeConf[i].zbee_ieee) == 0 &&
-                        ZigbeeConf[pi].zbee_endpoint == 0) {
-                        parent_on = ZigbeeConf[pi].state;
-                        break;
-                    }
+                int parent_pi = zbee_find_parent_onoff(ZigbeeConf[i].zbee_ieee, i);
+                if (parent_pi >= 0) {
+                    parent_on = ZigbeeConf[parent_pi].state;
                 }
 
                 if (child_on && parent_on) {
@@ -6174,7 +6208,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                     }
 
                     /* PWM без энкодера: привязка zbee_bind_id у самого PWM-пина */
-                    int zbee_id = NUMPIN + i;
+                    int zbee_id = ZbeeIdFromIdx(i);
                     for (int d = 0; d < NUMPIN; d++) {
                         if (PinsConf[d].topin == 5 &&
                             PinsConf[d].zbee_bind_id == (uint16_t)zbee_id) {
@@ -6189,18 +6223,17 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                         if (PinsConf[e].topin == 8 &&
                             PinsConf[e].zbee_bind_id == (uint16_t)zbee_id) {
                             PinsConf[e].dvalue = mapped;
-                            if (PinsConf[e].encoderb > 0 &&
-                                PinsConf[e].encoderb < NUMPIN &&
-                                PinsConf[PinsConf[e].encoderb].topin == 5) {
-                                pwm_set_percent(PinsConf[e].encoderb, mapped);
+                            uint8_t encb = PinsConf[e].encoderb;
+                            if (IsPinId(encb) && PinsConf[encb - 1].topin == 5) {
+                                pwm_set_percent((uint8_t)(encb - 1), mapped);
                                 LOG_Z2M("dimmer cl8 id=%d -> PWM[%d] = %d%%\r\n",
-                                       zbee_id, PinsConf[e].encoderb, mapped);
+                                       zbee_id, encb, mapped);
                             }
                         }
                     }
                 } else {
                     LOG_Z2M("dimmer cl8 id=%d skipped (child=%d parent=%d)\r\n",
-                           NUMPIN + i, child_on, parent_on);
+                           ZbeeIdFromIdx(i), child_on, parent_on);
                 }
             }
         }
@@ -6241,7 +6274,7 @@ static void mqtt_zigbee_trigger_handler(const char *topic, const char *payload) 
         } else if (ZigbeeConf[i].zbee_role == ZBEE_ROLE_SWITCH) {
             /* Switch: payload → state → processPins */
             if (ZigbeeConf[i].onoff == 0) {
-                LOG_Z2M("zbee: SWITCH id=%d DISABLED (master off)\r\n", NUMPIN + i);
+                LOG_Z2M("zbee: SWITCH id=%d DISABLED (master off)\r\n", ZbeeIdFromIdx(i));
             } else if (ZigbeeConf[i].vbtn_mode == VBTN_MODE_PASSTHROUGH) {
                 bool matched = false;
                 uint8_t new_state = ZigbeeConf[i].state;
@@ -6267,9 +6300,9 @@ static void mqtt_zigbee_trigger_handler(const char *topic, const char *payload) 
 
                 if (matched) {
                     ZigbeeConf[i].state = new_state;
-                    processPins(NUMPIN + i, new_state);
+                    processPins(ZbeeIdFromIdx(i), new_state);
                     LOG_Z2M("zbee: SWITCH %s ieee=%s slot=%d id=%d payload=%s\r\n",
-                            new_state ? "ON" : "OFF", ieee, i, NUMPIN + i, payload);
+                            new_state ? "ON" : "OFF", ieee, i, ZbeeIdFromIdx(i), payload);
                 }
             }
         } else {
@@ -7071,6 +7104,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                         strncpy(ZigbeeConf[target_zbi].zbee_ieee, ZigbeeConf[zbi].zbee_ieee,
                                 sizeof(ZigbeeConf[target_zbi].zbee_ieee) - 1);
                         ZigbeeConf[target_zbi].zbee_ieee[16] = '\0';
+                        ZigbeeConf[target_zbi].zbee_endpoint = ZigbeeConf[zbi].zbee_endpoint;
                     }
 
                     gang_num++;
@@ -7106,7 +7140,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                     }
 
                     LOG_Z2M("zbee: LEARN SWITCH gang %d slot %d (id=%d) on='%s' off='%s'\r\n",
-                            gang_num, target_zbi, NUMPIN + target_zbi,
+                            gang_num, target_zbi, ZbeeIdFromIdx(target_zbi),
                             trigger_payloads[on_idx], off_idx >= 0 ? trigger_payloads[off_idx] : "(toggle)");
 
                     used[k] = 1;
@@ -7136,7 +7170,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                             ZigbeeConf[zbi].action_pool_idx = zbee_action_alloc();
                         }
                         LOG_Z2M("zbee: LEARN SINGLE SWITCH slot %d (id=%d) on='%s' off='%s'\r\n",
-                                zbi, NUMPIN + zbi, trigger_payloads[0], trigger_payloads[1]);
+                                zbi, ZbeeIdFromIdx(zbi), trigger_payloads[0], trigger_payloads[1]);
                     } else {
                         /* Multi-gang switch: каждая кнопка = отдельный канал/слот */
                         for (int k = 0; k < trigger_count; k++) {
@@ -7153,6 +7187,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                                 strncpy(ZigbeeConf[target_zbi].zbee_ieee, ZigbeeConf[zbi].zbee_ieee,
                                         sizeof(ZigbeeConf[target_zbi].zbee_ieee) - 1);
                                 ZigbeeConf[target_zbi].zbee_ieee[16] = '\0';
+                                ZigbeeConf[target_zbi].zbee_endpoint = ZigbeeConf[zbi].zbee_endpoint;
                             }
                             ZigbeeConf[target_zbi].zbee_role = ZBEE_ROLE_SWITCH;
                             ZigbeeConf[target_zbi].topin = 11;
@@ -7188,7 +7223,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                             }
 
                             LOG_Z2M("zbee: LEARN PASSTHROUGH SWITCH %d '%s' -> slot %d (id=%d)\r\n",
-                                    k, trigger_payloads[k], target_zbi, NUMPIN + target_zbi);
+                                    k, trigger_payloads[k], target_zbi, ZbeeIdFromIdx(target_zbi));
                         }
                     }
                 }
@@ -7211,7 +7246,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                     pt_dst[11] = '\0';
 
                     LOG_Z2M("zbee: LEARN PASSTHROUGH BUTTON '%s' ct='%s' -> slot %d (id=%d)\r\n",
-                            trigger_payloads[k], ct, zbi, NUMPIN + zbi);
+                            trigger_payloads[k], ct, zbi, ZbeeIdFromIdx(zbi));
                 }
 
                 if (ZigbeeConf[zbi].action_pool_idx == ACTION_POOL_IDX_NONE) {
@@ -7248,7 +7283,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                     }
                     strncpy(act_dst, "None", sizeof(ZigbeeActionPoolArr[aidx].sclick) - 1);
                     LOG_Z2M("zbee: LEARN BUTTON '%s' ct='%s' -> slot %d (id=%d)\r\n",
-                            trigger_payloads[k], ct, zbi, NUMPIN + zbi);
+                            trigger_payloads[k], ct, zbi, ZbeeIdFromIdx(zbi));
                 }
 
                 if (ZigbeeActionPoolArr[aidx].dclick[0] == '\0')
@@ -7288,6 +7323,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                 strncpy(ZigbeeConf[free_zbi].zbee_ieee, ZigbeeConf[zbi].zbee_ieee,
                         sizeof(ZigbeeConf[free_zbi].zbee_ieee) - 1);
                 ZigbeeConf[free_zbi].zbee_ieee[16] = '\0';
+                ZigbeeConf[free_zbi].zbee_endpoint = ZigbeeConf[zbi].zbee_endpoint;
             }
             ZigbeeConf[free_zbi].zbee_role = has_switch ? ZBEE_ROLE_SWITCH : ZBEE_ROLE_TRIGGER;
             ZigbeeConf[free_zbi].topin = 11;
@@ -7347,7 +7383,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
             }
 
             LOG_Z2M("zbee: LEARN TRIGGER >3 '%s' ct='%s' -> slot %d (id=%d)\r\n",
-                    trigger_payloads[k], trigger_click_types[k], free_zbi, NUMPIN + free_zbi);
+                    trigger_payloads[k], trigger_click_types[k], free_zbi, ZbeeIdFromIdx(free_zbi));
         }
     }
 
@@ -7735,29 +7771,30 @@ void mqtt_message_handler(const char *topic, const char *payload) {
   }
 
   printf("[MQTT] Parsed command: %s, id: %d\r\n", command, id);
-  if (id < 0 || id >= NUMPIN) {
+  if (id < 1 || id > NUMPIN) {
     printf("[MQTT] Invalid ID: %d\r\n", id);
     return;
   }
+  int pin_idx = id - 1;
 
   if (strcmp(command, "button") == 0) {
-    if (PinsConf[id].topin == 1) { // BUTTON
+    if (PinsConf[pin_idx].topin == 1) { // BUTTON
       // Ищем тип клика после последнего слэша
       const char *last_slash = strrchr(command_start, '/');
       if (last_slash) {
         const char *click_type = last_slash + 1;
         if (strcmp(click_type, "single_click") == 0 &&
-            PinsConf[id].sclick[0] != '\0') {
-          action_handler(id, PinsConf[id].sclick, "SC");
-          printf("[MQTT] Executing single click actions: '%s'\r\n", PinsConf[id].sclick);
+            PinsConf[pin_idx].sclick[0] != '\0') {
+          action_handler((uint16_t)id, PinsConf[pin_idx].sclick, "SC");
+          printf("[MQTT] Executing single click actions: '%s'\r\n", PinsConf[pin_idx].sclick);
         } else if (strcmp(click_type, "double_click") == 0 &&
-                   PinsConf[id].dclick[0] != '\0') {
-          action_handler(id, PinsConf[id].dclick, "DC");
-          printf("[MQTT] Executing double click actions: '%s'\r\n", PinsConf[id].dclick);
+                   PinsConf[pin_idx].dclick[0] != '\0') {
+          action_handler((uint16_t)id, PinsConf[pin_idx].dclick, "DC");
+          printf("[MQTT] Executing double click actions: '%s'\r\n", PinsConf[pin_idx].dclick);
         } else if (strcmp(click_type, "long_press") == 0 &&
-                   PinsConf[id].lpress[0] != '\0') {
-          action_handler(id, PinsConf[id].lpress, "LP");
-          printf("[MQTT] Executing long press actions: '%s'\r\n", PinsConf[id].lpress);
+                   PinsConf[pin_idx].lpress[0] != '\0') {
+          action_handler((uint16_t)id, PinsConf[pin_idx].lpress, "LP");
+          printf("[MQTT] Executing long press actions: '%s'\r\n", PinsConf[pin_idx].lpress);
         } else {
           printf("[MQTT] Invalid or unconfigured click type: %s\r\n", click_type);
         }
@@ -7767,12 +7804,12 @@ void mqtt_message_handler(const char *topic, const char *payload) {
     } else {
       printf("[MQTT] Error, button with id = %d doesn't exist or has incorrect topin "
              "value (%d)!\r\n",
-             id, PinsConf[id].topin);
+             id, PinsConf[pin_idx].topin);
     }
   } else if (strcmp(command, "switch") == 0) {
-    if (PinsConf[id].topin == 3) { // SWITCH
+    if (PinsConf[pin_idx].topin == 3) { // SWITCH
       /* Master Enable: если onoff == 0, игнорируем MQTT-команду */
-      if (PinsConf[id].onoff == 0) {
+      if (PinsConf[pin_idx].onoff == 0) {
         printf("[MQTT] Switch %d DISABLED (master off), cmd ignored!\r\n", id);
       } else {
         const char *state_part = strstr(command_start, "state=");
@@ -7795,11 +7832,11 @@ void mqtt_message_handler(const char *topic, const char *payload) {
     } else {
       printf("[MQTT] Error, switch with id = %d doesn't exist or has incorrect topin "
              "value (%d)!\r\n",
-             id, PinsConf[id].topin);
+             id, PinsConf[pin_idx].topin);
     }
   } else if (strcmp(command, "pwm") == 0) {
-    if (PinsConf[id].topin == 5) { // PWM
-      if (is_pin_in_autotune(id)) { /* AutoTune lock */
+    if (PinsConf[pin_idx].topin == 5) { // PWM
+      if (is_pin_in_autotune(pin_idx)) { /* AutoTune lock */
         printf("[MQTT] PWM %d BLOCKED by AutoTune\r\n", id);
       } else {
         const char *dvalue_part = strstr(command_start, "dvalue=");
@@ -7807,14 +7844,14 @@ void mqtt_message_handler(const char *topic, const char *payload) {
           int value;
           if (sscanf(dvalue_part + 7, "%d", &value) == 1) {
             if (value >= 0 && value <= 100) { // dvalue — ПРОЦЕНТ 0-100
-              PinsConf[id].dvalue = value;
-              uint32_t pulse_mqtt = pwm_gate_open((uint8_t)id)
-                  ? (uint32_t)((uint64_t)value * PinsConf[id].pwmmax / 100ULL)
+              PinsConf[pin_idx].dvalue = value;
+              uint32_t pulse_mqtt = pwm_gate_open((uint8_t)pin_idx)
+                  ? (uint32_t)((uint64_t)value * PinsConf[pin_idx].pwmmax / 100ULL)
                   : 0;
-              __HAL_TIM_SET_COMPARE(&htim[id], PinsInfo[id].tim_channel,
+              __HAL_TIM_SET_COMPARE(&htim[pin_idx], PinsInfo[pin_idx].tim_channel,
                                     pulse_mqtt);
               printf("[MQTT] PWM MQTT %s: %d%% = %lu steps\r\n",
-                     PinsInfo[id].pins, value, (unsigned long)pulse_mqtt);
+                     PinsInfo[pin_idx].pins, value, (unsigned long)pulse_mqtt);
             } else {
               printf("[MQTT] Invalid dvalue for PWM (must be 0-100): %d\r\n", value);
             }
@@ -7828,14 +7865,14 @@ void mqtt_message_handler(const char *topic, const char *payload) {
     } else {
       printf("[MQTT] Error, pwm with id = %d doesn't exist or has incorrect topin "
              "value (%d)!\r\n",
-             id, PinsConf[id].topin);
+             id, PinsConf[pin_idx].topin);
     }
   } else {
     printf("[MQTT] Unsupported command: %s\r\n", command);
   }
 }
 
-void action_handler(uint8_t button_id, const char *action_str,
+void action_handler(uint16_t button_id, const char *action_str,
                     const char *press_type) {
   if (action_str == NULL || strlen(action_str) == 0 ||
       strcmp(action_str, "None") == 0) {
@@ -7903,9 +7940,9 @@ void action_handler(uint8_t button_id, const char *action_str,
       case 0:
       case 1:
       case 2:
-        /* Zigbee-устройства (id >= NUMPIN) */
-        if (id >= NUMPIN && id < NUMPIN + NUMZBEE) {
-          int zbi = id - NUMPIN;
+        /* Zigbee-устройства (новые ID 90..289) */
+        if (IsZigbeePin((uint16_t)id)) {
+          int zbi = ZbeeIdx((uint16_t)id);
 
           /* SMS/DTMF-команда для Zigbee PIR меняет только On/Off охраны
            * (делается в execute_commands), на устройство ничего не шлём */
@@ -7965,13 +8002,14 @@ void action_handler(uint8_t button_id, const char *action_str,
           }
           break;
         }
-        if (id < 0 || id >= NUMPIN)
+        if (id < 1 || id > NUMPIN)
           break;
+        int pin_idx = id - 1;
 
-        if (PinsConf[id].topin == 3) {
+        if (PinsConf[pin_idx].topin == 3) {
           /* Если рубильник (Master Enable) отключен, игнорируем любые команды!
            */
-          if (PinsConf[id].onoff == 0) {
+          if (PinsConf[pin_idx].onoff == 0) {
             printf("[action_handler] Switch %d DISABLED (master off), action %d blocked\n", id, action);
             break;
           }
@@ -7984,17 +8022,20 @@ void action_handler(uint8_t button_id, const char *action_str,
                   PinsLinks[i]
                       .idout; // Используем int, чтобы корректно обработать -1
 
-              /* Защита от мусора или неинициализированных связей (-1) */
-              if (out_id < 0) {
+              /* Защита от мусора или неинициализированных связей:
+               * idout — логический ID, 0/-1 и значения вне пространства
+               * физических пинов/Zigbee недопустимы. */
+              if (out_id < 1 || out_id > ZBEE_ID_MAX) {
                 continue;
               }
 
-              /* Zigbee-слоты (ID 89..NUMPIN+NUMZBEE-1): раньше отсекались
-               * проверкой out_id >= NUMPIN и команда молча терялась. Отправляем
+              /* Zigbee-слоты (ID NUMPIN+1..ZBEE_ID_MAX, т.е. 90..289):
+               * раньше отсекались проверкой out_id >= NUMPIN и команда молча
+               * терялась. Отправляем
                * их в outputQueue — StartOutputTask сам различает физический
                * пин/Zigbee и отбрасывает роль ZBEE_ROLE_SWITCH. */
-              if (out_id >= NUMPIN) {
-                if (out_id < NUMPIN + NUMZBEE) {
+              if (IsZigbeePin((uint16_t)out_id)) {
+                if (out_id <= ZBEE_ID_MAX) {
                   data_pin_t data_pin = {0}; /* A3: локальная копия */
                   data_pin.id = out_id;
                   data_pin.action = action;
@@ -8009,8 +8050,9 @@ void action_handler(uint8_t button_id, const char *action_str,
               }
 
               /* Если привязанное устройство это ШИМ (PWM) */
-              if (PinsConf[out_id].topin == 5) {
-                if (is_pin_in_autotune(out_id)) continue; /* AutoTune lock */
+              int out_idx = out_id - 1;
+              if (PinsConf[out_idx].topin == 5) {
+                if (is_pin_in_autotune(out_idx)) continue; /* AutoTune lock */
                 uint32_t pulse = 0;
                 /* Вычисляем новое состояние для ШИМ */
                 uint8_t new_state = action;
@@ -8018,19 +8060,19 @@ void action_handler(uint8_t button_id, const char *action_str,
                   /* Для TOGGLE ШИМа нужно знать его текущее состояние.
                      Поскольку onoff может не отражать реальности, используем
                      логику из onoffid */
-                  new_state = !PinsConf[out_id]
+                  new_state = !PinsConf[out_idx]
                                    .onoff; // Инвертируем виртуальное состояние
-                  PinsConf[out_id].onoff = new_state;
+                  PinsConf[out_idx].onoff = new_state;
                 } else {
-                  PinsConf[out_id].onoff = action;
+                  PinsConf[out_idx].onoff = action;
                 }
 
                 if (new_state != 0) {
-                  pulse = (uint32_t)((uint64_t)PinsConf[out_id].dvalue *
-                                     PinsConf[out_id].pwmmax / 100ULL);
+                  pulse = (uint32_t)((uint64_t)PinsConf[out_idx].dvalue *
+                                     PinsConf[out_idx].pwmmax / 100ULL);
                 }
-                __HAL_TIM_SET_COMPARE(&htim[out_id],
-                                      PinsInfo[out_id].tim_channel, pulse);
+                __HAL_TIM_SET_COMPARE(&htim[out_idx],
+                                      PinsInfo[out_idx].tim_channel, pulse);
               }
               /* Если обычное устройство (Реле и т.д.) */
               else {
@@ -8050,13 +8092,13 @@ void action_handler(uint8_t button_id, const char *action_str,
           /* Обычное прямое управление для не-Switch пинов */
           /* SECURITY-пин (датчик) - вход: команда CMD меняет только On/Off
            * (выполнено в execute_commands), на GPIO ничего не пишем */
-          if (PinsConf[id].topin == 10 && press_type &&
+          if (PinsConf[pin_idx].topin == 10 && press_type &&
               strcmp(press_type, "CMD") == 0) {
             break;
           }
           /* Блокируем выполнение, если устройство отключено (onoff == 0),
              НО только если команда пришла извне (CMD), и это не PWM (у ШИМ onoff хранит текущее состояние) */
-          if (PinsConf[id].topin != 5 && PinsConf[id].onoff == 0) {
+          if (PinsConf[pin_idx].topin != 5 && PinsConf[pin_idx].onoff == 0) {
              if (press_type && strcmp(press_type, "CMD") == 0) {
                  break;
              }
@@ -8138,7 +8180,7 @@ void Check_SunriseSunset_Actions() {
   }
   lastchk = curtime;
   if (SetSettings.onsunrise && !srise_ok) {
-    char offstr[20], acts[100];
+    char offstr[20], acts[128];
     safe_split(SetSettings.srise_pins, offstr, sizeof(offstr), acts, sizeof(acts), '/');
     if (offstr[0] != '\0' && acts[0] != '\0') {
       int offset = atoi(offstr);
@@ -8159,7 +8201,7 @@ void Check_SunriseSunset_Actions() {
     //    printf("DEBUG: Sunrise actions are disabled \r\n");
   }
   if (SetSettings.onsunset && !sset_ok) {
-    char offstr[20], acts[100];
+    char offstr[20], acts[128];
     safe_split(SetSettings.sset_pins, offstr, sizeof(offstr), acts, sizeof(acts), '/');
     if (offstr[0] != '\0' && acts[0] != '\0') {
       int offset = atoi(offstr);
@@ -8182,17 +8224,20 @@ void Check_SunriseSunset_Actions() {
 }
 void processPins(uint16_t i, uint8_t action) {
   // Защита от OOB-доступа к PinsConf[] (ZIGBEE PLAN B)
-  if (i < NUMPIN) {
-    if (PinsConf[i].onoff == 0) {
+  if (i >= 1 && i <= NUMPIN) {
+    if (PinsConf[i - 1].onoff == 0) {
       printf("[processPins] Switch %d DISABLED (master off), action %d blocked\r\n", i, action);
       return;
     }
-  } else {
+  } else if (IsZigbeePin(i)) {
     int zbi = ZbeeIdx(i);
-    if (zbi < NUMZBEE && ZigbeeConf[zbi].onoff == 0) {
+    if (zbi >= 0 && zbi < NUMZBEE && ZigbeeConf[zbi].onoff == 0) {
       printf("[processPins] Zigbee %d DISABLED (master off), action %d blocked\r\n", i, action);
       return;
     }
+  } else {
+    printf("[processPins] invalid pin ID %u\r\n", i);
+    return;
   }
   for (int a = 0; a < NUMPINLINKS; a++) {
     if (PinsLinks[a].idin == i) {
@@ -8223,32 +8268,33 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
                            const struct dbPinsInfo *PinsInfo, uint8_t count) {
   struct mg_str body = mg_str_n(json, strlen(json));
   int id = (int)mg_json_get_long(body, "$.id", -1);
-  if (id < 0 || id >= count) {
+  if (id < 1 || id > count) {
     printf("button ID out of bounds or not found %d\r\n", id);
     if (my_DgnTaskHandle)
       xTaskNotifyGive(my_DgnTaskHandle);
     return;
   }
-  PinsConf[id].ptype = (uint8_t)mg_json_get_long(body, "$.ptype", PinsConf[id].ptype);
+  int pin_idx = id - 1;
+  PinsConf[pin_idx].ptype = (uint8_t)mg_json_get_long(body, "$.ptype", PinsConf[pin_idx].ptype);
   char *action = mg_json_get_str(body, "$.action");
   if (action) {
-    strncpy(PinsConf[id].sclick, action, sizeof(PinsConf[id].sclick) - 1);
-    PinsConf[id].sclick[sizeof(PinsConf[id].sclick) - 1] = '\0';
+    strncpy(PinsConf[pin_idx].sclick, action, sizeof(PinsConf[pin_idx].sclick) - 1);
+    PinsConf[pin_idx].sclick[sizeof(PinsConf[pin_idx].sclick) - 1] = '\0';
     mg_free(action);
   }
   char *send_sms = mg_json_get_str(body, "$.send_sms");
   if (send_sms) {
-    strncpy(PinsConf[id].send_sms, send_sms, sizeof(PinsConf[id].send_sms) - 1);
-    PinsConf[id].send_sms[sizeof(PinsConf[id].send_sms) - 1] = '\0';
+    strncpy(PinsConf[pin_idx].send_sms, send_sms, sizeof(PinsConf[pin_idx].send_sms) - 1);
+    PinsConf[pin_idx].send_sms[sizeof(PinsConf[pin_idx].send_sms) - 1] = '\0';
     mg_free(send_sms);
   }
   char *info = json_get_str_allow_empty(body, "$.info");
   if (info) {
-    strncpy(PinsConf[id].info, info, sizeof(PinsConf[id].info) - 1);
-    PinsConf[id].info[sizeof(PinsConf[id].info) - 1] = '\0';
+    strncpy(PinsConf[pin_idx].info, info, sizeof(PinsConf[pin_idx].info) - 1);
+    PinsConf[pin_idx].info[sizeof(PinsConf[pin_idx].info) - 1] = '\0';
     mg_free(info);
   }
-  PinsConf[id].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[id].onoff);
+  PinsConf[pin_idx].onoff = (uint8_t)mg_json_get_long(body, "$.onoff", PinsConf[pin_idx].onoff);
   int usbnum = 1;
   xQueueSend(usbQueueHandle, &usbnum, 0);
 
@@ -8257,7 +8303,8 @@ void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf,
 }
 
 /* ─── POST /api/security/set: monitoring для виртуального пина (Zigbee-PIR) ───
- * id = NUMPIN + индекс слота. Действие хранится в пуле действий (sclick),
+ * id = NUMPIN + 1 + индекс слота (ZBEE_ID_BASE + zbi).
+ * Действие хранится в пуле действий (sclick),
  * send_sms — флаг в слоте. ptype игнорируется: слот всегда PIR. */
 static void parse_monitoring_json_zbee(const char *json, int zbi) {
   struct mg_str body = mg_str_n(json, strlen(json));
@@ -8341,8 +8388,8 @@ void handle_security_set(struct mg_connection *c, struct mg_http_message *hm) {
         return;
       }
       int mid = (int)mg_json_get_long(body, "$.id", -1);
-      if (mid >= NUMPIN && mid < NUMPIN + NUMZBEE) {
-        parse_monitoring_json_zbee(g_body, mid - NUMPIN);
+      if (IsZigbeePin(mid)) {
+        parse_monitoring_json_zbee(g_body, ZbeeIdx(mid));
       } else {
         parse_monitoring_json(g_body, PinsConf, PinsInfo, NUMPIN);
       }
@@ -8893,13 +8940,13 @@ GPIO_TypeDef *get_gpio_port(const char *pin_str) {
 
 void DHT22_Init(uint8_t index, uint8_t id) {
   dht22[index].id = id;
-  strncpy(dht22[index].pin, PinsInfo[id].pins, sizeof(dht22[index].pin) - 1);
+  strncpy(dht22[index].pin, PinsInfo[id - 1].pins, sizeof(dht22[index].pin) - 1);
   dht22[index].onoff = 1;
   dht22[index].typsensr = 2; // DHT22
   dht22[index].lastread = 0;
 
-  GPIO_TypeDef *port = PinsInfo[id].gpio_name; // GPIOF
-  uint16_t pin = PinsInfo[id].hal_pin;         // GPIO_PIN_6
+  GPIO_TypeDef *port = PinsInfo[id - 1].gpio_name; // GPIOF
+  uint16_t pin = PinsInfo[id - 1].hal_pin;         // GPIO_PIN_6
 
   GPIO_InitTypeDef GPIO_InitStructPrivate = {0};
   GPIO_InitStructPrivate.Pin = pin;
@@ -8913,9 +8960,9 @@ void DHT22_Init(uint8_t index, uint8_t id) {
 
 uint8_t DHT22_Start(uint8_t index) {
   uint8_t Response = 0;
-  if (dht22[index].id >= NUMPIN) return 0; // Safety check
-  GPIO_TypeDef *port = PinsInfo[dht22[index].id].gpio_name;
-  uint16_t pin = PinsInfo[dht22[index].id].hal_pin;
+  if (!IsPinId(dht22[index].id)) return 0; // Safety check
+  GPIO_TypeDef *port = PinsInfo[dht22[index].id - 1].gpio_name;
+  uint16_t pin = PinsInfo[dht22[index].id - 1].hal_pin;
   if (!port) return 0; // Protection against uninitialized pins
   GPIO_InitTypeDef GPIO_InitStructPrivate = {0};
   GPIO_InitStructPrivate.Pin = pin;
@@ -8962,9 +9009,9 @@ uint8_t DHT22_Start(uint8_t index) {
 }
 
 uint8_t DHT22_Read(uint8_t index) {
-  if (dht22[index].id >= NUMPIN) return 0; // Safety check
-  GPIO_TypeDef *port = PinsInfo[dht22[index].id].gpio_name;
-  uint16_t pin = PinsInfo[dht22[index].id].hal_pin;
+  if (!IsPinId(dht22[index].id)) return 0; // Safety check
+  GPIO_TypeDef *port = PinsInfo[dht22[index].id - 1].gpio_name;
+  uint16_t pin = PinsInfo[dht22[index].id - 1].hal_pin;
   if (!port) return 0; // Protection against uninitialized pins
   uint8_t data = 0;
   for (uint8_t i = 0; i < 8; i++) {
@@ -9270,17 +9317,19 @@ void checkPortClockStatus(GPIO_TypeDef *GPIO_Port) {
   }
 }
 
-/* Очередь SMS-тревог: битовая маска по единому пространству ID
- * (0..NUMPIN-1 физические пины, NUMPIN..NUMPIN+NUMZBEE-1 Zigbee-слоты).
+/* Очередь SMS-тревог: битовая маска по индексам слотов (slot = id - 1).
+ * Физические ID 1..NUMPIN -> биты 0..NUMPIN-1,
+ * Zigbee ID NUMPIN+1..NUMPIN+NUMZBEE -> биты NUMPIN..NUMPIN+NUMZBEE-1.
  * Датчики только выставляют бит, а отправляет SMS задача SIM800L
  * (sms_alarm_poll), чтобы не блокировать SecurityTask / MQTT-обработчик
  * и не писать в UART модема из двух задач одновременно. */
 static volatile uint8_t s_sms_alarm_mask[(NUMPIN + NUMZBEE + 7) / 8];
 
 void sms_alarm_request(int id) {
-  if (id < 0 || id >= NUMPIN + NUMZBEE) return;
+  if (id < 1 || id > NUMPIN + NUMZBEE) return;
+  int slot = id - 1;
   taskENTER_CRITICAL();
-  s_sms_alarm_mask[id / 8] |= (uint8_t)(1u << (id % 8));
+  s_sms_alarm_mask[slot / 8] |= (uint8_t)(1u << (slot % 8));
   taskEXIT_CRITICAL();
 }
 
@@ -9306,8 +9355,8 @@ void sms_alarm_poll(void) {
      * порядок отправки тот же: по возрастанию ID. */
     for (uint8_t bit = 0; bit < 8; bit++) {
       if (!(pending & (uint8_t)(1u << bit))) continue;
-      int id = (int)(b * 8u + bit);
-      if (id >= NUMPIN + NUMZBEE) continue;   /* защита от мусорных битов */
+      int id = (int)(b * 8u + bit) + 1;
+      if (id > NUMPIN + NUMZBEE) continue;   /* защита от мусорных битов */
       send_sms(id);
     }
   }
@@ -9336,7 +9385,7 @@ static int remote_onoff_pin(int id, int sub, uint8_t onoff, char *label,
   const int label_sub = sub;
 
   /* ID 0 - не строка таблицы (нумерация пинов начинается с 1) */
-  if (id < 1 || id > 999) return 0;
+  if (id < 1 || id > ZBEE_ID_MAX) return 0;
 
   if (sub > 0) {
     /* Дочерняя строка Zigbee: "N.M" - ищем слот по display id */
@@ -9353,39 +9402,40 @@ static int remote_onoff_pin(int id, int sub, uint8_t onoff, char *label,
       }
     }
     if (found < 0) return 0;
-    id = NUMPIN + found;
-  } else if (id >= NUMPIN) {
-    int zi = id - NUMPIN;
+    id = ZbeeIdFromIdx(found);
+  } else if (IsZigbeePin(id)) {
+    int zi = ZbeeIdx(id);
     if (zi >= NUMZBEE || ZigbeeConf[zi].zbee_ieee[0] == '\0') return 0;
   } else {
     /* Физический пин: только типы, у которых есть колонка On/Off.
-     * Пин 1 - общий ползунок SIM800L (страница Security). */
-    uint8_t t = PinsConf[id].topin;
-    if (id != 1 && t != 1 && t != 3 && t != 4 && t != 5 && t != 8 && t != 9 &&
+     * ID 2 (индекс 1) - общий ползунок SIM800L (страница Security). */
+    uint8_t t = PinsConf[id - 1].topin;
+    if (id != 2 && t != 1 && t != 3 && t != 4 && t != 5 && t != 8 && t != 9 &&
         t != 10)
       return 0;
     /* PWM: рубильник только у строки PWM без энкодера и без PID. У PWM с
      * энкодером рубильник у энкодера (его ID), у PID - слот PID (55/66). Во
      * время AutoTune настройки PWM заблокированы. Иначе команда не имела бы
      * эффекта, а SMS-отчёт показал бы ложный успех. */
-    if (id != 1 && t == 5 &&
-        (pwm_owned_by_pid((uint8_t)id) || pwm_has_encoder_link((uint8_t)id) ||
-         is_pin_in_autotune((uint8_t)id)))
+    if (id != 2 && t == 5 &&
+        (pwm_owned_by_pid((uint8_t)(id - 1)) ||
+         pwm_has_encoder_link((uint8_t)(id - 1)) ||
+         is_pin_in_autotune((uint8_t)(id - 1))))
       return 0;
   }
 
-  if (id < NUMPIN && PinsConf[id].topin == 4) {
+  if (IsPinId(id) && PinsConf[id - 1].topin == 4) {
     /* OneWire: On/Off хранится в записи сенсора (DS18B20 / DHT22) */
     int done = 0;
     taskENTER_CRITICAL();
     for (int j = 0; j < MAX_DS18B20_P && !done; j++) {
-      if (ds18b20[j].typsensr == 1 && ds18b20[j].id == id) {
+      if (ds18b20[j].typsensr == 1 && ds18b20[j].id == (uint8_t)id) {
         ds18b20[j].onoff = onoff;
         done = 1;
       }
     }
     for (int j = 0; j < MAX_DHT22_P && !done; j++) {
-      if (dht22[j].typsensr == 2 && dht22[j].id == id) {
+      if (dht22[j].typsensr == 2 && dht22[j].id == (uint8_t)id) {
         dht22[j].onoff = onoff;
         done = 1;
       }
@@ -9403,8 +9453,8 @@ static int remote_onoff_pin(int id, int sub, uint8_t onoff, char *label,
     snprintf(json, sizeof(json), "{\"id\":%d,\"onoff\":%d}", id, (int)onoff);
     parse_onoff_json(json, PinsConf, NUMPIN);
 
-    if (id < NUMPIN) {
-      switch (PinsConf[id].topin) {
+    if (IsPinId(id)) {
+      switch (PinsConf[id - 1].topin) {
         case 1:  mark_slice_dirty(&g_ver_button);   break;
         case 3:  mark_slice_dirty(&g_ver_switch);   break;
         case 5:
@@ -9413,7 +9463,7 @@ static int remote_onoff_pin(int id, int sub, uint8_t onoff, char *label,
         case 10: mark_slice_dirty(&g_ver_security); break;
         default: break;
       }
-      if (id == 1 && PinsConf[id].topin != 10) mark_slice_dirty(&g_ver_security);
+      if (id == 2 && PinsConf[id - 1].topin != 10) mark_slice_dirty(&g_ver_security);
       mark_slice_dirty(&g_ver_pins);
       /* parse_onoff_json сохраняет не чаще раза в 5 с - сохраняем явно */
       remote_onoff_save(1); /* pins.ini */
@@ -9520,8 +9570,8 @@ void send_sms(int index) {
   }
 
   /* Zigbee PIR: флаг Send SMS хранится в ZigbeeConf[].sec_send_sms */
-  if (index >= NUMPIN && index < NUMPIN + NUMZBEE) {
-    int zbi = index - NUMPIN;
+  if (IsZigbeePin(index)) {
+    int zbi = ZbeeIdx(index);
     if (PinsConf[1].onoff != 1 || !ZigbeeConf[zbi].sec_send_sms ||
         !ZigbeeConf[zbi].onoff || SetSettings.tel[0] == '\0') {
       return;
@@ -9546,10 +9596,10 @@ void send_sms(int index) {
     HAL_UART_Transmit(GSM, &zctrlZ, 1, 1000);
     return;
   }
-  if (index < 0 || index >= NUMPIN) return;
+  if (!IsPinId(index)) return;
 
   // Regular SMS handling
-  if (PinsConf[1].onoff == 1 && strcmp(PinsConf[index].send_sms, "YES") == 0) {
+  if (PinsConf[1].onoff == 1 && strcmp(PinsConf[index - 1].send_sms, "YES") == 0) {
     osDelay(1000);
     // Устанавливаем формат номера
     HAL_UART_Transmit(GSM, (uint8_t *)"AT+CSCS=\"GSM\"\r\n",
@@ -9572,7 +9622,7 @@ void send_sms(int index) {
     // Формируем новое сообщение в формате "ALARM:%d:%d:%s"
     char message[GSM_RX_BUFFER_SIZE];
     snprintf(message, GSM_RX_BUFFER_SIZE, "ALARM:ID=%d:%s", index,
-             PinsConf[index].info);
+             PinsConf[index - 1].info);
     HAL_UART_Transmit(GSM, (uint8_t *)message, strlen(message), 1000);
     osDelay(100);
     uint8_t ctrlZ = 26;
@@ -9733,8 +9783,9 @@ void check_ds18b20_changes(uint8_t pin_id, uint8_t sensor_id) {
 static uint32_t s_mqtt_rate_tick  = 0;
 static uint16_t s_mqtt_rate_count = 0;
 
-void mqtt_queue_send_safe(uint8_t command, uint8_t deviceId,
+void mqtt_queue_send_safe(uint8_t command, uint16_t deviceId,
                           uint8_t state, uint8_t reserved) {
+  (void)reserved;
 
   uint32_t now = HAL_GetTick();
 
@@ -9756,8 +9807,7 @@ void mqtt_queue_send_safe(uint8_t command, uint8_t deviceId,
   MqttMessage_t msg = {
     .command  = command,
     .deviceId = deviceId,
-    .state    = state,
-    .reserved = reserved
+    .state    = state
   };
 
   if (xQueueSend(mqttQueueHandle, &msg, 0) == pdPASS) {
@@ -9869,7 +9919,7 @@ void publish_sensor_batch(struct mg_connection *conn) {
       int added = snprintf(batch_buf + off, avail,
                       "%s\"p%d\":%d",
                       count > 0 ? "," : "",
-                      i, PinsConf[i].dvalue);
+                      i + 1, PinsConf[i].dvalue);
       if (added > 0 && added < avail) {
         off += added;
         prev_pwm_dvalue[i] = PinsConf[i].dvalue;
@@ -9981,15 +10031,16 @@ void send_mqtt_timer_batch(struct mg_connection *conn) {
       if (strncmp(tok, "pwm:", 4) == 0) {
         /* PWM: "pwm:<id>" + 3 аргумента (dur, start, end) */
         int pid = atoi(tok + 4);
-        if (pid >= 0 && pid < NUMPIN && PinsConf[pid].topin == 5) {
-          int duty = PinsConf[pid].dvalue;
-          if (prev_duty[pid] != (int16_t)duty) {
-            prev_duty[pid] = (int16_t)duty;
+        if (IsPinId(pid) && PinsConf[pid - 1].topin == 5) {
+          int pidx = pid - 1;
+          int duty = PinsConf[pidx].dvalue;
+          if (prev_duty[pidx] != (int16_t)duty) {
+            prev_duty[pidx] = (int16_t)duty;
             has_changes = true;
           }
           off += snprintf(tbuf + off, avail,
                           "%s{\"pwmid\":\"%d\",\"duty\":\"%d\",\"info\":\"%.29s\"}",
-                          pcnt > 0 ? "," : "", pid, duty, PinsConf[pid].info);
+                          pcnt > 0 ? "," : "", pid, duty, PinsConf[pidx].info);
           pcnt++;
         }
         /* Пропускаем 3 аргумента (dur, start, end) */
@@ -10000,16 +10051,17 @@ void send_mqtt_timer_batch(struct mg_connection *conn) {
       } else {
         /* Обычный: "id:action" */
         int pid = atoi(tok);
-        if (pid > 0 && pid < NUMPIN) {
-          uint8_t st = PinsConf[pid].on;
-          if (prev_gpio[pid] != st) {
-            prev_gpio[pid] = st;
+        if (IsPinId(pid)) {
+          int pidx = pid - 1;
+          uint8_t st = PinsConf[pidx].on;
+          if (prev_gpio[pidx] != st) {
+            prev_gpio[pidx] = st;
             has_changes = true;
           }
           off += snprintf(tbuf + off, avail,
                           "%s{\"id\":\"%d\",\"state\":\"%s\",\"info\":\"%.29s\"}",
                           pcnt > 0 ? "," : "", pid,
-                          st ? "ON" : "OFF", PinsConf[pid].info);
+                          st ? "ON" : "OFF", PinsConf[pidx].info);
           pcnt++;
         }
       }
@@ -10640,18 +10692,18 @@ void gen_pid_json(char *buffer, int buffer_size) {
 
     /* Имя PWM-пина и его Duty */
     const char *pin_name = "";
-    uint8_t pin_id = PidConf[i].pwm_pin_id;
+    uint16_t pin_id = PidConf[i].pwm_pin_id;
     int current_duty = 0;
-    if (pin_id > 0 && pin_id < NUMPIN) {
-      pin_name = PinsInfo[pin_id].pins;
-      current_duty = PinsConf[pin_id].dvalue;
+    if (pin_id >= 1 && pin_id <= NUMPIN) {
+      pin_name = PinsInfo[pin_id - 1].pins;
+      current_duty = PinsConf[pin_id - 1].dvalue;
     }
 
     pos += snprintf(buffer + pos, buffer_size - pos,
                     "{\"id\":%d,\"pins\":\"%s\",\"pinact\":", i + 1, pin_name);
 
     /* pinact объект */
-    if (pin_id > 0 && pin_id < NUMPIN) {
+    if (pin_id >= 1 && pin_id <= NUMPIN) {
       pos += snprintf(buffer + pos, buffer_size - pos, "{\"%s\":%d}", pin_name,
                       pin_id);
     } else {
@@ -10660,10 +10712,10 @@ void gen_pid_json(char *buffer, int buffer_size) {
 
     char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), PidConf[i].tmpset, 1);
     char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), PidConf[i].tmpcur, 1);
-    uint8_t sp_id = PidConf[i].sensor_pin_id;
+    uint16_t sp_id = PidConf[i].sensor_pin_id;
     const char *sp_name = (PidConf[i].selsens != PID_SENS_NONE &&
-                           sp_id > 0 && sp_id < NUMPIN)
-                          ? PinsInfo[sp_id].pins : "";
+                           sp_id >= 1 && sp_id <= NUMPIN)
+                          ? PinsInfo[sp_id - 1].pins : "";
     int tmpok = (PidConf[i].selsens != PID_SENS_NONE &&
                  PidConf[i].stale_cnt == 0) ? 1 : 0;
     char ce_raw[COND_LEN];
@@ -10749,7 +10801,9 @@ void parse_pid_json(const char *json) {
     size_t pos = 0;
     struct mg_str key, val;
     if ((pos = mg_json_next(pa, pos, &key, &val)) > 0) {
-      PidConf[id].pwm_pin_id = (uint8_t)mg_json_get_long(val, "$", 0);
+      long pwm = mg_json_get_long(val, "$", 0);
+      if (pwm == 0 || IsPinId((int)pwm))
+        PidConf[id].pwm_pin_id = (uint16_t)pwm;
     }
   }
 
@@ -10771,7 +10825,9 @@ void parse_pid_json(const char *json) {
   }
 
   if (mg_json_get(body, "$.sensor_pin_id", NULL) >= 0) {
-    PidConf[id].sensor_pin_id = (uint8_t)mg_json_get_long(body, "$.sensor_pin_id", 0);
+    long sp = mg_json_get_long(body, "$.sensor_pin_id", 0);
+    if (sp == 0 || IsPinId((int)sp))
+      PidConf[id].sensor_pin_id = (uint16_t)sp;
   }
 
   if (mg_json_get(body, "$.presets", NULL) >= 0) {
@@ -10905,12 +10961,12 @@ void handle_pid_get(struct mg_connection *c) {
       mg_send(c, ",", 1);
 
     const char *pin_name = "";
-    uint8_t pin_id = pid.pwm_pin_id;
+    uint16_t pin_id = pid.pwm_pin_id;
     int current_duty = 0;
-    if (pin_id > 0 && pin_id < NUMPIN) {
-      pin_name = PinsInfo[pin_id].pins;
+    if (pin_id >= 1 && pin_id <= NUMPIN) {
+      pin_name = PinsInfo[pin_id - 1].pins;
       taskENTER_CRITICAL();
-      current_duty = PinsConf[pin_id].dvalue;
+      current_duty = PinsConf[pin_id - 1].dvalue;
       taskEXIT_CRITICAL();
     }
 
@@ -10919,7 +10975,7 @@ void handle_pid_get(struct mg_connection *c) {
                    i + 1, pin_name);
     mg_http_write_chunk(c, buf, (size_t)len);
 
-    if (pin_id > 0 && pin_id < NUMPIN) {
+    if (pin_id >= 1 && pin_id <= NUMPIN) {
       len = snprintf(buf, sizeof(buf), "{\"%s\":%d}", pin_name, pin_id);
     } else {
       len = snprintf(buf, sizeof(buf), "{}");
@@ -10928,10 +10984,10 @@ void handle_pid_get(struct mg_connection *c) {
 
     { char s_ts[16]; fmt_float(s_ts, sizeof(s_ts), pid.tmpset, 1);
       char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), pid.tmpcur, 1);
-      uint8_t sp_id = pid.sensor_pin_id;
+      uint16_t sp_id = pid.sensor_pin_id;
       const char *sp_name = (pid.selsens != PID_SENS_NONE &&
-                             sp_id > 0 && sp_id < NUMPIN)
-                            ? PinsInfo[sp_id].pins : "";
+                             sp_id >= 1 && sp_id <= NUMPIN)
+                            ? PinsInfo[sp_id - 1].pins : "";
       int tmpok = (pid.selsens != PID_SENS_NONE && pid.stale_cnt == 0) ? 1 : 0;
       char ce_raw[COND_LEN];
       char ce_expr[2 * COND_LEN + 8];
@@ -11065,7 +11121,7 @@ float pid_read_temperature(int slot) {
 /* ──── is_pin_in_autotune: true если pin_id занят автотюном PID ──── */
 bool is_pin_in_autotune(uint8_t pin_id) {
   for (int i = 0; i < PID_MAX_SLOTS; i++) {
-    if (PidConf[i].pwm_pin_id == pin_id &&
+    if (PidConf[i].pwm_pin_id == (uint16_t)(pin_id + 1) &&
         (PidConf[i].tune_state == PID_TUNE_STEP ||
          PidConf[i].tune_state == PID_TUNE_BIAS)) {
       return true;
@@ -11078,23 +11134,24 @@ bool is_pin_in_autotune(uint8_t pin_id) {
 void pid_set_pwm(int slot, uint8_t duty) {
   if (slot < 0 || slot >= PID_MAX_SLOTS)
     return;
-  uint8_t pin_id = PidConf[slot].pwm_pin_id;
-  if (pin_id == 0 || pin_id >= NUMPIN)
+  uint16_t pin_id = PidConf[slot].pwm_pin_id;
+  if (pin_id < 1 || pin_id > NUMPIN)
     return;
-  if (PinsConf[pin_id].topin != 5)
+  int pin_idx = pin_id - 1;
+  if (PinsConf[pin_idx].topin != 5)
     return; /* не PWM-пин */
 
   if (duty > 100)
     duty = 100;
 
   /* Записываем duty в PinsConf для консистентности */
-  PinsConf[pin_id].dvalue = duty;
+  PinsConf[pin_idx].dvalue = duty;
 
   /* Расчёт pulse аналогично InitPin (setings.c) */
-  uint32_t period = PinsConf[pin_id].pwmmax;
+  uint32_t period = PinsConf[pin_idx].pwmmax;
   uint32_t pulse = (uint32_t)((uint64_t)duty * period / 100ULL);
 
-  __HAL_TIM_SET_COMPARE(&htim[pin_id], PinsInfo[pin_id].tim_channel, pulse);
+  __HAL_TIM_SET_COMPARE(&htim[pin_idx], PinsInfo[pin_idx].tim_channel, pulse);
 }
 
 /* ──── pid_set_pwm_f: устанавливает duty% (float) на PWM-пин ──── */
@@ -11102,10 +11159,11 @@ void pid_set_pwm(int slot, uint8_t duty) {
 void pid_set_pwm_f(int slot, float duty) {
   if (slot < 0 || slot >= PID_MAX_SLOTS)
     return;
-  uint8_t pin_id = PidConf[slot].pwm_pin_id;
-  if (pin_id == 0 || pin_id >= NUMPIN)
+  uint16_t pin_id = PidConf[slot].pwm_pin_id;
+  if (pin_id < 1 || pin_id > NUMPIN)
     return;
-  if (PinsConf[pin_id].topin != 5)
+  int pin_idx = pin_id - 1;
+  if (PinsConf[pin_idx].topin != 5)
     return; /* не PWM-пин */
 
   if (duty < 0.0f)
@@ -11114,13 +11172,13 @@ void pid_set_pwm_f(int slot, float duty) {
     duty = 100.0f;
 
   /* Записываем округлённое значение в dvalue для UI */
-  PinsConf[pin_id].dvalue = (int)(duty + 0.5f);
+  PinsConf[pin_idx].dvalue = (int)(duty + 0.5f);
 
   /* Расчёт pulse с дробной точностью */
-  uint32_t period = PinsConf[pin_id].pwmmax;
+  uint32_t period = PinsConf[pin_idx].pwmmax;
   uint32_t pulse = (uint32_t)(duty * (float)period / 100.0f + 0.5f);
 
-  __HAL_TIM_SET_COMPARE(&htim[pin_id], PinsInfo[pin_id].tim_channel, pulse);
+  __HAL_TIM_SET_COMPARE(&htim[pin_idx], PinsInfo[pin_idx].tim_channel, pulse);
 }
 
 /* ──── Адаптивная стабилизация: утилита ──── */
@@ -11729,7 +11787,7 @@ void calc_display_id(int parent_id, int zbee_slot, int trigger_index,
 
 void calc_zigbee_display_id(int index, char *out, size_t out_size) {
     if (index < 0 || index >= NUMZBEE || ZigbeeConf[index].zbee_ieee[0] == '\0') {
-        snprintf(out, out_size, "%d", NUMPIN + (index >= 0 && index < NUMZBEE ? index : 0));
+        snprintf(out, out_size, "%d", ZbeeIdFromIdx((index >= 0 && index < NUMZBEE) ? index : 0));
         return;
     }
 
@@ -11757,7 +11815,7 @@ void calc_zigbee_display_id(int index, char *out, size_t out_size) {
                 sub_idx++;
             }
         }
-        snprintf(out, out_size, "%d.%d", NUMPIN + parent_idx, sub_idx + 1);
+        snprintf(out, out_size, "%d.%d", ZbeeIdFromIdx(parent_idx), sub_idx + 1);
         return;
     }
 
@@ -11779,9 +11837,9 @@ void calc_zigbee_display_id(int index, char *out, size_t out_size) {
                 sub_idx++;
             }
         }
-        snprintf(out, out_size, "%d.%d", NUMPIN + head_idx, sub_idx + 1);
+        snprintf(out, out_size, "%d.%d", ZbeeIdFromIdx(head_idx), sub_idx + 1);
     } else {
-        snprintf(out, out_size, "%d", NUMPIN + index);
+        snprintf(out, out_size, "%d", ZbeeIdFromIdx(index));
     }
 }
 
@@ -11919,7 +11977,7 @@ void handle_zigbee_get(struct mg_connection *c, long offset_req, long limit_req,
       "\"onoff\":%d,\"brightness\":%d,\"color_hex\":\"%06X\",\"info\":\"%s\","
       "\"role\":%d,\"ep_onoff\":%d,\"ep_brightness\":%d,\"ep_color\":%d,\"override\":%d}",
       (first ? "" : ","),
-      NUMPIN + i, display_id, ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint,
+      ZbeeIdFromIdx(i), display_id, ZigbeeConf[i].zbee_ieee, ZigbeeConf[i].zbee_endpoint,
       clbuf, type, icon,
       ZigbeeConf[i].onoff, ZigbeeConf[i].dvalue,
       ZigbeeConf[i].color_hex & 0xFFFFFF,
@@ -11944,7 +12002,7 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
   struct mg_str json = mg_str(body);
 
   int id = (int)mg_json_get_long(json, "$.id", -1);
-  if (id >= NUMPIN) id -= NUMPIN;
+  if (IsZigbeePin(id)) id = ZbeeIdx(id);
   if (id >= 0 && id < NUMZBEE) {
     bool config_changed = false;  /* Только для полей, требующих записи на флешку */
 
@@ -12077,7 +12135,7 @@ void handle_zigbee_enable(struct mg_connection *c, struct mg_http_message *hm) {
   struct mg_str json = mg_str(body);
 
   int id = (int)mg_json_get_long(json, "$.id", -1);
-  if (id >= NUMPIN) id -= NUMPIN;
+  if (IsZigbeePin(id)) id = ZbeeIdx(id);
   int onoff = (int)mg_json_get_long(json, "$.onoff", -1);
 
   if (id < 0 || id >= NUMZBEE || onoff < 0 || onoff > 1) {
@@ -12106,17 +12164,14 @@ void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm) 
   int onoff_cmd = (int)mg_json_get_long(json, "$.onoff", -1);
   char *trigger_str = mg_json_get_str(json, "$.trigger");
 
-  /* Определяем zbee_idx: для триггеров id >= NUMPIN */
+  /* id приходит логическим 90..289 */
   int zbee_idx = -1;
-  if (id >= NUMPIN) {
-    int slot_candidate = id - NUMPIN;
-    /* Check if this slot exists */
+  if (IsZigbeePin(id)) {
+    int slot_candidate = ZbeeIdx(id);
     if (slot_candidate >= 0 && slot_candidate < NUMZBEE &&
         ZigbeeConf[slot_candidate].zbee_ieee[0] != '\0') {
       zbee_idx = slot_candidate;
     }
-  } else {
-    zbee_idx = id;
   }
 
   if (zbee_idx < 0 || zbee_idx >= NUMZBEE) {
@@ -12172,7 +12227,7 @@ void handle_zigbee_rescan(struct mg_connection *c, struct mg_http_message *hm) {
   struct mg_str json = mg_str(body);
 
   int id = (int)mg_json_get_long(json, "$.id", -1);
-  if (id >= NUMPIN) id -= NUMPIN;
+  if (IsZigbeePin(id)) id = ZbeeIdx(id);
 
   if (id < 0 || id >= NUMZBEE) {
     mg_http_reply(c, 400, "Content-Type: application/json\r\n",

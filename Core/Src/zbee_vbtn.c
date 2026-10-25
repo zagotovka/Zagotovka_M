@@ -108,7 +108,7 @@ void vbtn_execute(int slot, int event_type) {
     }
 
     if (action_str && action_str[0] && strcmp(action_str, "None") != 0) {
-        uint8_t btn_id = (uint8_t)(NUMPIN + slot);
+        uint16_t btn_id = (uint16_t)ZbeeIdFromIdx(slot);
         const char *event_name[] = {"[SINGLE CLICK]", "[DOUBLE CLICK]", "[LONG PRESS]"};
         LOG_SYSTEM("%s Zigbee Button %d: %s", event_name[event_type], btn_id, action_str);
         action_handler(btn_id, action_str, press_type);

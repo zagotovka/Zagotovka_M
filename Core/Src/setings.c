@@ -18,6 +18,8 @@
 #include "cond_eval.h" /* пул встроенных выражений условий */
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
 #include "dtcm_alloc.h"
 
 #include "FreeRTOS.h"
@@ -49,6 +51,249 @@ int pinindex = -1;       //  Current pin index
 int sensidx = -1;        // Current sensor index
 uint8_t typensor = 0;    // Current Type Sensor
 static int temp_id = -1; // Временное хранение ID до определения типа
+static bool g_idm_shift_overflow; // число не поместилось при миграции
+
+/* ── Миграция старых ID (0..288) в новые (1..289) ──
+ * Старая схема: физические 0..88, Zigbee 89..288. Новая: физические 1..89,
+ * Zigbee 90..289. Поэтому любое старое непустое значение сдвигается на +1.
+ * 0 в действиях/условиях означал PA0 и тоже становится 1. */
+static int idm_shift_id(int v) {
+  if (v >= 0 && v <= 288) return v + 1;
+  return v;
+}
+
+/* Сдвинуть десятичное число в позиции num внутри буфера, последний байт
+ * которого end (перед '\0'). Значение растёт максимум на 1 знак; если места
+ * нет — число остаётся прежним, а g_idm_shift_overflow выставляется в true.
+ * Правит строку на месте, без временных буферов.
+ * Возвращает указатель за новым числом. */
+static char *idm_shift_num_inplace(char *num, char *end) {
+  char *p = num;
+  long v = 0;
+  while (p <= end && isdigit((unsigned char)*p)) {
+    v = v * 10 + (*p - '0');
+    p++;
+  }
+  if (p == num) return num; /* не число */
+  long nv = idm_shift_id((int)v);
+  int nd = 1;
+  for (long t = nv; t >= 10; t /= 10) nd++;
+  int od = (int)(p - num);
+  size_t rest = strlen(p); /* хвост строки + '\0' */
+  if (p + rest + (size_t)(nd - od) > end) {
+    g_idm_shift_overflow = true;
+    return p; /* не влезает — не трогаем */
+  }
+  memmove(num + nd, p, rest + 1);
+  for (int i = nd - 1; i >= 0; i--) {
+    num[i] = (char)('0' + (int)(nv % 10));
+    nv /= 10;
+  }
+  return num + nd;
+}
+
+/* Сдвиг ID в выражениях условий: D/R/DV/RV/B/BH/BU/T/H<id>. C<n> не трогаем.
+ * Правит строку на месте, без временных буферов. Останавливается на '\0' или
+ * ',' (запятых внутри выражений условий не бывает). */
+static void idm_shift_expr(char *s, size_t cap) {
+  if (!s || !s[0] || cap == 0) return;
+  char *end = s + cap - 1;
+  char *p = s;
+  while (*p && *p != ',' && p <= end) {
+    char l = (char)tolower((unsigned char)*p);
+    int prefix = 0;
+    if (p[1] && p[2] && (l == 'd' || l == 'r') &&
+        tolower((unsigned char)p[1]) == 'v' && isdigit((unsigned char)p[2]))
+      prefix = 2;
+    else if (p[1] && p[2] && l == 'b' &&
+             (tolower((unsigned char)p[1]) == 'h' ||
+              tolower((unsigned char)p[1]) == 'u') &&
+             isdigit((unsigned char)p[2]))
+      prefix = 2;
+    else if (p[1] && (l == 'd' || l == 'r' || l == 'b' || l == 't' || l == 'h') &&
+             isdigit((unsigned char)p[1]))
+      prefix = 1;
+    if (prefix) {
+      p = idm_shift_num_inplace(p + prefix, end);
+      continue;
+    }
+    if (l == 'c' && isdigit((unsigned char)p[1])) {
+      /* Ссылка на библиотеку условий: номер не сдвигаем */
+      p += 2;
+      while (*p && isdigit((unsigned char)*p)) p++;
+      continue;
+    }
+    p++;
+  }
+}
+
+/* Сдвиг строки действий: "6:1,pwm:0,1,80,80?D1,93.1:2".
+ * После "pwm:" сдвигается только первый параметр (ID); длительность/яркость
+ * не трогаем. Условие после '?' обрабатывается отдельно.
+ * Правит строку на месте, без временных буферов. */
+static void idm_shift_action(char *s, size_t cap) {
+  if (!s || !s[0] || cap == 0) return;
+  char *end = s + cap - 1;
+  char *p = s;
+  int pwm_left = 0;
+  while (*p && p <= end) {
+    /* 1. Сдвинуть ведущий ID токена (или ID после "pwm:"). */
+    if (pwm_left > 0) {
+      pwm_left--;
+    } else if (strncmp(p, "pwm:", 4) == 0 && isdigit((unsigned char)p[4])) {
+      idm_shift_num_inplace(p + 4, end);
+      pwm_left = 3;
+    } else if (p[0] == 'p' && isdigit((unsigned char)p[1])) {
+      /* Пауза "p<seconds>" — не ID */
+    } else if (isdigit((unsigned char)p[0])) {
+      idm_shift_num_inplace(p, end);
+    }
+    /* 2. Найти токен заново (после возможного роста) и сдвинуть условие. */
+    char *tokend = p;
+    while (*tokend && *tokend != ',') tokend++;
+    char *cond = p;
+    while (cond < tokend && *cond != '?') cond++;
+    if (cond < tokend) {
+      idm_shift_expr(cond + 1, (size_t)(end - cond));
+      tokend = p;
+      while (*tokend && *tokend != ',') tokend++;
+    }
+    p = tokend;
+    if (*p == ',') p++;
+  }
+}
+
+/* "offset/actions" для sunrise/sunset: offset (секунды) не сдвигаем. */
+static void idm_shift_sunset(char *s, size_t cap) {
+  if (!s || !s[0]) return;
+  char *slash = strchr(s, '/');
+  if (slash) idm_shift_action(slash + 1, cap - (size_t)(slash + 1 - s));
+  else idm_shift_action(s, cap);
+}
+
+/* Применить сдвиг к копии поля и записать обратно только при полном успехе.
+ * Если хотя бы одно число не поместилось, исходная строка не меняется. */
+static bool idm_shift_atomic(char *s, size_t cap,
+                             void (*shift)(char *, size_t),
+                             const char *what, int row) {
+  if (!s || !s[0] || cap == 0) return true;
+
+  char tmp[255];
+  if (cap > sizeof(tmp)) {
+    printf("[MIGRATE] %s: field too large, IDs left unchanged\r\n", what);
+    return false;
+  }
+
+  memcpy(tmp, s, cap);
+  g_idm_shift_overflow = false;
+  shift(tmp, cap);
+  if (g_idm_shift_overflow) {
+    if (row >= 0)
+      printf("[MIGRATE] %s index %d: field too long, IDs left unchanged\r\n",
+             what, row);
+    else
+      printf("[MIGRATE] %s: field too long, IDs left unchanged\r\n", what);
+    return false;
+  }
+
+  memcpy(s, tmp, cap);
+  return true;
+}
+
+/* pintopin.ini: (0,0) — пустая запись; одиночный 0 — это PA0. */
+static int idm_shift_link_side(int v, int other) {
+  if (v == 0) return (other == 0) ? 0 : 1;
+  if (v >= 1 && v <= 288) return v + 1;
+  return v;
+}
+
+static void idm_shift_pintopin(void) {
+  if (!PinsLinks) return;
+  for (int i = 0; i < NUMPINLINKS; i++) {
+    int in = PinsLinks[i].idin;
+    int out = PinsLinks[i].idout;
+    if (in == 0 && out == 0) continue;
+    PinsLinks[i].idin = (short)idm_shift_link_side(in, out);
+    PinsLinks[i].idout = (short)idm_shift_link_side(out, in);
+  }
+}
+
+static void idm_shift_pins_conf(void) {
+  for (int i = 0; i < NUMPIN; i++) {
+    uint8_t e = PinsConf[i].encoderb;
+    if (e >= 1 && e <= NUMPIN - 1) PinsConf[i].encoderb = (uint8_t)(e + 1);
+    uint16_t zb = PinsConf[i].zbee_bind_id;
+    if (zb >= NUMPIN && zb <= NUMPIN + NUMZBEE - 1)
+      PinsConf[i].zbee_bind_id = (uint16_t)(zb + 1);
+    idm_shift_atomic(PinsConf[i].sclick, sizeof(PinsConf[i].sclick),
+                     idm_shift_action, "pins.ini sclick", i);
+    idm_shift_atomic(PinsConf[i].dclick, sizeof(PinsConf[i].dclick),
+                     idm_shift_action, "pins.ini dclick", i);
+    idm_shift_atomic(PinsConf[i].lpress, sizeof(PinsConf[i].lpress),
+                     idm_shift_action, "pins.ini lpress", i);
+  }
+}
+
+static void idm_shift_onewire(void) {
+  for (int i = 0; i < MAX_DS18B20_P; i++) {
+    if (ds18b20[i].typsensr != 1) continue;
+    if (ds18b20[i].id >= 0 && ds18b20[i].id <= NUMPIN - 1)
+      ds18b20[i].id = (uint8_t)(ds18b20[i].id + 1);
+    for (int j = 0; j < ds18b20[i].numsens && j < MAX_DS18B20_PER_PIN; j++) {
+      idm_shift_atomic(ds18b20[i].sensors[j].actup,
+                       sizeof(ds18b20[i].sensors[j].actup),
+                       idm_shift_action, "onewire.ini actup", i);
+      idm_shift_atomic(ds18b20[i].sensors[j].actlow,
+                       sizeof(ds18b20[i].sensors[j].actlow),
+                       idm_shift_action, "onewire.ini actlow", i);
+    }
+  }
+  if (dht22) {
+    for (int i = 0; i < MAX_DHT22_P; i++) {
+      if (dht22[i].typsensr != 2) continue;
+      if (dht22[i].id >= 0 && dht22[i].id <= NUMPIN - 1)
+        dht22[i].id = (uint8_t)(dht22[i].id + 1);
+      idm_shift_atomic(dht22[i].actup, sizeof(dht22[i].actup),
+                       idm_shift_action, "onewire.ini dht22 actup", i);
+      idm_shift_atomic(dht22[i].actlow, sizeof(dht22[i].actlow),
+                       idm_shift_action, "onewire.ini dht22 actlow", i);
+      idm_shift_atomic(dht22[i].actuh, sizeof(dht22[i].actuh),
+                       idm_shift_action, "onewire.ini dht22 actuh", i);
+      idm_shift_atomic(dht22[i].actlh, sizeof(dht22[i].actlh),
+                       idm_shift_action, "onewire.ini dht22 actlh", i);
+    }
+  }
+}
+
+static void idm_shift_cron(void) {
+  for (int i = 0; i < NUMTASK; i++)
+    idm_shift_atomic(dbCrontxt[i].activ, sizeof(dbCrontxt[i].activ),
+                     idm_shift_action, "cron.ini activ", i);
+}
+
+static void idm_shift_settings(void) {
+  idm_shift_atomic(SetSettings.srise_pins, sizeof(SetSettings.srise_pins),
+                   idm_shift_sunset, "settings.ini srise_pins", -1);
+  idm_shift_atomic(SetSettings.sset_pins, sizeof(SetSettings.sset_pins),
+                   idm_shift_sunset, "settings.ini sset_pins", -1);
+  for (int i = 0; i < NUMCOND; i++)
+    idm_shift_atomic(SetSettings.conds[i], sizeof(SetSettings.conds[i]),
+                     idm_shift_expr, "settings.ini cond", i);
+}
+
+static void idm_shift_pid(void) {
+  for (int i = 0; i < PID_MAX_SLOTS; i++) {
+    if (PidConf[i].pwm_pin_id >= 1 && PidConf[i].pwm_pin_id <= NUMPIN - 1)
+      PidConf[i].pwm_pin_id = (uint8_t)(PidConf[i].pwm_pin_id + 1);
+    if (PidConf[i].sensor_pin_id >= 1 &&
+        PidConf[i].sensor_pin_id <= NUMPIN - 1)
+      PidConf[i].sensor_pin_id = (uint8_t)(PidConf[i].sensor_pin_id + 1);
+  }
+}
+
+static int g_pins_idver = 1;
+static int g_cron_idver = 1;
+static int g_ow_idver = 1;
 
 // Функция включает тактирование на указанном порту.
 // Обёртка над checkPortClockStatus() для обратной совместимости (char* → GPIO_TypeDef*).
@@ -114,6 +359,7 @@ void SetSettingsConfig() {
   }
   // Write opening bracket
   f_write(&USBHFile, "{", 1, &bytesWritten);
+  writeField(&USBHFile, buffer, "idver", "%d", CONFIG_ID_VERSION);
   // Write string fields
   writeField(&USBHFile, buffer, "adm_name", "\"%s\"", SetSettings.adm_name);
   writeField(&USBHFile, buffer, "adm_pswd", "\"%s\"", SetSettings.adm_pswd);
@@ -225,7 +471,7 @@ void StartSettingsConfig() {
 
   // Write opening bracket
   f_write(&USBHFile, "{", 1, &bytesWritten);
-
+  writeField(&USBHFile, buffer, "idver", "%d", CONFIG_ID_VERSION);
 
   // Write default string fields
   writeField(&USBHFile, buffer, "adm_name", "\"%s\"", ADM_NAME);
@@ -370,6 +616,7 @@ void GetSettingsConfig() {
   }
   //	printf("File opened successfully\r\n");
   memset(&SetSettings, 0, sizeof(SetSettings)); // обнуляем структуру
+  int settings_idver = 1;
   // Дефолты ДО парсинга: если ключ отсутствует в старом settings.ini — остаются дефолты
   SetSettings.check_mqtt_srv = CHECK_MQTT_SRV;
   SetSettings.mqtt_srv_prt = MQTT_SRV_PRT;
@@ -519,7 +766,9 @@ void GetSettingsConfig() {
       // value);
     }
     // Обработка пары ключ-значение для числовых значений
-    if (strcmp(key, "numline") == 0) {
+    if (strcmp(key, "idver") == 0) {
+      settings_idver = atoi(value);
+    } else if (strcmp(key, "numline") == 0) {
       SetSettings.numline = atoi(value);
       //			printf("Found key: %s, value: %s\r\n", key,
       // value);
@@ -729,6 +978,10 @@ void GetSettingsConfig() {
   }
 
   f_close(&USBHFile);
+  if (settings_idver < CONFIG_ID_VERSION) {
+    idm_shift_settings();
+    printf("[MIGRATE] settings.ini IDs shifted to v%d\r\n", CONFIG_ID_VERSION);
+  }
   //	printf("File closed\r\n");
   //	printf("=== GetSetingsConfig() complete ===\r\n");
 }
@@ -760,6 +1013,7 @@ void GetCronConfig() {
   }
   //    printf("File opened successfully\r\n");
   memset(dbCrontxt, 0, sizeof(dbCrontxt));
+  g_cron_idver = 1;
   //    printf("Memory cleared\r\n");
 
   while ((fresult = f_read(&USBHFile, &currentChar, 1, &bytesRead)) == FR_OK &&
@@ -830,7 +1084,9 @@ void GetCronConfig() {
     while (end > trimmed_key && *end == ' ')
       end--;
     *(end + 1) = '\0';
-    if (strcmp(trimmed_key, "info") == 0) {
+    if (strcmp(trimmed_key, "idver") == 0) {
+      g_cron_idver = atoi(value);
+    } else if (strcmp(trimmed_key, "info") == 0) {
       strncpy(dbCrontxt[currentIndex].info, value,
               sizeof(dbCrontxt[currentIndex].info) - 1);
       recordComplete = true;
@@ -869,6 +1125,10 @@ void GetCronConfig() {
   }
   //    printf("Processed %d records\r\n", currentIndex);
   f_close(&USBHFile);
+  if (g_cron_idver < CONFIG_ID_VERSION) {
+    idm_shift_cron();
+    printf("[MIGRATE] cron.ini IDs shifted to v%d\r\n", CONFIG_ID_VERSION);
+  }
   //    printf("File closed\r\n");
   {
     extern volatile uint8_t g_cron_dirty[NUMTASK];
@@ -892,6 +1152,8 @@ void SetCronConfig() {
   for (int i = 0; i < NUMTASK; i++) {
     f_write(&USBHFile, "{", 1,
             &bytesWritten); // Write opening bracket for object
+    if (i == 0)
+      writeField(&USBHFile, buffer, "idver", "%d", CONFIG_ID_VERSION);
     writeField(&USBHFile, buffer, "cron", "\"%s\"", dbCrontxt[i].cron);
     writeField(&USBHFile, buffer, "activ", "\"%s\"", dbCrontxt[i].activ);
     writeField(&USBHFile, buffer, "ptime", "%d", 0);
@@ -934,6 +1196,7 @@ void GetPinConfig() {
   if (f_open(&USBHFile, "pins.ini", FA_READ) != FR_OK) {
     return;
   }
+  g_pins_idver = 1;
 
   // Find first '['
   do {
@@ -967,7 +1230,9 @@ void GetPinConfig() {
         }
 
         // Встроенная обработка пар ключ-значение
-        if (strcmp(key, "topin") == 0) {
+        if (strcmp(key, "idver") == 0)
+          g_pins_idver = atoi(value);
+        else if (strcmp(key, "topin") == 0) {
           PinsConf[currentPin].topin = atoi(value);
           //                    printf("Processing pin with topin=%d at index
           //                    %d\n", PinsConf[currentPin].topin, currentPin);
@@ -1095,7 +1360,9 @@ void GetPinConfig() {
         }
 
         // Встроенная обработка пар ключ-значение
-        if (strcmp(key, "topin") == 0) {
+        if (strcmp(key, "idver") == 0)
+          g_pins_idver = atoi(value);
+        else if (strcmp(key, "topin") == 0) {
           PinsConf[currentPin].topin = atoi(value);
           //                    printf("Processing pin with topin=%d at index
           //                    %d\n", PinsConf[currentPin].topin, currentPin);
@@ -1196,6 +1463,10 @@ void GetPinConfig() {
     }
   }
   f_close(&USBHFile);
+  if (g_pins_idver < CONFIG_ID_VERSION) {
+    idm_shift_pins_conf();
+    printf("[MIGRATE] pins.ini IDs shifted to v%d\r\n", CONFIG_ID_VERSION);
+  }
 }
 
 void SetPinConfig() {
@@ -1221,6 +1492,10 @@ void SetPinConfig() {
       printf("Failed to write '{': %d\n", fresult);
       f_close(&USBHFile);
       return;
+    }
+    if (i == 0) {
+      snprintf(buffer, sizeof(buffer), "\"idver\":%d,", CONFIG_ID_VERSION);
+      f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
     }
     snprintf(buffer, sizeof(buffer), "\"topin\":%d", PinsConf[i].topin);
     fresult = f_write(&USBHFile, buffer, strlen(buffer), &Byteswritten);
@@ -1519,9 +1794,16 @@ void GetPinToPin() {
 
   int i = 0;
   int loaded = 0;
+  int idver = 1;
+  bool first_elem = true;
   size_t pos = 0;
   struct mg_str key, elem;
   while (i < NUMPINLINKS && (pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
+	  if (first_elem) {
+	    idver = (int)mg_json_get_long(elem, "$.idver", 1);
+	    first_elem = false;
+	    if (mg_json_get(elem, "$.idver", NULL) >= 0) continue;   /* служебный заголовок, не связь */
+	  }
     long idin = mg_json_get_long(elem, "$.idin", 0);
     long idout = mg_json_get_long(elem, "$.idout", 0);
     PinsLinks[i].idin = (short)idin;
@@ -1537,6 +1819,10 @@ void GetPinToPin() {
     i++;
   }
   vPortFree(buf);
+  if (idver < CONFIG_ID_VERSION) {
+    idm_shift_pintopin();
+    LOG_SYSTEM("[USB] pintopin.ini IDs shifted to v%d", CONFIG_ID_VERSION);
+  }
   LOG_SYSTEM("[USB] GetPinToPin: loaded %d entries (%d total)", loaded, i);
   if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 }
@@ -1558,6 +1844,16 @@ void SetPinToPin() {
     LOG_SYSTEM("[USB] SetPinToPin write '[' failed");
     f_close(&USBHFile);
     return;
+  }
+  {
+    int len = snprintf(buffer, JSON_BUF_SIZE, "{\"idver\":%d}", CONFIG_ID_VERSION);
+    fres = f_write(&USBHFile, buffer, len, &bytesWritten);
+    if (fres != FR_OK || (int)bytesWritten != len) {
+      LOG_SYSTEM("[USB] SetPinToPin write idver failed");
+      f_close(&USBHFile);
+      return;
+    }
+    saved_count = 1;
   }
   for (int i = 0; i < NUMPINLINKS; i++) {
     if (PinsLinks[i].idin == 0 && PinsLinks[i].idout == 0)
@@ -1600,6 +1896,11 @@ void InitPin() {
     HAL_GPIO_DeInit(GPIOA, GPIO_PIN_3); // PA3
     HAL_GPIO_DeInit(GPIOD, GPIO_PIN_5); // PD5
   }
+
+  /* Power On State: восстановить dvalue/onoff PWM и onoff энкодеров по режиму
+   * (OFF / ON / LAST) ДО настройки таймеров. PinsLinks уже загружены. */
+  ponr_boot_prepare();
+
 
   for (i = 0; i < NUMPIN; i++) {
     // для Multi button
@@ -1668,8 +1969,8 @@ void InitPin() {
     else if (PinsConf[i].topin == 5) {
       // Защита от NULL: если у пина нет таймера - пропускаем
       if (PinsInfo[i].tim == NULL) {
-        printf("PWM ERROR: pin %d (%s) has no timer assigned! Skipping.\r\n", i,
-               PinsInfo[i].pins);
+        printf("PWM ERROR: pin %d (%s) has no timer assigned! Skipping.\r\n",
+               PinIdFromIdx(i), PinsInfo[i].pins);
         PinsConf[i].topin = 0;
         continue;
       }
@@ -1755,9 +2056,9 @@ void InitPin() {
         PinsConf[i].dvalue = 100;
       uint32_t pulse =
           (uint32_t)((uint64_t)PinsConf[i].dvalue * period / 100ULL);
-      /* Рубильник PWM-строки (без энкодера): после перезагрузки выключенный
-       * PWM не должен выдавать dvalue. Бит снимается при привязке к энкодеру. */
-      if ((PinsConf[i].pwm_flags & PWMF_SWITCH) && PinsConf[i].onoff == 0)
+      /* Рубильник с учётом энкодера: pwm_gate_open() смотрит и onoff
+       * энкодера, и onoff самой PWM-строки (бит PWMF_SWITCH). */
+      if (!pwm_gate_open((uint8_t)i))
         pulse = 0;
       /* Power On State: OFF - старт с нулевой скважностью, ON - со значением
        * dvalue (и включённым рубильником), LAST - как сохранено (поведение по
@@ -1852,7 +2153,7 @@ void InitPin() {
     else if (PinsConf[i].topin == 10) { // Security
       checkPortClockStatus(PinsInfo[i].gpio_name);
       if (SetSettings.sim800l == 1 &&
-          (i == 1 || i == 35)) { // Пропускаем пины UART2 если SIM800L включен
+          (i == 1 || i == 36)) { // Пропускаем PA3 и PD5 (UART2), если SIM800L включен
         SetSettings.monflg++;
         PinsConf[i].topin = 0; // Что бы не отображались в таблице 'Security'!
         continue;              // Пропускаем
@@ -1944,6 +2245,10 @@ void ProcessKeyValuePair(const char *key, const char *value, int nestLevel) {
   //	printf("DEBUG: Processing - Key: %s, Value: %s, NestLevel: %d\n", key,
   // value, nestLevel);	printf("DEBUG: Current state - temp_id: %d,
   // typensor: %d, pinindex: %d\n", temp_id, typensor, pinindex);
+  if (nestLevel == 1 && strcmp(key, "idver") == 0) {
+    g_ow_idver = atoi(value);
+    return;
+  }
   if (nestLevel == 2) {
     // Если встречаем ключ "pins" и значение "id", готовимся к приему id
     if (strcmp(key, "pins") == 0 && strcmp(value, "id") == 0) {
@@ -2174,6 +2479,7 @@ void GetOneWireConfig() {
   typensor = 0;
   pinindex = -1;
   sensidx = 0;
+  g_ow_idver = 1;
   while ((fresult = f_read(&USBHFile, &currentChar, 1, &bytesRead)) == FR_OK &&
          bytesRead > 0) {
     if (!inString &&
@@ -2250,6 +2556,10 @@ void GetOneWireConfig() {
     }
   }
   f_close(&USBHFile);
+  if (g_ow_idver < CONFIG_ID_VERSION) {
+    idm_shift_onewire();
+    printf("[MIGRATE] onewire.ini IDs shifted to v%d\r\n", CONFIG_ID_VERSION);
+  }
   //	printf("=== Finished GetOneWireConfig() ===\r\n");
 }
 /***********************************************************************************************/
@@ -2272,8 +2582,12 @@ void SetOneWireConfig() {
     return;
   }
   // Start the root object and write language
-  const char *start_obj = "{\"lang\":\"";
-  fresult = f_write(&USBHFile, start_obj, strlen(start_obj), &byteswritten);
+  char start_obj[64];
+  int start_len = snprintf(start_obj, sizeof(start_obj),
+                           "{\"idver\":%d,\"lang\":\"", CONFIG_ID_VERSION);
+  if (start_len <= 0 || start_len >= (int)sizeof(start_obj))
+    goto cleanup;
+  fresult = f_write(&USBHFile, start_obj, (UINT)start_len, &byteswritten);
   if (fresult != FR_OK)
     goto cleanup;
   fresult = f_write(&USBHFile, SetSettings.lang, strlen(SetSettings.lang),
@@ -2466,9 +2780,16 @@ void GetCondPool() {
   struct mg_str body = mg_str_n(buf, strlen(buf));
   int loaded = 0;
   int skipped = 0;
+  int idver = 1;
+  uint64_t shifted = 0; /* слоты пула, уже сдвинутые при миграции */
+  bool first_elem = true;
   size_t pos = 0;
   struct mg_str key, elem;
   while ((pos = mg_json_next(body, pos, &key, &elem)) > 0) {
+    if (first_elem) {
+      idver = (int)mg_json_get_long(elem, "$.idver", 1);
+      first_elem = false;
+    }
     char *expr = mg_json_get_str(elem, "$.e");
     if (!expr) continue;
     uint8_t idx = cond_intern(expr);
@@ -2476,6 +2797,16 @@ void GetCondPool() {
     if (idx == COND_IDX_INVALID) {
       skipped++;
       continue;
+    }
+    if (idver < CONFIG_ID_VERSION && idx != COND_IDX_NONE &&
+        !(shifted & (1ULL << idx))) {
+      /* Сдвигаем ID в слоте пула (char[COND_LEN]) атомарно: при переполнении
+       * слот не меняется. Маска не даёт сдвинуть слот дважды, если несколько
+       * записей свернулись в него дедупликацией. */
+      char *slot = (char *)cond_text(idx);
+      if (slot)
+        idm_shift_atomic(slot, COND_LEN, idm_shift_expr, "cond.ini expr", -1);
+      shifted |= 1ULL << idx;
     }
     loaded++;
   }
@@ -2503,6 +2834,16 @@ void SetCondPool() {
     f_close(&USBHFile);
     return;
   }
+  {
+    int len = snprintf(buffer, JSON_BUF_SIZE, "{\"idver\":%d}",
+                       CONFIG_ID_VERSION);
+    fres = f_write(&USBHFile, buffer, (UINT)len, &byteswritten);
+    if (fres != FR_OK || (int)byteswritten != len) {
+      LOG_SYSTEM("[USB] SetCondPool write idver failed");
+      f_close(&USBHFile);
+      return;
+    }
+  }
 
   for (int i = 1; i <= COND_POOL_TOTAL; i++) {
     const char *e = cond_text((uint8_t)i);
@@ -2510,7 +2851,7 @@ void SetCondPool() {
     char esc[2 * COND_LEN + 8];
     json_escape_str(esc, e, sizeof(esc));
     int len = snprintf(buffer, JSON_BUF_SIZE, "%s{\"i\":%d,\"e\":\"%s\"}",
-                       saved ? "," : "", i, esc);
+                       ",", i, esc);
     if (len <= 0 || len >= JSON_BUF_SIZE) continue;
     fres = f_write(&USBHFile, buffer, (UINT)len, &byteswritten);
     if (fres != FR_OK || (int)byteswritten != len) {
@@ -2565,6 +2906,7 @@ void GetPidConfig() {
 
   /* Парсим JSON */
   struct mg_str body = mg_str_n(buf, strlen(buf));
+  int pid_idver = (int)mg_json_get_long(body, "$.idver", 1);
 
   int arr_ofs = mg_json_get(body, "$.pid", NULL);
   if (arr_ofs < 0) {
@@ -2623,6 +2965,10 @@ void GetPidConfig() {
     idx++;
   }
   vPortFree(buf);
+  if (pid_idver < CONFIG_ID_VERSION) {
+    idm_shift_pid();
+    printf("[MIGRATE] pid.ini IDs shifted to v%d\r\n", CONFIG_ID_VERSION);
+  }
   if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
   printf("[PID] Loaded %d slots from pid.ini\r\n", idx);
 }
@@ -2642,8 +2988,12 @@ void SetPidConfig() {
   }
 
   /* Заголовок JSON */
-  const char *start = "{\"pid\":[";
-  fresult = f_write(&USBHFile, start, strlen(start), &byteswritten);
+  char start[64];
+  int start_len = snprintf(start, sizeof(start),
+                           "{\"idver\":%d,\"pid\":[", CONFIG_ID_VERSION);
+  if (start_len <= 0 || start_len >= (int)sizeof(start))
+    goto cleanup;
+  fresult = f_write(&USBHFile, start, (UINT)start_len, &byteswritten);
   if (fresult != FR_OK) goto cleanup;
 
   bool first = true;
@@ -2753,6 +3103,7 @@ void GetZigbeeConfig(void) {
 
   /* Парсим JSON */
   struct mg_str body = mg_str_n(buf, strlen(buf));
+  int zb_idver = (int)mg_json_get_long(body, "$.idver", 1);
 
   int arr_ofs = mg_json_get(body, "$.zigbee", NULL);
   if (arr_ofs < 0) {
@@ -2836,14 +3187,26 @@ void GetZigbeeConfig(void) {
         if (sclick) {
           strncpy(ZigbeeActionPoolArr[aidx].sclick, sclick, sizeof(ZigbeeActionPoolArr[aidx].sclick) - 1);
           ZigbeeActionPoolArr[aidx].sclick[sizeof(ZigbeeActionPoolArr[aidx].sclick) - 1] = '\0';
+          if (zb_idver < CONFIG_ID_VERSION)
+            idm_shift_atomic(ZigbeeActionPoolArr[aidx].sclick,
+                             sizeof(ZigbeeActionPoolArr[aidx].sclick),
+                             idm_shift_action, "zigbee.ini sclick", idx);
         }
         if (dclick) {
           strncpy(ZigbeeActionPoolArr[aidx].dclick, dclick, sizeof(ZigbeeActionPoolArr[aidx].dclick) - 1);
           ZigbeeActionPoolArr[aidx].dclick[sizeof(ZigbeeActionPoolArr[aidx].dclick) - 1] = '\0';
+          if (zb_idver < CONFIG_ID_VERSION)
+            idm_shift_atomic(ZigbeeActionPoolArr[aidx].dclick,
+                             sizeof(ZigbeeActionPoolArr[aidx].dclick),
+                             idm_shift_action, "zigbee.ini dclick", idx);
         }
         if (lpress) {
           strncpy(ZigbeeActionPoolArr[aidx].lpress, lpress, sizeof(ZigbeeActionPoolArr[aidx].lpress) - 1);
           ZigbeeActionPoolArr[aidx].lpress[sizeof(ZigbeeActionPoolArr[aidx].lpress) - 1] = '\0';
+          if (zb_idver < CONFIG_ID_VERSION)
+            idm_shift_atomic(ZigbeeActionPoolArr[aidx].lpress,
+                             sizeof(ZigbeeActionPoolArr[aidx].lpress),
+                             idm_shift_action, "zigbee.ini lpress", idx);
         }
       }
     }
@@ -2905,6 +3268,8 @@ void GetZigbeeConfig(void) {
   }
 
   vPortFree(buf);
+  if (zb_idver < CONFIG_ID_VERSION)
+    printf("[MIGRATE] zigbee.ini IDs shifted to v%d\r\n", CONFIG_ID_VERSION);
   if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
   printf("[ZIGBEE] Loaded %d slots from zigbee.ini\r\n", idx);
 }
@@ -2922,8 +3287,11 @@ void SetZigbeeConfig(void) {
     return;
   }
 
-  const char *start = "{\"zigbee\":[";
-  fresult = f_write(&USBHFile, start, strlen(start), &byteswritten);
+  char start[64];
+  int start_len = snprintf(start, sizeof(start),
+                           "{\"idver\":%d,\"zigbee\":[", CONFIG_ID_VERSION);
+  if (start_len <= 0 || start_len >= (int)sizeof(start)) goto cleanup;
+  fresult = f_write(&USBHFile, start, (UINT)start_len, &byteswritten);
   if (fresult != FR_OK) goto cleanup;
 
   bool first = true;
@@ -2996,23 +3364,67 @@ cleanup:
  *
  * Хранение:
  *  - режим: поле ponr в pins.ini (физические пины) и zigbee.ini (Zigbee);
- *  - "последнее состояние": битовые карты s_last_pin / s_last_zbee (около 40 байт
- *    RAM) в маленьком файле laststate.ini на USB-флешке (usbnum 9). Запись
- *    отложенная (5 с тишины, не чаще раза в 30 с), чтобы не изнашивать флешку.
+ *  - "последнее состояние": маленькая запись (битовые карты Device и Zigbee,
+ *    dvalue/onoff PWM и onoff энкодеров) в двух файлах на USB-флешке:
+ *    laststate.ini и laststate2.ini. Пишутся по очереди, у каждой записи есть
+ *    номер и CRC32; при старте берётся самая новая валидная. Недописанный
+ *    файл при потере питания предыдущую копию не портит.
+ *  - Политика записи: 1,5 с тишины после изменения, не чаще раза в 10 с, при
+ *    непрерывных изменениях (fade, энкодер) не реже раза в 30 с. Изменение
+ *    не теряется: флаг остаётся, пока состояние не записано.
+ *  - Перед плановым reset (mg_device_reset) состояние дописывается принудительно.
  *  - Zerg_Flash (сектор 11) НЕ используется: он целиком занят 94 слотами
  *    HTTPSsettings и разделён с загрузчиком.
  */
 extern osMessageQueueId_t outputQueueHandle;
 extern volatile bool mqtt_connected_reported;
 
+
 volatile uint8_t g_ponr_boot_pass = 0;
+
 
 #define PONR_PIN_BYTES   ((NUMPIN + 7) / 8)
 #define PONR_ZBEE_BYTES  ((NUMZBEE + 7) / 8)
 
+
+#define PONR_FILE_A        "laststate.ini"
+#define PONR_FILE_B        "laststate2.ini"
+#define PONR_FILE_BUF      (2 * (PONR_PIN_BYTES + PONR_ZBEE_BYTES + 2 * NUMPIN) + 192)
+
+
+#define PONR_QUIET_MS      1500u   /* тишина после последнего изменения */
+#define PONR_MIN_GAP_MS    10000u  /* минимум между двумя записями на флешку */
+#define PONR_MAX_WAIT_MS   30000u  /* потолок ожидания при непрерывных изменениях */
+#define PONR_FLUSH_WAIT_MS 1500u   /* сколько ждать запись перед плановым reset */
+
+
 static uint8_t s_last_pin[PONR_PIN_BYTES];
 static uint8_t s_last_zbee[PONR_ZBEE_BYTES];
-static uint8_t s_pwm_prev[NUMPIN]; /* dvalue (7 бит) | onoff << 7 для PWM в режиме LAST */
+
+
+/* Состояние PWM-строк и строк энкодера (для режима LAST):
+ * s_w_dv - dvalue 0..100 (для энкодера не используется),
+ * s_w_fl - бит0: включено, бит1: запись валидна. */
+#define PONR_W_ON    0x01u
+#define PONR_W_VALID 0x02u
+static uint8_t s_w_dv[NUMPIN];
+static uint8_t s_w_fl[NUMPIN];
+
+
+/* Текущая запись на флешке */
+static uint32_t s_ls_seq = 0;
+static uint8_t  s_ls_next_slot = 0;
+
+
+/* Политика записи */
+static volatile bool     s_dirty = false;
+static volatile bool     s_wr_pending = false;
+static volatile bool     s_written_once = false;
+static volatile uint32_t s_dirty_since = 0;
+static volatile uint32_t s_dirty_chg = 0;
+static volatile uint32_t s_last_write_tick = 0;
+static bool              s_wr_fail_logged = false;
+
 
 static inline bool ponr_bm_get(const uint8_t *b, int i) {
   return ((b[i >> 3] >> (i & 7)) & 1u) != 0;
@@ -3022,16 +3434,34 @@ static inline void ponr_bm_set(uint8_t *b, int i, bool v) {
   else   b[i >> 3] &= (uint8_t)~(1u << (i & 7));
 }
 
+
+static void ponr_mark_dirty(uint32_t now) {
+  if (!s_dirty) s_dirty_since = now;
+  s_dirty_chg = now;
+  s_dirty = true;
+}
+
+
+static void ponr_w_update(int i, uint8_t dv, uint8_t fl, bool *changed) {
+  if (s_w_dv[i] != dv || s_w_fl[i] != fl) {
+    s_w_dv[i] = dv;
+    s_w_fl[i] = fl;
+    *changed = true;
+  }
+}
+
+
 /* true, если выход out_id привязан к физическому выключателю (Switch, topin == 3) */
 static bool ponr_is_switch_output(int out_id) {
-  if (out_id <= 0) return false;
+  if (out_id < 0) return false;
   for (int a = 0; a < NUMPINLINKS; a++) {
-    if (PinsLinks[a].idout != (short)out_id) continue;
+    if (PinsLinks[a].idout != (short)(out_id + 1)) continue;
     int in = PinsLinks[a].idin;
-    if (in > 0 && in < NUMPIN && PinsConf[in].topin == 3) return true;
+    if (IsPinId(in) && PinsConf[in - 1].topin == 3) return true;
   }
   return false;
 }
+
 
 /* Эффективный режим физического пина. Значения 0 и 1 (старые ini) трактуются
  * как раньше: Device, привязанный к выключателю, следует за выключателем,
@@ -3051,6 +3481,7 @@ uint8_t ponr_eff_pin(int i) {
   return v;
 }
 
+
 /* Эффективный режим Zigbee-слота: по умолчанию NONE (ничего не делать). */
 uint8_t ponr_eff_zbee(int zbi) {
   if (zbi < 0 || zbi >= NUMZBEE) return PONR_NONE;
@@ -3058,12 +3489,14 @@ uint8_t ponr_eff_zbee(int zbi) {
   return (v < PONR_OFF || v > PONR_NONE) ? PONR_NONE : v;
 }
 
+
 /* Режим для любого id выхода (физический пин или Zigbee-слот) */
 uint8_t ponr_eff_out(int id) {
-  if (id >= 0 && id < NUMPIN) return ponr_eff_pin(id);
-  if (id >= NUMPIN && id < NUMPIN + NUMZBEE) return ponr_eff_zbee(id - NUMPIN);
+  if (IsPinId(id)) return ponr_eff_pin(id - 1);
+  if (IsZigbeePin(id)) return ponr_eff_zbee(ZbeeIdx(id));
   return PONR_OFF;
 }
+
 
 /* Режим для строки энкодера (topin 8): собственное значение, если оно новое;
  * иначе значение первого привязанного PWM; иначе LAST. */
@@ -3072,12 +3505,13 @@ uint8_t ponr_eff_enc(int enc_id) {
   uint8_t v = PinsConf[enc_id].ponr;
   if (v >= PONR_OFF && v <= PONR_LAST) return v;
   for (int a = 0; a < NUMPINLINKS; a++) {
-    if (PinsLinks[a].idin != (short)enc_id) continue;
+    if (PinsLinks[a].idin != (short)(enc_id + 1)) continue;
     int out = PinsLinks[a].idout;
-    if (out > 0 && out < NUMPIN && PinsConf[out].topin == 5) return ponr_eff_pin(out);
+    if (IsPinId(out) && PinsConf[out - 1].topin == 5) return ponr_eff_pin(out - 1);
   }
   return PONR_LAST;
 }
+
 
 /* Проверка значения, пришедшего из веба. topin: 2 Device, 5 PWM, 11 Zigbee. */
 uint8_t ponr_sanitize(int topin, long v) {
@@ -3087,16 +3521,51 @@ uint8_t ponr_sanitize(int topin, long v) {
   return (v >= PONR_OFF && v <= PONR_SWITCH) ? (uint8_t)v : PONR_OFF;
 }
 
+
 /* Последнее сохранённое состояние физического выхода (для InitPin) */
 bool ponr_last_get(int i) {
   return (i >= 0 && i < NUMPIN) && ponr_bm_get(s_last_pin, i);
 }
 
+
 /* Фильтр начального прохода по выключателям: на старте положение выключателя
  * применяется только к физическим выходам с режимом SWITCH. */
 bool ponr_boot_pass_allows(int out_id) {
-  return out_id > 0 && out_id < NUMPIN && ponr_eff_pin(out_id) == PONR_SWITCH;
+  return IsPinId(out_id) && ponr_eff_pin(out_id - 1) == PONR_SWITCH;
 }
+
+
+/* Подготовка состояния PWM и энкодеров до настройки таймеров (вызывается из
+ * InitPin). OFF/ON закрывают/открывают рубильник энкодера, LAST возвращает
+ * сохранённые dvalue и onoff. Для PWM-строки без энкодера onoff меняется
+ * только у строк с битом PWMF_SWITCH (старые PWM для cron/PID не трогаем). */
+void ponr_boot_prepare(void) {
+  for (int i = 0; i < NUMPIN; i++) {
+    if (PinsConf[i].topin != 5) continue;
+    uint8_t pm = ponr_eff_pin(i);
+    bool has_enc = false;
+    for (int a = 0; a < NUMPINLINKS; a++) {
+      if (PinsLinks[a].idout != (short)(i + 1)) continue;
+      int e = PinsLinks[a].idin;
+      if (!IsPinId(e) || PinsConf[e - 1].topin != 8) continue;
+      has_enc = true;
+      int ei = e - 1;
+      if (pm == PONR_OFF) {
+        PinsConf[ei].onoff = 0;
+      } else if (pm == PONR_ON) {
+        PinsConf[ei].onoff = 1;
+      } else if (pm == PONR_LAST && (s_w_fl[ei] & PONR_W_VALID)) {
+        PinsConf[ei].onoff = (s_w_fl[ei] & PONR_W_ON) ? 1 : 0;
+      }
+    }
+    if (pm == PONR_LAST && (s_w_fl[i] & PONR_W_VALID)) {
+      PinsConf[i].dvalue = (s_w_dv[i] <= 100) ? s_w_dv[i] : 100;
+      if (!has_enc && (PinsConf[i].pwm_flags & PWMF_SWITCH))
+        PinsConf[i].onoff = (s_w_fl[i] & PONR_W_ON) ? 1 : 0;
+    }
+  }
+}
+
 
 /* Положение физического выключателя, привязанного к выходу out_id:
  * 1 - замкнут (ON), 0 - разомкнут (OFF), -1 - выключателя нет. */
@@ -3104,15 +3573,17 @@ static int ponr_switch_position(int out_id) {
   for (int a = 0; a < NUMPINLINKS; a++) {
     if (PinsLinks[a].idout != (short)out_id) continue;
     int in = PinsLinks[a].idin;
-    if (in <= 0 || in >= NUMPIN) continue;
-    if (PinsConf[in].topin != 3 || PinsConf[in].onoff == 0) continue;
+    if (!IsPinId(in)) continue;
+    if (PinsConf[in - 1].topin != 3 || PinsConf[in - 1].onoff == 0) continue;
     if (!cond_eval_ref(PinsLinks[a].cond)) continue;
-    return (HAL_GPIO_ReadPin(PinsInfo[in].gpio_name, PinsInfo[in].hal_pin) == GPIO_PIN_RESET) ? 1 : 0;
+    return (HAL_GPIO_ReadPin(PinsInfo[in - 1].gpio_name, PinsInfo[in - 1].hal_pin) == GPIO_PIN_RESET) ? 1 : 0;
   }
   return -1;
 }
 
-/* ---- laststate.ini: {"p":"<hex 12 байт>","z":"<hex 25 байт>"} ---- */
+
+/* ---- Файлы состояния: {"v":2,"q":<номер>,"p":"<hex>","z":"<hex>",
+ *      "d":"<hex>","f":"<hex>","c":"<crc32 hex>"} ---- */
 static void ponr_hex_encode(const uint8_t *src, int n, char *dst) {
   static const char d[] = "0123456789abcdef";
   for (int i = 0; i < n; i++) {
@@ -3122,6 +3593,7 @@ static void ponr_hex_encode(const uint8_t *src, int n, char *dst) {
   dst[2 * n] = '\0';
 }
 
+
 static int ponr_hex_nibble(char c) {
   if (c >= '0' && c <= '9') return c - '0';
   if (c >= 'a' && c <= 'f') return c - 'a' + 10;
@@ -3129,89 +3601,206 @@ static int ponr_hex_nibble(char c) {
   return -1;
 }
 
-static void ponr_hex_decode(const char *s, uint8_t *dst, int n) {
+
+/* Строгая проверка: длина ровно 2*n и только hex-символы */
+static bool ponr_hex_decode_n(const char *s, uint8_t *dst, int n) {
+  if (s == NULL || (int)strlen(s) != 2 * n) return false;
   for (int i = 0; i < n; i++) {
     int hi = ponr_hex_nibble(s[2 * i]);
-    if (hi < 0) return;
     int lo = ponr_hex_nibble(s[2 * i + 1]);
-    if (lo < 0) return;
+    if (hi < 0 || lo < 0) return false;
     dst[i] = (uint8_t)((hi << 4) | lo);
   }
+  return true;
 }
+
+
+static uint32_t ponr_crc32(uint32_t crc, const uint8_t *p, size_t n) {
+  crc = ~crc;
+  while (n--) {
+    crc ^= *p++;
+    for (int k = 0; k < 8; k++)
+      crc = (crc >> 1) ^ (0xEDB88320u & (uint32_t)(-(int32_t)(crc & 1u)));
+  }
+  return ~crc;
+}
+
+
+static uint32_t ponr_payload_crc(uint32_t seq, const uint8_t *pp, const uint8_t *zz,
+                                 const uint8_t *dv, const uint8_t *fl) {
+  uint32_t c = ponr_crc32(0, (const uint8_t *)&seq, sizeof(seq));
+  c = ponr_crc32(c, pp, PONR_PIN_BYTES);
+  c = ponr_crc32(c, zz, PONR_ZBEE_BYTES);
+  c = ponr_crc32(c, dv, NUMPIN);
+  c = ponr_crc32(c, fl, NUMPIN);
+  return c;
+}
+
+
+typedef struct {
+  bool     legacy;  /* старый формат (только p и z), без CRC */
+  uint32_t seq;
+  uint8_t  pp[PONR_PIN_BYTES];
+  uint8_t  zz[PONR_ZBEE_BYTES];
+  uint8_t  dv[NUMPIN];
+  uint8_t  fl[NUMPIN];
+} ponr_rec_t;
+
+
+static bool ponr_read_rec(const char *name, ponr_rec_t *r) {
+  static char buf[PONR_FILE_BUF];
+  FILINFO finfo;
+  UINT br = 0;
+
+
+  memset(r, 0, sizeof(*r));
+  if (f_stat(name, &finfo) != FR_OK || finfo.fsize == 0 ||
+      finfo.fsize >= sizeof(buf)) {
+    return false;
+  }
+  if (f_open(&USBHFile, name, FA_READ) != FR_OK) return false;
+  FRESULT fr = f_read(&USBHFile, buf, (UINT)finfo.fsize, &br);
+  f_close(&USBHFile);
+  if (fr != FR_OK || br == 0) return false;
+  buf[br] = '\0';
+
+
+  struct mg_str body = mg_str_n(buf, br);
+  long ver = mg_json_get_long(body, "$.v", 1);
+  char *hp = mg_json_get_str(body, "$.p");
+  char *hz = mg_json_get_str(body, "$.z");
+  bool ok = (hp != NULL) && (hz != NULL) &&
+            ponr_hex_decode_n(hp, r->pp, PONR_PIN_BYTES) &&
+            ponr_hex_decode_n(hz, r->zz, PONR_ZBEE_BYTES);
+
+
+  if (ok && ver >= 2) {
+    char *hd = mg_json_get_str(body, "$.d");
+    char *hf = mg_json_get_str(body, "$.f");
+    char *hc = mg_json_get_str(body, "$.c");
+    ok = (hd != NULL) && (hf != NULL) && (hc != NULL) &&
+         ponr_hex_decode_n(hd, r->dv, NUMPIN) &&
+         ponr_hex_decode_n(hf, r->fl, NUMPIN);
+    if (ok) {
+      r->seq = (uint32_t)mg_json_get_long(body, "$.q", 0);
+      uint32_t crc = (uint32_t)strtoul(hc, NULL, 16);
+      ok = (crc == ponr_payload_crc(r->seq, r->pp, r->zz, r->dv, r->fl));
+    }
+    if (hd) mg_free(hd);
+    if (hf) mg_free(hf);
+    if (hc) mg_free(hc);
+  } else if (ok) {
+    r->legacy = true;
+  }
+  if (hp) mg_free(hp);
+  if (hz) mg_free(hz);
+  return ok;
+}
+
 
 void GetLastState(void) {
-  FILINFO finfo;
-  UINT bytesRead = 0;
-  char buf[256];
+  static ponr_rec_t rec[2];
+  bool ok0 = ponr_read_rec(PONR_FILE_A, &rec[0]);
+  bool ok1 = ponr_read_rec(PONR_FILE_B, &rec[1]);
+  int pick = -1;
+  if (ok0 && ok1) pick = (rec[1].seq > rec[0].seq) ? 1 : 0;
+  else if (ok0)   pick = 0;
+  else if (ok1)   pick = 1;
+  if (pick < 0) return;
 
-  if (f_stat("laststate.ini", &finfo) != FR_OK || finfo.fsize == 0 ||
-      finfo.fsize >= sizeof(buf)) {
-    return;
-  }
-  if (f_open(&USBHFile, "laststate.ini", FA_READ) != FR_OK) {
-    LOG_SYSTEM("[USB] Cannot open laststate.ini");
-    return;
-  }
-  FRESULT fr = f_read(&USBHFile, buf, finfo.fsize, &bytesRead);
-  f_close(&USBHFile);
-  if (fr != FR_OK || bytesRead == 0) return;
-  buf[bytesRead] = '\0';
 
-  struct mg_str body = mg_str_n(buf, strlen(buf));
-  char *hp = mg_json_get_str(body, "$.p");
-  if (hp) {
-    if (strlen(hp) >= 2u * PONR_PIN_BYTES) ponr_hex_decode(hp, s_last_pin, PONR_PIN_BYTES);
-    mg_free(hp);
+  memcpy(s_last_pin, rec[pick].pp, sizeof(s_last_pin));
+  memcpy(s_last_zbee, rec[pick].zz, sizeof(s_last_zbee));
+  if (!rec[pick].legacy) {
+    memcpy(s_w_dv, rec[pick].dv, sizeof(s_w_dv));
+    memcpy(s_w_fl, rec[pick].fl, sizeof(s_w_fl));
   }
-  char *hz = mg_json_get_str(body, "$.z");
-  if (hz) {
-    if (strlen(hz) >= 2u * PONR_ZBEE_BYTES) ponr_hex_decode(hz, s_last_zbee, PONR_ZBEE_BYTES);
-    mg_free(hz);
-  }
-  LOG_SYSTEM("[USB] GetLastState: loaded laststate.ini");
+  s_ls_seq = rec[pick].seq;
+  s_ls_next_slot = (pick == 0) ? 1 : 0;
+  printf("[PONR] state loaded from %s, seq=%lu\r\n",
+         pick == 0 ? PONR_FILE_A : PONR_FILE_B, (unsigned long)s_ls_seq);
 }
 
+
+/* Вызывается из задачи USB (usbnum == 9). Пишет в тот слот, который НЕ является
+ * самой новой валидной копией, поэтому предыдущая копия остаётся целой, даже
+ * если питание пропадёт посреди записи. */
 void SetLastState(void) {
-  uint8_t pp[PONR_PIN_BYTES];
-  uint8_t zz[PONR_ZBEE_BYTES];
-  char hp[2 * PONR_PIN_BYTES + 1];
-  char hz[2 * PONR_ZBEE_BYTES + 1];
-  char buf[2 * PONR_PIN_BYTES + 2 * PONR_ZBEE_BYTES + 24];
-  UINT bytesWritten = 0;
+  static uint8_t pp[PONR_PIN_BYTES];
+  static uint8_t zz[PONR_ZBEE_BYTES];
+  static uint8_t dv[NUMPIN];
+  static uint8_t fl[NUMPIN];
+  static char hp[2 * PONR_PIN_BYTES + 1];
+  static char hz[2 * PONR_ZBEE_BYTES + 1];
+  static char hd[2 * NUMPIN + 1];
+  static char hf[2 * NUMPIN + 1];
+  static char buf[PONR_FILE_BUF];
+
 
   taskENTER_CRITICAL();
   memcpy(pp, s_last_pin, sizeof(pp));
   memcpy(zz, s_last_zbee, sizeof(zz));
+  memcpy(dv, s_w_dv, sizeof(dv));
+  memcpy(fl, s_w_fl, sizeof(fl));
   taskEXIT_CRITICAL();
 
+
+  uint32_t seq = s_ls_seq + 1;
+  uint32_t crc = ponr_payload_crc(seq, pp, zz, dv, fl);
   ponr_hex_encode(pp, PONR_PIN_BYTES, hp);
   ponr_hex_encode(zz, PONR_ZBEE_BYTES, hz);
-  int len = snprintf(buf, sizeof(buf), "{\"p\":\"%s\",\"z\":\"%s\"}", hp, hz);
-  if (len <= 0 || len >= (int)sizeof(buf)) return;
+  ponr_hex_encode(dv, NUMPIN, hd);
+  ponr_hex_encode(fl, NUMPIN, hf);
 
-  if (f_open(&USBHFile, (const TCHAR *)"laststate.ini", FA_CREATE_ALWAYS | FA_WRITE) != FR_OK) {
-    LOG_SYSTEM("[USB] SetLastState open failed");
-    return;
+
+  int len = snprintf(buf, sizeof(buf),
+                     "{\"v\":2,\"q\":%lu,\"p\":\"%s\",\"z\":\"%s\",\"d\":\"%s\",\"f\":\"%s\",\"c\":\"%08lx\"}",
+                     (unsigned long)seq, hp, hz, hd, hf, (unsigned long)crc);
+  bool ok = false;
+  if (len > 0 && len < (int)sizeof(buf)) {
+    const char *name = s_ls_next_slot ? PONR_FILE_B : PONR_FILE_A;
+    if (f_open(&USBHFile, (const TCHAR *)name, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK) {
+      UINT bw = 0;
+      FRESULT fw = f_write(&USBHFile, buf, (UINT)len, &bw);
+      FRESULT fs = f_sync(&USBHFile);
+      FRESULT fc = f_close(&USBHFile);
+      ok = (fw == FR_OK && (int)bw == len && fs == FR_OK && fc == FR_OK);
+    }
   }
-  FRESULT fr = f_write(&USBHFile, buf, (UINT)len, &bytesWritten);
-  if (fr != FR_OK || (int)bytesWritten != len) {
-    LOG_SYSTEM("[USB] SetLastState write failed");
+
+
+  uint32_t now = HAL_GetTick();
+  s_last_write_tick = now;
+  s_written_once = true;
+  if (ok) {
+    s_ls_seq = seq;
+    s_ls_next_slot ^= 1u;
+    s_wr_fail_logged = false;
+  } else {
+    /* Запись не прошла: оставляем флаг, повтор через PONR_MIN_GAP_MS */
+    ponr_mark_dirty(now);
+    if (!s_wr_fail_logged) {
+      s_wr_fail_logged = true;
+      LOG_SYSTEM("[USB] SetLastState write failed, will retry");
+    }
   }
-  f_sync(&USBHFile);
-  f_close(&USBHFile);
+  s_wr_pending = false;
 }
+
 
 /* ---- Zigbee: применение режима после подключения к MQTT (пачками, чтобы не
  * переполнить outputQueue) ---- */
 #define PONR_ZB_DELAY_MS   15000u  /* пауза после подключения к MQTT */
 #define PONR_ZB_BATCH      8       /* слотов за один шаг (шаг - раз в секунду) */
-#define PONR_ZB_TRACK_MS   60000u  /* пауза перед отслеживанием state Zigbee */
+#define PONR_ZB_TRACK_MS   8000u   /* пауза перед отслеживанием state Zigbee */
+
 
 static bool     s_zb_applied   = false;
 static int      s_zb_cursor    = 0;
 static bool     s_zb_wait      = false;
 static uint32_t s_zb_wait_tick = 0;
 static uint32_t s_zb_done_tick = 0;
+
 
 /* Возвращает action (0/1) или -1, если для слота ничего делать не нужно */
 static int ponr_zbee_action(int zbi) {
@@ -3224,10 +3813,11 @@ static int ponr_zbee_action(int zbi) {
   case PONR_OFF:    return 0;
   case PONR_ON:     return 1;
   case PONR_LAST:   return ponr_bm_get(s_last_zbee, zbi) ? 1 : 0;
-  case PONR_SWITCH: return ponr_switch_position(NUMPIN + zbi);
+  case PONR_SWITCH: return ponr_switch_position(ZbeeIdFromIdx(zbi));
   default:          return -1;
   }
 }
+
 
 static void ponr_apply_zigbee_step(void) {
   int sent = 0;
@@ -3235,7 +3825,7 @@ static void ponr_apply_zigbee_step(void) {
     int action = ponr_zbee_action(s_zb_cursor);
     if (action >= 0) {
       data_pin_t dp = {0};
-      dp.id = NUMPIN + s_zb_cursor;
+      dp.id = (uint16_t)ZbeeIdFromIdx(s_zb_cursor);
       dp.action = action;
       if (xQueueSend(outputQueueHandle, (void *)&dp, 0) != pdPASS) return; /* очередь занята - повтор на следующем шаге */
       sent++;
@@ -3248,79 +3838,103 @@ static void ponr_apply_zigbee_step(void) {
   }
 }
 
-/* ---- Отслеживание последнего состояния. Вызывается из StartInputTask каждые
- * 5 мс, внутри троттлинг до раза в секунду. ---- */
-static bool     s_poll_first   = true;
-static bool     s_dirty_last   = false;
-static bool     s_dirty_pwm    = false;
-static uint32_t s_dirty_last_tick = 0;
-static uint32_t s_dirty_pwm_tick  = 0;
-static uint32_t s_save_last_tick  = 0;
-static uint32_t s_save_pwm_tick   = 0;
-static bool     s_saved_last_once = false;
-static bool     s_saved_pwm_once  = false;
+
+/* ---- Отслеживание последнего состояния. Возвращает true, если что-то
+ * изменилось относительно сохранённого. Zigbee отслеживается только после
+ * применения режима при старте (force - для принудительного снимка перед reset). */
+static bool ponr_scan(uint32_t now, bool force) {
+  bool changed = false;
+
+
+  for (int i = 0; i < NUMPIN; i++) {
+    uint8_t t = PinsConf[i].topin;
+    if (t == 2) {
+      if (ponr_eff_pin(i) != PONR_LAST) continue;
+      bool lvl = HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin) != GPIO_PIN_RESET;
+      if (lvl != ponr_bm_get(s_last_pin, i)) {
+        ponr_bm_set(s_last_pin, i, lvl);
+        changed = true;
+      }
+    } else if (t == 5) {
+      if (ponr_eff_pin(i) != PONR_LAST) continue;
+      if (pwm_owned_by_pid((uint8_t)i)) continue; /* PID перезаписывает dvalue каждый цикл */
+      int d = PinsConf[i].dvalue;
+      uint8_t dv = (uint8_t)((d < 0) ? 0 : ((d > 100) ? 100 : d));
+      bool on = (PinsConf[i].pwm_flags & PWMF_SWITCH) ? (PinsConf[i].onoff != 0) : true;
+      uint8_t fl = (uint8_t)(PONR_W_VALID | (on ? PONR_W_ON : 0u));
+      ponr_w_update(i, dv, fl, &changed);
+    } else if (t == 8) {
+      if (ponr_eff_enc(i) != PONR_LAST) continue;
+      uint8_t fl = (uint8_t)(PONR_W_VALID | ((PinsConf[i].onoff != 0) ? PONR_W_ON : 0u));
+      ponr_w_update(i, 0, fl, &changed);
+    }
+  }
+
+
+  if (s_zb_applied && (force || (uint32_t)(now - s_zb_done_tick) >= PONR_ZB_TRACK_MS)) {
+    for (int z = 0; z < NUMZBEE; z++) {
+      if (ZigbeeConf[z].topin != 11 || ponr_eff_zbee(z) != PONR_LAST) continue;
+      bool st = ZigbeeConf[z].state != 0;
+      if (st != ponr_bm_get(s_last_zbee, z)) {
+        ponr_bm_set(s_last_zbee, z, st);
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+
+/* Отправить запрос на запись, если политика разрешает */
+static void ponr_try_write(uint32_t now) {
+  if (!s_dirty || s_wr_pending) return;
+  bool quiet = (uint32_t)(now - s_dirty_chg) >= PONR_QUIET_MS;
+  bool aged  = (uint32_t)(now - s_dirty_since) >= PONR_MAX_WAIT_MS;
+  bool gap   = !s_written_once || (uint32_t)(now - s_last_write_tick) >= PONR_MIN_GAP_MS;
+  if (!(quiet || aged) || !gap) return;
+  uint8_t u = 9;
+  if (xQueueSend(usbQueueHandle, &u, 0) == pdPASS) {
+    s_wr_pending = true;
+    s_dirty = false;
+  }
+}
+
+
+/* Вызывается перед плановым reset (mg_device_reset): последний снимок
+ * состояния и ожидание записи на флешку не дольше PONR_FLUSH_WAIT_MS. */
+void ponr_flush_before_reset(void) {
+  if (xTaskGetSchedulerState() != taskSCHEDULER_RUNNING) return;
+  if (usbQueueHandle == NULL) return;
+  uint32_t now = HAL_GetTick();
+  if (ponr_scan(now, true)) ponr_mark_dirty(now);
+  if (!s_dirty && !s_wr_pending) return;
+  if (s_dirty && !s_wr_pending) {
+    uint8_t u = 9;
+    if (xQueueSend(usbQueueHandle, &u, 0) == pdPASS) {
+      s_wr_pending = true;
+      s_dirty = false;
+    }
+  }
+  uint32_t t0 = HAL_GetTick();
+  while (s_wr_pending && (uint32_t)(HAL_GetTick() - t0) < PONR_FLUSH_WAIT_MS) {
+    osDelay(10);
+  }
+}
+
+
+/* Вызывается из StartInputTask каждые 5 мс, внутри троттлинг до раза в секунду. */
 static uint32_t s_poll_tick = 0;
+
 
 void ponr_poll(void) {
   uint32_t now = HAL_GetTick();
   if ((uint32_t)(now - s_poll_tick) < 1000u) return;
   s_poll_tick = now;
 
-  bool ch_last = false;
-  bool ch_pwm = false;
 
-  for (int i = 0; i < NUMPIN; i++) {
-    uint8_t t = PinsConf[i].topin;
-    if (t == 2 && ponr_eff_pin(i) == PONR_LAST) {
-      bool lvl = HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin) != GPIO_PIN_RESET;
-      if (lvl != ponr_bm_get(s_last_pin, i)) {
-        ponr_bm_set(s_last_pin, i, lvl);
-        ch_last = true;
-      }
-    } else if (t == 5 && ponr_eff_pin(i) == PONR_LAST) {
-      uint8_t cur = (uint8_t)((PinsConf[i].dvalue & 0x7F) | (PinsConf[i].onoff ? 0x80 : 0));
-      if (cur != s_pwm_prev[i]) {
-        s_pwm_prev[i] = cur;
-        if (!s_poll_first) ch_pwm = true; /* первый проход - только базовое значение */
-      }
-    }
-  }
-  s_poll_first = false;
+  if (ponr_scan(now, false)) ponr_mark_dirty(now);
+  ponr_try_write(now);
 
-  /* Zigbee: state отслеживается только после применения режима при старте */
-  if (s_zb_applied && (uint32_t)(now - s_zb_done_tick) >= PONR_ZB_TRACK_MS) {
-    for (int z = 0; z < NUMZBEE; z++) {
-      if (ZigbeeConf[z].topin != 11 || ponr_eff_zbee(z) != PONR_LAST) continue;
-      bool st = ZigbeeConf[z].state != 0;
-      if (st != ponr_bm_get(s_last_zbee, z)) {
-        ponr_bm_set(s_last_zbee, z, st);
-        ch_last = true;
-      }
-    }
-  }
-
-  if (ch_last) { s_dirty_last = true; s_dirty_last_tick = now; }
-  if (ch_pwm)  { s_dirty_pwm = true;  s_dirty_pwm_tick = now; }
-
-  /* Отложенная запись: 5 с после последнего изменения, не чаще раза в 30 с */
-  if (s_dirty_last && (uint32_t)(now - s_dirty_last_tick) >= 5000u &&
-      (!s_saved_last_once || (uint32_t)(now - s_save_last_tick) >= 30000u)) {
-    uint8_t u = 9;
-    if (xQueueSend(usbQueueHandle, &u, 0) == pdPASS) {
-      s_dirty_last = false;
-      s_saved_last_once = true;
-      s_save_last_tick = now;
-    }
-  }
-  if (s_dirty_pwm && (uint32_t)(now - s_dirty_pwm_tick) >= 5000u &&
-      (!s_saved_pwm_once || (uint32_t)(now - s_save_pwm_tick) >= 30000u)) {
-    uint8_t u = 1; /* PWM хранит dvalue и onoff в pins.ini */
-    if (xQueueSend(usbQueueHandle, &u, 0) == pdPASS) {
-      s_dirty_pwm = false;
-      s_saved_pwm_once = true;
-      s_save_pwm_tick = now;
-    }
-  }
 
   /* Zigbee: режим применяется один раз после подключения к MQTT */
   if (!s_zb_applied) {
@@ -3335,4 +3949,3 @@ void ponr_poll(void) {
     }
   }
 }
-

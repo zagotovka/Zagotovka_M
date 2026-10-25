@@ -393,7 +393,7 @@ function TabCron({ }) {
               </ul>
             </li>
             <li>
-              <b>Назовите и включите.</b> В поле <b>INFO</b> напишите название (до 30 символов, например «Свет на крыльце»), включите ползунок <b>On/Off</b> и нажмите <b>Save changes</b>.
+              <b>Назовите и включите.</b> В поле <b>INFO</b> напишите название (до 29 байт UTF-8, кириллица — около 14 символов, например «Свет на крыльце»), включите ползунок <b>On/Off</b> и нажмите <b>Save changes</b>.
               Если ползунок выключен, строка будет проигнорирована целиком.
             </li>
             <li>
@@ -772,9 +772,9 @@ function TabCron({ }) {
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3g50'}</code></td><td class="border px-4 py-2">Включить пин 6, только если значение диммера 3 равно 50 или больше.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3l50'}</code></td><td class="border px-4 py-2">Включить пин 6, только если значение диммера 3 равно 50 или меньше.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3>0&Ss'}</code></td><td class="border px-4 py-2">Включить пин 6, если диммер 3 светит и сейчас ночь (Ss).</td></tr>
-              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Включить пин 6, только если Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 89).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Включить пин 6, только если Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 90).</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV93g100'}</code></td><td class="border px-4 py-2">Включить пин 6, только если яркость Zigbee-устройства 93 равна 100 или больше.</td></tr>
-              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'93.1:2?D2'}</code></td><td class="border px-4 py-2">Zigbee: слот 93, sub-action 1, переключить - только если устройство 2 включено.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'93.1:2?D2'}</code></td><td class="border px-4 py-2">Zigbee: ID 93, sub-action 1, переключить - только если устройство 2 включено.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5<25|D1'}</code></td><td class="border px-4 py-2">Включить пин 6, если на датчике 5 ниже 25 градусов ИЛИ включено устройство 1 (особый случай при неисправном датчике - см. правила ниже).</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?C3'}</code></td><td class="border px-4 py-2">Включить пин 6, только если верно готовое условие из ячейки C3.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'pwm:5,600,0,100?Ss'}</code></td><td class="border px-4 py-2">Плавный разгон диммера 5 с 0 до 100 процентов за 600 секунд, только если сейчас ночь (Ss). У pwm-действия условие пишется в самом конце, после последнего числа.</td></tr>
@@ -881,7 +881,7 @@ function TabCron({ }) {
           <ul class="list-disc ml-6 mb-3 space-y-1">
             <li>Поле <b>Cron</b> - до 34 символов, семь полей через пробел.</li>
             <li>Поле <b>Script</b> - до 254 символов вместе с условиями.</li>
-            <li>Поле <b>INFO</b> - до 30 символов.</li>
+            <li>Поле <b>INFO</b> - до 29 байт UTF-8 (кириллица — около 14 символов).</li>
             <li><b>Duration (Sec)</b> в окне PWM - от 1 до 864000 секунд.</li>
             <li>Число строк ограничено: сколько ещё можно добавить, показывает надпись под таблицей.</li>
             <li>Готовых условий на странице «Global Settings» (строка Conditions) - 12 ячеек.</li>
@@ -922,7 +922,7 @@ function TabCron({ }) {
               </ul>
             </li>
             <li>
-              <b>Name it and enable it.</b> In the <b>INFO</b> field write a name (up to 30 characters, for example "Porch light"), turn the <b>On/Off</b> slider on and press <b>Save changes</b>.
+              <b>Name it and enable it.</b> In the <b>INFO</b> field write a name (up to 29 UTF-8 bytes, about 14 Cyrillic characters, for example "Porch light"), turn the <b>On/Off</b> slider on and press <b>Save changes</b>.
               If the slider is off, the whole row is ignored.
             </li>
             <li>
@@ -1301,9 +1301,9 @@ function TabCron({ }) {
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3g50'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if dimmer 3 value is 50 or more.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3l50'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if dimmer 3 value is 50 or less.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3>0&Ss'}</code></td><td class="border px-4 py-2">Turn on pin 6 if dimmer 3 is lit and it is night (Ss).</td></tr>
-              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 89).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 90).</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV93g100'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if the brightness of Zigbee device 93 is 100 or more.</td></tr>
-              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'93.1:2?D2'}</code></td><td class="border px-4 py-2">Zigbee: slot 93, sub-action 1, toggle - only if device 2 is on.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'93.1:2?D2'}</code></td><td class="border px-4 py-2">Zigbee: ID 93, sub-action 1, toggle - only if device 2 is on.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5<25|D1'}</code></td><td class="border px-4 py-2">Turn on pin 6 if sensor 5 is below 25 degrees OR device 1 is on (special case with a dead sensor - see the rules below).</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?C3'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if the ready-made condition from cell C3 is true.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'pwm:5,600,0,100?Ss'}</code></td><td class="border px-4 py-2">Smooth ramp-up of dimmer 5 from 0 to 100 percent over 600 seconds, only if it is night (Ss). For a pwm action the condition goes at the very end, after the last number.</td></tr>
@@ -1410,7 +1410,7 @@ function TabCron({ }) {
           <ul class="list-disc ml-6 mb-3 space-y-1">
             <li>The <b>Cron</b> field - up to 34 characters, seven fields separated by spaces.</li>
             <li>The <b>Script</b> field - up to 254 characters including conditions.</li>
-            <li>The <b>INFO</b> field - up to 30 characters.</li>
+            <li>The <b>INFO</b> field - up to 29 UTF-8 bytes (about 14 Cyrillic characters).</li>
             <li><b>Duration (Sec)</b> in the PWM window - from 1 to 864000 seconds.</li>
             <li>The number of rows is limited: the label under the table shows how many more can be added.</li>
             <li>Ready-made conditions on the "Global Settings" page (the Conditions row) - 12 cells.</li>

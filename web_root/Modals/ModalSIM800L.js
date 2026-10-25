@@ -137,11 +137,11 @@ function ModalSIM800L({ hideModal, title, selectedGps, onSave, language = 'en' }
                 <tbody>
                   <tr class="bg-gray-200">
                     <td class="p-2 font-bold">${M.rxd}</td>
-                    <td class="p-2">PA3(1)</td>
+                    <td class="p-2">PA3(2)</td>
                   </tr>
                   <tr class="bg-white">
                     <td class="p-2 font-bold">${M.txd}</td>
-                    <td class="p-2">PD5(35)</td>
+                    <td class="p-2">PD5(37)</td>
                   </tr>
                   <tr class="bg-gray-200">
                     <td class="p-2 font-bold">${M.mobilePhone}</td>

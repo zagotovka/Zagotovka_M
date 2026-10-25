@@ -4,7 +4,7 @@ export const enLangswitch = [
   'PIN - The unique number of the digital or analog pin.',
   'Pullup type (EXTERNAL_PULLDOWN, INTERNAL_PULLUP, EXTERNAL_PULLUP)',
   'Device connection - Here will appear one or more devices/relays of pin(s) with which this switch interacts.',
-  'INFO - Give a name of this switch for quick navigation. Example: "Kitchen", "Children room", etc. Max. 30 characters!',
+  'INFO - Give a name of this switch for quick navigation. Example: "Kitchen", "Children room", etc. Max. 29 UTF-8 bytes!',
   "On/Off - Enable or disable the switch state handler on this pin.",
   'Action - The Edit button allows you to access the switch settings menu.'
 ];
@@ -25,7 +25,7 @@ export const enlangbutton = [
   'sclick - Command to execute when the button is pressed once.',
   'dclick - Command to execute when the button is pressed twice.',
   'lpress - Command to execute when the button is long pressed.',
-  'INFO - Give a name of this button for quick navigation. Example: "Kitchen", "Children room", etc. Max. 30 characters!',
+  'INFO - Give a name of this button for quick navigation. Example: "Kitchen", "Children room", etc. Max. 29 UTF-8 bytes!',
   "On/Off - Enable or disable the button function on this pin.",
   'Action - The Edit button allows you to access the button settings menu.'
 ];
@@ -73,7 +73,7 @@ export const enlangeditbutton = [
   'Double-click interval (ms) - The interval in ms during which two consecutive button presses will generate a DoubleClick event. 0 - does not track a double-click. It is usually 800ms.',
   'Prevent Click - 1 or 0 - Prevent (1) - a Click event from being generated the first time you click if it is followed by a DoubleClick. Makes sense only if Double-click interval is greater than zero.',
   'Relay connection - Here will appear one or more relays of pin(s) with which this button interacts.',
-  'INFO - Give a name of this button for quick navigation. Example: "Kitchen", "Children room", etc. Max. 30 characters!',
+  'INFO - Give a name of this button for quick navigation. Example: "Kitchen", "Children room", etc. Max. 29 UTF-8 bytes!',
   "On/Off - 'On' or 'Off' this pin/switch."
 ];
 
@@ -86,7 +86,7 @@ export const enlangpwm = [
   'Invert State - port inversion (Off - logical 1 at the output, on - 0).',
   'Dimmer value (0-255) - If you use PWM, it will between (0-255).',
   'Power On Restore - What parameters should be saved when changing and restored when the controller is on None - do not save anything, when you turn on the state and value are equal to those set when configuring. State - restore the last set state of parameter On. Value - restore the last set value of dimmer (PWM). State&Value - restore state and value.',
-  'INFO - Give a name to the selected relay for quick navigation, e.g."Kitchen", "Kids room", etc. No more than 30 characters!',
+  'INFO - Give a name to the selected relay for quick navigation, e.g."Kitchen", "Kids room", etc. No more than 29 UTF-8 bytes!',
   "On/Off - 'On' or 'Off' this relay.",
   'Action - Some actions with this pin.'
 ];
@@ -95,7 +95,7 @@ export const enlangz = [
   '', // Empty string for index 0
   'ID - is a unique numerical identifier of the pin. Assigned automatically',
   'PIN - The unique number of the digital or analog pin.',
-  'INFO - Give a name to the selected relay for quick navigation, e.g."Kitchen", "Kids room", etc. No more than 30 characters!',
+  'INFO - Give a name to the selected relay for quick navigation, e.g."Kitchen", "Kids room", etc. No more than 29 UTF-8 bytes!',
   "On/Off - 'On' or 'Off' this relay.",
   'Action - For yourself, write a reminder for what this PIN is for!.'
 ];
@@ -106,7 +106,7 @@ export const enrelay = [
   'PIN - The unique number of the digital or analog pin.',
   "ON - State of pin -1 is 'On', 0 is 'Off'.",
   'Power On Restore - What parameters should be saved when changing and restored when the controller is on None - do not save anything, when you turn on the state and value are equal to those set when configuring. State - restore the last set state of parameter On. Value - restore the last set value of dimmer (PWM). State&Value - restore state and value.',
-  'INFO - Give a name to the selected relay for quick navigation, e.g."Kitchen", "Kids room", etc. No more than 30 characters!',
+  'INFO - Give a name to the selected relay for quick navigation, e.g."Kitchen", "Kids room", etc. No more than 29 UTF-8 bytes!',
   "On/Off - 'On' or 'Off' this relay.",
   'Action - For yourself, write a reminder for what this PIN is for!.'
 ];
@@ -120,7 +120,7 @@ export const enlangeditrelay = [
   'Invert State - port inversion (Off - logical 1 at the output, on - 0).',
   'Dimmer value (0-255) - If you use PWM, it will between (0-255).',
   'Power On Restore - What parameters should be saved when changing and restored when the controller is on None - do not save anything, when you turn on the state and value are equal to those set when configuring. State - restore the last set state of parameter On. Value - restore the last set value of dimmer (PWM). State&Value - restore state and value.',
-  'INFO - Give a name to the selected relay for quick navigation, e.g."Kitchen", "Kids room", etc. No more than 30 characters!',
+  'INFO - Give a name to the selected relay for quick navigation, e.g."Kitchen", "Kids room", etc. No more than 29 UTF-8 bytes!',
   "On/Off - 'On' or 'Off' this relay."
 ];
 
@@ -129,7 +129,7 @@ export const enlangtimers = [
   'No - A unique numerical identifier of the task (cron). Assigned automatically.', // 1
   'Cron - Configure a schedule (cron) to perform the action.', // 2
   'Script - What action (script) must be performed at the time specified in the timer.', // 3
-  'Info - Give a name to the selected timer for quick navigation, e.g."Lawn Watering", "Backyard Light", etc. No more than 30 characters!', // 4
+  'Info - Give a name to the selected timer for quick navigation, e.g."Lawn Watering", "Backyard Light", etc. No more than 29 UTF-8 bytes!', // 4
   'On/Off - Enable or disable the execution of this task.', // 5
   'Action - The Edit button allows you to access the task settings menu.' // 6
 ];

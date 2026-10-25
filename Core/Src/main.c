@@ -523,33 +523,33 @@ void button_event_handler(
     break;
   case LONG_PRESS_START: // Начало долгого нажатия
     if (is_action_set(PinsConf[handle->button_id].lpress)) {
-      LOG_SYSTEM("[LONG PRESS] Button %d: %s", handle->button_id, PinsConf[handle->button_id].lpress);
-      action_handler(handle->button_id, PinsConf[handle->button_id].lpress,
+      LOG_SYSTEM("[LONG PRESS] Button %d: %s", PinIdFromIdx(handle->button_id), PinsConf[handle->button_id].lpress);
+      action_handler((uint16_t)(handle->button_id + 1), PinsConf[handle->button_id].lpress,
                      "long press");
       mqtt_queue_send_safe(3, handle->button_id, 1, 0);
     }
     break;
   case LONG_PRESS_HOLD: // Продолжение долгого нажатия
-    //       printf("Button %d: LONG_PRESS_HOLD!\r\n", handle->button_id);
+    //       printf("Button %d: LONG_PRESS_HOLD!\r\n", PinIdFromIdx(handle->button_id));
     break;
   case SINGLE_CLICK: // Одиночное нажатие кнопки
     if (is_action_set(PinsConf[handle->button_id].sclick)) {
-      LOG_SYSTEM("[SINGLE CLICK] Button %d: %s", handle->button_id, PinsConf[handle->button_id].sclick);
-      action_handler(handle->button_id, PinsConf[handle->button_id].sclick,
+      LOG_SYSTEM("[SINGLE CLICK] Button %d: %s", PinIdFromIdx(handle->button_id), PinsConf[handle->button_id].sclick);
+      action_handler((uint16_t)(handle->button_id + 1), PinsConf[handle->button_id].sclick,
                      "sclick press");
       mqtt_queue_send_safe(4, handle->button_id, 2, 0);
     }
     break;
   case DOUBLE_CLICK: // Двойное нажатие кнопки
     if (is_action_set(PinsConf[handle->button_id].dclick)) {
-      LOG_SYSTEM("[DOUBLE CLICK] Button %d: %s", handle->button_id, PinsConf[handle->button_id].dclick);
-      action_handler(handle->button_id, PinsConf[handle->button_id].dclick,
+      LOG_SYSTEM("[DOUBLE CLICK] Button %d: %s", PinIdFromIdx(handle->button_id), PinsConf[handle->button_id].dclick);
+      action_handler((uint16_t)(handle->button_id + 1), PinsConf[handle->button_id].dclick,
                      "double press");
       mqtt_queue_send_safe(5, handle->button_id, 3, 0);
     }
     break;
   case PRESS_REPEAT: // Повторное нажатие кнопки
-    printf("Button %d: PRESS_REPEAT!\r\n", handle->button_id);
+    printf("Button %d: PRESS_REPEAT!\r\n", PinIdFromIdx(handle->button_id));
     break;
   default:
     // Обработка неизвестного значения event
@@ -573,16 +573,17 @@ void pwm_event_handler(Button *handle) {
     //              printf("Button %d: PRESS_UP!\r\n", handle->button_id);
     break;
   case LONG_PRESS_START: // Начало долгого нажатия
-    printf("Button %d: LONG_PRESS_START!\r\n", handle->button_id);
+    printf("Button %d: LONG_PRESS_START!\r\n", PinIdFromIdx(handle->button_id));
     break;
   case LONG_PRESS_HOLD:
     //	  if(PinsConf[handle->button_id].sclick == 2){
     for (int a = 0; a < NUMPINLINKS; a++) {
-      if (PinsLinks[a].idin == handle->button_id) {
+      if (PinsLinks[a].idin == (short)(handle->button_id + 1)) {
         // PinsInfo[i].tim->CCR1 = 50;
         //  PWM
-        i = PinsLinks[a].idout;
-        if (i < 0 || i >= NUMPIN) continue; /* Zigbee/мусор — не PWM */
+        int out_id = PinsLinks[a].idout;
+        if (out_id < 1 || out_id > NUMPIN) continue; /* Zigbee/мусор — не PWM */
+        i = out_id - 1;
         if (PinsConf[i].topin == 5) {
           if (is_pin_in_autotune(i)) break; /* AutoTune lock */
           // dvalue - ПРОЦЕНТ 0-100, step = 1%
@@ -603,7 +604,7 @@ void pwm_event_handler(Button *handle) {
           uint32_t pulse_lh = (uint32_t)((uint64_t)PinsConf[i].dvalue *
                                          PinsConf[i].pwmmax / 100ULL);
           __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, pulse_lh);
-          printf("PWM LONG [%d] %s: %d%% = %lu steps\r\n", i, PinsInfo[i].pins,
+          printf("PWM LONG [%d] %s: %d%% = %lu steps\r\n", PinIdFromIdx(i), PinsInfo[i].pins,
                  PinsConf[i].dvalue, (unsigned long)pulse_lh);
         }
         //						data_pin.id =
@@ -611,22 +612,23 @@ void pwm_event_handler(Button *handle) {
         // data_pin.action = 2;
         // xQueueSend(outputQueueHandle, (void* ) &data_pin, 0);
         printf("Button %d: SINGLE_CLICK PWM pwmValue %d flag %d!\r\n",
-               handle->button_id, PinsConf[i].dvalue,
+               PinIdFromIdx(handle->button_id), PinsConf[i].dvalue,
                PinsConf[handle->button_id].on);
       }
       //				}
     }
-    printf("Button %d: LONG_PRESS_HOLD!\r\n", handle->button_id);
+    printf("Button %d: LONG_PRESS_HOLD!\r\n", PinIdFromIdx(handle->button_id));
     break;
   case SINGLE_CLICK: // Одиночное нажатие кнопки
                      //	  if(PinsConf[handle->button_id].sclick == 2){
     for (int a = 0; a < NUMPINLINKS; a++) {
-      if (PinsLinks[a].idin == handle->button_id) {
+      if (PinsLinks[a].idin == (short)(handle->button_id + 1)) {
         // PinsInfo[i].tim->CCR1 = 50;
         // for (uint8_t i = 0; i < NUMPIN; i++) {
         //  PWM
-        i = PinsLinks[a].idout;
-        if (i < 0 || i >= NUMPIN) continue; /* Zigbee/мусор — не PWM */
+        int out_id = PinsLinks[a].idout;
+        if (out_id < 1 || out_id > NUMPIN) continue; /* Zigbee/мусор — не PWM */
+        i = out_id - 1;
         if (PinsConf[i].topin == 5) {
           if (is_pin_in_autotune(i)) break; /* AutoTune lock */
           // dvalue - ПРОЦЕНТ 0-100, step = 1%
@@ -647,7 +649,7 @@ void pwm_event_handler(Button *handle) {
           uint32_t pulse_sc = (uint32_t)((uint64_t)PinsConf[i].dvalue *
                                          PinsConf[i].pwmmax / 100ULL);
           __HAL_TIM_SET_COMPARE(&htim[i], PinsInfo[i].tim_channel, pulse_sc);
-          printf("PWM CLICK [%d] %s: %d%% = %lu steps\r\n", i, PinsInfo[i].pins,
+          printf("PWM CLICK [%d] %s: %d%% = %lu steps\r\n", PinIdFromIdx(i), PinsInfo[i].pins,
                  PinsConf[i].dvalue, (unsigned long)pulse_sc);
         }
 
@@ -656,7 +658,7 @@ void pwm_event_handler(Button *handle) {
         // data_pin.action = 2;
         // xQueueSend(outputQueueHandle, (void* ) &data_pin, 0);
         printf("Button %d: SINGLE_CLICK PWM pwmValue %d flag %d!\r\n",
-               handle->button_id, PinsConf[i].dvalue,
+               PinIdFromIdx(handle->button_id), PinsConf[i].dvalue,
                PinsConf[handle->button_id].on);
       }
     }
@@ -665,11 +667,11 @@ void pwm_event_handler(Button *handle) {
     break;
   case DOUBLE_CLICK: // Двойное нажатие кнопки
     PinsConf[handle->button_id].on ^= 1;
-    printf("Button %d: DOUBLE_CLICK PWM %d!\r\n", handle->button_id,
+    printf("Button %d: DOUBLE_CLICK PWM %d!\r\n", PinIdFromIdx(handle->button_id),
            PinsConf[handle->button_id].on);
     break;
   case PRESS_REPEAT: // Повторное нажатие кнопки
-    printf("Button %d: PRESS_REPEAT PWM!\r\n", handle->button_id);
+    printf("Button %d: PRESS_REPEAT PWM!\r\n", PinIdFromIdx(handle->button_id));
     break;
   default:
     // Обработка неизвестного значения event
@@ -1643,54 +1645,55 @@ void vApplicationMallocFailedHook(void)
 #define fade_state dtcm_fade_state
 
 /* Запускает (или перезапускает) плавное изменение PWM.
- * pwm_id       — индекс PWM-пина (topin == 5)
+ * pwm_id       — логический ID PWM-пина (1..NUMPIN, topin == 5), не индекс
  * duration_sec — длительность перехода в секундах
  * start_duty   — начальная яркость 0–100%
  * end_duty     — конечная яркость   0–100% */
-void start_pwm_fade(uint8_t pwm_id, uint32_t duration_sec,
+void start_pwm_fade(uint16_t pwm_id, uint32_t duration_sec,
                     int start_duty, int end_duty, int cronindex) {
-    if (pwm_id >= NUMPIN || PinsConf[pwm_id].topin != 5) {
+    int pwm_idx = PinIdxFromId(pwm_id);
+    if (pwm_idx < 0 || pwm_idx >= NUMPIN || PinsConf[pwm_idx].topin != 5) {
         printf("start_pwm_fade: bad id=%d\r\n", pwm_id);
         return;
     }
-    if (is_pin_in_autotune(pwm_id)) {
+    if (is_pin_in_autotune(pwm_idx)) {
         printf("[FADE] BLOCKED by AutoTune: pwm_id=%d\r\n", pwm_id);
         return;
     }
 
     /* Рубильник: Encoder onoff (приоритетный) либо On/Off самой PWM-строки */
-    bool enc_on = pwm_gate_open(pwm_id);
+    bool enc_on = pwm_gate_open(pwm_idx);
     if (!enc_on) {
         // Гасим PWM и блокируем — БЕЗОПАСНОСТЬ
-        __HAL_TIM_SET_COMPARE(&htim[pwm_id], PinsInfo[pwm_id].tim_channel, 0);
-        fade_state[pwm_id].active = false;
+        __HAL_TIM_SET_COMPARE(&htim[pwm_idx], PinsInfo[pwm_idx].tim_channel, 0);
+        fade_state[pwm_idx].active = false;
         return;
     }
 
     uint32_t steps = duration_sec > 0 ? duration_sec : 1;
 
-    fade_state[pwm_id].active       = true;
-    fade_state[pwm_id].current_duty = (float)start_duty;
-    fade_state[pwm_id].delta        = (float)(end_duty - start_duty)
+    fade_state[pwm_idx].active       = true;
+    fade_state[pwm_idx].current_duty = (float)start_duty;
+    fade_state[pwm_idx].delta        = (float)(end_duty - start_duty)
                                        / (float)steps;
-    fade_state[pwm_id].steps_left   = steps;
-    fade_state[pwm_id].end_duty     = end_duty;
-    fade_state[pwm_id].cronindex    = cronindex;
+    fade_state[pwm_idx].steps_left   = steps;
+    fade_state[pwm_idx].end_duty     = end_duty;
+    fade_state[pwm_idx].cronindex    = cronindex;
 
     /* Сохраняем pwm_out PID для бесшовной передачи после fade */
-    fade_state[pwm_id].saved_pid_duty = 0;
+    fade_state[pwm_idx].saved_pid_duty = 0;
     for (int p = 0; p < PID_MAX_SLOTS; p++) {
       if (PidConf[p].pwm_pin_id == pwm_id) {
-        fade_state[pwm_id].saved_pid_duty = PidConf[p].pwm_out;
+        fade_state[pwm_idx].saved_pid_duty = PidConf[p].pwm_out;
         break;
       }
     }
 
     /* Устанавливаем начальное значение немедленно */
-    PinsConf[pwm_id].dvalue = start_duty;
+    PinsConf[pwm_idx].dvalue = start_duty;
     uint32_t pulsef3 =
-        (uint32_t)((uint64_t)start_duty * PinsConf[pwm_id].pwmmax / 100ULL);
-    __HAL_TIM_SET_COMPARE(&htim[pwm_id], PinsInfo[pwm_id].tim_channel, pulsef3);
+        (uint32_t)((uint64_t)start_duty * PinsConf[pwm_idx].pwmmax / 100ULL);
+    __HAL_TIM_SET_COMPARE(&htim[pwm_idx], PinsInfo[pwm_idx].tim_channel, pulsef3);
 
 //    printf("PWM fade: id=%d %ds %d%%->%d%%\r\n",pwm_id, (int)duration_sec, start_duty, end_duty);
 }
@@ -1752,7 +1755,7 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
         dur = atoi(t2);
         sduty = atoi(t3);
         eduty = atoi(t4);
-        start_pwm_fade((uint8_t)pwm_id, (uint32_t)dur, sduty, eduty, cronindex);
+        start_pwm_fade((uint16_t)pwm_id, (uint32_t)dur, sduty, eduty, cronindex);
         /* MQTT: батч send_mqtt_timer_batch() отправляет состояние раз в 1с */
       } else {
         printf("parse_string: bad pwm token: %s\r\n", token);
@@ -1899,11 +1902,11 @@ void StartConfigTask(void *argument)
 	          SetZigbeeConfig(); // "zigbee.ini" не существует — создаём его
 	        }
 
-	        /* Последнее состояние выходов (режим Power On State = LAST). Файла
-	         * может не быть - тогда все выходы считаются выключенными. */
-	        if (f_stat("laststate.ini", &finfo) == FR_OK) {
-	          GetLastState();
-	        }
+	        /* Последнее состояние выходов (режим Power On State = LAST).
+	         * GetLastState() сам проверяет обе копии (laststate.ini и
+	         * laststate2.ini) и берёт самую новую валидную; файлов может не быть -
+	         * тогда все выходы считаются выключенными. */
+	        GetLastState();
 
 	        InitPin(); // Инициализация пинов — теперь всегда выполняется после всех загрузок,
 	                   // независимо от того, какие файлы нашлись, а какие были созданы заново
@@ -1970,7 +1973,7 @@ case 2:
 	          SetCondPool(); // Сохранение встроенных выражений условий в "cond.ini"
 	          break;
 	        case 9:
-	          SetLastState(); // Сохранение последнего состояния выходов в "laststate.ini"
+	          SetLastState(); // Сохранение последнего состояния (laststate.ini / laststate2.ini)
 	          break;
 	        default:
 	          printf("xQueueReceive get wrong data! \r\n");
@@ -2294,11 +2297,11 @@ void StartWebServerTask(void *argument)
 			// printf("[MQTT_Q] cmd=%d dev=%d state=%d\r\n", rxMsg.command,rxMsg.deviceId, rxMsg.state);
       /* Защита от повреждённых сообщений в очереди */
       /* cmd 11 (ZIGBEE SECURITY) несёт индекс слота ZigbeeConf, а не id пина.
-       * cmd 3/4/5 валидны и для Zigbee-кнопок (id = NUMPIN + индекс слота). */
-      bool zbee_btn_ev = (rxMsg.deviceId >= NUMPIN && rxMsg.deviceId < NUMPIN + NUMZBEE &&
+       * cmd 3/4/5 валидны и для Zigbee-кнопок (deviceId = логический 90..289). */
+      bool zbee_btn_ev = (IsZigbeePin(rxMsg.deviceId) &&
                           (rxMsg.command == 3 || rxMsg.command == 4 || rxMsg.command == 5));
-      if (rxMsg.deviceId >= NUMPIN && rxMsg.command != 1 && rxMsg.command != 11 &&
-          !zbee_btn_ev) {
+      bool phys_dev = (rxMsg.deviceId < NUMPIN);
+      if (!phys_dev && rxMsg.command != 1 && rxMsg.command != 11 && !zbee_btn_ev) {
         printf("MQTT queue: invalid deviceId=%d, cmd=%d — skipped\r\n", rxMsg.deviceId, rxMsg.command);
       } else {
       switch (rxMsg.command) {
@@ -2318,7 +2321,9 @@ void StartWebServerTask(void *argument)
           memset(mqtt_topic, 0, sizeof(mqtt_topic));
           memset(mqtt_payload, 0, sizeof(mqtt_payload));
           snprintf(mqtt_topic, sizeof(mqtt_topic), "/switch/");
-          snprintf(mqtt_payload, sizeof(mqtt_payload), "ID:%d=%s", rxMsg.deviceId, rxMsg.state ? "ON" : "OFF");
+          snprintf(mqtt_payload, sizeof(mqtt_payload), "ID:%d=%s",
+                   rxMsg.deviceId < NUMPIN ? rxMsg.deviceId + 1 : rxMsg.deviceId,
+                   rxMsg.state ? "ON" : "OFF");
           send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
@@ -2331,9 +2336,9 @@ void StartWebServerTask(void *argument)
           memset(mqtt_topic, 0, sizeof(mqtt_topic));
           memset(mqtt_payload, 0, sizeof(mqtt_payload));
           snprintf(mqtt_topic, sizeof(mqtt_topic), "/button/");
-          if (rxMsg.deviceId >= NUMPIN) {
+          if (IsZigbeePin(rxMsg.deviceId)) {
             /* Zigbee-кнопка: действия в пуле, а не в PinsConf (иначе OOB) */
-            int zbi = rxMsg.deviceId - NUMPIN;
+            int zbi = ZbeeIdx(rxMsg.deviceId);
             const char *zact = (rxMsg.command == 3) ? zbee_action_lpress(zbi)
                              : (rxMsg.command == 4) ? zbee_action_sclick(zbi)
                              : zbee_action_dclick(zbi);
@@ -2343,9 +2348,9 @@ void StartWebServerTask(void *argument)
                      rxMsg.deviceId, zname, zact);
           } else {
             switch (rxMsg.command) {
-            case 3: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].lpress); break;
-            case 4: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick); break;
-            case 5: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].dclick); break;
+            case 3: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s", rxMsg.deviceId + 1, PinsConf[rxMsg.deviceId].lpress); break;
+            case 4: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId + 1, PinsConf[rxMsg.deviceId].sclick); break;
+            case 5: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId + 1, PinsConf[rxMsg.deviceId].dclick); break;
             }
           }
           send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
@@ -2358,7 +2363,7 @@ void StartWebServerTask(void *argument)
           memset(mqtt_topic, 0, sizeof(mqtt_topic));
           memset(mqtt_payload, 0, sizeof(mqtt_payload));
           snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
-          snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId, PinsConf[rxMsg.deviceId].sclick, PinsConf[rxMsg.deviceId].info);
+          snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId + 1, PinsConf[rxMsg.deviceId].sclick, PinsConf[rxMsg.deviceId].info);
           send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
           printf("Error: MQTT settings not configured\r\n");
@@ -2371,7 +2376,7 @@ void StartWebServerTask(void *argument)
           memset(mqtt_payload, 0, sizeof(mqtt_payload));
           snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
           snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s",
-                   NUMPIN + rxMsg.deviceId, zbee_action_sclick(rxMsg.deviceId),
+                   ZbeeIdFromIdx(rxMsg.deviceId), zbee_action_sclick(rxMsg.deviceId),
                    ZigbeeConf[rxMsg.deviceId].zbee_label);
           send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
         } else if (SetSettings.check_mqtt == 1) {
@@ -2388,7 +2393,7 @@ void StartWebServerTask(void *argument)
           snprintf(mqtt_topic, sizeof(mqtt_topic), "/onoff/");
           int written = snprintf(mqtt_payload, sizeof(mqtt_payload),
                                  "ID=%d/OnOff=%s/%s",
-                                 rxMsg.deviceId,
+                                 rxMsg.deviceId + 1,
                                  PinsConf[rxMsg.deviceId].onoff ? "ON" : "OFF",
                                  PinsConf[rxMsg.deviceId].info);
           if (written < 0 || (size_t)written >= sizeof(mqtt_payload)) {
@@ -2474,7 +2479,7 @@ void StartOutputTask(void *argument)
           output_peak = cur_out;
         }
       }
-      if (data_pin.id >= 0 && data_pin.id < (NUMPIN + NUMZBEE)) {
+      if (IsPinId(data_pin.id) || IsZigbeePin(data_pin.id)) {
         if (IsZigbeePin(data_pin.id)) {
           int zbi = ZbeeIdx(data_pin.id);
           if (ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_SWITCH) {
@@ -2530,16 +2535,16 @@ void StartOutputTask(void *argument)
         } else {
           switch (data_pin.action) {
           case 0:
-            HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name,
-                              PinsInfo[data_pin.id].hal_pin, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(PinsInfo[data_pin.id - 1].gpio_name,
+                              PinsInfo[data_pin.id - 1].hal_pin, GPIO_PIN_RESET);
             break;
           case 1:
-            HAL_GPIO_WritePin(PinsInfo[data_pin.id].gpio_name,
-                              PinsInfo[data_pin.id].hal_pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(PinsInfo[data_pin.id - 1].gpio_name,
+                              PinsInfo[data_pin.id - 1].hal_pin, GPIO_PIN_SET);
             break;
           case 2:
-            HAL_GPIO_TogglePin(PinsInfo[data_pin.id].gpio_name,
-                               PinsInfo[data_pin.id].hal_pin);
+            HAL_GPIO_TogglePin(PinsInfo[data_pin.id - 1].gpio_name,
+                               PinsInfo[data_pin.id - 1].hal_pin);
             break;
           default:
             printf("Invalid action: %d\r\n", data_pin.action);
@@ -2780,7 +2785,7 @@ void StartInputTask(void *argument)
 	      if (PinsConf[i].onoff != 0) {
 	        uint8_t act = (pinLevel[i] == GPIO_PIN_RESET) ? 1 : 0;
 	        g_ponr_boot_pass = 1;
-	        processPins(i, act);
+	        processPins((uint16_t)(i + 1), act);
 	        g_ponr_boot_pass = 0;
 	        mqtt_queue_send_safe(2, i, act, 0);
 	      }
@@ -2839,7 +2844,7 @@ void StartInputTask(void *argument)
 	        pinStates[i] =
 	            HAL_GPIO_ReadPin(PinsInfo[i].gpio_name, PinsInfo[i].hal_pin);
 	        if (pinStates[i] != GPIO_PIN_RESET && pinStates[i] != GPIO_PIN_SET) {
-	          printf("Error reading GPIO pin %d\r\n", i);
+	          printf("Error reading GPIO pin %d\r\n", PinIdFromIdx(i));
 	          continue;
 	        }
 	        /* Master Enable: если onoff == 0, игнорируем физический выключатель.
@@ -2858,7 +2863,7 @@ void StartInputTask(void *argument)
 	            pinLevel[i] != pinStates[i]) {
 	          pinLevel[i] = pinStates[i];
 	          pinTimes[i] = millis;
-	          processPins(i, 1); // Отправляем 1, т.к. выключатель включен
+	          processPins((uint16_t)(i + 1), 1); // Отправляем 1, т.к. выключатель включен
 	          mqtt_queue_send_safe(2, i, 1, 0);
 	        }
 	        // Когда выключатель разомкнут (отжат) - на входе 1
@@ -2866,7 +2871,7 @@ void StartInputTask(void *argument)
 	            pinLevel[i] != pinStates[i]) {
 	          pinLevel[i] = pinStates[i];
 	          pinTimes[i] = millis;
-	          processPins(i, 0); // Отправляем 0, т.к. выключатель выключен
+	          processPins((uint16_t)(i + 1), 0); // Отправляем 0, т.к. выключатель выключен
 	          mqtt_queue_send_safe(2, i, 0, 0);
 	        }
 	      }
@@ -2915,11 +2920,12 @@ static bool enc_apply(uint8_t id, int delta)
   bool changed = false;
 
   for (int a = 0; a < NUMPINLINKS; a++) {
-    if (PinsLinks[a].idin != id) continue;
+    if (PinsLinks[a].idin != (short)(id + 1)) continue;
     if (!cond_eval_ref(PinsLinks[a].cond)) continue;
 
-    int idpwm = PinsLinks[a].idout;
-    if (idpwm < 0 || idpwm >= NUMPIN) continue;      /* Zigbee/мусор */
+    int out_id = PinsLinks[a].idout;
+    if (out_id < 1 || out_id > NUMPIN) continue;      /* Zigbee/мусор */
+    int idpwm = out_id - 1;
     if (PinsConf[idpwm].topin != 5) continue;
     if (is_pin_in_autotune(idpwm)) continue;         /* AutoTune lock */
 
@@ -2959,7 +2965,7 @@ void StartEncoderTask(void *argument)
   for (uint8_t id = 0; id < NUMPIN; id++) {
     if (PinsConf[id].topin != 8) continue;
     uint8_t b = PinsConf[id].encoderb;
-    if (b == 0 || b >= NUMPIN) continue;
+    if (b < 1 || b > NUMPIN) continue;
     n_enc++;
   }
 
@@ -2979,13 +2985,13 @@ void StartEncoderTask(void *argument)
   for (uint8_t id = 0; id < NUMPIN && k < n_enc; id++) {
     if (PinsConf[id].topin != 8) continue;
     uint8_t b = PinsConf[id].encoderb;
-    if (b == 0 || b >= NUMPIN) continue;
+    if (b < 1 || b > NUMPIN) continue;
 
     enc_ctx_t *c = &list[k++];
     memset(c, 0, sizeof(*c));
     c->id = id;
     c->gA = PinsInfo[id].gpio_name; c->pA = PinsInfo[id].hal_pin;
-    c->gB = PinsInfo[b].gpio_name;  c->pB = PinsInfo[b].hal_pin;
+    c->gB = PinsInfo[b - 1].gpio_name;  c->pB = PinsInfo[b - 1].hal_pin;
     c->state = ((HAL_GPIO_ReadPin(c->gA, c->pA) ? 1 : 0) << 1)
              |  (HAL_GPIO_ReadPin(c->gB, c->pB) ? 1 : 0);
   }
@@ -3063,7 +3069,7 @@ void StartDs18b20Task(void *argument)
   for (uint8_t i = 0; i < NUMPIN; i++) {
     if (PinsConf[i].topin == 4) { // OneWire pin found
       for (uint8_t j = 0; j < MAX_DS18B20_P; j++) {
-        if (ds18b20[j].id == i && ds18b20[j].typsensr == 1) {
+        if (ds18b20[j].id == (uint8_t)(i + 1) && ds18b20[j].typsensr == 1) {
           if (dscount >= MAX_DS18B20_P) {
             printf("[ERROR] Too many DS18B20 pins! Max: %d\r\n", MAX_DS18B20_P);
             break;
@@ -3175,8 +3181,8 @@ void StartDht22Task(void *argument)
     if (PinsConf[i].topin == 4) {
       for (uint8_t j = 0; j < MAX_DHT22_P; j++) {
 //        printf("+++ i = %d j = %d \r\n", i, j);
-        if (dht22[j].id == i && dht22[j].typsensr == 2) {
-          DHT22_Init(j, i);
+        if (dht22[j].id == (uint8_t)(i + 1) && dht22[j].typsensr == 2) {
+          DHT22_Init(j, (uint8_t)(i + 1));
           dht22[j].valid = true;
           dht22[j].onoff = 1;
           dhtcount++;
@@ -3404,10 +3410,11 @@ static void svc_mark_changed_slices(void)
 #define SVC_MASK_VALID (1ULL << 63)
 _Static_assert(NUMTASK <= 63, "svc cron mask: NUMTASK must be <= 63");
 
-static uint64_t svc_build_cron_mask(int pwm_id)
+static uint64_t svc_build_cron_mask(int logical_pwm_id)
 {
+  /* logical_pwm_id — ID 1..NUMPIN, а не индекс массива. */
   char needle[12];
-  snprintf(needle, sizeof(needle), "pwm:%d,", pwm_id);
+  snprintf(needle, sizeof(needle), "pwm:%d,", logical_pwm_id);
 
   uint64_t m = SVC_MASK_VALID;
   for (int t = 0; t < NUMTASK; t++) {
@@ -3477,7 +3484,7 @@ if (HAL_GetTick() - fade_tick >= 1000) {
 	  	        /* ── Timer onoff — останавливаем fade, PWM не трогаем ── */
 	  	        /* Карта считается один раз при старте fade (а не раз в секунду) */
 	  	        if (!(svc_cron_mask[i] & SVC_MASK_VALID)) {
-	  	            svc_cron_mask[i] = svc_build_cron_mask(i);
+	  	            svc_cron_mask[i] = svc_build_cron_mask(PinIdFromIdx(i));
 	  	        }
 
 	  	        bool timer_on = false;
@@ -3492,7 +3499,7 @@ if (HAL_GetTick() - fade_tick >= 1000) {
 	  	            /* Таймер выключен — останавливаем fade на текущем значении */
 	  	            fade_state[i].active = false;
 	  	            printf("PWM fade stopped by Timer OFF: id=%d at %d%%\r\n",
-	  	                   i, PinsConf[i].dvalue);
+	  	                   PinIdFromIdx(i), PinsConf[i].dvalue);
 	  	            continue; /* PWM НЕ трогаем — остаётся на текущем значении */
 	  	        }
 	  	        /* ──────────────────────────────────────────────────────── */
@@ -3515,7 +3522,7 @@ if (HAL_GetTick() - fade_tick >= 1000) {
 
 	  	          /* Бесшовная передача: PID берёт PWM с финального значения fade */
 	  	          for (int p = 0; p < PID_MAX_SLOTS; p++) {
-	  	            if (PidConf[p].pwm_pin_id == i) {
+	  	            if (PidConf[p].pwm_pin_id == (uint16_t)(i + 1)) {
 	  	              PidConf[p].pwm_out = (uint8_t)d;
 	  	              pid_set_pwm(p, (uint8_t)d);
 	  	              break;
@@ -3728,14 +3735,14 @@ void StartSecurityTask(void *argument)
 	            if ((currtime - sec_lasttrg[i]) >= 1000) {
 	              if (PinsConf[i].onoff && PinsConf[i].sclick[0] != '\0' &&
 	                  strcmp(PinsConf[i].sclick, "None") != 0) {
-	                action_handler(i, PinsConf[i].sclick, "Security action");
+	                action_handler((uint16_t)(i + 1), PinsConf[i].sclick, "Security action");
 
 	                mqtt_queue_send_safe(6, i, current_state, 0);
 	              }
 	              /* Send SMS не зависит от поля Action: SMS уходит, даже если
 	               * Action = None. Отправляет задача SIM800L (sms_alarm_poll). */
 	              if (PinsConf[i].onoff && strcmp(PinsConf[i].send_sms, "YES") == 0) {
-	                sms_alarm_request(i);
+	                sms_alarm_request(i + 1);
 	              }
 
 	              sec_lasttrg[i] = currtime;
@@ -3784,8 +3791,8 @@ void StartPIDTask(void *argument)
       if (PidConf[i].pwm_pin_id == 0 && PidConf[i].selsens == PID_SENS_NONE) continue;
 
       /* Если PWM управляется fade (рассвет/закат) — PID не трогает этот пин */
-      uint8_t pwm_id = PidConf[i].pwm_pin_id;
-      if (pwm_id > 0 && pwm_id < NUMPIN && fade_state[pwm_id].active) continue;
+      uint16_t pwm_id = PidConf[i].pwm_pin_id;
+      if (pwm_id >= 1 && pwm_id <= NUMPIN && fade_state[pwm_id - 1].active) continue;
 
       uint32_t now = HAL_GetTick();
       if ((now - PidConf[i].last_tick) < PidConf[i].Ts_ms) continue;

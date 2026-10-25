@@ -239,26 +239,28 @@ static void cond_timeofday_update(void) {
 #define COND_UNKNOWN COND_NOVAL
 
 static int32_t cond_read_state(int id) {
-  if (id >= 0 && id < NUMPIN) {
-    if (PinsConf[id].topin == 5) /* PWM: "включен" = яркость > 0 */
-      return (PinsConf[id].dvalue > 0) ? 1 : 0;
-    if (PinsInfo[id].gpio_name)
-      return (int32_t)HAL_GPIO_ReadPin(PinsInfo[id].gpio_name,
-                                       PinsInfo[id].hal_pin);
+  if (IsPinId(id)) {
+    int idx = id - 1;
+    if (PinsConf[idx].topin == 5) /* PWM: "включен" = яркость > 0 */
+      return (PinsConf[idx].dvalue > 0) ? 1 : 0;
+    if (PinsInfo[idx].gpio_name)
+      return (int32_t)HAL_GPIO_ReadPin(PinsInfo[idx].gpio_name,
+                                       PinsInfo[idx].hal_pin);
     return 0;
   }
-  if (id >= NUMPIN && id < NUMPIN + NUMZBEE)
-    return ZigbeeConf[id - NUMPIN].state ? 1 : 0;
+  if (IsZigbeePin(id))
+    return ZigbeeConf[ZbeeIdx(id)].state ? 1 : 0;
   return 0;
 }
 
 static int32_t cond_read_value(int id) {
-  if (id >= 0 && id < NUMPIN) {
-    if (PinsConf[id].topin == 5) return (int32_t)PinsConf[id].dvalue;
+  if (IsPinId(id)) {
+    int idx = id - 1;
+    if (PinsConf[idx].topin == 5) return (int32_t)PinsConf[idx].dvalue;
     return 0;
   }
-  if (id >= NUMPIN && id < NUMPIN + NUMZBEE)
-    return (int32_t)ZigbeeConf[id - NUMPIN].dvalue;
+  if (IsZigbeePin(id))
+    return (int32_t)ZigbeeConf[ZbeeIdx(id)].dvalue;
   return 0;
 }
 
@@ -267,14 +269,15 @@ static int32_t cond_read_value(int id) {
 static void cond_read_button(int id, int32_t *pressed, int32_t *held) {
   *pressed = 0;
   *held = 0;
-  if (id >= 0 && id < NUMPIN) {
-    if (button && PinsConf[id].topin == 1) {
-      uint8_t st = button[id].state;
+  if (IsPinId(id)) {
+    int idx = id - 1;
+    if (button && PinsConf[idx].topin == 1) {
+      uint8_t st = button[idx].state;
       if (st == 1 || st == 3 || st == 5) *pressed = 1;
       if (st == 5) *held = 1;
     }
-  } else if (id >= NUMPIN && id < NUMPIN + NUMZBEE) {
-    uint8_t st = ZigbeeConf[id - NUMPIN].vbtn_state;
+  } else if (IsZigbeePin(id)) {
+    uint8_t st = ZigbeeConf[ZbeeIdx(id)].vbtn_state;
     if (st == VBTN_STATE_PRESSED || st == VBTN_STATE_WAIT_REPEAT ||
         st == VBTN_STATE_RE_PRESSED)
       *pressed = 1;

@@ -120,7 +120,7 @@ struct dbPinsConf {     // Создали структуру с необходи
 	uint16_t zbee_attribute;      // Attribute ID (16-bit): 0x0000=OnOff state
 	char     zbee_label[30];      // Friendly name для UI (только для отображения)
 	// === ENCODER ↔ ZIGBEE BINDING ===
-	uint16_t zbee_bind_id;        // ID привязанного Zigbee устройства (NUMPIN+zbi, до 288)
+	uint16_t zbee_bind_id;        // ID привязанного Zigbee устройства (ZBEE_ID_BASE+zbi, до ZBEE_ID_MAX, т.е. до 289)
 	char     send_sms[5];         // Send sms YES/NO
 	uint8_t  prvstate;            // Предыдущее состояние (для edge detection)
 	uint8_t  state;               // Текущее состояние пина (0/1)
@@ -146,9 +146,9 @@ typedef enum {
 
 typedef struct {
     /* ── Привязка ── */
-    uint8_t  pwm_pin_id;           // ID пина в PinsConf[] (topin==5)
+    uint8_t  pwm_pin_id;           // логический ID пина (индекс в PinsConf[] + 1), 0 = не назначен (topin==5)
     PidSensorType_e selsens;       // тип датчика: 1=DS18B20, 2=DHT22
-    uint8_t  sensor_pin_id;        // ID пина сенсора в PinsConf[] (topin==4)
+    uint8_t  sensor_pin_id;        // логический ID пина сенсора (индекс в PinsConf[] + 1), 0 = не назначен (topin==4)
     char     sernum[17];           // серийник DS18B20 (16 hex + '\0'), пусто для DHT22
     uint8_t  sensor_sub_idx;       // индекс датчика на шине DS18B20 (0-9), 0 для DHT22
 
@@ -416,9 +416,19 @@ void zbee_action_clear(uint8_t idx);
 #define VBTN_LONG_MS           800
 #define VBTN_WATCHDOG_MS       5000
 
-/* ── Addressing: unified ID space ── */
-static inline bool IsZigbeePin(int id) { return id >= NUMPIN && id < NUMPIN + NUMZBEE; }
-static inline int  ZbeeIdx(int id)     { return id - NUMPIN; }
+/* ── Addressing: unified logical ID space ──
+ * 0 = "не назначено"; физические пины 1..NUMPIN; Zigbee NUMPIN+1..NUMPIN+NUMZBEE.
+ * Внутренние массивы PinsConf[]/PinsInfo[]/ZigbeeConf[] остаются 0-based. */
+#define CONFIG_ID_VERSION  2
+#define ZBEE_ID_BASE       (NUMPIN + 1)
+#define ZBEE_ID_MAX        (NUMPIN + NUMZBEE)
+
+static inline bool IsPinId(int id)       { return id >= 1 && id <= NUMPIN; }
+static inline int  PinIdxFromId(int id)  { return id - 1; }
+static inline int  PinIdFromIdx(int idx) { return idx + 1; }
+static inline bool IsZigbeePin(int id)   { return id >= ZBEE_ID_BASE && id <= ZBEE_ID_MAX; }
+static inline int  ZbeeIdx(int id)       { return id - ZBEE_ID_BASE; }
+static inline int  ZbeeIdFromIdx(int idx){ return idx + ZBEE_ID_BASE; }
 
 /* PIR-слот: ручной override=7 либо автоопределение (SENSOR + Occupancy) */
 static inline bool zbee_is_pir(const ZigbeeVirtualPin *z) {
@@ -432,16 +442,6 @@ void zbee_vbtn_tick(void);
 void zbee_vbtn_mqtt_event(int slot, const char *payload);
 void zbee_vbtn_auto_detect(int slot, const char *first_payload);
 void vbtn_execute(int slot, int event_type);
-
-/* ── PinView — тонкий интерфейс для общих операций ── */
-typedef struct {
-    uint8_t    topin;
-    uint8_t    state;
-    int        dvalue;
-    const char *label;
-    bool       is_zigbee;
-    void      *raw;        // dbPinsConf* либо ZigbeeVirtualPin*
-} PinView;
 
 /* Функции конфигурации zigbee.ini */
 void GetZigbeeConfig(void);

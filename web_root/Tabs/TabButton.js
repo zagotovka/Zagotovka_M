@@ -550,7 +550,7 @@ const TabButton = () => {
         <div>
           <h3 class="text-lg font-bold text-black mb-2">Формат полей Action</h3>
           <p class="mb-2">Максимальное количество записей в формате <code>ID:Action</code> с разделителем <code>,</code> ограничено длиной строки — <b>124 символа</b> (вместе с условиями после знака ?).</p>
-          <p class="mb-2">Примеры записи: <code>6:1</code> (пин 6 → ON), <code>93:2</code> (пин 93 → TOGGLE), <code>93.1:0</code> (Zigbee слот 93, sub-action 1 → OFF).</p>
+          <p class="mb-2">Примеры записи: <code>6:1</code> (пин 6 → ON), <code>93:2</code> (пин 93 → TOGGLE), <code>93.1:0</code> (Zigbee ID 93, sub-action 1 → OFF).</p>
           <table class="w-full bg-white/70">
             <thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Длина ID</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Пример</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Байт на запись</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Записей в строке</th></tr></thead>
             <tbody>
@@ -663,9 +663,9 @@ const TabButton = () => {
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3g100'}</code></td><td class="border px-4 py-2">Включить пин 6, только если значение диммера 3 больше или равно 100.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3l100'}</code></td><td class="border px-4 py-2">Включить пин 6, только если значение диммера 3 меньше или равно 100.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3>0&Ss'}</code></td><td class="border px-4 py-2">Включить пин 6, если диммер 3 светит и выполнено условие заката (Ss).</td></tr>
-              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Включить пин 6, только если Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 89).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Включить пин 6, только если Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 90).</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV93g100'}</code></td><td class="border px-4 py-2">Включить пин 6, только если яркость Zigbee-устройства 93 не меньше 100.</td></tr>
-              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'93.1:2?D2'}</code></td><td class="border px-4 py-2">Zigbee: слот 93, sub-action 1, переключить - только если устройство 2 включено.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'93.1:2?D2'}</code></td><td class="border px-4 py-2">Zigbee: ID 93, sub-action 1, переключить - только если устройство 2 включено.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5<25|D1'}</code></td><td class="border px-4 py-2">Включить пин 6, если на датчике 5 ниже 25 градусов ИЛИ включено устройство 1 (особый случай при неисправном датчике - см. правила ниже).</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?C3'}</code></td><td class="border px-4 py-2">Включить пин 6, только если верно готовое условие из ячейки C3.</td></tr>
             </tbody>
@@ -984,7 +984,7 @@ const TabButton = () => {
         <div>
           <h3 class="text-lg font-bold text-black mb-2">Action Field Format</h3>
           <p class="mb-2">Maximum number of entries in <code>ID:Action</code> format with <code>,</code> separator is limited by string length — <b>124 characters</b> (including conditions after the ? sign).</p>
-          <p class="mb-2">Entry examples: <code>6:1</code> (pin 6 → ON), <code>93:2</code> (pin 93 → TOGGLE), <code>93.1:0</code> (Zigbee slot 93, sub-action 1 → OFF).</p>
+          <p class="mb-2">Entry examples: <code>6:1</code> (pin 6 → ON), <code>93:2</code> (pin 93 → TOGGLE), <code>93.1:0</code> (Zigbee ID 93, sub-action 1 → OFF).</p>
           <table class="w-full bg-white/70">
             <thead><tr><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">ID Length</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Example</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Bytes per entry</th><th class="border px-3 py-1 text-left font-bold text-black bg-black/5">Entries in string</th></tr></thead>
             <tbody>
@@ -1097,9 +1097,9 @@ const TabButton = () => {
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3g100'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if dimmer 3 value is greater than or equal to 100.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3l100'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if dimmer 3 value is less than or equal to 100.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3>0&Ss'}</code></td><td class="border px-4 py-2">Turn on pin 6 if dimmer 3 is lit and the sunset condition (Ss) is met.</td></tr>
-              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 89).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 90).</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV93g100'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if the brightness of Zigbee device 93 is 100 or more.</td></tr>
-              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'93.1:2?D2'}</code></td><td class="border px-4 py-2">Zigbee: slot 93, sub-action 1, toggle - only if device 2 is on.</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'93.1:2?D2'}</code></td><td class="border px-4 py-2">Zigbee: ID 93, sub-action 1, toggle - only if device 2 is on.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5<25|D1'}</code></td><td class="border px-4 py-2">Turn on pin 6 if sensor 5 is below 25 degrees OR device 1 is on (special case with a dead sensor - see the rules below).</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?C3'}</code></td><td class="border px-4 py-2">Turn on pin 6 only if the ready-made condition from cell C3 is true.</td></tr>
             </tbody>

@@ -139,10 +139,10 @@ typedef struct data_pin_t {
 
 // Структура для передачи данных MQTT
 typedef struct {
+	uint16_t deviceId;   // физический пин: ИНДЕКС 0..NUMPIN-1 (в payload выводится +1);
+	                     // Zigbee-кнопки и switch: логический ID 90..289; cmd 11: индекс слота
     uint8_t command;     // Тип команды
-    uint8_t deviceId;    // ID устройства
     uint8_t state;       // Состояние
-    uint8_t reserved;    // Для выравнивания по 4 байта
 } __attribute__((packed)) MqttMessage_t;
 
 /* Входящее MQTT-сообщение для отложенной обработки

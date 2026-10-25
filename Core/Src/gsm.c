@@ -421,9 +421,9 @@ void execute_commands(char *cmd_str) {
             strcat(invpins, inv_str);
             invldcnt++;
           }
-        } else if (pin >= NUMPIN && pin < NUMPIN + NUMZBEE) {
+        } else if (IsZigbeePin(pin)) {
           /* Zigbee-слоты: поддерживается только On/Off охранного PIR */
-          int zbi = pin - NUMPIN;
+          int zbi = ZbeeIdx(pin);
           if (zbee_is_pir(&ZigbeeConf[zbi]) && ZigbeeConf[zbi].zbee_ieee[0] != '\0' &&
               value >= 0 && value <= 2) {
             if (value == 1) ZigbeeConf[zbi].onoff = 1;
@@ -450,13 +450,14 @@ void execute_commands(char *cmd_str) {
               invldcnt++;
             }
           }
-        } else if (pin >= 0 && pin < NUMPIN) {
-          if ((PinsConf[pin].topin == 2 || PinsConf[pin].topin == 10 || PinsConf[pin].topin == 3) && (value >= 0 && value <= 2)) {
+        } else if (IsPinId(pin)) {
+          int pin_idx = pin - 1;
+          if ((PinsConf[pin_idx].topin == 2 || PinsConf[pin_idx].topin == 10 || PinsConf[pin_idx].topin == 3) && (value >= 0 && value <= 2)) {
             /* Для типа SECURITY (topin==10) управляем onoff */
-            if (PinsConf[pin].topin == 10) {
-              if (value == 1) PinsConf[pin].onoff = 1;
-              else if (value == 0) PinsConf[pin].onoff = 0;
-              else if (value == 2) PinsConf[pin].onoff = !PinsConf[pin].onoff;
+            if (PinsConf[pin_idx].topin == 10) {
+              if (value == 1) PinsConf[pin_idx].onoff = 1;
+              else if (value == 0) PinsConf[pin_idx].onoff = 0;
+              else if (value == 2) PinsConf[pin_idx].onoff = !PinsConf[pin_idx].onoff;
               sec_changed = true;
               psec_changed = true;
               sec_last_id = pin;
@@ -489,16 +490,16 @@ void execute_commands(char *cmd_str) {
               LOG_GSM("Error: vldpins buffer full\n");
             }
 
-          } else if (PinsConf[pin].topin == 1 && (value >= 3 && value <= 5)) {
+          } else if (PinsConf[pin_idx].topin == 1 && (value >= 3 && value <= 5)) {
             /* Для типа BUTTON (topin==1) обрабатываем нажатие через action_handler:
                поддерживает PinsLinks, Switch-логику, PWM, onoff/master enable. */
-            if (PinsConf[pin].onoff != 0) {
-              if (value == 3 && PinsConf[pin].sclick[0] != '\0') {
-                action_handler(pin, PinsConf[pin].sclick, "SC");
-              } else if (value == 4 && PinsConf[pin].dclick[0] != '\0') {
-                action_handler(pin, PinsConf[pin].dclick, "DC");
-              } else if (value == 5 && PinsConf[pin].lpress[0] != '\0') {
-                action_handler(pin, PinsConf[pin].lpress, "LP");
+            if (PinsConf[pin_idx].onoff != 0) {
+              if (value == 3 && PinsConf[pin_idx].sclick[0] != '\0') {
+                action_handler((uint16_t)pin, PinsConf[pin_idx].sclick, "SC");
+              } else if (value == 4 && PinsConf[pin_idx].dclick[0] != '\0') {
+                action_handler((uint16_t)pin, PinsConf[pin_idx].dclick, "DC");
+              } else if (value == 5 && PinsConf[pin_idx].lpress[0] != '\0') {
+                action_handler((uint16_t)pin, PinsConf[pin_idx].lpress, "LP");
               }
             }
 
@@ -579,7 +580,10 @@ void execute_commands(char *cmd_str) {
 
   /* On/Off охранного пина изменён по SMS/DTMF: делаем то же, что делает
    * веб-путь (handle_onoff_set): обновляем ETag страниц, чтобы ползунок
-   * сменился в браузере, сохраняем конфиг и шлём MQTT-уведомление. */
+   * сменился в браузере, сохраняем конфиг и шлём MQTT-уведомление.
+   * Zigbee-слот сохраняем, но MQTT-событие не шлём: cmd 11 — это тревога
+   * (ZBEE_SECURITY), а не уведомление On/Off, и в исходной логике его здесь
+   * не было. */
   if (sec_changed) {
     mark_slice_dirty(&g_ver_security);
     mark_slice_dirty(&g_ver_pins);
@@ -594,8 +598,8 @@ void execute_commands(char *cmd_str) {
         xQueueSend(usbQueueHandle, &usbnum, 0);
       }
     }
-    if (sec_last_id >= 0 && sec_last_id < NUMPIN) {
-      mqtt_queue_send_safe(8, (uint8_t)sec_last_id, 0, 0);
+    if (IsPinId(sec_last_id)) {
+      mqtt_queue_send_safe(8, (uint16_t)(sec_last_id - 1), 0, 0);
     }
   }
 
@@ -640,21 +644,22 @@ void send_command_result_sms(void) {
         k++;
       }
       int pin_id_full = atoi(pin_number);
-      if (pin_id_full >= NUMPIN) {
+      if (IsZigbeePin(pin_id_full)) {
         /* Zigbee PIR (единое пространство ID): отдельная запись в SEC-TY */
-        if (pin_id_full < NUMPIN + NUMZBEE &&
-            zbee_is_pir(&ZigbeeConf[pin_id_full - NUMPIN])) {
+        int zbi = ZbeeIdx(pin_id_full);
+        if (zbee_is_pir(&ZigbeeConf[zbi])) {
           char zentry[24];
           snprintf(zentry, sizeof(zentry), "%s%s:%s", sec_cnt > 0 ? "," : "",
                    pin_number,
-                   ZigbeeConf[pin_id_full - NUMPIN].onoff == 1 ? "ON" : "OFF");
+                   ZigbeeConf[zbi].onoff == 1 ? "ON" : "OFF");
           strncat(sec_buf, zentry, sizeof(sec_buf) - strlen(sec_buf) - 1);
           sec_cnt++;
         }
         tok = strtok(NULL, ",");
         continue;
       }
-      uint8_t pin_id = (uint8_t)pin_id_full;
+      if (!IsPinId(pin_id_full)) { tok = strtok(NULL, ","); continue; }
+      uint8_t pin_id = (uint8_t)(pin_id_full - 1);
 
       char *colon = strchr(tok, ':');
       int action_val = -1;

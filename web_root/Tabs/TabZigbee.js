@@ -17,7 +17,7 @@ const HELP_CONTENT = {
             <li><b>Узнайте IEEE Address устройства.</b> Это уникальный адрес из 16 шестнадцатеричных символов, например <code>${'588e81fffe36a343'}</code>. Его можно найти в Zigbee2MQTT или на наклейке устройства.</li>
             <li>Откройте страницу <b>Select pin(s)</b>, в разделе <b>«Виртуальные пины Zigbee»</b> выберите свободный пин и установите тип <b>Zigbee</b>.</li>
             <li>В появившейся строке впишите <b>IEEE Address</b> и название в поле <b>Info</b>, затем нажмите <b>Submit</b>.</li>
-            <li>Вернитесь на эту страницу: в таблице появится строка с ID, начиная с 89. Нажмите <b>«Обучение»</b>, подействуйте на устройство (нажмите кнопку, покрутите диммер), опишите появившиеся строки и нажмите <b>«Сохранить»</b>.</li>
+            <li>Вернитесь на эту страницу: в таблице появится строка с ID, начиная с 90. Нажмите <b>«Обучение»</b>, подействуйте на устройство (нажмите кнопку, покрутите диммер), опишите появившиеся строки и нажмите <b>«Сохранить»</b>.</li>
             <li>Нажмите <b>«Управление»</b> и проверьте устройство ползунком <b>Power</b>.</li>
             <li>Убедитесь, что ползунок <b>On/Off</b> в строке устройства включён: пока он выключен, контроллер не отправляет устройству команды из окна <b>«Управление»</b>.</li>
           </ol>
@@ -47,7 +47,7 @@ const HELP_CONTENT = {
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Таблица устройств</h2>
           <div>
-            <p class="mb-2">На этой странице отображаются все Zigbee-устройства, добавленные на странице <b>Select pin(s)</b> (режим <b>Zigbee</b>, поля <b>IEEE Address</b> и <b>Info</b>). ID Zigbee-устройств начинаются с 89.</p>
+            <p class="mb-2">На этой странице отображаются все Zigbee-устройства, добавленные на странице <b>Select pin(s)</b> (режим <b>Zigbee</b>, поля <b>IEEE Address</b> и <b>Info</b>). ID Zigbee-устройств начинаются с 90.</p>
             <h3 class="text-lg font-bold text-black mb-2">Колонки таблицы</h3>
           <table class="w-full bg-white/70"><thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Колонка</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Что показывает</th></tr></thead><tbody><tr><td class="border px-4 py-2"><b>ID</b></td><td class="border px-4 py-2">Номер строки в контроллере. У вложенных строк группы ID вида 93.1, 93.2 (см. раздел про Multi).</td></tr><tr><td class="border px-4 py-2"><b>IEEE Address</b></td><td class="border px-4 py-2">Уникальный 64-битный адрес Zigbee-устройства. У группы рядом с адресом показан номер эндпоинта, например (EP1).</td></tr><tr><td class="border px-4 py-2"><b>Type</b></td><td class="border px-4 py-2">Тип устройства: Socket, Лампа (яркость), Лампа (яркость + цвет), Button, Switch, PIR, Sensor. Для группы строк показано Multi и число строк в ней.</td></tr><tr><td class="border px-4 py-2"><b>Info</b></td><td class="border px-4 py-2">Название устройства (например, Лампа кухня). Задаётся на странице Select pin(s) или в колонке «Название» окна обучения.</td></tr><tr><td class="border px-4 py-2"><b>On/Off</b></td><td class="border px-4 py-2">Рубильник строки (подробнее ниже).</td></tr><tr><td class="border px-4 py-2"><b>Action</b></td><td class="border px-4 py-2">Кнопки <b>Управление</b> и <b>Обучение</b>.</td></tr></tbody></table>
           </div>
@@ -168,7 +168,7 @@ const HELP_CONTENT = {
             <li><b>Find the IEEE Address of the device.</b> It is a unique address of 16 hexadecimal characters, for example <code>${'588e81fffe36a343'}</code>. You can find it in Zigbee2MQTT or on the device sticker.</li>
             <li>Open the <b>Select pin(s)</b> page, in the <b>"Virtual pins of Zigbee"</b> section choose a free pin and set the type to <b>Zigbee</b>.</li>
             <li>In the row that appears, type the <b>IEEE Address</b> and a name in the <b>Info</b> field, then press <b>Submit</b>.</li>
-            <li>Come back to this page: a row with an ID starting from 89 appears in the table. Press <b>Learn</b>, act on the device (press a button, turn a dimmer), describe the rows that appear and press <b>Save</b>.</li>
+            <li>Come back to this page: a row with an ID starting from 90 appears in the table. Press <b>Learn</b>, act on the device (press a button, turn a dimmer), describe the rows that appear and press <b>Save</b>.</li>
             <li>Press <b>Control</b> and check the device with the <b>Power</b> slider.</li>
             <li>Make sure the <b>On/Off</b> slider in the device row is On: while it is Off, the controller does not send the device any commands from the <b>Control</b> window.</li>
           </ol>
@@ -198,7 +198,7 @@ const HELP_CONTENT = {
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Device table</h2>
           <div>
-            <p class="mb-2">This page shows all Zigbee devices added on the <b>Select pin(s)</b> page (mode <b>Zigbee</b>, fields <b>IEEE Address</b> and <b>Info</b>). Zigbee device IDs start at 89.</p>
+            <p class="mb-2">This page shows all Zigbee devices added on the <b>Select pin(s)</b> page (mode <b>Zigbee</b>, fields <b>IEEE Address</b> and <b>Info</b>). Zigbee device IDs start at 90.</p>
             <h3 class="text-lg font-bold text-black mb-2">Table columns</h3>
           <table class="w-full bg-white/70"><thead><tr><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">Column</th><th class="border px-4 py-2 text-left font-bold text-black bg-black/5">What it shows</th></tr></thead><tbody><tr><td class="border px-4 py-2"><b>ID</b></td><td class="border px-4 py-2">Row number in the controller. Child rows of a group have IDs like 93.1, 93.2 (see the Multi section).</td></tr><tr><td class="border px-4 py-2"><b>IEEE Address</b></td><td class="border px-4 py-2">Unique 64-bit address of the Zigbee device. For a group, the endpoint number is shown next to the address, for example (EP1).</td></tr><tr><td class="border px-4 py-2"><b>Type</b></td><td class="border px-4 py-2">Device type: Socket, Lamp (brightness), Lamp (brightness + color), Button, Switch, PIR, Sensor. A group of rows shows Multi and the number of rows in it.</td></tr><tr><td class="border px-4 py-2"><b>Info</b></td><td class="border px-4 py-2">Device name (for example, Kitchen lamp). It is set on the Select pin(s) page or in the Name column of the learning window.</td></tr><tr><td class="border px-4 py-2"><b>On/Off</b></td><td class="border px-4 py-2">Row master switch (details below).</td></tr><tr><td class="border px-4 py-2"><b>Action</b></td><td class="border px-4 py-2">The <b>Control</b> and <b>Learn</b> buttons.</td></tr></tbody></table>
           </div>

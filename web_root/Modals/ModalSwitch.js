@@ -221,7 +221,7 @@ function ModalSwitch({
   };
 
   const renderModalContent = () => {
-    const isZigbee = selectedSwitch?.id >= 89;
+    const isZigbee = selectedSwitch?.id > 89;
 
     if (page === 'TabSwitch') {
       if (modalType === 'connection') {

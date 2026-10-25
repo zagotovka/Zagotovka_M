@@ -26,6 +26,7 @@
 
 #include "compat_ota.h"
 #include "zagotovka.h" /* HTTPSsettings, get_valid_settings(), update_and_write_settings() */
+#include "setings.h"   /* ponr_flush_before_reset() */
 #include "version_gen.h" /* FW_VERSION */
 #include "fw_meta.h" /* OTA_STATE_* */
 #include "logger.h"    /* LOG_CAT_OTA, LOG_MASK_OTA, cat_prefixes[], g_log_filter_mask */
@@ -78,6 +79,8 @@ static void ota_flag_write(uint32_t state) {
 
 /* ---- mg_device_reset ---------------------------------------------------- */
 void mg_device_reset(void) {
+    /* Power On State: дописать последнее состояние на флешку (до 1,5 с) */
+    ponr_flush_before_reset();
     NVIC_SystemReset();
     /* Never returns */
 }

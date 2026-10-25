@@ -372,7 +372,7 @@ const HELP_CONTENT = {
 <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3g50'}</code></td><td class="border px-4 py-2">Включить 6, только если значение диммера 3 равно 50 или больше.</td></tr>
 <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3l50'}</code></td><td class="border px-4 py-2">Включить 6, только если значение диммера 3 равно 50 или меньше.</td></tr>
 <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3>0&Ss'}</code></td><td class="border px-4 py-2">Включить 6, если диммер 3 светит и сейчас ночь.</td></tr>
-<tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Включить 6, только если включено Zigbee-устройство с ID 93 (ID Zigbee-устройств начинаются с 89).</td></tr>
+<tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Включить 6, только если включено Zigbee-устройство с ID 93 (ID Zigbee-устройств начинаются с 90).</td></tr>
 <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV93g100'}</code></td><td class="border px-4 py-2">Включить 6, только если яркость Zigbee-устройства 93 равна 100 или больше.</td></tr>
 <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'93.1:2?D2'}</code></td><td class="border px-4 py-2">Zigbee: слот 93, подкоманда 1, переключить - только если устройство 2 включено.</td></tr>
 <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5<25|D1'}</code></td><td class="border px-4 py-2">Включить 6, если на датчике 5 холоднее 25 градусов ИЛИ включено устройство 1 (особый случай с неисправным датчиком - см. правило 7).</td></tr>
@@ -719,7 +719,7 @@ const HELP_CONTENT = {
 <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3g50'}</code></td><td class="border px-4 py-2">Turn on 6 only if the value of dimmer 3 is 50 or more.</td></tr>
 <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3l50'}</code></td><td class="border px-4 py-2">Turn on 6 only if the value of dimmer 3 is 50 or less.</td></tr>
 <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV3>0&Ss'}</code></td><td class="border px-4 py-2">Turn on 6 if dimmer 3 is lit and it is night.</td></tr>
-<tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Turn on 6 only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 89).</td></tr>
+<tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?D93'}</code></td><td class="border px-4 py-2">Turn on 6 only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 90).</td></tr>
 <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?DV93g100'}</code></td><td class="border px-4 py-2">Turn on 6 only if the brightness of Zigbee device 93 is 100 or more.</td></tr>
 <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'93.1:2?D2'}</code></td><td class="border px-4 py-2">Zigbee: slot 93, sub-command 1, toggle - only if device 2 is on.</td></tr>
 <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'6:1?T5<25|D1'}</code></td><td class="border px-4 py-2">Turn on 6 if sensor 5 is colder than 25 degrees OR device 1 is on (special case with a faulty sensor - see rule 7).</td></tr>

@@ -526,7 +526,7 @@ const HELP = {
         ['Диммеры (ШИМ) и Zigbee', [
           ['DV3>0', 'Регулятор работает, только если диммер 3 светит.'],
           ['DV3g50', 'Регулятор работает, только если значение диммера 3 равно 50 или больше.'],
-          ['D93', 'Регулятор работает, только если Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 89).'],
+          ['D93', 'Регулятор работает, только если Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 90).'],
           ['DV93g100', 'Регулятор работает, только если значение Zigbee-устройства 93 равно 100 или больше.'],
         ]],
         ['Кнопки', [
@@ -753,7 +753,7 @@ const HELP = {
         ['Dimmers (PWM) and Zigbee', [
           ['DV3>0', 'The controller works only if dimmer 3 is lit.'],
           ['DV3g50', 'The controller works only if the dimmer 3 value is 50 or greater.'],
-          ['D93', 'The controller works only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 89).'],
+          ['D93', 'The controller works only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 90).'],
           ['DV93g100', 'The controller works only if the value of Zigbee device 93 is 100 or greater.'],
         ]],
         ['Buttons', [
@@ -1847,7 +1847,7 @@ function TabPid({ }) {
         <div class="font-extrabold text-3xl md:text-4xl text-slate-800 mb-2 drop-shadow-sm tracking-tight uppercase">
           PID Controller(s)
         </div>
-        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Три часа ночи, вы проснулись с мыслью: а не остыл ли инкубатор? Здесь живёт «умный термостат»: вы называете градусы, а контроллер сам плавно подбирает мощность нагрева и держит температуру ровно, пока вы спите.' : 'Three a.m., you wake up wondering: has the incubator gone cold? This is where the "smart thermostat" lives: you name the degrees, and the controller smoothly picks the heating power by itself and keeps the temperature steady while you sleep.'}</p>
+        <p class="text-sm text-slate-600 mb-6 max-w-3xl">${language === 'ru' ? 'Три часа ночи, вы проснулись с мыслью: а не остыл ли инкубатор? Здесь живёт «умный термостат»: вы указываете температуру, а контроллер сам плавно подбирает мощность нагрева и держит температуру ровно, пока вы спите.' : 'Three a.m., you wake up wondering: has the incubator gone cold? This is where the "smart thermostat" lives: you name the degrees, and the controller smoothly picks the heating power by itself and keeps the temperature steady while you sleep.'}</p>
         <div class="w-full mb-6 relative">
           ${visiblePids > 0
             ? html`

@@ -8,7 +8,7 @@ import { Icons, Login, Setting as SettingsComp, Button, Stat, tipColors, Colored
 import { MyPolzunok, Chart, DeveloperNote, pageSetting, Toast } from '../main.js';
 import { ruLangswitch, rulangbutton, rulangmonitoring, ruencoder, rurelay, rulangpwm, rulangtimers, rulange1Wire, rulangsettings } from '../rulang.js';
 import { enLangswitch, enlangbutton, enlangmonitoring, enencoder, enrelay, enlangpwm, enlangtimers, enlange1Wire, enlangsettings } from '../enlang.js';
-import { condHelpTitle } from '../condlib.js';
+import { condHelpTitle, MAX_LOGICAL_ID } from '../condlib.js';
 import { ThemeToggle } from '../theme.js';
 
 // ---------------------------------------------------------------------------
@@ -337,7 +337,7 @@ const SUN_HELP = {
         ['0/6:1?DV3>0', 'Включить пин 6, только если диммер 3 светит.'],
         ['0/6:1?DV3g50', 'Включить пин 6, только если значение диммера 3 равно 50 или больше.'],
         ['0/6:1?DV3l50', 'Включить пин 6, только если значение диммера 3 равно 50 или меньше.'],
-        ['0/6:1?D93', 'Включить пин 6, только если Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 89).'],
+        ['0/6:1?D93', 'Включить пин 6, только если Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 90).'],
         ['0/6:1?DV93g100', 'Включить пин 6, только если значение Zigbee-устройства 93 равно 100 или больше.'],
         ['0/93.1:2?D5', 'Запустить у Zigbee-триггера 93 действие номер 1 (суффикс .1 или .2 после номера), только если устройство 5 включено.'],
       ]],
@@ -405,7 +405,7 @@ const SUN_HELP = {
       'Условие относится только к своему действию. В строке 0/6:1?D2,7:1 условие D2 касается только пина 6, а пин 7 включится всегда.',
       'Смещение одно на всю строку, а не на каждое действие.',
       'Внутри условия нельзя ставить запятые и второй знак ?. Длина условия прямо в действии - до 60 символов, а в одной ячейке библиотеки - до 46. Если условие длинное или повторяется, запишите его один раз в ячейку библиотеки Conditions (строка ниже на этой странице; те же ячейки можно править и на страницах Switch, Encoder, PID) и ссылайтесь коротко: 0/6:1?C3. Условие длиннее 46 символов разбейте на две ячейки и соедините ссылками: 0/6:1?C3|C4. В ячейку пишется только проверка, без смещения и действия.',
-      'Часть строки после знака / устройство читает максимум 99 символов: страница принимает больше, но прошивка обрезает хвост, и обрезанное условие сработает неверно. Держите строку короче.',
+      'Часть строки после знака / ограничена 127 символами: более длинную строку страница не сохранит, а прошивка не прочитает.',
       'Неисправный или молчащий датчик в условии даёт ответ «неизвестно»: действие пропускается, даже если перед условием стоит !. Исключение: явная правда через |, например T3<10|D1.',
       'Страница проверяет только допустимые символы и формат строки, но не смысл условия. Поэтому после настройки проверьте условие на деле: например, временно задайте время срабатывания через пару минут.',
       'Условие работает только при срабатывании по Sunrise/Sunset. Ручное включение и выключение (ползунки, MQTT, API) условие не проверяет.',
@@ -569,7 +569,7 @@ const SUN_HELP = {
         ['0/6:1?DV3>0', 'Turn pin 6 on only if dimmer 3 is lit.'],
         ['0/6:1?DV3g50', 'Turn pin 6 on only if the dimmer 3 value is 50 or greater.'],
         ['0/6:1?DV3l50', 'Turn pin 6 on only if the dimmer 3 value is 50 or less.'],
-        ['0/6:1?D93', 'Turn pin 6 on only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 89).'],
+        ['0/6:1?D93', 'Turn pin 6 on only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 90).'],
         ['0/6:1?DV93g100', 'Turn pin 6 on only if the value of Zigbee device 93 is 100 or greater.'],
         ['0/93.1:2?D5', 'Run action number 1 of the Zigbee trigger 93 (suffix .1 or .2 after the number), only if device 5 is on.'],
       ]],
@@ -637,7 +637,7 @@ const SUN_HELP = {
       'A condition belongs only to its own action. In the line 0/6:1?D2,7:1 the condition D2 affects only pin 6, and pin 7 turns on always.',
       'The offset is one for the whole line, not for each action.',
       'Inside a condition you cannot use commas or a second ? sign. A condition written right in the action can be up to 60 characters long, while one library cell holds up to 46. If a condition is long or repeats, write it once into a cell of the Conditions library (the row below on this page; the same cells can also be edited on the Switch, Encoder and PID pages) and refer to it briefly: 0/6:1?C3. A condition longer than 46 characters can be split into two cells and joined by references: 0/6:1?C3|C4. Only the check goes into the cell, without the offset and the action.',
-      'The part of the line after the / sign is read by the device up to 99 characters: the page accepts more, but the firmware cuts the tail, and a cut condition will work incorrectly. Keep the line shorter.',
+      'The part of the line after the / sign is limited to 127 characters: the page will not save a longer line and the firmware will not read it.',
       'A faulty or silent sensor in a condition gives the answer "unknown": the action is skipped, even if the condition starts with !. Exception: explicit truth through |, for example T3<10|D1.',
       'The page checks only the allowed characters and the format of the line, not the meaning of the condition. So after setting up, test the condition in practice: for example, temporarily set the trigger time a couple of minutes ahead.',
       'A condition works only when triggered by Sunrise/Sunset. Manual on/off (switches, MQTT, API) does not check conditions.',
@@ -1056,7 +1056,7 @@ function Settings({ }) {
   //   действия - список "пин:действие" через запятую, действие: 0 - выкл,
   //              1 - вкл, 2 - переключить; для Zigbee-триггеров допустим
   //              суффикс ".1" или ".2" после номера пина (например 93.1:2).
-  // Прошивка режет часть действий до 127 байт (stack-буфер в action_handler).
+  // Прошивка читает часть действий до 127 байт (stack-буфер в action_handler).
   const SUN_ACTIONS_MAX_LEN = 127;
   const SUN_OFFSET_MAX = 86399;
 
@@ -1098,7 +1098,7 @@ function Settings({ }) {
     const tokRe = new RegExp('^(\\d{1,3})(?:\\.([12]))?:([0-2])(\\?[' + condChars + ']{1,60})?$');
     for (const tok of tokens) {
       const m = tokRe.exec(tok);
-      if (!m || parseInt(m[1], 10) > 255) {
+      if (!m || parseInt(m[1], 10) > MAX_LOGICAL_ID) {
         return isRu ? 'Неверное действие "' + tok + '". Ожидается пин:действие?условие, действие 0, 1 или 2 (например 6:1 или 6:1?D2)'
                     : 'Invalid action "' + tok + '". Expected pin:action?condition, action is 0, 1 or 2 (e.g. 6:1 or 6:1?D2)';
       }

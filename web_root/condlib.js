@@ -33,6 +33,9 @@ const COND_PART = `(\\?[${COND_CHARS}]{1,60})?`;
 // Предельная длина выражения условия (COND_LEN-1 в прошивке)
 export const COND_MAX_LEN = 46;
 
+// Максимальный логический ID: NUMPIN (89) + NUMZBEE (200) = 289.
+export const MAX_LOGICAL_ID = 289;
+
 // Токен действия с опциональным условием: "6:1", "93.1:2", "6:1?D2&DV3>50"
 export const ACTION_TOKEN_RE_SOURCE =
   `(None|\\d{1,4}(\\.\\d)?:[012]${COND_PART})`;
@@ -58,7 +61,7 @@ export function validateSunToken(token) {
   const m = new RegExp(
     `^(\\d{1,3})(?:\\.([12]))?:([0-2])${COND_PART}$`
   ).exec(token);
-  if (!m || parseInt(m[1], 10) > 255) return false;
+  if (!m || parseInt(m[1], 10) > MAX_LOGICAL_ID) return false;
   return true;
 }
 

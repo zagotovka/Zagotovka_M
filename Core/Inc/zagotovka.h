@@ -249,6 +249,9 @@ void pid_autotune_start(int slot);
 void pid_autotune_stop(int slot);
 void pid_set_pwm_f(int slot, float duty);
 void pid_compute_imc(int slot);
+/* is_pin_in_autotune и все pwm_* ниже принимают ИНДЕКС пина (с нуля, как
+ * PinsConf[idx]), а не логический ID (ID = индекс + 1). Исключение:
+ * start_pwm_fade() в main.c принимает логический ID. */
 bool is_pin_in_autotune(uint8_t pin_id);
 /* PWM helpers: PWM без энкодера, рубильник On/Off, CH Polarity */
 bool pwm_owned_by_pid(uint8_t pwm_id);
@@ -312,7 +315,7 @@ void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
 void SendZigbeeEPCommand(const char *zbee_ieee, uint8_t endpoint,
                            uint16_t dp, const char *val);
 
-void action_handler(uint8_t button_id, const char* action_str, const char* press_type);
+void action_handler(uint16_t button_id, const char* action_str, const char* press_type);
 
 void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf, const struct dbPinsInfo *PinsInfo, uint8_t count);
 
@@ -362,7 +365,7 @@ void check_ds18b20_changes(uint8_t pin_id, uint8_t sensor_id);
 void check_dht22_changes(uint8_t sensor_id);
 
 /* Rate-limited MQTT queue wrapper — max 20 events/sec, критичные события bypass */
-void mqtt_queue_send_safe(uint8_t command, uint8_t deviceId,
+void mqtt_queue_send_safe(uint8_t command, uint16_t deviceId,
                           uint8_t state, uint8_t reserved);
 
 time_t initializeTime(void);

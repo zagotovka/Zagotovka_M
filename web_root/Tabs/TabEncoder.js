@@ -692,7 +692,7 @@ function TabEncoder({ }) {
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3g50'}</code></td><td class="border px-4 py-2">Ручка работает, только если значение диммера 3 равно 50 или больше.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3l50'}</code></td><td class="border px-4 py-2">Ручка работает, только если значение диммера 3 равно 50 или меньше.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3>0&DV3l90'}</code></td><td class="border px-4 py-2">Ручка работает, пока диммер 3 светит, но не ярче 90.</td></tr>
-              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'D93'}</code></td><td class="border px-4 py-2">Ручка работает, только если Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 89).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'D93'}</code></td><td class="border px-4 py-2">Ручка работает, только если Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 90).</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV93g100'}</code></td><td class="border px-4 py-2">Ручка работает, только если значение Zigbee-устройства 93 равно 100 или больше.</td></tr>
             </tbody>
           </table>
@@ -1189,7 +1189,7 @@ function TabEncoder({ }) {
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3g50'}</code></td><td class="border px-4 py-2">The knob works only if the dimmer 3 value is 50 or greater.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3l50'}</code></td><td class="border px-4 py-2">The knob works only if the dimmer 3 value is 50 or less.</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV3>0&DV3l90'}</code></td><td class="border px-4 py-2">The knob works while dimmer 3 is lit but not brighter than 90.</td></tr>
-              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'D93'}</code></td><td class="border px-4 py-2">The knob works only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 89).</td></tr>
+              <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'D93'}</code></td><td class="border px-4 py-2">The knob works only if the Zigbee device with ID 93 is on (Zigbee device IDs start from 90).</td></tr>
               <tr><td class="border px-4 py-2 whitespace-nowrap"><code>${'DV93g100'}</code></td><td class="border px-4 py-2">The knob works only if the value of Zigbee device 93 is 100 or greater.</td></tr>
             </tbody>
           </table>
@@ -1536,6 +1536,7 @@ function TabEncoder({ }) {
             <span class="font-mono text-slate-700">${formatPwmFreq(d.pwm)}</span>
             <span class="ml-1 font-bold ${fStatus.cls}">${fStatus.msg}</span>
             ${connectedTimers.length > 0 ? html`<span class="ml-2 font-mono text-xs text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200 shadow-sm" title="Hardware Timer">${connectedTimers.join(', ')}</span>` : ''}
+            ${connectedPins.length > 0 ? html`<span class="ml-2 text-xs font-semibold ${d.pol ? 'text-orange-700' : 'text-slate-500'}">${d.pol ? 'Inverted' : 'Normal'}</span>` : ''}
           </td>
           <td class="px-6 py-2 font-mono text-sm text-blue-600">
             ${d.pwmmax ? `${d.pwmmax} steps` : '—'}

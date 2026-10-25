@@ -167,14 +167,14 @@ const PonrSelect = ({ id, topin, language, selectedValues, handleFieldChange }) 
 };
 
 const ArraySelect = ({ d, selectedValues, isRowDisabled, handleRadioChange, handleFieldChange, language }) => {
-  const isPhysicalPin = d.id < 89;
-  const isZigbeePin = d.id >= 89;
+  const isPhysicalPin = d.id <= 89;
+  const isZigbeePin = d.id > 89;
   const currentTopin = selectedValues[`topin_${d.id}`];
 
   return html`
   <tr class="${isRowDisabled(d.id)
       ? 'bg-red-200/50 opacity-50 pointer-events-none'
-      : d.id % 2 === 1
+      : d.id % 2 === 0
         ? 'bg-white/80'
         : 'bg-sky-200/40'
     } hover:bg-slate-200/80 transition-colors">
@@ -362,7 +362,7 @@ const HELP_CONTENT = {
 
       <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">Переключатель SIM800L</h2>
-        <p>Переключатель SIM800L вверху страницы включает работу с GSM-модулем. Модуль подключается к пинам UART2, поэтому при включённом переключателе эти два пина (ID 1 и ID 35) блокируются и их тип изменить нельзя.</p>
+        <p>Переключатель SIM800L вверху страницы включает работу с GSM-модулем. Модуль подключается к пинам UART2, поэтому при включённом переключателе эти два пина (ID 2 и ID 37) блокируются и их тип изменить нельзя.</p>
         <p>Номер телефона и остальные параметры модуля задаются на странице <b>Security</b>, в блоке <b>SIM800L Settings</b>.</p>
       </section>
 
@@ -380,7 +380,7 @@ const HELP_CONTENT = {
         <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
           <p class="text-lg font-bold text-black mb-1">Нужный пин почему-то серый</p>
           <p class="mb-1">Вы выбрали пин под реле, а строка серая, и тип поменять нельзя. Что-то сломалось?</p>
-          <p class="mb-1">Спокойно! Это не поломка. Переключатель <b>SIM800L</b> вверху страницы включён, а GSM-модуль занимает два пина UART2 (ID 1 и ID 35). Пока переключатель включён, их тип менять нельзя. Если GSM вам не нужен, выключите его, а если нужен, выберите для реле другой пин.</p>
+          <p class="mb-1">Спокойно! Это не поломка. Переключатель <b>SIM800L</b> вверху страницы включён, а GSM-модуль занимает два пина UART2 (ID 2 и ID 37). Пока переключатель включён, их тип менять нельзя. Если GSM вам не нужен, выключите его, а если нужен, выберите для реле другой пин.</p>
           <p class="mb-1"><b>Результат:</b> вы знаете, почему строка заблокирована, и можете решить, что важнее.</p>
         </div>
 
@@ -424,7 +424,7 @@ const HELP_CONTENT = {
           <li>Нажали ли вы <b>Submit</b>: пока вы его не нажали, выбранный тип нигде не применяется.</li>
           <li>Кнопка <b>Submit</b> показывает «Please wait N sec.»: идёт запись на USB-флешку, подождите несколько секунд.</li>
           <li>Переключатель <b>PWM</b> или <b>Security</b> у пина неактивен: этот пин такую роль выполнять не может, выберите другой.</li>
-          <li>Строки ID 1 и ID 35 серые: включён переключатель <b>SIM800L</b>.</li>
+          <li>Строки ID 2 и ID 37 серые: включён переключатель <b>SIM800L</b>.</li>
           <li>Пин не появился на нужной странице: проверьте, что выбран подходящий тип. Zigbee-устройства ищите на странице <b>Zigbee Devices</b>.</li>
           <li><b>IEEE Address</b> должен состоять ровно из 16 шестнадцатеричных символов.</li>
         </ul>
@@ -560,7 +560,7 @@ const HELP_CONTENT = {
 
       <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">SIM800L switch</h2>
-        <p>The SIM800L switch at the top of the page enables work with the GSM module. The module is connected to the UART2 pins, so while the switch is on these two pins (ID 1 and ID 35) are locked and their type cannot be changed.</p>
+        <p>The SIM800L switch at the top of the page enables work with the GSM module. The module is connected to the UART2 pins, so while the switch is on these two pins (ID 2 and ID 37) are locked and their type cannot be changed.</p>
         <p>The phone number and the other module parameters are set on the <b>Security</b> page, in the <b>SIM800L Settings</b> block.</p>
       </section>
 
@@ -578,7 +578,7 @@ const HELP_CONTENT = {
         <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
           <p class="text-lg font-bold text-black mb-1">The pin you need is greyed out</p>
           <p class="mb-1">You picked a pin for a relay, but the row is grey and the type cannot be changed. Is something broken?</p>
-          <p class="mb-1">Relax! It is not broken. The <b>SIM800L</b> switch at the top of the page is On, and the GSM module takes two UART2 pins (ID 1 and ID 35). While the switch is On, their type cannot be changed. If you do not need GSM, turn it off, and if you do, pick another pin for the relay.</p>
+          <p class="mb-1">Relax! It is not broken. The <b>SIM800L</b> switch at the top of the page is On, and the GSM module takes two UART2 pins (ID 2 and ID 37). While the switch is On, their type cannot be changed. If you do not need GSM, turn it off, and if you do, pick another pin for the relay.</p>
           <p class="mb-1"><b>Result:</b> you know why the row is locked and can decide what matters more.</p>
         </div>
 
@@ -622,7 +622,7 @@ const HELP_CONTENT = {
           <li>Did you press <b>Submit</b>? Until you do, the chosen type is not applied anywhere.</li>
           <li>The <b>Submit</b> button shows "Please wait N sec.": the data is being written to the USB flash drive, wait a few seconds.</li>
           <li>The <b>PWM</b> or <b>Security</b> switch of a pin is inactive: that pin cannot perform the role, choose another one.</li>
-          <li>The rows with ID 1 and ID 35 are grey: the <b>SIM800L</b> switch is On.</li>
+          <li>The rows with ID 2 and ID 37 are grey: the <b>SIM800L</b> switch is On.</li>
           <li>The pin did not appear on the page you expected: check that the right type is chosen. Look for Zigbee devices on the <b>Zigbee Devices</b> page.</li>
           <li>The <b>IEEE Address</b> must be exactly 16 hexadecimal characters.</li>
         </ul>
@@ -667,7 +667,7 @@ function TabSelect({ }) {
   };
 
   const isRowDisabled = (id) => {
-    return gpsEnabled && (id === 1 || id === 35);
+    return gpsEnabled && (id === 2 || id === 37);
   };
 
   // Опрос берёт только первую страницу (физические пины, ~1.5 КБ).
@@ -780,7 +780,7 @@ function TabSelect({ }) {
     const changed = [];
     varselect.forEach((d) => {
       const snap = serverSnapshot.current[d.id] || {};
-      if (d.id < 89) {
+      if (d.id <= 89) {
         const raw = selectedValues[`topin_${d.id}`];
         const cur = raw !== undefined ? raw : d.topin.toString();
         // Power On State: режим уходит вместе с типом пина (только Device и PWM)
@@ -898,7 +898,7 @@ function TabSelect({ }) {
       const next = { ...prevState, [name]: value };
       // Смена типа физического пина: режим предыдущего типа не переносится
       const pid = parseInt(name.replace('topin_', ''), 10);
-      if (!isNaN(pid) && pid < 89) delete next[`ponr_${pid}`];
+      if (!isNaN(pid) && pid <= 89) delete next[`ponr_${pid}`];
       return next;
     });
     lastChangeTime.current = Date.now();
@@ -1003,20 +1003,20 @@ function TabSelect({ }) {
                         <td colspan="4" class="px-6 py-3 text-lg font-bold text-slate-700">
                           <span class="mr-2 text-slate-500">${expandedSections.physical ? '▼' : '▶'}</span>
                           ${language === 'ru' ? 'Физические пины STM32' : 'Physical pins of STM32'}
-                          <span class="ml-2 text-sm font-normal text-slate-500">(${varselect.filter(d => d.id < 89).length})</span>
+                          <span class="ml-2 text-sm font-normal text-slate-500">(${varselect.filter(d => d.id <= 89).length})</span>
                         </td>
                       </tr>
-                      ${expandedSections.physical && varselect.filter(d => d.id < 89).map((d) => html`<${ArraySelect} d=${d} selectedValues=${selectedValues} isRowDisabled=${isRowDisabled} handleRadioChange=${handleRadioChange} handleFieldChange=${handleFieldChange} language=${language} />`)}
+                      ${expandedSections.physical && varselect.filter(d => d.id <= 89).map((d) => html`<${ArraySelect} d=${d} selectedValues=${selectedValues} isRowDisabled=${isRowDisabled} handleRadioChange=${handleRadioChange} handleFieldChange=${handleFieldChange} language=${language} />`)}
                       
                       <!-- Zigbee virtual pins section -->
                       <tr class="bg-gradient-to-r from-cyan-100 to-cyan-50 cursor-pointer hover:from-cyan-200 hover:to-cyan-100 transition-colors" onclick=${() => toggleSection('zigbee')}>
                         <td colspan="4" class="px-6 py-3 text-lg font-bold text-cyan-700">
                           <span class="mr-2 text-cyan-500">${expandedSections.zigbee ? '▼' : '▶'}</span>
                           ${language === 'ru' ? 'Виртуальные пины Zigbee' : 'Virtual pins of Zigbee'}
-                          <span class="ml-2 text-sm font-normal text-cyan-500">(${varselect.filter(d => d.id >= 89).length})</span>
+                          <span class="ml-2 text-sm font-normal text-cyan-500">(${varselect.filter(d => d.id > 89).length})</span>
                         </td>
                       </tr>
-                      ${expandedSections.zigbee && varselect.filter(d => d.id >= 89).map((d) => html`<${ArraySelect} d=${d} selectedValues=${selectedValues} isRowDisabled=${isRowDisabled} handleRadioChange=${handleRadioChange} handleFieldChange=${handleFieldChange} language=${language} />`)}
+                      ${expandedSections.zigbee && varselect.filter(d => d.id > 89).map((d) => html`<${ArraySelect} d=${d} selectedValues=${selectedValues} isRowDisabled=${isRowDisabled} handleRadioChange=${handleRadioChange} handleFieldChange=${handleFieldChange} language=${language} />`)}
                     `}
                   </tbody>
                 </table>

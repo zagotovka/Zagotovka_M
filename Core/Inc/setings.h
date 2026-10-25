@@ -46,7 +46,9 @@ uint8_t ponr_sanitize(int topin, long v); /* проверка значения �
 bool    ponr_last_get(int i);             /* последнее сохранённое состояние пина */
 bool    ponr_boot_pass_allows(int out_id);
 void    ponr_poll(void);                  /* вызывать из StartInputTask */
-void    GetLastState(void);               /* laststate.ini */
+void    ponr_boot_prepare(void);          /* вызывать в InitPin до цикла по пинам */
+void    ponr_flush_before_reset(void);    /* вызывать перед плановым reset */
+void    GetLastState(void);               /* laststate.ini / laststate2.ini */
 void    SetLastState(void);
 
 #define ADM_NAME "admin"

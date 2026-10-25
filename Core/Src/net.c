@@ -1919,7 +1919,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
           zbee_sub.qos = s_qos;
           mg_mqtt_sub(c, &zbee_sub);
           printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d ep=%d)\r\n",
-                 zbee_sub_topic, NUMPIN + i, ZigbeeConf[i].ep);
+                 zbee_sub_topic, ZbeeIdFromIdx(i), ZigbeeConf[i].ep);
 
           /* Также подписываемся на кластер 8 (Dimmer) для этого EP */
           if (ZigbeeConf[i].cluster_flags & ZBEE_CL_DIMMER) {
@@ -1934,7 +1934,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
             zbee_sub.qos = s_qos;
             mg_mqtt_sub(c, &zbee_sub);
             printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d dimmer)\r\n",
-                   zbee_sub_topic, NUMPIN + i);
+                   zbee_sub_topic, ZbeeIdFromIdx(i));
           }
 
           continue;
@@ -1954,7 +1954,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
           zbee_sub.topic = mg_str(zbee_sub_topic);
           zbee_sub.qos = s_qos;
           mg_mqtt_sub(c, &zbee_sub);
-          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, ZbeeIdFromIdx(i));
         }
         if (flags & ZBEE_CL_DIMMER) {
           char zbee_sub_topic[80];
@@ -1969,7 +1969,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
           zbee_sub.topic = mg_str(zbee_sub_topic);
           zbee_sub.qos = s_qos;
           mg_mqtt_sub(c, &zbee_sub);
-          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, ZbeeIdFromIdx(i));
         }
         if (flags & ZBEE_CL_COLOR) {
           char zbee_sub_topic[80];
@@ -1984,7 +1984,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
           zbee_sub.topic = mg_str(zbee_sub_topic);
           zbee_sub.qos = s_qos;
           mg_mqtt_sub(c, &zbee_sub);
-          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, ZbeeIdFromIdx(i));
         }
         if (flags & ZBEE_CL_COVER) {
           char zbee_sub_topic[80];
@@ -1999,7 +1999,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
           zbee_sub.topic = mg_str(zbee_sub_topic);
           zbee_sub.qos = s_qos;
           mg_mqtt_sub(c, &zbee_sub);
-          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, ZbeeIdFromIdx(i));
         }
         if (flags & ZBEE_CL_THERMO) {
           char zbee_sub_topic[80];
@@ -2014,7 +2014,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
           zbee_sub.topic = mg_str(zbee_sub_topic);
           zbee_sub.qos = s_qos;
           mg_mqtt_sub(c, &zbee_sub);
-          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, ZbeeIdFromIdx(i));
         }
         if (flags & ZBEE_CL_LOCK) {
           char zbee_sub_topic[80];
@@ -2029,7 +2029,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
           zbee_sub.topic = mg_str(zbee_sub_topic);
           zbee_sub.qos = s_qos;
           mg_mqtt_sub(c, &zbee_sub);
-          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, NUMPIN + i);
+          printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d)\r\n", zbee_sub_topic, ZbeeIdFromIdx(i));
         }
 
         /* Подписка на trigger топик если это кнопка (TRIGGER role) */
@@ -2048,7 +2048,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
             zbee_sub.topic = mg_str(zbee_sub_topic);
             zbee_sub.qos = s_qos;
             mg_mqtt_sub(c, &zbee_sub);
-            printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d TRIGGER)\r\n", zbee_sub_topic, NUMPIN + i);
+            printf("[MQTT] SUBSCRIBED to '%s' (zigbee id %d TRIGGER)\r\n", zbee_sub_topic, ZbeeIdFromIdx(i));
           }
         }
       }
@@ -2404,7 +2404,7 @@ static void handle_get_pins(struct mg_connection *c,
                 "\"ptype\":%d,\"onoff\":%d,"
                 "\"sclick\":\"%s\",\"dclick\":\"%s\",\"lpress\":\"%s\","
                 "\"info\":\"%s\"}",
-                i, esc_pins,
+                i + 1, esc_pins,
                 PinsConf[i].ptype, PinsConf[i].onoff,
                 esc_sc, esc_dc, esc_lp, esc_info);
             break;
@@ -2414,7 +2414,7 @@ static void handle_get_pins(struct mg_connection *c,
             CHUNK_SEND_FMT(c, &first,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"SWITCH\","
                 "\"ptype\":%d,\"onoff\":%d,\"info\":\"%s\"}",
-                i, esc_pins,
+                i + 1, esc_pins,
                 PinsConf[i].ptype, PinsConf[i].onoff, esc_info);
             break;
 
@@ -2422,7 +2422,7 @@ static void handle_get_pins(struct mg_connection *c,
             CHUNK_SEND_FMT(c, &first,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"ONEWIRE\","
                 "\"onoff\":%d,\"info\":\"%s\"}",
-                i, esc_pins,
+                i + 1, esc_pins,
                 PinsConf[i].onoff, esc_info);
             break;
 
@@ -2431,7 +2431,7 @@ static void handle_get_pins(struct mg_connection *c,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"PWM\","
                 "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,"
                 "\"onoff\":%d,\"info\":\"%s\"}",
-                i, esc_pins,
+                i + 1, esc_pins,
                 PinsConf[i].dvalue, PinsConf[i].pwm, PinsConf[i].pwmmax,
                 PinsConf[i].onoff, esc_info);
             break;
@@ -2440,7 +2440,7 @@ static void handle_get_pins(struct mg_connection *c,
             CHUNK_SEND_FMT(c, &first,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"DEVICE\","
                 "\"onoff\":%d,\"info\":\"%s\"}",
-                i, esc_pins,
+                i + 1, esc_pins,
                 PinsConf[i].onoff, esc_info);
             break;
 
@@ -2449,7 +2449,7 @@ static void handle_get_pins(struct mg_connection *c,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"ENCODER\","
                 "\"dvalue\":%d,\"pwm\":%d,\"pwmmax\":%d,"
                 "\"ponr\":%d,\"onoff\":%d,\"info\":\"%s\"}",
-                i, esc_pins,
+                i + 1, esc_pins,
                 PinsConf[i].dvalue, PinsConf[i].pwm, PinsConf[i].pwmmax,
                 (int)ponr_eff_enc(i), PinsConf[i].onoff, esc_info);
             break;
@@ -2458,7 +2458,7 @@ static void handle_get_pins(struct mg_connection *c,
             CHUNK_SEND_FMT(c, &first,
                 "{\"id\":%d,\"pin\":\"%s\",\"type\":\"SECURITY\","
                 "\"ptype\":%d,\"onoff\":%d,\"info\":\"%s\"}",
-                i, esc_pins,
+                i + 1, esc_pins,
                 PinsConf[i].ptype, PinsConf[i].onoff, esc_info);
             break;
 
@@ -2564,7 +2564,7 @@ void handle_buttons(struct mg_connection *c, struct mg_http_message *hm) {
 
             mg_http_printf_chunk(c,
                 "%s{\"topin\":1,\"id\":%ld,\"pins\":\"%s\",\"ptype\":%d%s%s%s%s,\"onoff\":%d}",
-                emitted ? "," : "", i, esc_pins, PinsConf[i].ptype,
+                emitted ? "," : "", i + 1, esc_pins, PinsConf[i].ptype,
                 frag_sc, frag_dc, frag_lp, frag_info, PinsConf[i].onoff);
         } else {
             json_frag_str(frag_sc, sizeof(frag_sc), "sclick", zbee_action_sclick(zbi));
@@ -2583,7 +2583,7 @@ void handle_buttons(struct mg_connection *c, struct mg_http_message *hm) {
             mg_http_printf_chunk(c,
                 "%s{\"topin\":1,\"id\":%ld,\"pins\":\"%s\"%s%s%s%s,\"onoff\":%d,"
                 "\"is_zigbee\":1,\"vbtn_mode\":%d}",
-                emitted ? "," : "", i, esc_pins,
+                emitted ? "," : "", i + 1, esc_pins,
                 frag_sc, frag_dc, frag_lp, frag_info,
                 ZigbeeConf[zbi].onoff, ZigbeeConf[zbi].vbtn_mode);
         }
@@ -2616,11 +2616,11 @@ static int build_pinact_json(char *buf, size_t bufsize, int for_id) {
 
         char name[32];
         int target = PinsLinks[k].idout;
-        if (target < NUMPIN) {
-            json_escape_str(name, PinsInfo[target].pins, sizeof(name));
+        if (IsPinId(target)) {
+            json_escape_str(name, PinsInfo[target - 1].pins, sizeof(name));
         } else {
-            int zbi = target - NUMPIN;
-            if (zbi >= 0 && zbi < NUMZBEE) {
+            int zbi = ZbeeIdx(target);
+            if (IsZigbeePin(target)) {
                 json_escape_str(name,
                     ZigbeeConf[zbi].zbee_label[0] ? ZigbeeConf[zbi].zbee_label : "Zigbee",
                     sizeof(name));
@@ -2658,7 +2658,7 @@ void handle_switches(struct mg_connection *c) {
         int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 450) {
             MG_ERROR(("switches: OVERFLOW at pin %d, pos=%d remaining=%d",
-                      i, pos, remaining));
+                      PinIdFromIdx(i), pos, remaining));
             break;
         }
 
@@ -2668,13 +2668,13 @@ void handle_switches(struct mg_connection *c) {
         json_escape_str(esc_pins, PinsInfo[i].pins, sizeof(esc_pins));
 
         char pinact_buf[256];
-        build_pinact_json(pinact_buf, sizeof(pinact_buf), i);
+        build_pinact_json(pinact_buf, sizeof(pinact_buf), i + 1);
 
         pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
             "%s{\"topin\":%d,\"id\":%d,\"pins\":\"%s\",\"ptype\":%d,"
             "\"pinact\":%s,\"info\":\"%s\",\"onoff\":%d}",
             first ? "" : ",",
-            PinsConf[i].topin, i, esc_pins,
+            PinsConf[i].topin, i + 1, esc_pins,
             PinsConf[i].ptype, pinact_buf, esc_info, PinsConf[i].onoff);
 
         first = false;
@@ -2687,15 +2687,15 @@ void handle_switches(struct mg_connection *c) {
         int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 450) {
             MG_ERROR(("switches: OVERFLOW at zigbee %d, pos=%d remaining=%d",
-                      i, pos, remaining));
+                      ZbeeIdFromIdx(i), pos, remaining));
             break;
         }
 
         char esc_info[64];
         json_escape_str(esc_info, ZigbeeConf[i].info, sizeof(esc_info));
 
-        /* ID для Zigbee: NUMPIN + i (виртуальные пины) */
-        int zigbee_id = NUMPIN + i;
+        /* Новый логический ID Zigbee: 90..289 */
+        int zigbee_id = ZbeeIdFromIdx(i);
 
         /* Payload: если vbtn_mode == PASSTHROUGH и pt_single задан, используем его */
         char esc_pins[64];
@@ -2771,12 +2771,12 @@ static void handle_switches_page(struct mg_connection *c, long from, long limit)
 
             json_escape_str(esc_info, PinsConf[id].info, sizeof(esc_info));
             json_escape_str(esc_pins, PinsInfo[id].pins, sizeof(esc_pins));
-            build_pinact_json(pinact_buf, sizeof(pinact_buf), (int)id);
+            build_pinact_json(pinact_buf, sizeof(pinact_buf), (int)id + 1);
             n = snprintf(rec, sizeof(rec),
                 "%s{\"topin\":%d,\"id\":%ld,\"pins\":\"%s\",\"ptype\":%d,"
                 "\"pinact\":%s,\"info\":\"%s\",\"onoff\":%d}",
                 first ? "" : ",",
-                PinsConf[id].topin, id, esc_pins,
+                PinsConf[id].topin, id + 1, esc_pins,
                 PinsConf[id].ptype, pinact_buf, esc_info, PinsConf[id].onoff);
         } else {
             long zi = id - (long)NUMPIN;
@@ -2790,12 +2790,13 @@ static void handle_switches_page(struct mg_connection *c, long from, long limit)
             } else {
                 snprintf(esc_pins, sizeof(esc_pins), "ZB_%.16s", ZigbeeConf[zi].zbee_ieee);
             }
-            build_pinact_json(pinact_buf, sizeof(pinact_buf), (int)id);
+            int zigbee_id = ZbeeIdFromIdx((int)zi);
+            build_pinact_json(pinact_buf, sizeof(pinact_buf), zigbee_id);
             n = snprintf(rec, sizeof(rec),
-                "%s{\"topin\":11,\"id\":%ld,\"pins\":\"%s\",\"ptype\":0,"
+                "%s{\"topin\":11,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,"
                 "\"pinact\":%s,\"info\":\"%s\",\"onoff\":%d}",
                 first ? "" : ",",
-                id, esc_pins, pinact_buf, esc_info, ZigbeeConf[zi].onoff);
+                zigbee_id, esc_pins, pinact_buf, esc_info, ZigbeeConf[zi].onoff);
         }
 
         if (n > 0 && (size_t)n < sizeof(rec)) {
@@ -2864,9 +2865,9 @@ void handle_encoders(struct mg_connection *c, struct mg_http_message *hm) {
 
         /* ── Encoder B pin ── */
         uint8_t encoderb_id = PinsConf[i].encoderb;
-        if (encoderb_id == 0 || encoderb_id > NUMPIN) encoderb_id = 255;
-        const char *encb_pin = (encoderb_id != 255 && encoderb_id < NUMPIN)
-            ? PinsInfo[encoderb_id].pins : "";
+        if (encoderb_id < 1 || encoderb_id > NUMPIN) encoderb_id = 255;
+        const char *encb_pin = (encoderb_id != 255)
+            ? PinsInfo[encoderb_id - 1].pins : "";
 
         /* ── PWM параметры + pinact через PinsLinks — один проход ──
          * dvalue берётся от совпадения с наибольшим idout (как в старом
@@ -2880,17 +2881,18 @@ void handle_encoders(struct mg_connection *c, struct mg_http_message *hm) {
         int pa_off   = 0;
         int pa_first = 1;
         for (int k = 0; k < NUMPINLINKS; k++) {
-            if (PinsLinks[k].idin != i) continue;
+            if (PinsLinks[k].idin != (short)(i + 1)) continue;
             int out_id = PinsLinks[k].idout;
-            if (out_id < 0 || out_id >= NUMPIN) continue;
-            if (PinsConf[out_id].topin != 5) continue;
+            if (out_id < 1 || out_id > NUMPIN) continue;
+            int out_idx = out_id - 1;
+            if (PinsConf[out_idx].topin != 5) continue;
             if (!cond_set) { enc_cond = PinsLinks[k].cond; cond_set = true; }
             if (out_id > best_out) {
                 best_out   = out_id;
-                pwm_dvalue = PinsConf[out_id].dvalue;
-                pwm_freq   = PinsConf[out_id].pwm;
-                pwm_max    = PinsConf[out_id].pwmmax;
-                pwm_pol    = (PinsConf[out_id].pwm_flags & PWMF_INVERT) ? 1 : 0;
+                pwm_dvalue = PinsConf[out_idx].dvalue;
+                pwm_freq   = PinsConf[out_idx].pwm;
+                pwm_max    = PinsConf[out_idx].pwmmax;
+                pwm_pol    = (PinsConf[out_idx].pwm_flags & PWMF_INVERT) ? 1 : 0;
             }
             if (PinsLinks[k].pins[0] != '\0') {
                 pa_off += snprintf(pinact + pa_off, sizeof(pinact) - pa_off,
@@ -2918,7 +2920,7 @@ void handle_encoders(struct mg_connection *c, struct mg_http_message *hm) {
         int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 700) {  // 700 — максимум одного encoder-слота (pinact 256 + cexpr 102 + поля)
             MG_ERROR(("encoders: OVERFLOW at pin %d, pos=%d remaining=%d",
-                      i, pos, remaining));
+                      PinIdFromIdx(i), pos, remaining));
             if (paged) next = i;
             break;
         }
@@ -2930,7 +2932,7 @@ void handle_encoders(struct mg_connection *c, struct mg_http_message *hm) {
             "\"pinact\":{%s},\"info\":\"%s\",\"onoff\":%d,"
         	"\"zbee_bind\":%d,\"cond\":%d,\"cexpr\":\"%s\",\"pol\":%d}",
             first ? "" : ",",
-            PinsConf[i].topin, i, esc_pins,
+            PinsConf[i].topin, i + 1, esc_pins,
             encoderb_id, esc_encb,
             pwm_dvalue, pwm_freq, pwm_max,
             (int)ponr_eff_enc(i),
@@ -2949,8 +2951,8 @@ void handle_encoders(struct mg_connection *c, struct mg_http_message *hm) {
     for (int k = 0; k < NUMPINLINKS; k++) {
         int in_id = PinsLinks[k].idin;
         int out_id = PinsLinks[k].idout;
-        if (in_id < 0 || in_id >= NUMPIN || out_id < 0 || out_id >= NUMPIN) continue;
-        if (PinsConf[in_id].topin == 8) enc_linked[out_id] = 1;
+        if (!IsPinId(in_id) || !IsPinId(out_id)) continue;
+        if (PinsConf[in_id - 1].topin == 8) enc_linked[out_id - 1] = 1;
     }
     for (int i = (cursor > NUMPIN ? cursor - NUMPIN : 0); next < 0 && i < NUMPIN; i++) {
         if (PinsConf[i].topin != 5 || enc_linked[i]) continue;
@@ -2960,7 +2962,7 @@ void handle_encoders(struct mg_connection *c, struct mg_http_message *hm) {
         int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < 700) {
             MG_ERROR(("encoders: OVERFLOW (pwm rows) at pin %d, pos=%d remaining=%d",
-                      i, pos, remaining));
+                      PinIdFromIdx(i), pos, remaining));
             if (paged) next = NUMPIN + i;
             break;
         }
@@ -2983,7 +2985,7 @@ void handle_encoders(struct mg_connection *c, struct mg_http_message *hm) {
             "\"pinact\":{},\"info\":\"%s\",\"onoff\":%d,"
             "\"zbee_bind\":%d,\"cond\":0,\"cexpr\":\"\","
             "\"pol\":%d,\"owner\":\"%s\",\"locked\":%d}",
-            first ? "" : ",", i, esc_pins,
+            first ? "" : ",", i + 1, esc_pins,
             PinsConf[i].dvalue, PinsConf[i].pwm, PinsConf[i].pwmmax,
             (int)ponr_eff_pin(i), esc_info, onoff_eff,
             PinsConf[i].zbee_bind_id,
@@ -3044,12 +3046,12 @@ static int pid_format_slot(char *out, size_t sz, int i, bool first) {
     }
 
     const char *pin_name = "";
-    uint8_t pin_id = PidConf[i].pwm_pin_id;
+    uint16_t pin_id = PidConf[i].pwm_pin_id;
     int duty = 0;
 
-    if (pin_id > 0 && pin_id < NUMPIN) {
-        pin_name = PinsInfo[pin_id].pins;
-        duty     = PinsConf[pin_id].dvalue;
+    if (pin_id >= 1 && pin_id <= NUMPIN) {
+        pin_name = PinsInfo[pin_id - 1].pins;
+        duty     = PinsConf[pin_id - 1].dvalue;
     }
 
     char esc_info[64];
@@ -3065,10 +3067,10 @@ static int pid_format_slot(char *out, size_t sz, int i, bool first) {
     char s_tc[16]; fmt_float(s_tc, sizeof(s_tc), PidConf[i].tmpcur, 1);
 
     /* Выбранный датчик: ID/имя пина и признак наличия валидной температуры */
-    uint8_t sp_id = PidConf[i].sensor_pin_id;
+    uint16_t sp_id = PidConf[i].sensor_pin_id;
     const char *sp_name = (PidConf[i].selsens != PID_SENS_NONE &&
-                           sp_id > 0 && sp_id < NUMPIN)
-                          ? PinsInfo[sp_id].pins : "";
+                           sp_id >= 1 && sp_id <= NUMPIN)
+                          ? PinsInfo[sp_id - 1].pins : "";
     char esc_spname[16];
     json_escape_str(esc_spname, sp_name, sizeof(esc_spname));
     int tmpok = (PidConf[i].selsens != PID_SENS_NONE &&
@@ -3076,7 +3078,7 @@ static int pid_format_slot(char *out, size_t sz, int i, bool first) {
 
     /* pinact: пустой объект, если PWM-пин не привязан (иначе UI покажет "(0)") */
     char pinact[40];
-    if (pin_id > 0 && pin_id < NUMPIN) {
+    if (pin_id >= 1 && pin_id <= NUMPIN) {
         snprintf(pinact, sizeof(pinact), "\"%s\":%d", esc_pname, pin_id);
     } else {
         pinact[0] = '\0';
@@ -3183,8 +3185,10 @@ static void handle_pid(struct mg_connection *c, struct mg_http_message *hm) {
 }
 
 /* ─── /api/state/security (Keep-Alive polling) ───
- * Строки таблицы: физические пины с topin==10 (id 0..NUMPIN-1) и Zigbee-PIR
- * (id NUMPIN..NUMPIN+NUMZBEE-1). Параметры запроса:
+ * Строки таблицы: физические пины с topin==10 и Zigbee-PIR.
+ * Внутренний курсор from/next — сквозной 0-based: 0..NUMPIN-1 индексируют
+ * PinsConf[], NUMPIN..NUMPIN+NUMZBEE-1 — ZigbeeConf[]. В JSON отдаётся
+ * логический ID: физический i+1, Zigbee ZBEE_ID_BASE+z. Параметры запроса:
  *   from  - сквозной id, с которого искать строки (по умолчанию 0)
  *   limit - максимум строк в ответе (1..SEC_PAGE_MAX_LIMIT). Без limit число
  *           строк не режется (как раньше), ответ ограничен только размером
@@ -3241,8 +3245,10 @@ static void handle_security(struct mg_connection *c, struct mg_http_message *hm)
 
         int remaining = (int)G_BODY_SIZE - pos;
         if (remaining < SEC_REC_RESERVE) {
+            long log_id = (i < (long)NUMPIN) ? i + 1
+                                             : ZbeeIdFromIdx((int)(i - (long)NUMPIN));
             MG_ERROR(("security: buffer full at id %ld, pos=%d remaining=%d",
-                      i, pos, remaining));
+                      log_id, pos, remaining));
             next = i;   /* клиент продолжит с этого id, а не потеряет хвост */
             break;
         }
@@ -3263,7 +3269,7 @@ static void handle_security(struct mg_connection *c, struct mg_http_message *hm)
                 "\"action\":\"%s\",\"send_sms\":\"%s\","
                 "\"info\":\"%s\",\"onoff\":%d}",
                 first ? "" : ",",
-                PinsConf[i].topin, (int)i, esc_pins2, PinsConf[i].ptype,
+                PinsConf[i].topin, (int)i + 1, esc_pins2, PinsConf[i].ptype,
                 esc_action, esc_sms, esc_row_info, PinsConf[i].onoff);
         } else {
             int z = (int)(i - (long)NUMPIN);
@@ -3280,7 +3286,7 @@ static void handle_security(struct mg_connection *c, struct mg_http_message *hm)
                 "%s{\"topin\":11,\"id\":%d,\"pins\":\"%s\",\"ptype\":0,\"zbee\":1,"
                 "\"action\":\"%s\",\"send_sms\":\"%s\","
                 "\"info\":\"%s\",\"onoff\":%d}",
-                first ? "" : ",", (int)i, esc_zpins,
+                first ? "" : ",", ZbeeIdFromIdx(z), esc_zpins,
                 esc_action, esc_sms, esc_row_info, ZigbeeConf[z].onoff);
         }
 
@@ -3419,12 +3425,13 @@ static void handle_onewire(struct mg_connection *c) {
 
         /* ── DS18B20 ── */
         for (int j = 0; j < MAX_DS18B20_P; j++) {
-            if (ds18b20[j].id != i || ds18b20[j].typsensr != 1) continue;
+            if (ds18b20[j].id != (uint8_t)(i + 1) || ds18b20[j].typsensr != 1) continue;
             snsr_fnd = true;
 
             int remaining = (int)G_BODY_SIZE - pos;
             if (remaining < 128) {
-                MG_ERROR(("onewire: OVERFLOW before DS18B20 pin %d, pos=%d", i, pos));
+                MG_ERROR(("onewire: OVERFLOW before DS18B20 pin %d, pos=%d",
+                          PinIdFromIdx(i), pos));
                 goto close_json;
             }
 
@@ -3432,7 +3439,7 @@ static void handle_onewire(struct mg_connection *c) {
                 "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":%d,"
                 "\"numsens\":%d,\"onoff\":%d,\"sensors\":[",
                 first_pin ? "" : ",",
-                ds18b20[j].id, ds18b20[j].pin, ds18b20[j].typsensr,
+                i + 1, ds18b20[j].pin, ds18b20[j].typsensr,
                 ds18b20[j].numsens, ds18b20[j].onoff);
             first_pin = false;
 
@@ -3442,7 +3449,7 @@ static void handle_onewire(struct mg_connection *c) {
                 remaining = (int)G_BODY_SIZE - pos;
                 if (remaining < 250) {
                     MG_ERROR(("onewire: OVERFLOW at DS18B20 sensor %d pin %d, pos=%d",
-                              k, i, pos));
+                              k, PinIdFromIdx(i), pos));
                     break;
                 }
 
@@ -3476,12 +3483,13 @@ static void handle_onewire(struct mg_connection *c) {
 
         /* ── DHT22 ── */
         for (int j = 0; j < MAX_DHT22_P && !snsr_fnd; j++) {
-            if (dht22[j].id != i || dht22[j].typsensr != 2) continue;
+            if (dht22[j].id != (uint8_t)(i + 1) || dht22[j].typsensr != 2) continue;
             snsr_fnd = true;
 
             int remaining = (int)G_BODY_SIZE - pos;
             if (remaining < 400) {
-                MG_ERROR(("onewire: OVERFLOW before DHT22 pin %d, pos=%d", i, pos));
+                MG_ERROR(("onewire: OVERFLOW before DHT22 pin %d, pos=%d",
+                          PinIdFromIdx(i), pos));
                 goto close_json;
             }
 
@@ -3506,7 +3514,7 @@ static void handle_onewire(struct mg_connection *c) {
                 "\"info\":\"%s\"}"
                 "]}",
                 first_pin ? "" : ",",
-                dht22[j].id, dht22[j].pin, dht22[j].typsensr,
+                i + 1, dht22[j].pin, dht22[j].typsensr,
                 dht22[j].numsens, dht22[j].onoff,
                 s_t, s_h,
                 dht22[j].valid ? "true" : "false",
@@ -3522,7 +3530,8 @@ static void handle_onewire(struct mg_connection *c) {
         if (!snsr_fnd) {
             int remaining = (int)G_BODY_SIZE - pos;
             if (remaining < 100) {
-                MG_ERROR(("onewire: OVERFLOW before no-sensor pin %d, pos=%d", i, pos));
+                MG_ERROR(("onewire: OVERFLOW before no-sensor pin %d, pos=%d",
+                          PinIdFromIdx(i), pos));
                 goto close_json;
             }
             char esc_ow_pins[16];
@@ -3531,7 +3540,7 @@ static void handle_onewire(struct mg_connection *c) {
                 "%s{\"id\":%d,\"pin\":\"%s\",\"typsensr\":0,"
                 "\"numsens\":0,\"info\":\"No active sensors found\",\"onoff\":0}",
                 first_pin ? "" : ",",
-                i, esc_ow_pins);
+                i + 1, esc_ow_pins);
             first_pin = false;
         }
     }

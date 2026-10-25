@@ -1,4 +1,3 @@
-
 import './netGate.js'; // ПЕРВЫМ: лимит параллельных fetch (меньше сокетов/TLS-handshake)
 import { registerPoll, unregisterPoll, pauseAll, resumeAll } from './pollQueue.js';
 import { StateContext } from './context.js';
@@ -30,6 +29,7 @@ import {
 import './Modal.css';
 import './background.css';
 import './theme.css';
+import './logo.css';
 import './theme.js';
 import { ruLangswitch } from './rulang.js';
 import { enLangswitch } from './enlang.js';
@@ -85,6 +85,15 @@ const Logo = (props) =>
     style="object-fit:contain;"
     draggable="false"
   />`;
+// Animated wordmark for the sidebar. Look and animation are pure CSS, see logo.css.
+// Light theme -> dark-metal logo, dark theme -> silver logo (switched through [data-theme]).
+const WordLogo = () =>
+  html`<div class="zl" role="img" aria-label="Zagotovka Mongoose">
+    <div class="zl-base"></div>
+    <div class="zl-glint"></div>
+    <div class="zl-mg-glow"></div>
+    <div class="zl-mg"></div>
+  </div>`;
 const NavLink = ({ title, href, ids }) =>
   html`<a href="#${href}/?id=${ids}" class="">${title}<///>`;
 const DelLink = ({ title, href, ids, onclicks }) =>
@@ -208,10 +217,9 @@ function Sidebar({ url, show }) {
             ${show && 'translate-x-0'} right-auto bottom-0"
   >
     <div class="flex flex-col m-4 gap-y-6">
-      <div
-        class="flex h-10 shrink-0 items-center gap-x-4 font-bold text-xl text-slate-500"
-      >
-        <${Logo} class="h-full" /> Zagotovka <span class="text-xs text-slate-400 font-normal ml-1">${typeof __FW_VERSION__ !== 'undefined' ? __FW_VERSION__ : 'dev'}</span>
+      <div class="flex shrink-0 items-end gap-x-2">
+        <${WordLogo} />
+        <span class="pb-0.5 text-xs font-normal text-slate-400">${typeof __FW_VERSION__ !== 'undefined' ? __FW_VERSION__ : 'dev'}</span>
       <//>
       <div class="flex flex-1 flex-col">
         <${NavLink} title="Logger" tone="sys" icon=${Icons.navLogger} href="/" url=${url} />
@@ -725,5 +733,3 @@ const App = function ({ }) {
 };
 
 window.onload = () => render(h(App), document.body);
-
-

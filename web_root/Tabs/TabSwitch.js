@@ -723,7 +723,7 @@ function TabSwitch({ }) {
               <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'DV3g100'}</td><td class="border px-4 py-2">значение диммера 3 больше или равно 100</td></tr>
               <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'DV3l100'}</td><td class="border px-4 py-2">значение диммера 3 меньше или равно 100</td></tr>
               <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'DV3>0&Ss'}</td><td class="border px-4 py-2">диммер 3 светит и сейчас ночь</td></tr>
-              <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'D93'}</td><td class="border px-4 py-2">Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 89)</td></tr>
+              <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'D93'}</td><td class="border px-4 py-2">Zigbee-устройство с ID 93 включено (ID Zigbee-устройств начинаются с 90)</td></tr>
               <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'DV93g100'}</td><td class="border px-4 py-2">яркость Zigbee-устройства 93 не меньше 100</td></tr>
               <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'T5<25|D1'}</td><td class="border px-4 py-2">температура датчика 5 ниже 25 ИЛИ устройство 1 включено (особый случай при неисправном датчике - см. правила ниже)</td></tr>
             </tbody>
@@ -1117,7 +1117,7 @@ function TabSwitch({ }) {
               <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'DV3g100'}</td><td class="border px-4 py-2">dimmer 3 value is greater than or equal to 100</td></tr>
               <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'DV3l100'}</td><td class="border px-4 py-2">dimmer 3 value is less than or equal to 100</td></tr>
               <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'DV3>0&Ss'}</td><td class="border px-4 py-2">dimmer 3 is lit and it is night</td></tr>
-              <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'D93'}</td><td class="border px-4 py-2">Zigbee device with ID 93 is on (Zigbee device IDs start from 89)</td></tr>
+              <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'D93'}</td><td class="border px-4 py-2">Zigbee device with ID 93 is on (Zigbee device IDs start from 90)</td></tr>
               <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'DV93g100'}</td><td class="border px-4 py-2">brightness of Zigbee device 93 is 100 or more</td></tr>
               <tr><td class="border px-4 py-2 font-semibold whitespace-nowrap">${'T5<25|D1'}</td><td class="border px-4 py-2">sensor 5 is below 25 OR device 1 is on (special case with a dead sensor - see the rules below)</td></tr>
             </tbody>
