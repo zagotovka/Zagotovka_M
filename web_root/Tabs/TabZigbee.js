@@ -313,6 +313,139 @@ const HELP_CONTENT = {
   `
 };
 
+/* ---------------------------------------------------------------------------
+   Всплывающие подсказки заголовков таблицы (общий механизм как на Timer(s)/Encoder):
+   один глобальный div #__global_tip, реакция на любой элемент с атрибутом data-tip,
+   цвета зависят от data-theme на <html>.
+   --------------------------------------------------------------------------- */
+function initGlobalTooltip() {
+  if (document.__tipInited) return;
+  document.__tipInited = true;
+
+  const tip = document.createElement('div');
+  tip.id = '__global_tip';
+  Object.assign(tip.style, {
+    position: 'fixed',
+    zIndex: '99999',
+    maxWidth: '280px',
+    background: '#1a2332',
+    color: '#e8f4f8',
+    padding: '8px 12px',
+    borderRadius: '8px',
+    border: '1px solid rgba(0,188,188,0.35)',
+    fontSize: '12px',
+    lineHeight: '1.6',
+    boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
+    pointerEvents: 'none',
+    whiteSpace: 'normal',
+    display: 'none',
+    transition: 'opacity 0.12s ease',
+    opacity: '0',
+  });
+  document.body.appendChild(tip);
+
+  let hideTimer = null;
+
+  function show(el) {
+    clearTimeout(hideTimer);
+    tip.innerHTML = el.dataset.tip;
+    const darkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+    tip.style.background = darkTheme ? '#e6eef4' : '#1a2332';
+    tip.style.color      = darkTheme ? '#14202b' : '#e8f4f8';
+    tip.style.border     = darkTheme ? '1px solid rgba(0,160,170,0.65)' : '1px solid rgba(0,188,188,0.35)';
+    tip.style.boxShadow  = darkTheme ? '0 6px 22px rgba(0,0,0,0.65)' : '0 6px 20px rgba(0,0,0,0.45)';
+    tip.style.display = 'block';
+
+    tip.style.opacity = '0';
+    tip.style.left = '0px';
+    tip.style.top = '0px';
+
+    requestAnimationFrame(() => {
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      const vw = window.innerWidth;
+      const r = el.getBoundingClientRect();
+
+      let left = r.left + r.width / 2 - tw / 2;
+      left = Math.max(8, Math.min(left, vw - tw - 8));
+
+      let top = r.top - th - 8;
+      if (top < 8) top = r.bottom + 8;
+
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
+      tip.style.opacity = '1';
+    });
+  }
+
+  function hide() {
+    hideTimer = setTimeout(() => {
+      tip.style.opacity = '0';
+      setTimeout(() => { tip.style.display = 'none'; }, 120);
+    }, 80);
+  }
+
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el);
+  });
+
+  document.addEventListener('mouseout', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) hide();
+  });
+
+  // Touch screens: tap on an element with a tooltip shows it, tap elsewhere hides it
+  document.addEventListener('click', e => {
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el); else hide();
+  });
+}
+
+const ZB_TIPS = {
+  ru: {
+    id: 'Номер устройства в таблице прошивки. Используется в сценариях, ' +
+        'условиях и MQTT как идентификатор этого Zigbee-устройства. ' +
+        'У многоканального устройства каждая конечная точка (EP) имеет свой ID.',
+    ieee: '<b>IEEE-адрес</b> - уникальный 64-битный адрес Zigbee-устройства: 16 символов 0-9, a-f ' +
+          '(например 0x00124b0012345678). Не меняется при пересопряжении.<br><br>' +
+          '<b>Где найти:</b><br>' +
+          '1. В веб-панели SLZB-06p7U: <b>Zigbee Hub - Zigbee devices</b>, колонка IEEE.<br>' +
+          '2. В инструкции или на наклейке устройства (IEEE / MAC / EUI64).<br>' +
+          '3. В любом другом месте, где показан адрес: Zigbee2MQTT, ZHA, другой Zigbee-шлюз.',
+    type: 'Тип устройства: Socket (розетка/реле), Dimmer, Color (RGB/CCT), PIR (датчик движения), ' +
+          'Sensor, Button (кнопка), Switch (выключатель). Multi - устройство с несколькими ' +
+          'каналами (EP); нажмите на строку, чтобы раскрыть список.',
+    info: 'Ваше пояснение к устройству (например, название комнаты или лампы). ' +
+          'Текстовая метка, на работу устройства не влияет.',
+    onoff: 'Текущее состояние устройства. Переключатель отправляет команду включения/выключения. ' +
+           'У группы Multi переключатель в головной строке управляет всеми каналами сразу.',
+    action: '<b>Управление</b> - настройки устройства, тип, яркость и цвет.<br>' +
+            '<b>Обучение</b> - мастер обучения устройства (окно Learn).'
+  },
+  en: {
+    id: 'Device number in the firmware table. Used in scenarios, ' +
+        'conditions and MQTT as the identifier of this Zigbee device. ' +
+        'A multi-channel device gets a separate ID for each endpoint (EP).',
+    ieee: '<b>IEEE address</b> is the unique 64-bit Zigbee device address: 16 characters 0-9, a-f ' +
+          '(for example 0x00124b0012345678). It does not change when you re-pair the device.<br><br>' +
+          '<b>Where to find it:</b><br>' +
+          '1. In the SLZB-06p7U web panel: <b>Zigbee Hub - Zigbee devices</b>, IEEE column.<br>' +
+          '2. In the device manual or on its label (IEEE / MAC / EUI64).<br>' +
+          '3. Anywhere else that shows the address: Zigbee2MQTT, ZHA, another Zigbee gateway.',
+    type: 'Device type: Socket (plug/relay), Dimmer, Color (RGB/CCT), PIR (motion sensor), ' +
+          'Sensor, Button, Switch. Multi is a device with several channels (EP); ' +
+          'click the row to expand the list.',
+    info: 'Your own note for the device (for example a room or lamp name). ' +
+          'A text label, does not affect how the device works.',
+    onoff: 'Current device state. The switch sends an on/off command. ' +
+           'On a Multi group the switch in the head row controls all channels at once.',
+    action: '<b>Control</b> - device settings, type, brightness and color.<br>' +
+            '<b>Learn</b> - device learning wizard (Learn window).'
+  }
+};
+
 export function TabZigbee({}) {
   const [devices, setDevices] = useState([]);
   const [language, setLanguage] = useState('ru');
@@ -481,6 +614,8 @@ export function TabZigbee({}) {
       refreshSafe();
     }, 1000);
   };
+
+  useEffect(() => { initGlobalTooltip(); }, []);
 
   useEffect(() => {
     mounted.current = true;
@@ -654,7 +789,11 @@ export function TabZigbee({}) {
     }
   };
 
-  const Th = ({ title }) => html`<th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide">${title}</th>`;
+  const Th = ({ title, tip }) => html`
+    <th
+      class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide cursor-help"
+      data-tip=${ZB_TIPS[language === 'en' ? 'en' : 'ru'][tip]}
+    >${title}</th>`;
 
   if (!devices.length) return html`
     <div class="m-2 sm:m-4 lg:m-8 p-4 md:p-8 rounded-3xl bg-white/40 backdrop-blur-md border border-white/40 shadow-xl relative flex-grow flex flex-col justify-start items-center" style="overflow-anchor:none;">
@@ -701,12 +840,12 @@ export function TabZigbee({}) {
                 <table class="w-full text-left border-collapse whitespace-nowrap">
                   <thead>
                     <tr class="bg-teal-600/10 border-b border-teal-600/20">
-                      <${Th} title="ID" />
-                      <${Th} title="IEEE Address" />
-                      <${Th} title="Type" />
-                      <${Th} title="Info" />
-                      <${Th} title="On/Off" />
-                      <${Th} title="Action" />
+                      <${Th} title="ID" tip="id" />
+                      <${Th} title="IEEE Address" tip="ieee" />
+                      <${Th} title="Type" tip="type" />
+                      <${Th} title="Info" tip="info" />
+                      <${Th} title="On/Off" tip="onoff" />
+                      <${Th} title="Action" tip="action" />
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-white/40">

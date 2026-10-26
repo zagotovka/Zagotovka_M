@@ -895,6 +895,11 @@ void mg_error(struct mg_connection *c, const char *fmt, ...) {
 static char *s_addr;      // Current address to write to
 static size_t s_size;     // Firmware size to flash. In-progress indicator
 static uint32_t s_crc32;  // Firmware checksum
+static uint32_t s_last_crc32;  // CRC последнего успешно записанного образа
+static uint32_t s_last_size;   // размер последнего успешно записанного образа
+
+uint32_t mg_ota_last_crc32(void) { return s_last_crc32; }
+uint32_t mg_ota_last_size(void) { return s_last_size; }
 
 bool mg_ota_flash_begin(size_t new_firmware_size, struct mg_flash *flash) {
   bool ok = false;
@@ -1004,6 +1009,10 @@ bool mg_ota_flash_end(struct mg_flash *flash) {
     }
     if (size == s_size && crc32 == s_crc32) ok = true;
     LOG_OTA("CRC: %lx/%lx, size: %u/%u, status: %s\n", s_crc32, crc32, (unsigned)s_size, (unsigned)size, ok ? "ok" : "fail");
+    if (ok) {
+      s_last_crc32 = crc32;
+      s_last_size = (uint32_t) s_size;
+    }
     s_size = 0;
     if (ok) ok = flash->swap_fn();
   }

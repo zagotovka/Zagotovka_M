@@ -109,7 +109,7 @@ function ModalPwmCron({
             <tbody>
               <tr class="bg-gray-200">
                 <td class="p-2 font-bold">ID</td>
-                <td class="p-2">${selectedCron.id}</td>
+                <td class="p-2">${selectedCron.id + 1}</td>
               </tr>
               <tr class="bg-white">
                 <td class="p-2 font-bold">PWM Pin</td>

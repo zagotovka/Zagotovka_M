@@ -109,6 +109,13 @@ void mg_ota_set_pending_bank(uint8_t target_bank, uint8_t prev_bank) {
      * с retries=2 унаследует счётчик, и после первого падения нового
      * образа bootloader откатится сразу, не дав трёх свежих попыток). */
     tmp.ota_boot_retries = 0;
+    if (target_bank) {
+        tmp.ota_bank_b_size = mg_ota_last_size();
+        tmp.ota_bank_b_crc  = mg_ota_last_crc32();
+    } else {
+        tmp.ota_bank_a_size = mg_ota_last_size();
+        tmp.ota_bank_a_crc  = mg_ota_last_crc32();
+    }
     update_and_write_settings(&tmp);
 }
 
@@ -149,6 +156,13 @@ void mg_ota_reset_status(void) {
     char *slot = target ? tmp.ota_bank_b_version : tmp.ota_bank_a_version;
     memset(slot, 0, sizeof(tmp.ota_bank_a_version));
     strncpy(slot, OTA_BANK_VERSION_PARTIAL, sizeof(tmp.ota_bank_a_version) - 1);
+    if (target) {
+        tmp.ota_bank_b_size = 0;
+        tmp.ota_bank_b_crc  = 0;
+    } else {
+        tmp.ota_bank_a_size = 0;
+        tmp.ota_bank_a_crc  = 0;
+    }
 
     tmp.ota_state = 0;   /* 0 = Нет данных / флаг сброшен (как и раньше) */
     bool ok = update_and_write_settings(&tmp);
@@ -246,6 +260,76 @@ bool mg_ota_bank_image_valid(uint8_t bank) {
         }
     }
     return true;
+}
+
+#define OTA_BANK_CAPACITY 0x000C0000u   /* 768 КБ, как BANK_CAPACITY в bootloader */
+
+static uint32_t ota_bank_base(uint8_t bank) {
+    return bank ? 0x08100000u : 0x08040000u;
+}
+
+/* true, если запись о банке не соответствует его содержимому. */
+static bool ota_bank_record_stale(const HTTPSsettings *s, uint8_t bank,
+                                  uint8_t active, const char **why) {
+    const char *ver = bank ? s->ota_bank_b_version : s->ota_bank_a_version;
+    uint32_t size   = bank ? s->ota_bank_b_size    : s->ota_bank_a_size;
+    uint32_t crc    = bank ? s->ota_bank_b_crc     : s->ota_bank_a_crc;
+
+    /* Служебная метка ("!partial" и т.п.): в банк идёт запись, не трогаем. */
+    if (ver[0] == '!') return false;
+
+    if (size != 0) {
+        if (size > OTA_BANK_CAPACITY) { *why = "bad size"; return true; }
+        uint32_t calc = mg_crc32(0, (const char *) ota_bank_base(bank), size);
+        if (calc != crc) { *why = "crc mismatch"; return true; }
+        return false;
+    }
+
+    /* Записи о CRC нет. Для активного банка версия обязана совпадать с
+     * запущенной (mg_ota_commit() пишет именно FW_VERSION, до 15 символов). */
+    if (bank == active && ver[0] != '\0' &&
+        strncmp(ver, FW_VERSION, sizeof(s->ota_bank_a_version) - 1) != 0) {
+        *why = "version differs from running image";
+        return true;
+    }
+    return false;
+}
+
+bool mg_ota_sync_bank_records(void) {
+    const HTTPSsettings *cur = get_valid_settings();
+    if (cur == NULL) return false;
+
+    /* Пробная загрузка OTA: записи свежие, CRC уже сверил bootloader. */
+    if (cur->ota_pending == 1) return false;
+
+    HTTPSsettings tmp;
+    memcpy(&tmp, cur, sizeof(tmp));
+
+    uint8_t active = mg_ota_get_active_bank();
+    bool changed = false;
+
+    for (uint8_t bank = 0; bank < 2; bank++) {
+        const char *why = "";
+        if (!ota_bank_record_stale(&tmp, bank, active, &why)) continue;
+
+        char *ver = bank ? tmp.ota_bank_b_version : tmp.ota_bank_a_version;
+        memset(ver, 0, sizeof(tmp.ota_bank_a_version));
+        if (bank) {
+            tmp.ota_bank_b_size = 0;
+            tmp.ota_bank_b_crc  = 0;
+        } else {
+            tmp.ota_bank_a_size = 0;
+            tmp.ota_bank_a_crc  = 0;
+        }
+        if (bank == active) tmp.ota_state = OTA_STATE_NONE;
+
+        LOG_OTA("sync_bank_records: bank %c flashed directly (%s), "
+                "version and CRC reset\n", bank ? 'B' : 'A', why);
+        changed = true;
+    }
+
+    if (!changed) return false;
+    return update_and_write_settings(&tmp);
 }
 
 /* Переключение на противоположный банк без заливки нового образа

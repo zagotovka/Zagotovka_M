@@ -502,6 +502,17 @@ void ota_health_check_fn(void *arg) {
   }
 }
 
+/* Однократная проверка после старта: если образ в банке залит напрямую
+   (ST-Link), записи о его версии и CRC устарели. Сбрасываем их, чтобы
+   интерфейс показал "прошито напрямую", а bootloader не считал образ битым. */
+static void ota_sync_banks_fn(void *arg) {
+  (void) arg;
+  if (s_ota_expected != 0) return;   /* идёт OTA-загрузка: настройки не трогаем */
+  if (mg_ota_sync_bank_records()) {
+    LOG_OTA("Direct flash detected, bank records reset\n");
+  }
+}
+
 extern UART_HandleTypeDef huart3;
 
 static void ota_log_direct(const char *fmt, ...) {
@@ -3674,6 +3685,8 @@ void web_init(struct mg_mgr *mgr) {
             mg_timer_add(mgr, OTA_BOOT_COMMIT_DELAY_MS, 0,
                          ota_health_check_fn, NULL);
         }
+        /* Автоопределение банка, залитого напрямую (ST-Link). Один раз, через 5 с. */
+        mg_timer_add(mgr, 5000, 0, ota_sync_banks_fn, NULL);
     }
 }
 /*********************************** From Zagotovka ****************************************************/

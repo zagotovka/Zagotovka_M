@@ -80,6 +80,10 @@ typedef struct __attribute__((packed)) {
     uint8_t ota_prev_active_bank;    // банк, активный ДО текущего OTA-цикла
     char    ota_bank_a_version[16];  // последняя подтверждённая версия в Bank A
     char    ota_bank_b_version[16];  // последняя подтверждённая версия в Bank B
+    uint32_t ota_bank_a_size;        // размер образа Bank A (0 = записи нет, прошито напрямую)
+    uint32_t ota_bank_a_crc;         // CRC32 образа Bank A
+    uint32_t ota_bank_b_size;        // размер образа Bank B (0 = записи нет)
+    uint32_t ota_bank_b_crc;         // CRC32 образа Bank B
 } HTTPSsettings;
 
 // Проверка, что размер структуры не превышает размер сектора (256 КБ)

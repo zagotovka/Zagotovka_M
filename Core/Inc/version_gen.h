@@ -1,3 +1,3 @@
 // AUTO-GENERATED from VERSION file. Do not edit manually.
 #pragma once
-#define FW_VERSION "v3.0.0a"
+#define FW_VERSION "v3.0.1g"

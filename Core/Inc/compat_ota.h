@@ -61,6 +61,8 @@ uint8_t  mg_ota_get_active_bank(void);
 uint32_t mg_ota_crc32(int firmware);
 uint32_t mg_ota_timestamp(int firmware);
 size_t   mg_ota_size(int firmware);
+uint32_t mg_ota_last_crc32(void);
+uint32_t mg_ota_last_size(void);
 
 bool mg_ota_commit(void);
 bool mg_ota_rollback(void);
@@ -85,6 +87,12 @@ bool mg_ota_switch_bank(void);
  * bank: 0 = Bank A (0x08040000), 1 = Bank B (0x08100000). */
 bool mg_ota_bank_image_valid(uint8_t bank);
 
+/* Сверяет записи о версии/размере/CRC обоих банков с реальным содержимым flash.
+ * Если образ в банке залит напрямую (ST-Link), запись устарела: версия банка
+ * очищается, размер и CRC обнуляются (для активного банка ещё ota_state = 0).
+ * Не трогает настройки во время пробной загрузки OTA (ota_pending == 1).
+ * Возвращает true, если настройки были изменены и успешно записаны. */
+bool mg_ota_sync_bank_records(void);
 /* ---- Flash stubs -------------------------------------------------------- */
 void  *mg_flash_start(void);
 size_t mg_flash_size(void);

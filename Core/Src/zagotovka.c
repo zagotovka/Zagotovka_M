@@ -3883,6 +3883,78 @@ static bool settings_area_is_erased(void) {
   return true;
 }
 extern CRC_HandleTypeDef hcrc;
+/* Защита настроек: мьютекс записи, флаг стирания и маленькая RAM-копия
+ * только OTA-полей (около 56 байт вместо копии всей структуры). */
+typedef struct {
+  uint8_t  ota_state;
+  uint8_t  ota_active_bank;
+  uint8_t  ota_pending;
+  uint8_t  ota_boot_retries;
+  uint8_t  ota_prev_active_bank;
+  char     ota_bank_a_version[16];
+  char     ota_bank_b_version[16];
+  uint32_t ota_bank_a_size;
+  uint32_t ota_bank_a_crc;
+  uint32_t ota_bank_b_size;
+  uint32_t ota_bank_b_crc;
+} OtaFieldsCache;
+
+static SemaphoreHandle_t s_settings_mutex = NULL;
+static OtaFieldsCache s_ota_cache;
+static volatile bool s_ota_cache_ok = false;
+static volatile bool s_settings_erasing = false;
+
+static void ota_cache_store(const HTTPSsettings *s)
+{
+  s_ota_cache.ota_state            = s->ota_state;
+  s_ota_cache.ota_active_bank      = s->ota_active_bank;
+  s_ota_cache.ota_pending          = s->ota_pending;
+  s_ota_cache.ota_boot_retries     = s->ota_boot_retries;
+  s_ota_cache.ota_prev_active_bank = s->ota_prev_active_bank;
+  memcpy(s_ota_cache.ota_bank_a_version, s->ota_bank_a_version,
+         sizeof(s_ota_cache.ota_bank_a_version));
+  memcpy(s_ota_cache.ota_bank_b_version, s->ota_bank_b_version,
+         sizeof(s_ota_cache.ota_bank_b_version));
+  s_ota_cache.ota_bank_a_size = s->ota_bank_a_size;
+  s_ota_cache.ota_bank_a_crc  = s->ota_bank_a_crc;
+  s_ota_cache.ota_bank_b_size = s->ota_bank_b_size;
+  s_ota_cache.ota_bank_b_crc  = s->ota_bank_b_crc;
+  s_ota_cache_ok = true;
+}
+
+static void ota_cache_restore(HTTPSsettings *s)
+{
+  s->ota_state            = s_ota_cache.ota_state;
+  s->ota_active_bank      = s_ota_cache.ota_active_bank;
+  s->ota_pending          = s_ota_cache.ota_pending;
+  s->ota_boot_retries     = s_ota_cache.ota_boot_retries;
+  s->ota_prev_active_bank = s_ota_cache.ota_prev_active_bank;
+  memcpy(s->ota_bank_a_version, s_ota_cache.ota_bank_a_version,
+         sizeof(s->ota_bank_a_version));
+  memcpy(s->ota_bank_b_version, s_ota_cache.ota_bank_b_version,
+         sizeof(s->ota_bank_b_version));
+  s->ota_bank_a_size = s_ota_cache.ota_bank_a_size;
+  s->ota_bank_a_crc  = s_ota_cache.ota_bank_a_crc;
+  s->ota_bank_b_size = s_ota_cache.ota_bank_b_size;
+  s->ota_bank_b_crc  = s_ota_cache.ota_bank_b_crc;
+}
+
+static void settings_lock(void)
+{
+  if (xTaskGetSchedulerState() == taskSCHEDULER_NOT_STARTED) return;
+  if (s_settings_mutex == NULL) {
+    vTaskSuspendAll();
+    if (s_settings_mutex == NULL) s_settings_mutex = xSemaphoreCreateMutex();
+    (void)xTaskResumeAll();
+  }
+  if (s_settings_mutex != NULL) xSemaphoreTake(s_settings_mutex, portMAX_DELAY);
+}
+
+static void settings_unlock(void)
+{
+  if (xTaskGetSchedulerState() == taskSCHEDULER_NOT_STARTED) return;
+  if (s_settings_mutex != NULL) xSemaphoreGive(s_settings_mutex);
+}
 /* writebuf перенесён наверх файла (DTCM-указатель, zagotovka_dtcm_init) */
 
 // Функция для вычисления CRC всей структуры, кроме поля crc
@@ -3993,41 +4065,51 @@ static bool settings_strings_terminated(const HTTPSsettings *s) {
 }
 
 // Функция получения указателя на действительные настройки
-const HTTPSsettings *get_valid_settings(void) {
-  const HTTPSsettings *valid_settings = NULL;
-  uint8_t max_version = 0;
-  bool found_valid = false;
+const HTTPSsettings* get_valid_settings(void) {
+	/* Область настроек стирается другой задачей: подождать (до 4 с), а не
+	 * читать стёртую flash и получать NULL. Из ISR и при остановленном
+	 * планировщике не ждём. */
+	if (s_settings_erasing && xTaskGetSchedulerState() == taskSCHEDULER_RUNNING
+			&& __get_IPSR() == 0U) {
+		for (int w = 0; w < 400 && s_settings_erasing; w++) {
+			vTaskDelay(pdMS_TO_TICKS(10));
+		}
+	}
+	const HTTPSsettings *valid_settings = NULL;
+	uint8_t max_version = 0;
+	bool found_valid = false;
 
-  // Сканируем все возможные позиции структуры в секторе
-  for (int i = 0; i < SETTINGS_VERSION_COUNT; i++) {
-    const HTTPSsettings *current = (HTTPSsettings *)GET_SETTINGS_ADDR(i);
+	// Сканируем все возможные позиции структуры в секторе
+	for (int i = 0; i < SETTINGS_VERSION_COUNT; i++) {
+		const HTTPSsettings *current = (HTTPSsettings*) GET_SETTINGS_ADDR(i);
 
-    // Проверяем валидность текущих настроек
-    if (current->magic == SETTINGS_MAGIC_VALUE) {
-      uint32_t calculated_crc = calculate_crc(current);
-      if (calculated_crc == current->crc &&
-          settings_strings_terminated(current)) {
-        // Проверяем версию (с учетом цикличности)
-        if (!found_valid || ((uint8_t)(current->version - max_version)) < 128) {
-          valid_settings = current;
-          max_version = current->version;
-          found_valid = true;
-          //                    printf("Found valid settings version: %u at
-          //                    index: %d\r\n", current->version, i);
-        }
-      }
-    }
-  }
-  if (valid_settings) {
-    //    printf("Using settings version: %u\r\n", valid_settings->version);
-  } else {
-    printf("No valid settings found\r\n");
-  }
-  return valid_settings;
+		// Проверяем валидность текущих настроек
+		if (current->magic == SETTINGS_MAGIC_VALUE) {
+			uint32_t calculated_crc = calculate_crc(current);
+			if (calculated_crc == current->crc
+					&& settings_strings_terminated(current)) {
+				// Проверяем версию (с учетом цикличности)
+				if (!found_valid
+						|| ((uint8_t) (current->version - max_version)) < 128) {
+					valid_settings = current;
+					max_version = current->version;
+					found_valid = true;
+					// printf("Found valid settings version: %u at
+					//index: %d\r\n", current->version, i);
+				}
+			}
+		}
+	}
+	if (valid_settings) {
+		//printf("Using settings version: %u\r\n", valid_settings->version);
+	} else {
+		printf("No valid settings found\r\n");
+	}
+	return valid_settings;
 }
 
 // Функция записи настроек во флеш
-static bool write_settings_to_flash(const HTTPSsettings *settings) {
+static bool write_settings_to_flash_locked(const HTTPSsettings *settings) {
   // Находим текущие валидные настройки для определения версии
   const HTTPSsettings *current = get_valid_settings();
   uint8_t new_version = current ? ((current->version + 1) & 0xFF) : 0;
@@ -4060,6 +4142,7 @@ static bool write_settings_to_flash(const HTTPSsettings *settings) {
 
   // Если нужно, стираем область настроек (начало нового цикла)
   if (need_erase) {
+	    s_settings_erasing = true;
     FLASH_EraseInitTypeDef EraseInitStruct = {0};
     EraseInitStruct.TypeErase = FLASH_TYPEERASE_SECTORS;
     EraseInitStruct.VoltageRange = FLASH_VOLTAGE_RANGE_3;
@@ -4107,9 +4190,18 @@ static bool write_settings_to_flash(const HTTPSsettings *settings) {
     write_result = false;
   }
 
+  if (write_result) {
+    ota_cache_store(&temp_settings);
+  }
   return write_result;
 }
-
+static bool write_settings_to_flash(const HTTPSsettings *settings) {
+  settings_lock();
+  bool ok = write_settings_to_flash_locked(settings);
+  s_settings_erasing = false;
+  settings_unlock();
+  return ok;
+}
 // Функция обновления настроек с записью во флеш
 bool update_and_write_settings(HTTPSsettings *settings) {
   // Обновляем магическое значение
@@ -6069,7 +6161,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                                     found_direct = true;
                                     pwm_set_percent((uint8_t)d, mapped);
                                     LOG_Z2M("dimmer id=%d direct PWM[%d]=%d%%\r\n",
-                                           zbee_id, d, mapped);
+                                           zbee_id, d+1, mapped);
                                 }
                             }
                             for (int e = 0; e < NUMPIN; e++) {
@@ -6214,7 +6306,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                             PinsConf[d].zbee_bind_id == (uint16_t)zbee_id) {
                             pwm_set_percent((uint8_t)d, mapped);
                             LOG_Z2M("dimmer cl8 id=%d direct PWM[%d] = %d%%\r\n",
-                                   zbee_id, d, mapped);
+                                   zbee_id, d+1, mapped);
                         }
                     }
 
@@ -9486,16 +9578,18 @@ static int remote_onoff_pin(int id, int sub, uint8_t onoff, char *label,
 
 static int remote_onoff_cron(int id, uint8_t onoff, char *label,
                              size_t label_sz) {
-  /* Номера строк Cron в колонке ID начинаются с 0; доступны только
-   * строки, видимые на странице (в пределах заданного числа строк) */
-  if (id < 0 || id >= NUMTASK || id >= (int)SetSettings.numline) return 0;
+	/* Номера строк Cron в колонке No начинаются с 1 (индекс = номер - 1);
+	 * доступны только строки, видимые на странице */
+	if (id < 1) return 0;
+	id -= 1;
+	if (id >= NUMTASK || id >= (int)SetSettings.numline) return 0;
   taskENTER_CRITICAL();
   dbCrontxt[id].onoff = onoff;
   taskEXIT_CRITICAL();
   mark_slice_dirty(&g_ver_timers);
   remote_onoff_save(3); /* cron.ini */
   if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
-  snprintf(label, label_sz, "Cron%d=%s", id, onoff ? "ON" : "OFF");
+  snprintf(label, label_sz, "Cron%d=%s", id+1, onoff ? "ON" : "OFF");
   return 1;
 }
 
@@ -10212,6 +10306,7 @@ bool is_settings_valid(const HTTPSsettings *settings) {
 
 // Инициализация настроек HTTPS
 bool initialize_https_settings(void) {
+	printf("[SET] struct=%u slot=%u\n", (unsigned)sizeof(HTTPSsettings),(unsigned)SETTINGS_ALIGNED_SIZE);
   // Получаем указатель на действительные настройки
   const HTTPSsettings *valid_settings = get_valid_settings();
 
@@ -10242,6 +10337,10 @@ bool reset_to_defaults(void) {
   // Инициализируем буфер значениями по умолчанию
   HTTPSsettings *default_settings = (HTTPSsettings *)writebuf;
   memset(default_settings, 0, sizeof(HTTPSsettings));
+  /* Не терять состояние OTA: активный банк, счётчики, версии и CRC образов. */
+  if (s_ota_cache_ok) {
+    ota_cache_restore(default_settings);
+  }
 
   // Устанавливаем значения по умолчанию
   default_settings->magic = SETTINGS_MAGIC_VALUE;

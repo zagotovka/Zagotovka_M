@@ -110,7 +110,7 @@ function ModalCron({
               <table class="table-auto w-full">
                 <tbody>
                   ${[
-            { label: 'ID', value: selectedCron.id },
+            { label: 'ID', value: selectedCron.id + 1 },
             {
               label: 'Cron',
               value: html`

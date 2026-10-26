@@ -86,7 +86,7 @@ function initGlobalTooltip() {
 
   document.addEventListener('mouseover', e => {
     const el = e.target.closest('[data-tip]');
-    if (el) show(el);
+    if (el && el.dataset.tip) show(el);
   });
 
   document.addEventListener('mouseout', e => {
@@ -1464,7 +1464,7 @@ function TabEncoder({ }) {
           <td class="px-6 py-2 text-sm text-slate-800">${d.dvalue}${isPid ? ' (PID)' : ''}</td>
           <td class="px-6 py-2 text-sm text-slate-700 font-semibold">${({ 2: 'OFF', 3: 'ON', 4: 'LAST' })[d.ponr] || 'LAST'}</td>
           <td class="px-6 py-2 text-sm text-slate-600">${d.info}</td>
-          <td class="px-6 py-2" data-tip=${isPid ? pidTip : ''}>
+          <td class="px-6 py-2" data-tip=${isPid ? pidTip : undefined}>
             <${MyPolzunok}
               value=${d.onoff}
               disabled=${isPid || !!d.locked}
