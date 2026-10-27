@@ -60,8 +60,6 @@ function ModalEncoder({
   // dvalue хранится как ПРОЦЕНТ 0-100. C-код сам масштабирует в шаги таймера.
   const pwmmax = selectedEncoder.pwmmax || 100;
   const [dvalue, setDvalue] = useState(selectedEncoder.dvalue || 0);
-  // Power On State: 2 OFF, 3 ON, 4 LAST (по умолчанию LAST - сохранённое значение)
-  const [ponr, setPonr] = useState(selectedEncoder.ponr >= 2 && selectedEncoder.ponr <= 4 ? selectedEncoder.ponr : 4);
   const [pwmFreq, setPwmFreq] = useState(selectedEncoder.pwm || 10000000);
   // Строка PWM без энкодера (kind:"pwm"): настройки пишутся в сам PWM-пин
   const isPwmRow = selectedEncoder.kind === 'pwm';
@@ -143,7 +141,6 @@ function ModalEncoder({
         pwm: parseInt(pwmFreq), // Отправляем миллигерцы (10000000)
         pwmmax: selectedEncoder.pwmmax,
         dvalue: parseInt(dvalue),  // 0-100%, C-код масштабирует в шаги
-        ponr: parseInt(ponr),
         info: encoderInfo,
         onoff: onoff ? 1 : 0,
         pol: pol
@@ -245,10 +242,6 @@ function ModalEncoder({
 
   const handleDvalueChange = (e) => {
     setDvalue(e.target.value);
-  };
-
-  const handlePonrChange = (e) => {
-    setPonr(e.target.value);
   };
 
   const handlePwmFreqChange = (e) => {
@@ -431,20 +424,6 @@ function ModalEncoder({
                       <div class="text-xs text-gray-500">
                         ${dvalue}% = ${percentToSteps(parseInt(dvalue) || 0)} / ${pwmmax} steps
                       </div>
-                    </td>
-                  </tr>
-                  <tr class="bg-white">
-                    <td class="p-2 font-bold">Power on state</td>
-                    <td class="p-2">
-                      <select
-                        value=${ponr}
-                        onchange=${handlePonrChange}
-                        class="border rounded p-2 w-full"
-                      >
-                        <option value="2">OFF</option>
-                        <option value="3">ON</option>
-                        <option value="4">LAST</option>
-                      </select>
                     </td>
                   </tr>
                   <tr class="bg-gray-200">

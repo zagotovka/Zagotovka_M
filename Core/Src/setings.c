@@ -3387,8 +3387,8 @@ volatile uint8_t g_ponr_boot_pass = 0;
 #define PONR_ZBEE_BYTES  ((NUMZBEE + 7) / 8)
 
 
-#define PONR_FILE_A        "laststate.ini"
-#define PONR_FILE_B        "laststate2.ini"
+#define PONR_FILE_A        "last.ini"
+#define PONR_FILE_B        "last2.ini"
 #define PONR_FILE_BUF      (2 * (PONR_PIN_BYTES + PONR_ZBEE_BYTES + 2 * NUMPIN) + 192)
 
 
@@ -3502,13 +3502,16 @@ uint8_t ponr_eff_out(int id) {
  * иначе значение первого привязанного PWM; иначе LAST. */
 uint8_t ponr_eff_enc(int enc_id) {
   if (enc_id < 0 || enc_id >= NUMPIN) return PONR_LAST;
-  uint8_t v = PinsConf[enc_id].ponr;
-  if (v >= PONR_OFF && v <= PONR_LAST) return v;
+  /* Источник правды - режим привязанного PWM-выхода (тот же, что на странице
+   * Select pin(s) и в ponr_boot_prepare). Собственное поле энкодера - запасной
+   * вариант, только если ни один PWM-выход к энкодеру не привязан. */
   for (int a = 0; a < NUMPINLINKS; a++) {
     if (PinsLinks[a].idin != (short)(enc_id + 1)) continue;
     int out = PinsLinks[a].idout;
     if (IsPinId(out) && PinsConf[out - 1].topin == 5) return ponr_eff_pin(out - 1);
   }
+  uint8_t v = PinsConf[enc_id].ponr;
+  if (v >= PONR_OFF && v <= PONR_LAST) return v;
   return PONR_LAST;
 }
 
@@ -3717,7 +3720,7 @@ void GetLastState(void) {
   }
   s_ls_seq = rec[pick].seq;
   s_ls_next_slot = (pick == 0) ? 1 : 0;
-  printf("[PONR] state loaded from %s, seq=%lu\r\n",
+  printf("[SYSTEM] PONR state loaded from %s, seq=%lu\r\n",
          pick == 0 ? PONR_FILE_A : PONR_FILE_B, (unsigned long)s_ls_seq);
 }
 
@@ -3726,47 +3729,54 @@ void GetLastState(void) {
  * самой новой валидной копией, поэтому предыдущая копия остаётся целой, даже
  * если питание пропадёт посреди записи. */
 void SetLastState(void) {
-  static uint8_t pp[PONR_PIN_BYTES];
-  static uint8_t zz[PONR_ZBEE_BYTES];
-  static uint8_t dv[NUMPIN];
-  static uint8_t fl[NUMPIN];
-  static char hp[2 * PONR_PIN_BYTES + 1];
-  static char hz[2 * PONR_ZBEE_BYTES + 1];
-  static char hd[2 * NUMPIN + 1];
-  static char hf[2 * NUMPIN + 1];
-  static char buf[PONR_FILE_BUF];
+	static uint8_t pp[PONR_PIN_BYTES];
+	static uint8_t zz[PONR_ZBEE_BYTES];
+	static uint8_t dv[NUMPIN];
+	static uint8_t fl[NUMPIN];
+	static char hp[2 * PONR_PIN_BYTES + 1];
+	static char hz[2 * PONR_ZBEE_BYTES + 1];
+	static char hd[2 * NUMPIN + 1];
+	static char hf[2 * NUMPIN + 1];
+	static char buf[PONR_FILE_BUF];
 
+	taskENTER_CRITICAL();
+	memcpy(pp, s_last_pin, sizeof(pp));
+	memcpy(zz, s_last_zbee, sizeof(zz));
+	memcpy(dv, s_w_dv, sizeof(dv));
+	memcpy(fl, s_w_fl, sizeof(fl));
+	taskEXIT_CRITICAL();
 
-  taskENTER_CRITICAL();
-  memcpy(pp, s_last_pin, sizeof(pp));
-  memcpy(zz, s_last_zbee, sizeof(zz));
-  memcpy(dv, s_w_dv, sizeof(dv));
-  memcpy(fl, s_w_fl, sizeof(fl));
-  taskEXIT_CRITICAL();
+	uint32_t seq = s_ls_seq + 1;
+	uint32_t crc = ponr_payload_crc(seq, pp, zz, dv, fl);
+	ponr_hex_encode(pp, PONR_PIN_BYTES, hp);
+	ponr_hex_encode(zz, PONR_ZBEE_BYTES, hz);
+	ponr_hex_encode(dv, NUMPIN, hd);
+	ponr_hex_encode(fl, NUMPIN, hf);
 
-
-  uint32_t seq = s_ls_seq + 1;
-  uint32_t crc = ponr_payload_crc(seq, pp, zz, dv, fl);
-  ponr_hex_encode(pp, PONR_PIN_BYTES, hp);
-  ponr_hex_encode(zz, PONR_ZBEE_BYTES, hz);
-  ponr_hex_encode(dv, NUMPIN, hd);
-  ponr_hex_encode(fl, NUMPIN, hf);
-
-
-  int len = snprintf(buf, sizeof(buf),
-                     "{\"v\":2,\"q\":%lu,\"p\":\"%s\",\"z\":\"%s\",\"d\":\"%s\",\"f\":\"%s\",\"c\":\"%08lx\"}",
-                     (unsigned long)seq, hp, hz, hd, hf, (unsigned long)crc);
-  bool ok = false;
-  if (len > 0 && len < (int)sizeof(buf)) {
-    const char *name = s_ls_next_slot ? PONR_FILE_B : PONR_FILE_A;
-    if (f_open(&USBHFile, (const TCHAR *)name, FA_CREATE_ALWAYS | FA_WRITE) == FR_OK) {
-      UINT bw = 0;
-      FRESULT fw = f_write(&USBHFile, buf, (UINT)len, &bw);
-      FRESULT fs = f_sync(&USBHFile);
-      FRESULT fc = f_close(&USBHFile);
-      ok = (fw == FR_OK && (int)bw == len && fs == FR_OK && fc == FR_OK);
-    }
-  }
+	int len = snprintf(buf, sizeof(buf),
+					"{\"v\":2,\"q\":%lu,\"p\":\"%s\",\"z\":\"%s\",\"d\":\"%s\",\"f\":\"%s\",\"c\":\"%08lx\"}",
+					(unsigned long) seq, hp, hz, hd, hf, (unsigned long) crc);
+	bool ok = false;
+	if (len > 0 && len < (int) sizeof(buf)) {
+		const char *name = s_ls_next_slot ? PONR_FILE_B : PONR_FILE_A;
+		FRESULT fo = f_open(&USBHFile, (const TCHAR*) name,
+				FA_CREATE_ALWAYS | FA_WRITE);
+		if (fo == FR_OK) {
+			UINT bw = 0;
+			FRESULT fw = f_write(&USBHFile, buf, (UINT) len, &bw);
+			FRESULT fs = f_sync(&USBHFile);
+			FRESULT fc = f_close(&USBHFile);
+			ok = (fw == FR_OK && (int) bw == len && fs == FR_OK && fc == FR_OK);
+			if (!ok) {
+				printf("[SYSTEM] PONR write %s failed: write=%d sync=%d close=%d\r\n",
+						name, (int) fw, (int) fs, (int) fc);
+			}
+		} else {
+			printf("[SYSTEM] PONR f_open %s failed: %d\r\n", name, (int) fo);
+		}
+	} else {
+		printf("[SYSTEM] PONR buffer overflow: len=%d\r\n", len);
+	}
 
 
   uint32_t now = HAL_GetTick();
@@ -3776,6 +3786,7 @@ void SetLastState(void) {
     s_ls_seq = seq;
     s_ls_next_slot ^= 1u;
     s_wr_fail_logged = false;
+    printf("[SYSTEM] PONR state saved, seq=%lu\r\n", (unsigned long)seq);
   } else {
     /* Запись не прошла: оставляем флаг, повтор через PONR_MIN_GAP_MS */
     ponr_mark_dirty(now);
@@ -3924,6 +3935,7 @@ void ponr_flush_before_reset(void) {
 
 /* Вызывается из StartInputTask каждые 5 мс, внутри троттлинг до раза в секунду. */
 static uint32_t s_poll_tick = 0;
+static bool     s_initial_done = false;
 
 
 void ponr_poll(void) {
@@ -3931,6 +3943,14 @@ void ponr_poll(void) {
   if ((uint32_t)(now - s_poll_tick) < 1000u) return;
   s_poll_tick = now;
 
+
+  /* Первый проход после старта: если валидной записи на флешке не было
+   * (GetLastState не нашла ни одного файла, s_ls_seq == 0), создаём файл сразу,
+   * а не ждём первого изменения состояния. */
+  if (!s_initial_done) {
+    s_initial_done = true;
+    if (s_ls_seq == 0) ponr_mark_dirty(now);
+  }
 
   if (ponr_scan(now, false)) ponr_mark_dirty(now);
   ponr_try_write(now);
