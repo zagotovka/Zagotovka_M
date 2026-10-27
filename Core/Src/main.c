@@ -3408,7 +3408,7 @@ static void svc_mark_changed_slices(void)
  * бит 63 = карта посчитана. Одной строки "pwm:N," достаточно, чтобы таймер
  * считался управляющим этим пином (как и раньше). */
 #define SVC_MASK_VALID (1ULL << 63)
-_Static_assert(NUMTASK <= 63, "svc cron mask: NUMTASK must be <= 63");
+STATIC_ASSERT(NUMTASK <= 63, svc_cron_mask_numtask_must_be_le_63);
 
 static uint64_t svc_build_cron_mask(int logical_pwm_id)
 {

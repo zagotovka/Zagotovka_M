@@ -540,15 +540,19 @@ int main(void)
 		log_msg(b);
 	}
 
-	/* ── Проверка режима flash bank ── */
-	{
-		int is_single_bank = flash_is_dual_bank() ? 0 : 1;
-		if (is_single_bank) {
-			log_msg("[BOOT] *** WARNING: Flash is Single Bank! ***\r\n");
-			log_msg("[BOOT] Run: STM32_Programmer_CLI -c port=SWD -ob DBANK=0\r\n");
-			log_msg("[BOOT] OTA will not work until Dual Bank is enabled.\r\n");
-		} else {
-			log_msg("[BOOT] Flash: Dual Bank (OK)\r\n");
+	/* ── Проверка режима flash bank ──
+	 * Dual Bank задаётся программатором ДО прошивки:
+	 *   STM32_Programmer_CLI -c port=SWD -ob nDBANK=0
+	 * Менять nDBANK из кода нельзя: организация Flash меняется, и её
+	 * содержимое (включая сам загрузчик) становится нечитаемым. */
+	if (flash_is_dual_bank()) {
+		log_msg("[BOOT] Flash: Dual Bank (OK)\r\n");
+	} else {
+		for (;;) {
+			log_msg("[BOOT] *** ERROR: Flash is Single Bank. Run: "
+			        "STM32_Programmer_CLI -c port=SWD -ob nDBANK=0, "
+			        "then erase and reflash ***\r\n");
+			HAL_Delay(1000);
 		}
 	}
 

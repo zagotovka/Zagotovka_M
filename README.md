@@ -93,6 +93,51 @@ d. <a href="https://easyeda.com/editor#id=|125ff34d97324d308c97b01793449de7|1bc6
 
 The project now uses a dual-bank (Bank A / Bank B) flash layout. For a first-time flash, download and program the Bank A image; Bank B is used for subsequent OTA updates. Both current firmware images are also available in the [Proshivka](https://github.com/zagotovka/Zagotovka_M/tree/main/Proshivka) folder.
 
+### First flash of a new board (Windows, macOS, Linux)
+
+A brand-new STM32 chip has its memory set up in the "single" way. Zagotovka_M needs the "dual" way (it is called **Dual Bank**, the option `nDBANK = 0`). The firmware cannot change this by itself: when the memory mode changes, everything stored in the chip is destroyed, including the bootloader. So the mode is changed from the outside, **before** the firmware is written.
+
+You do not have to do it by hand. The script [`scripts/make_first_flash.py`](https://github.com/zagotovka/Zagotovka_M/blob/main/scripts/make_first_flash.py) does everything in one run:
+
+1. It builds one file `Zagotovka_FIRST_FLASH_<version>.bin` (the bootloader + the Bank A firmware) in the folder `Proshivka/First_flash`. It takes the newest `Zagotovka_Bank_A_v*.bin` from the folder `Proshivka` by itself, so you never type the version.
+2. It asks the chip which memory mode it has.
+3. If the chip is in the old ("single") mode, it switches it to Dual Bank and waits until the chip restarts (up to 40 seconds, usually much less).
+4. It erases the whole chip, writes the file and checks that the data was written correctly.
+5. It prints `DONE`.
+
+If something is wrong (a file is missing, the chip is not connected), the script stops and says why, before it touches the chip.
+
+**How to run it:**
+
+1. Install STM32CubeProgrammer (see below).
+2. Connect the board to the computer with a USB cable (the ST-LINK connector).
+3. Open the `scripts` folder, open a terminal (command line) in it and run:
+   - Windows: `python make_first_flash.py`
+   - macOS and Linux: `python3 make_first_flash.py`
+
+Python 3 must be installed on the computer (it is free: <https://www.python.org/downloads/>); nothing extra is needed for it. After `DONE` the board restarts by itself and starts the firmware. If you only want to build the file and not touch the chip, add `--image-only` to the command.
+
+> Do not just drag the `FIRST_FLASH` file onto the `NODE_F767ZI` USB drive of a brand-new board. Dragging a file does not change the memory mode, so the bootloader would print an error and would not start the firmware. Use the script above.
+
+### STM32CubeProgrammer must be installed
+
+The script works the same way on **Linux, Windows and macOS**, but only if the program **STM32CubeProgrammer** is installed on the computer. It is free, but you have to install it yourself: the script does not include it and does not download it.
+
+Why it is needed:
+
+- During installation it puts the drivers for the ST-LINK of the board into your system. Without them the computer does not see the board.
+- The script talks to the chip through its command-line tool `STM32_Programmer_CLI`.
+- Just in case, you can use it by hand to check the chip (see below).
+
+**Where to get it.** Download it from the official site: <https://www.st.com/en/development-tools/stm32cubeprog.html>. Choose the installer for your operating system and run it. The script was tested with version 2.23.0.
+
+**How to check the chip by hand.** Start STM32CubeProgrammer, choose `ST-LINK` in the list at the top right and press **Connect**. Open the **OB** tab (option bytes) and the group **User Configuration**: the box `nDBANK` must be **empty** (this is Dual Bank). If the box is ticked, the chip is still in the old mode: run the script again.
+
+**Two more things that do not depend on the script:**
+
+- **Windows.** The ST-LINK driver is needed (it is installed together with STM32CubeProgrammer or STM32CubeIDE). Type the command `python`, not `python3`.
+- **Linux.** If the programmer says that it does not see the ST-LINK, but on another computer everything works, then your user has no right to use the USB device. This is fixed by the `udev` rules from the CubeProgrammer package (the folder `Drivers/rules` inside its installation folder): copy the `*.rules` files to `/etc/udev/rules.d/`, run `sudo udevadm control --reload-rules && sudo udevadm trigger`, and plug the board in again.
+
 ## Interface video guide.
 
 ### How to use the "Switches" page <a href="https://youtu.be/C74IQA4-2aI"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/2d1cbc007f3da4553a70387ba9ce4421/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
@@ -168,3 +213,4 @@ This project uses semantic versioning. The version number follows the MAJOR.MINO
 | 2.13.0 | 21-10-2026 | Added a per-pin "**State on power-up**" setting (like Tasmota PowerOnState): supports Device/PWM pins and Zigbee, with delayed USB state saving and a responsive column with tooltip. Existing behavior preserved by default. Renamed “Duty on restore” to “Power on state.” |
 | 3.0.0 | 25-10-2026 | Shifted the logical ID scheme: physical pins now use IDs 1..89 (was 0..88), Zigbee 90..289 (was 89..288); saved configs are migrated automatically once (idver). IDs in the token API, MQTT, SMS commands and cron strings are shifted by +1. Reviewed every web page. Added an animated Zagotovka Mongoose logo (needs @property support: Chrome 85+, Safari 16.4+, Firefox 128+; older browsers show a static logo). |
 | 3.0.1 | 26-10-2026 | OTA/bootloader reliability: bootloader verifies OTA image CRC32 before first trial boot and rolls back on mismatch; normal boot checks only MSP. Both banks’ size/CRC32 are stored in settings. Direct ST-Link flashes are detected and their stale version/CRC reset, showing “flashed directly” on the Firmware Update page. Settings writes are mutex-protected; OTA state survives settings-ring erase. Limitation: corrupted and directly flashed images are indistinguishable by content. One-time reflash of bootloader and erase of settings sectors 22–23 required; TLS key/certificate and Telegram token must be re-entered. |
+| 3.0.2 | 27-10-2026 | Wrote the scripts/make_first_flash.py script, which prepares the microcontroller in a single operation, with no repeated runs: it reads FLASH->OPTCR, switches to Dual Bank if necessary (nDBANK=0), waits for the restart, erases the Flash, and programs Zagotovka_FIRST_FLASH_vX.X.Xx.bin (works on Windows, macOS, and Linux; requires STM32CubeProgrammer, which must be installed separately from the official ST website). For devices already running in Dual Bank, the script skips the Dual Bank switch. New boards must be switched to Dual Bank before the first flash (via the script or in CubeProgrammer): simply dragging the file onto the NODE_F767ZI drive does not change the memory mode! |
