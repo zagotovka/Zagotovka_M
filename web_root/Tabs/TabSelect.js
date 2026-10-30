@@ -368,36 +368,14 @@ const HELP_CONTENT = {
 
       <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">Примеры из жизни: что на самом деле умеет эта страница</h2>
-        <p class="mb-2">Четыре истории о том, как один выбор в таблице оживляет вывод контроллера. ID и пины в них условные.</p>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-          <p class="text-lg font-bold text-black mb-1">Кнопку припаяли, а она молчит</p>
-          <p class="mb-1">Вечер, паяльник остыл, кнопка на месте, вы нажимаете, а контроллер даже не вздрагивает. Час работы, кажется, насмарку.</p>
-          <p class="mb-1">Спокойно! Контроллер просто не знает, что на этом выводе кнопка: у пина по умолчанию тип <b>NONE</b>. Выберите для него тип <b>BUTTON</b> и нажмите <b>Submit</b>.</p>
-          <p class="mb-1"><b>Результат:</b> пин появляется на странице <b>Button(s) pin(s)</b>, где вы пишете, что делать по нажатию.</p>
-        </div>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-          <p class="text-lg font-bold text-black mb-1">Нужный пин почему-то серый</p>
-          <p class="mb-1">Вы выбрали пин под реле, а строка серая, и тип поменять нельзя. Что-то сломалось?</p>
-          <p class="mb-1">Спокойно! Это не поломка. Переключатель <b>SIM800L</b> вверху страницы включён, а GSM-модуль занимает два пина UART2 (ID 2 и ID 37). Пока переключатель включён, их тип менять нельзя. Если GSM вам не нужен, выключите его, а если нужен, выберите для реле другой пин.</p>
-          <p class="mb-1"><b>Результат:</b> вы знаете, почему строка заблокирована, и можете решить, что важнее.</p>
-        </div>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-          <p class="text-lg font-bold text-black mb-1">Убрали лампу, а страшно, что осталось</p>
-          <p class="mb-1">Старую лампу сняли, и вы вспоминаете: она была в действиях кнопки, в таймере, в условиях. Придётся обходить все страницы и вычищать.</p>
-          <p class="mb-1">Спокойно! Переведите её пин в <b>NONE</b> и нажмите <b>Submit</b>. Контроллер сам удалит все ссылки на этот ID: действия кнопок, таймеров, Sunrise / Sunset, условия, привязки. Если пин работал как PWM или DEVICE, его выход сразу выключится.</p>
-          <p class="mb-1"><b>Результат:</b> одно действие вместо обхода всех страниц. Помните, что очистка необратима.</p>
-        </div>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-          <p class="text-lg font-bold text-black mb-1">Zigbee-лампа за минуту</p>
-          <p class="mb-1">Вы купили беспроводную лампу и боитесь, что придётся разбираться с адресами и сетями.</p>
-          <p class="mb-1">Спокойно! В разделе <b>«Виртуальные пины Zigbee»</b> выберите свободный пин, тип <b>Zigbee</b>, впишите IEEE Address из Zigbee2MQTT или с наклейки (например, <code>${'588e81fffe36a343'}</code>) и название в <b>Info</b>, нажмите <b>Submit</b>. Лишние символы страница сама убирает, а буквы приводит к нижнему регистру.</p>
-          <p class="mb-1"><b>Результат:</b> лампа появляется на странице <b>Zigbee Devices</b>, где её учат и включают.</p>
-        </div>
-      </section>
+<p class="mb-2">ID и пины условные.</p>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>Кнопка молчит.</b> У пина по умолчанию тип <b>NONE</b>: выберите <b>BUTTON</b> и <b>Submit</b>, пин появится на странице <b>Button(s) pin(s)</b>.</li>
+<li><b>Пин серый.</b> Включён переключатель <b>SIM800L</b>, а модуль занимает два пина UART2 (ID 2 и ID 37). Выключите GSM или выберите другой пин.</li>
+<li><b>Убрали лампу.</b> Переведите её пин в <b>NONE</b> и <b>Submit</b>: контроллер сам удалит все ссылки на этот ID (кнопки, таймеры, Sunrise/Sunset, условия, привязки). Очистка необратима.</li>
+<li><b>Zigbee-лампа.</b> В <b>«Виртуальные пины Zigbee»</b> выберите свободный пин, тип <b>Zigbee</b>, впишите IEEE Address (например <code>${'588e81fffe36a343'}</code>) и <b>Info</b>, <b>Submit</b>: лампа появится на странице <b>Zigbee Devices</b>.</li>
+</ul>
+</section>
 
       <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">Автоматическая очистка связей</h2>
@@ -566,36 +544,14 @@ const HELP_CONTENT = {
 
       <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">Real-life examples: what this page can really do</h2>
-        <p class="mb-2">Four stories about how one choice in the table brings a controller pin to life. The IDs and pins in them are made up.</p>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-          <p class="text-lg font-bold text-black mb-1">The button is soldered but silent</p>
-          <p class="mb-1">Evening, the soldering iron has cooled, the button is in place, you press it, and the controller does not even flinch. An hour of work seems wasted.</p>
-          <p class="mb-1">Relax! The controller simply does not know there is a button on that pin: by default the pin type is <b>NONE</b>. Choose the type <b>BUTTON</b> for it and press <b>Submit</b>.</p>
-          <p class="mb-1"><b>Result:</b> the pin appears on the <b>Button(s) pin(s)</b> page, where you write what to do on a press.</p>
-        </div>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-          <p class="text-lg font-bold text-black mb-1">The pin you need is greyed out</p>
-          <p class="mb-1">You picked a pin for a relay, but the row is grey and the type cannot be changed. Is something broken?</p>
-          <p class="mb-1">Relax! It is not broken. The <b>SIM800L</b> switch at the top of the page is On, and the GSM module takes two UART2 pins (ID 2 and ID 37). While the switch is On, their type cannot be changed. If you do not need GSM, turn it off, and if you do, pick another pin for the relay.</p>
-          <p class="mb-1"><b>Result:</b> you know why the row is locked and can decide what matters more.</p>
-        </div>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-          <p class="text-lg font-bold text-black mb-1">The lamp is gone, but what is left behind?</p>
-          <p class="mb-1">You took the old lamp out and suddenly remember: it was in a button action, in a timer, in conditions. Now you have to walk through all the pages and clean up.</p>
-          <p class="mb-1">Relax! Set its pin to <b>NONE</b> and press <b>Submit</b>. The controller removes all references to that ID by itself: button actions, timers, Sunrise / Sunset, conditions, bindings. If the pin worked as PWM or DEVICE, its output switches off right away.</p>
-          <p class="mb-1"><b>Result:</b> one action instead of a tour of every page. Remember that the cleanup is irreversible.</p>
-        </div>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-          <p class="text-lg font-bold text-black mb-1">A Zigbee lamp in a minute</p>
-          <p class="mb-1">You bought a wireless lamp and fear you will have to deal with addresses and networks.</p>
-          <p class="mb-1">Relax! In the <b>"Virtual pins of Zigbee"</b> section choose a free pin, the type <b>Zigbee</b>, type the IEEE Address from Zigbee2MQTT or from the sticker (for example <code>${'588e81fffe36a343'}</code>) and a name in <b>Info</b>, press <b>Submit</b>. The page removes extra characters by itself, and the device converts letters to lowercase.</p>
-          <p class="mb-1"><b>Result:</b> the lamp appears on the <b>Zigbee Devices</b> page, where you teach it and switch it on.</p>
-        </div>
-      </section>
+<p class="mb-2">IDs and pins are made up.</p>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>The button is silent.</b> The pin type is <b>NONE</b> by default: choose <b>BUTTON</b> and <b>Submit</b>, the pin appears on the <b>Button(s) pin(s)</b> page.</li>
+<li><b>The pin is grey.</b> The <b>SIM800L</b> switch is on, and the module takes two UART2 pins (ID 2 and ID 37). Turn GSM off or choose another pin.</li>
+<li><b>A lamp was removed.</b> Set its pin to <b>NONE</b> and <b>Submit</b>: the controller removes every reference to that ID (buttons, timers, Sunrise/Sunset, conditions, links). The cleanup cannot be undone.</li>
+<li><b>A Zigbee lamp.</b> In <b>"Virtual pins of Zigbee"</b> choose a free pin, type <b>Zigbee</b>, enter the IEEE Address (for example <code>${'588e81fffe36a343'}</code>) and <b>Info</b>, <b>Submit</b>: the lamp appears on the <b>Zigbee Devices</b> page.</li>
+</ul>
+</section>
 
       <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">Automatic connection cleanup</h2>

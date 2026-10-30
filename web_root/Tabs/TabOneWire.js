@@ -413,35 +413,13 @@ const HELP_CONTENT = {
 </section>
 <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
 <h2 class="text-xl font-bold text-black">Примеры из жизни</h2>
-<p class="text-slate-600 italic mb-2">Все ID, пины и номера в примерах условные: подставьте свои.</p>
-<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
-<h3 class="text-lg font-bold text-black mb-2">Вентилятор будит весь дом</h3>
-<p class="mb-1">Ночью в теплице стало жарко, и вентилятор загудел так, что проснулась вся семья. Вот это сюрприз!</p>
-<p class="mb-1"><b>Спокойно!</b> Разрешите вентилятору включаться только днём. Верхний предел температуры датчика - 28 градусов, вентилятор подключён к пину 6.</p>
-<p class="mb-1">В поле <b>Action for Upper Temperature</b> пишем: <code>${'6:1?Sr'}</code></p>
-<p>Результат: если температура дошла до 28 днём, вентилятор включится; если ночью, действие будет пропущено. Чтобы Sr работало, на странице «Global Settings» должно быть настроено время восхода и заката. Условие проверяется один раз, в момент достижения предела (см. правило 1 ниже).</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
-<h3 class="text-lg font-bold text-black mb-2">Тепло уходит в форточку</h3>
-<p class="mb-1">Вы вернулись домой: форточка нараспашку, а обогреватель честно греет улицу. Обидно за счёт!</p>
-<p class="mb-1"><b>Спокойно!</b> Пусть обогреватель включается, только если форточка закрыта. Нижний предел - 18 градусов, обогреватель на пине 7, форточку открывает реле с ID 9 (включено - форточка открыта).</p>
-<p class="mb-1">В поле <b>Action for Lower Temperature</b> пишем: <code>${'7:1?!D9'}</code></p>
-<p>Результат: при холоде и закрытой форточке обогреватель включится; при открытой действие пропускается, и тепло не уходит на улицу.</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
-<h3 class="text-lg font-bold text-black mb-2">Картошка в погребе в опасности</h3>
-<p class="mb-1">Зимой в погребе температура ползёт вниз, и сердце уходит в пятки: заготовки под угрозой. Но греть погреб каждый раз, даже в оттепель, незачем.</p>
-<p class="mb-1"><b>Спокойно!</b> Греем, только если на улице действительно мороз. Нижний предел в погребе - 2 градуса, обогреватель на пине 7, уличный датчик - OneWire пин с ID 6.</p>
-<p class="mb-1">В поле <b>Action for Lower Temperature</b> пишем: <code>${'7:1?T6<-5'}</code></p>
-<p>Результат: обогреватель включится, только если на уличном датчике 6 холоднее минус 5. В оттепель действие пропускается. Условие проверяется один раз, когда в погребе дошло до 2 градусов.</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
-<h3 class="text-lg font-bold text-black mb-2">Вытяжка выстужает кладовку</h3>
-<p class="mb-1">В кладовке влажность подскочила, вытяжка включилась и вместе с сыростью выдула всё тепло. Зимой это не лечение, а наказание.</p>
-<p class="mb-1"><b>Спокойно!</b> Датчик DHT22 стоит на пине с ID 4, верхний предел влажности - 70 процентов, вытяжка подключена к пину 8. Пусть она включается, только если на улице не мороз.</p>
-<p class="mb-1">В поле <b>Action for upper H</b> пишем: <code>${'8:1?T4>5'}</code></p>
-<p>Результат: вытяжка включится при влажности выше предела, но только если температура на датчике 4 выше 5 градусов. В условии можно ссылаться и на этот же датчик, и на любой другой пин OneWire.</p>
-</div>
+<p class="mb-2">ID, пины и номера условные.</p>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>Вентилятор будит дом.</b> <b>Action for Upper Temperature</b>: <code>${'6:1?Sr'}</code> - при достижении предела вентилятор включится только днём (нужны время восхода и заката в Global Settings). Условие проверяется один раз, в момент достижения предела.</li>
+<li><b>Тепло уходит в форточку.</b> <b>Action for Lower Temperature</b>: <code>${'7:1?!D9'}</code> - обогреватель включится, только если форточка (реле 9) закрыта.</li>
+<li><b>Погреб.</b> <b>Action for Lower Temperature</b>: <code>${'7:1?T6<-5'}</code> - греть, только если на уличном датчике 6 холоднее минус 5.</li>
+<li><b>Вытяжка выстужает кладовку.</b> <b>Action for upper H</b>: <code>${'8:1?T4>5'}</code> - вытяжка включится при влажности выше предела, но только если на датчике 4 теплее 5 градусов. В условии можно ссылаться на любой датчик OneWire.</li>
+</ul>
 </section>
 <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
 <h2 class="text-xl font-bold text-black">Лимиты и «Не работает? Проверьте»</h2>
@@ -760,35 +738,13 @@ const HELP_CONTENT = {
 </section>
 <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
 <h2 class="text-xl font-bold text-black">Real-life examples</h2>
-<p class="text-slate-600 italic mb-2">All IDs, pins and numbers in the examples are made up: use your own.</p>
-<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
-<h3 class="text-lg font-bold text-black mb-2">The fan that wakes the whole house</h3>
-<p class="mb-1">It got hot in the greenhouse at night, and the fan roared so loud that the whole family woke up. Surprise!</p>
-<p class="mb-1"><b>Easy!</b> Let the fan turn on only in the daytime. The upper temperature limit of the sensor is 28 degrees, the fan is connected to pin 6.</p>
-<p class="mb-1">In <b>Action for Upper Temperature</b> write: <code>${'6:1?Sr'}</code></p>
-<p>Result: if the temperature reached 28 in the daytime, the fan turns on; if at night, the action is skipped. For Sr to work, the sunrise and sunset times must be set on the "Global Settings" page. The condition is checked once, when the limit is reached (see rule 1 below).</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
-<h3 class="text-lg font-bold text-black mb-2">Heat escaping through the window</h3>
-<p class="mb-1">You get home: the window is wide open, and the heater is honestly warming the street. Think of the bill!</p>
-<p class="mb-1"><b>Easy!</b> Let the heater turn on only if the window is closed. The lower limit is 18 degrees, the heater is on pin 7, the window is opened by the relay with ID 9 (on = window open).</p>
-<p class="mb-1">In <b>Action for Lower Temperature</b> write: <code>${'7:1?!D9'}</code></p>
-<p>Result: when it is cold and the window is closed, the heater turns on; if the window is open, the action is skipped and the heat does not go outside.</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
-<h3 class="text-lg font-bold text-black mb-2">The potatoes in the cellar are in danger</h3>
-<p class="mb-1">In winter the cellar temperature keeps sliding down, and your heart sinks: the whole harvest is at risk. But heating the cellar every time, even in a thaw, makes no sense.</p>
-<p class="mb-1"><b>Easy!</b> Heat only if it is really freezing outside. The lower limit in the cellar is 2 degrees, the heater is on pin 7, the outdoor sensor is the OneWire pin with ID 6.</p>
-<p class="mb-1">In <b>Action for Lower Temperature</b> write: <code>${'7:1?T6<-5'}</code></p>
-<p>Result: the heater turns on only if the outdoor sensor 6 reads colder than minus 5. In a thaw the action is skipped. The condition is checked once, when the cellar reaches 2 degrees.</p>
-</div>
-<div class="p-4 rounded-xl bg-white/80 border border-rose-300 mb-3">
-<h3 class="text-lg font-bold text-black mb-2">The exhaust fan chills the pantry</h3>
-<p class="mb-1">Humidity in the pantry jumped, the exhaust fan turned on and blew out all the warmth together with the damp. In winter that is a punishment, not a cure.</p>
-<p class="mb-1"><b>Easy!</b> A DHT22 sensor is on the pin with ID 4, the upper humidity limit is 70 percent, the exhaust fan is on pin 8. Let it turn on only if it is not freezing outside.</p>
-<p class="mb-1">In <b>Action for upper H</b> write: <code>${'8:1?T4>5'}</code></p>
-<p>Result: the fan turns on when humidity is above the limit, but only if the temperature on sensor 4 is above 5 degrees. A condition may refer to the same sensor or to any other OneWire pin.</p>
-</div>
+<p class="mb-2">IDs, pins and numbers are made up.</p>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>The fan wakes the house.</b> <b>Action for Upper Temperature</b>: <code>${'6:1?Sr'}</code> - when the limit is reached the fan turns on only in daytime (Global Settings needs sunrise and sunset times). The condition is checked once, at the moment the limit is reached.</li>
+<li><b>Heat escapes through the window.</b> <b>Action for Lower Temperature</b>: <code>${'7:1?!D9'}</code> - the heater turns on only if the window (relay 9) is closed.</li>
+<li><b>The cellar.</b> <b>Action for Lower Temperature</b>: <code>${'7:1?T6<-5'}</code> - heat only if the outdoor sensor 6 shows below minus 5.</li>
+<li><b>The hood chills the pantry.</b> <b>Action for upper H</b>: <code>${'8:1?T4>5'}</code> - the hood turns on above the humidity limit, but only if sensor 4 shows above 5 degrees. The condition can refer to any OneWire sensor.</li>
+</ul>
 </section>
 <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
 <h2 class="text-xl font-bold text-black">Limits and "Not working? Check"</h2>

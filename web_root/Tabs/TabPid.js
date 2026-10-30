@@ -994,31 +994,27 @@ const HOW = {
       <li>Выключить регулятор с телефона: SMS ${codeEl('1#55*')}, включить обратно: ${codeEl('1#66*')} (здесь 1 - номер из колонки No)</li>
     `,
     exTitle: 'Примеры из жизни: что на самом деле умеет эта страница',
-    exIntro: 'Четыре истории о том, как температура перестаёт быть вашей головной болью. Номера, датчики и градусы в примерах условные.',
+    exIntro: 'Номера, датчики и градусы условные.',
     examples: () => [
       {
-        t: 'Три часа ночи: не остыл ли инкубатор?',
-        s: 'Вы проснулись от мысли об яйцах: вдруг нагреватель отключился и зародыши стынут? Вставать и проверять термометр не хочется, а не проверить - нельзя.',
-        c: 'Спокойно! Выберите пресет 8 «Инкубатор», задайте в t_set 37.5 и нажмите Run tune. Регулятор сам подбирает мощность, держит температуру ровно, а при потере датчика (5 циклов без показаний) или при подъёме до аварийного потолка 40 °C сам глушит нагрев.',
-        r: 'Результат: Presets = 8, t_set = 37.5, On/Off включён, Run tune - и можно спать.',
+        t: 'Инкубатор ночью',
+        c: 'Пресет 8 «Инкубатор», t_set = 37.5, Run tune. Регулятор держит температуру, а при потере датчика (5 циклов без показаний) или при подъёме до аварийного потолка 40 °C сам глушит нагрев.',
+        r: 'Результат: можно спать спокойно.',
       },
       {
-        t: 'Пробка на выезде, а дом ледяной',
-        s: 'Пятница, вы едете на дачу и вспоминаете: тёплый пол так и не включили. Приедете в холодный дом, а греться он будет полдня.',
-        c: 'Спокойно! С номера из настроек SIM800L отправьте SMS 1#66*, где 1 - номер регулятора в колонке No. Регулятор включится и начнёт греть, а в ответ придёт OnOff: PID1=ON (если включён общий ползунок SIM800L). Выключить - 1#55*.',
-        r: 'Результат: тёплый дом к вашему приезду и одна короткая SMS вместо тревожных мыслей.',
+        t: 'Тёплый пол по дороге на дачу',
+        c: 'SMS 1#66* с номера из настроек SIM800L включает регулятор 1 (номер из колонки No), 1#55* выключает; ответ OnOff: PID1=ON приходит при включённом общем ползунке SIM800L.',
+        r: 'Результат: тёплый дом к приезду.',
       },
       {
-        t: 'Вентилятор шумит как самолёт',
-        s: 'Блок питания греется, и вентилятор ревёт на полных оборотах даже тогда, когда температура давно в норме. По ночам это просто невыносимо.',
-        c: 'Спокойно! Подключите вентилятор к PWM-пину, добавьте регулятор с пресетом 2 «Кулер / вентилятор» и задайте в t_set 45. Чем горячее объект, тем быстрее крутится вентилятор, а остыл - обороты падают.',
-        r: 'Результат: тишина, пока всё прохладно, и мощный обдув только когда он действительно нужен.',
+        t: 'Тихий вентилятор',
+        c: 'Вентилятор на PWM-пине, пресет 2 «Кулер / вентилятор», t_set = 45: чем горячее, тем быстрее вращение, остыл - обороты падают.',
+        r: 'Результат: тишина, пока прохладно.',
       },
       {
-        t: 'Весна пришла, а пол всё греет',
-        s: 'На улице уже плюс пятнадцать, окна нараспашку, а тёплый пол в прихожей упрямо греет и вы платите за каждый градус.',
-        c: 'Спокойно! В окне Edit регулятора в поле Condition впишите T3<10, где 3 - ID уличного датчика. Пока на улице холоднее 10 градусов, пол греет как обычно. Потеплело - выход становится 0 %, а накопленная поправка сбрасывается. Похолодало снова - регулятор стартует с нуля плавно, без рывка.',
-        r: 'Результат: пол сам перестаёт греть, когда улица тёплая, без единого нажатия.',
+        t: 'Весна пришла, а пол греет',
+        c: 'В Edit регулятора в поле Condition впишите T3<10 (3 - ID уличного датчика): при потеплении выход становится 0 % и поправка сбрасывается, при похолодании старт плавный.',
+        r: 'Результат: пол сам перестаёт греть в тепло.',
       },
     ],
     limTitle: 'Лимиты: сколько регуляторов и условий можно добавить',
@@ -1061,31 +1057,27 @@ const HOW = {
       <li>Turn the controller off from your phone: SMS ${codeEl('1#55*')}, back on: ${codeEl('1#66*')} (here 1 is the number from the No column)</li>
     `,
     exTitle: 'Real-life examples: what this page can really do',
-    exIntro: 'Four stories about how temperature stops being your headache. Numbers, sensors and degrees in the examples are made up.',
+    exIntro: 'Numbers, sensors and degrees are made up.',
     examples: () => [
       {
-        t: 'Three a.m.: has the incubator gone cold?',
-        s: 'You woke up thinking about the eggs: what if the heater switched off and the embryos are getting cold? You do not want to get up and check the thermometer, but you cannot just not check.',
-        c: 'Relax! Choose preset 8 "Incubator", set t_set to 37.5 and press Run tune. The controller picks the power by itself and keeps the temperature steady, and if the sensor is lost (5 cycles without readings) or the temperature reaches the emergency ceiling of 40 °C, it shuts the heating off by itself.',
-        r: 'Result: Presets = 8, t_set = 37.5, On/Off on, Run tune - and you can sleep.',
+        t: 'Incubator at night',
+        c: 'Preset 8 "Incubator", t_set = 37.5, Run tune. The controller holds the temperature and shuts the heating off by itself if the sensor is lost (5 cycles without readings) or the emergency ceiling of 40 C is reached.',
+        r: 'Result: you can sleep calmly.',
       },
       {
-        t: 'Stuck in traffic and the house is ice cold',
-        s: 'Friday, you are driving to the country house and remember: the warm floor was never switched on. You will arrive at a cold house, and it will take half a day to warm up.',
-        c: 'Relax! From the number set in the SIM800L settings send the SMS 1#66*, where 1 is the controller number in the No column. The controller turns on and starts heating, and you get the reply OnOff: PID1=ON (if the common SIM800L slider is On). To turn it off - 1#55*.',
-        r: 'Result: a warm house by the time you arrive and one short SMS instead of anxious thoughts.',
+        t: 'Warm floor on the way to the cottage',
+        c: 'SMS 1#66* from the number in the SIM800L settings turns controller 1 on (the number from the No column), 1#55* turns it off; the reply OnOff: PID1=ON arrives if the common SIM800L slider is on.',
+        r: 'Result: a warm house on arrival.',
       },
       {
-        t: 'The fan roars like an airplane',
-        s: 'The power supply gets warm and the fan roars at full speed even when the temperature has been fine for ages. At night it is simply unbearable.',
-        c: 'Relax! Connect the fan to a PWM pin, add a controller with preset 2 "Cooler / fan" and set t_set to 45. The hotter the object, the faster the fan spins, and when it cools down the speed drops.',
-        r: 'Result: silence while everything is cool, and strong airflow only when it is really needed.',
+        t: 'A quiet fan',
+        c: 'A fan on a PWM pin, preset 2 "Cooler / fan", t_set = 45: the hotter it is the faster it spins, and when it cools the speed drops.',
+        r: 'Result: silence while it is cool.',
       },
       {
-        t: 'Spring is here and the floor is still heating',
-        s: 'It is already plus fifteen outside, the windows are wide open, and the warm floor in the hallway stubbornly heats while you pay for every degree.',
-        c: 'Relax! In the controller Edit window type T3<10 into the Condition field, where 3 is the ID of the outdoor sensor. While it is colder than 10 degrees outside, the floor heats as usual. It got warmer - the output becomes 0 % and the accumulated correction is reset. Cold again - the controller restarts from zero smoothly, with no jerk.',
-        r: 'Result: the floor stops heating by itself when it is warm outside, without a single press.',
+        t: 'Spring came but the floor still heats',
+        c: 'In the controller Edit window put T3<10 into Condition (3 is the outdoor sensor ID): when it gets warm the output goes to 0 % and the correction is reset, when it gets cold again the start is smooth.',
+        r: 'Result: the floor stops heating by itself when it is warm.',
       },
     ],
     limTitle: 'Limits: how many controllers and conditions you can add',
@@ -1276,7 +1268,6 @@ function PidHelp({ lang }) {
               (e) => html`
                 <div class=${C.card}>
                   <div class="text-lg font-bold text-black mb-1">${e.t}</div>
-                  <p class=${C.p}>${e.s}</p>
                   <p class=${C.p}>${e.c}</p>
                   <p class="font-semibold">${e.r}</p>
                 </div>

@@ -57,4 +57,9 @@ uint8_t mqtt_server_client_count(void);
  * не подписываются). Используется slzb_watchdog для автоворековера шлюза. */
 uint8_t mqtt_server_slzb_connected(void);
 
+/* Снимок состояния, обновляется в mqtt_server_poll() (WebServerTask).
+ * Безопасен для чтения из других задач (InputTask/ponr_poll). */
+uint8_t mqtt_server_slzb_connected_cached(void);
+uint8_t mqtt_server_clients_cached(void);
+
 #endif /* MQTT_SERVER_H */

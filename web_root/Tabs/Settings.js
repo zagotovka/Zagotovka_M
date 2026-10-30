@@ -229,35 +229,14 @@ const SUN_HELP = {
       </div>
     `,
     lifeTitle: 'Примеры из жизни: что на самом деле умеет эта страница',
-    lifeIntro: 'Четыре истории о том, как одна строка в поле Sunrise или Sunset заботится о доме вместо вас. ID, пины и номера датчиков в них условные: подставьте свои.',
+    lifeIntro: 'ID, пины и номера датчиков условные: подставьте свои.',
     storiesView: html`
-      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-        <p class="text-lg font-bold text-black mb-1">Иней на рассаде</p>
-        <p class="mb-1">Апрель, днём плюс двадцать, и вы спокойно уходите с участка. А вечером в приложении погоды вдруг минус. В теплице рассада, которую вы растили два месяца. Сердце ёкает.</p>
-        <p class="mb-1">Спокойно! Обогреватель в теплице имеет ID 6, уличный датчик - ID 3. В поле <b>Sunset</b> записано <code>${'0/6:1?T3<10'}</code>, в поле <b>Sunrise</b> - <code>${'0/6:0'}</code>. На закате Zagotovka-M смотрит на датчик: холодно - включает обогреватель, тепло - оставляет выключенным.</p>
-        <p class="mb-1"><b>Результат:</b> тёплым вечером обогреватель стоит, холодным включается сам, а на рассвете выключается в любом случае. Проверка одна, на закате.</p>
-      </div>
-
-      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-        <p class="text-lg font-bold text-black mb-1">Подвал пахнет сыростью</p>
-        <p class="mb-1">Вы вернулись на дачу после дождливой недели и открыли подвал. Запах, на стенах тёмные пятна. Опять придётся всё перебирать.</p>
-        <p class="mb-1">Спокойно! Вытяжной вентилятор имеет ID 7, датчик влажности - ID 4. В поле <b>Sunset</b> записано <code>${'1800/7:1?H4>70'}</code>, в поле <b>Sunrise</b> - <code>${'0/7:0'}</code>. Через 30 минут после заката вентилятор включится, но только если влажность выше 70 процентов.</p>
-        <p class="mb-1"><b>Результат:</b> в сухие вечера вентилятор молчит, в сырые сам проветривает подвал до рассвета.</p>
-      </div>
-
-      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-        <p class="text-lg font-bold text-black mb-1">Дом притворяется жилым</p>
-        <p class="mb-1">Вы уезжаете в отпуск на две недели. Вечером окна тёмные, и вы представляете, как это видно с улицы.</p>
-        <p class="mb-1">Спокойно! Лампа на крыльце имеет ID 6, лампа в гостиной - ID 12, а ID 1 - это устройство-переключатель «Отпуск». В поле <b>Sunset</b> записано <code>${'0/6:1,12:1?D1'}</code>, в поле <b>Sunrise</b> - <code>${'0/6:0,12:0'}</code>. Крыльцо светит каждый вечер, а гостиная - только когда режим «Отпуск» включён.</p>
-        <p class="mb-1"><b>Результат:</b> уезжая, включаете устройство 1 - и вечером дом выглядит обитаемым. Вернулись, выключили - гостиная больше не загорается сама.</p>
-      </div>
-
-      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-        <p class="text-lg font-bold text-black mb-1">Порог нужно поменять в десяти местах</p>
-        <p class="mb-1">Наступила осень. Порог «холодно» теперь не 5, а 8 градусов, а он записан в нескольких действиях. Править всё вручную и ничего не пропустить - вот это нервы.</p>
-        <p class="mb-1">Спокойно! В строке <b>Conditions</b> этой страницы в ячейку <b>C1</b> записано <code>${'T3<5|H4>70'}</code>, а в действиях стоят короткие ссылки: в поле <b>Sunset</b> - <code>${'0/6:1?C1,7:1?C1'}</code>. Меняете одну ячейку C1 на <code>${'T3<8|H4>70'}</code>, и все места, где есть ссылка, сразу работают по-новому.</p>
-        <p class="mb-1"><b>Результат:</b> одна правка вместо десяти. Число рядом с ячейкой показывает, сколько мест её используют.</p>
-      </div>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>Иней на рассаде.</b> Sunset <code>${'0/6:1?T3<10'}</code>, Sunrise <code>${'0/6:0'}</code>: на закате обогреватель 6 включается, только если датчик 3 показывает меньше 10 градусов, на рассвете выключается всегда.</li>
+<li><b>Сырой подвал.</b> Sunset <code>${'1800/7:1?H4>70'}</code>, Sunrise <code>${'0/7:0'}</code>: через 30 минут после заката вентилятор 7 включается, только если влажность на датчике 4 выше 70 процентов.</li>
+<li><b>Дом притворяется жилым.</b> Sunset <code>${'0/6:1,12:1?D1'}</code>, Sunrise <code>${'0/6:0,12:0'}</code>: крыльцо светит каждый вечер, гостиная - только когда включено устройство 1 («Отпуск»).</li>
+<li><b>Порог в десяти местах.</b> Запишите условие в ячейку <b>C1</b>, например <code>${'T3<5|H4>70'}</code>, и ссылайтесь на неё: <code>${'0/6:1?C1,7:1?C1'}</code>. Правка одной ячейки меняет все места сразу.</li>
+</ul>
     `,
     checkTitle: 'Не работает? Проверьте',
     check: [
@@ -461,35 +440,14 @@ const SUN_HELP = {
       </div>
     `,
     lifeTitle: 'Real-life examples: what this page can really do',
-    lifeIntro: 'Four stories about how one line in the Sunrise or Sunset field looks after your home for you. The IDs, pins and sensor numbers in them are made up: use your own.',
+    lifeIntro: 'IDs, pins and sensor numbers are made up: use your own.',
     storiesView: html`
-      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-        <p class="text-lg font-bold text-black mb-1">Frost on the seedlings</p>
-        <p class="mb-1">April, plus twenty at noon, and you leave the plot without a worry. In the evening the weather app suddenly shows minus. The greenhouse holds seedlings you have grown for two months. Your heart skips.</p>
-        <p class="mb-1">Relax! The greenhouse heater has ID 6, the outdoor sensor has ID 3. The <b>Sunset</b> field holds <code>${'0/6:1?T3<10'}</code>, the <b>Sunrise</b> field holds <code>${'0/6:0'}</code>. At sunset Zagotovka-M looks at the sensor: cold - it turns the heater on, warm - it leaves it off.</p>
-        <p class="mb-1"><b>Result:</b> on a warm evening the heater stays off, on a cold one it turns on by itself, and at dawn it turns off in any case. There is one check, at sunset.</p>
-      </div>
-
-      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-        <p class="text-lg font-bold text-black mb-1">The cellar smells damp</p>
-        <p class="mb-1">You come back to the cottage after a rainy week and open the cellar. The smell, dark spots on the walls. Now everything has to be sorted out again.</p>
-        <p class="mb-1">Relax! The exhaust fan has ID 7, the humidity sensor has ID 4. The <b>Sunset</b> field holds <code>${'1800/7:1?H4>70'}</code>, the <b>Sunrise</b> field holds <code>${'0/7:0'}</code>. 30 minutes after sunset the fan turns on, but only if humidity is above 70 percent.</p>
-        <p class="mb-1"><b>Result:</b> on dry evenings the fan stays quiet, on damp ones it airs the cellar until dawn.</p>
-      </div>
-
-      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-        <p class="text-lg font-bold text-black mb-1">The house pretends someone is home</p>
-        <p class="mb-1">You leave for a two-week vacation. In the evening the windows are dark, and you picture how it looks from the street.</p>
-        <p class="mb-1">Relax! The porch lamp has ID 6, the living room lamp has ID 12, and ID 1 is a switch device called "Vacation". The <b>Sunset</b> field holds <code>${'0/6:1,12:1?D1'}</code>, the <b>Sunrise</b> field holds <code>${'0/6:0,12:0'}</code>. The porch lights up every evening, and the living room only when "Vacation" mode is on.</p>
-        <p class="mb-1"><b>Result:</b> when you leave, turn on device 1 - and in the evening the house looks lived in. When you are back, turn it off - the living room no longer lights up by itself.</p>
-      </div>
-
-      <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-        <p class="text-lg font-bold text-black mb-1">One threshold to change in ten places</p>
-        <p class="mb-1">Autumn has come. "Cold" is now 8 degrees, not 5, and the number is written in several actions. Editing everything by hand without missing one is a nerve-wracking job.</p>
-        <p class="mb-1">Relax! In the <b>Conditions</b> row of this page, cell <b>C1</b> holds <code>${'T3<5|H4>70'}</code>, and the actions use short references: in the <b>Sunset</b> field - <code>${'0/6:1?C1,7:1?C1'}</code>. Change one cell C1 to <code>${'T3<8|H4>70'}</code>, and every place with a reference immediately works the new way.</p>
-        <p class="mb-1"><b>Result:</b> one edit instead of ten. The number next to a cell shows how many places use it.</p>
-      </div>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>Frost on the seedlings.</b> Sunset <code>${'0/6:1?T3<10'}</code>, Sunrise <code>${'0/6:0'}</code>: at sunset heater 6 turns on only if sensor 3 shows below 10 degrees, and at sunrise it always turns off.</li>
+<li><b>A damp cellar.</b> Sunset <code>${'1800/7:1?H4>70'}</code>, Sunrise <code>${'0/7:0'}</code>: 30 minutes after sunset fan 7 turns on only if humidity on sensor 4 is above 70 percent.</li>
+<li><b>The house pretends to be lived in.</b> Sunset <code>${'0/6:1,12:1?D1'}</code>, Sunrise <code>${'0/6:0,12:0'}</code>: the porch lights every evening, the living room only while device 1 ("Vacation") is on.</li>
+<li><b>One threshold in ten places.</b> Put the condition into cell <b>C1</b>, for example <code>${'T3<5|H4>70'}</code>, and refer to it: <code>${'0/6:1?C1,7:1?C1'}</code>. Editing one cell changes every place at once.</li>
+</ul>
     `,
     checkTitle: 'Not working? Check these',
     check: [

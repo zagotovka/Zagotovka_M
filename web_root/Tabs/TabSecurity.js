@@ -147,28 +147,13 @@ const TabSecurity = () => {
         </section>
         <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Примеры из жизни: что на самом деле умеет эта страница</h2>
-          <p class="mb-2">Четыре истории о том, как SIM-карта превращает Zagotovka-M в пульт, которому не нужен интернет.</p>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Телефон вибрирует в самый неподходящий момент</p>
-            <p class="mb-1">Важная встреча (или кино, или сон), а телефон дрожит от SMS-тревог: датчик у двери срабатывает снова и снова. Выключить бы всё, но вы не дома.</p>
-            <p class="mb-1">Спокойно! Отправьте SMS <code>${'222'}</code> (или позвоните и наберите <code>${'222'}</code>): все SMS-уведомления выключены, придёт <code>${'ALL SMS notifications are switched OFF!'}</code>. Освободились - отправьте <code>${'777'}</code>, и тревоги снова приходят. Датчики и действия на устройствах работали всё это время, молчали только SMS.</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Дача без интернета</p>
-            <p class="mb-1">В деревне нет ни роутера, ни Wi-Fi, а на телефоне ни одного приложения под рукой. Через час вы приезжаете, а в доме холодно.</p>
-            <p class="mb-1">Спокойно! Позвоните на SIM-карту модуля с номера из настроек. Модуль сам снимет трубку, наберите <code>${'6#1*#'}</code>, где 6 - условный ID реле обогрева. Обогрев включён, а после окончания звонка придёт SMS-отчёт.</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Звонит незнакомый номер</p>
-            <p class="mb-1">Кто-то посторонний узнал номер модуля и названивает, пробуя набрать коды. Неприятно, правда?</p>
-            <p class="mb-1">Спокойно! Модуль слушается только номера из поля <b>"Мобильный телефон"</b>: вызов с любого другого номера сбрасывается автоматически, а чужие SMS игнорируются. Проверьте сами: позвоните с другого телефона, и модуль сбросит вызов.</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Номер на экране виден всем</p>
-            <p class="mb-1">Вы показываете настройки другу на видеозвонке или делаете скриншот для форума, а в таблице светится ваш номер.</p>
-            <p class="mb-1">Спокойно! Номер скрыт звёздочками, по одной на каждую цифру, знак + остаётся. Чтобы увидеть его, нажмите значок глаза рядом с номером, и он снова спрячется по вашему же нажатию.</p>
-          </div>
-        </section>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>Тревоги не вовремя.</b> SMS или DTMF <code>${'222'}</code> выключает все SMS-уведомления (ответ <code>${'ALL SMS notifications are switched OFF!'}</code>), <code>${'777'}</code> включает обратно. Датчики и действия работают всё время.</li>
+<li><b>Дача без интернета.</b> Позвоните на SIM модуля с номера из настроек и наберите <code>${'6#1*#'}</code> (6 - ID реле обогрева); после звонка придёт SMS-отчёт.</li>
+<li><b>Чужие номера.</b> Модуль слушается только номера из поля <b>"Мобильный телефон"</b>: вызовы с других сбрасываются, чужие SMS игнорируются.</li>
+<li><b>Номер на экране.</b> Он скрыт звёздочками (знак + остаётся); значок глаза показывает его и снова прячет.</li>
+</ul>
+</section>
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Ограничения и значения</h2>
           <div class="overflow-x-auto">
@@ -244,28 +229,13 @@ const TabSecurity = () => {
         </section>
         <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Examples from real life: what this page can really do</h2>
-          <p class="mb-2">Four stories about how a SIM card turns Zagotovka-M into a remote that needs no internet.</p>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Your phone buzzes at the worst moment</p>
-            <p class="mb-1">An important meeting (or a movie, or sleep), and your phone shakes with SMS alerts: the door sensor triggers again and again. You would switch it all off, but you are not at home.</p>
-            <p class="mb-1">Relax! Send the SMS <code>${'222'}</code> (or call and dial <code>${'222'}</code>): all SMS notifications are off, and you get <code>${'ALL SMS notifications are switched OFF!'}</code>. When you are free, send <code>${'777'}</code> and the alerts come back. The sensors and actions on devices worked all that time, only the SMS were silent.</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">A cottage without internet</p>
-            <p class="mb-1">In the village there is no router, no Wi-Fi, and not a single app at hand on your phone. You arrive in an hour, and the house is cold.</p>
-            <p class="mb-1">Relax! Call the SIM card of the module from the number in the settings. The module picks up by itself, dial <code>${'6#1*#'}</code>, where 6 is a made-up ID of the heating relay. The heating is on, and after the call ends an SMS report arrives.</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">An unknown number is calling</p>
-            <p class="mb-1">Someone outside learned the number of the module and keeps calling, trying to dial codes. Unpleasant, right?</p>
-            <p class="mb-1">Relax! The module obeys only the number from the <b>"Mobile phone"</b> field: a call from any other number is rejected automatically, and foreign SMS are ignored. Check it yourself: call from another phone and the module drops the call.</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Your number is visible to everyone</p>
-            <p class="mb-1">You show the settings to a friend on a video call or take a screenshot for a forum, and your number shines in the table.</p>
-            <p class="mb-1">Relax! The number is hidden by asterisks, one per digit, the + sign stays. To see it, click the eye icon next to the number, and it hides again on your next click.</p>
-          </div>
-        </section>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>Alerts at the wrong moment.</b> SMS or DTMF <code>${'222'}</code> switches off all SMS notifications (reply <code>${'ALL SMS notifications are switched OFF!'}</code>), <code>${'777'}</code> switches them back on. Sensors and actions keep working all the time.</li>
+<li><b>A cottage without internet.</b> Call the module SIM from the number in the settings and dial <code>${'6#1*#'}</code> (6 is the heater relay ID); an SMS report arrives after the call.</li>
+<li><b>Unknown numbers.</b> The module obeys only the number from the <b>"Mobile phone"</b> field: calls from other numbers are dropped, foreign SMS are ignored.</li>
+<li><b>The number on screen.</b> It is hidden behind asterisks (the + sign stays); the eye icon shows it and hides it again.</li>
+</ul>
+</section>
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Limits and values</h2>
           <div class="overflow-x-auto">
@@ -372,18 +342,6 @@ const TabSecurity = () => {
             <li>Допишите условие: <code>${'6:1?Ss'}</code>. Читаем так: «включить пин 6, но только ночью».</li>
           </ol>
           <p class="mb-3">Общий вид: <code>${'ID:команда?условие'}</code>. Команда: <b>0</b> - выключить, <b>1</b> - включить, <b>2</b> - переключить на противоположное. Несколько действий пишутся через запятую, и у каждого может быть своё условие или не быть никакого.</p>
-
-          <h4 class="text-lg font-bold text-black mt-4 mb-2">Примеры из жизни</h4>
-          <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-            <p class="mb-1">Датчик движения стоит в коридоре, лампа коридора подключена к пину 6. Хотим, чтобы лампа включалась при движении только ночью.</p>
-            <p class="mb-1">В поле Action пишем: <code>${'6:1?Ss'}</code></p>
-            <p>Результат: ночью лампа включается. Днём датчик тоже срабатывает, но лампа не включается - условие «сейчас ночь» не выполнено.</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-            <p class="mb-1">Сирена подключена к пину 8. Устройство 10 - это ваш «режим охраны»: вы включаете его, когда уходите из дома.</p>
-            <p class="mb-1">В поле Action пишем: <code>${'8:1?D10'}</code></p>
-            <p>Результат: пока устройство 10 выключено - сирена молчит, даже если датчик сработал. Когда устройство 10 включено - при срабатывании датчика сирена включается.</p>
-          </div>
 
           <h4 class="text-lg font-bold text-black mt-4 mb-2">Из чего строится условие (слова)</h4>
           <table class="w-full bg-white/70 mb-3">
@@ -589,28 +547,13 @@ const TabSecurity = () => {
         </section>
         <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Примеры из жизни: что на самом деле умеет эта страница</h2>
-          <p class="mb-2">Четыре истории о том, как дом учится охранять себя сам.</p>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Сердце ёкнуло в аэропорту</p>
-            <p class="mb-1">Вы уже в очереди на посадку, и вдруг мысль: а я поставил дом на охрану? Возвращаться поздно, и сердце колотится.</p>
-            <p class="mb-1">Спокойно! Достаньте телефон и отправьте SMS <code>${'14#11*'}</code>, где 14 - ID вашего датчика. Придёт <code>${'OnOff: Pin14=ON'}</code>: команда выполнена, датчик на охране. Если ответа нет, проверьте общий ползунок <b>OnOff</b> в блоке SIM800L Settings.</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Шаги в тёмном коридоре</p>
-            <p class="mb-1">Ночью вы идёте на кухню и шарите рукой по стене в поисках выключателя. А днём свет в коридоре вообще не нужен.</p>
-            <p class="mb-1">Спокойно! Датчик движения в коридоре, в поле <b>Action</b> записано <code>${'6:1?Ss'}</code>: лампа 6 включается по движению, но только ночью. Днём датчик тоже срабатывает, а лампа спит. Время восхода и заката должно быть задано на странице "Global Settings".</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Окно открыли, пока вас нет</p>
-            <p class="mb-1">Вы на работе, а дома кто-то открывает окно. Узнать об этом хочется сразу, а не вечером.</p>
-            <p class="mb-1">Спокойно! Магнит на створке, геркон <b>Normal open</b> на раме: пока окно закрыто, магнит рядом. Как только створку открыли, контакты размыкаются и датчик срабатывает. В <b>Action</b> записано <code>${'8:1'}</code> (сирена), <b>Send SMS</b> = YES, <b>INFO</b> = <code>${'Window'}</code>. Сирена воет, на телефон приходит <code>${'ALARM:ID=15:Window'}</code>, а в MQTT уходит событие на Swarm/security/.</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Сигнализация, которая знает, что вы дома</p>
-            <p class="mb-1">Сирена на двери - это отлично, пока вы сами не пришли домой. Оправдываться перед соседями совсем не хочется.</p>
-            <p class="mb-1">Спокойно! Устройство 10 - ваш "режим охраны". В поле <b>Action</b> датчика двери записано <code>${'8:1?D10'}</code>: сирена включается, только когда устройство 10 включено. Пришли домой - выключили устройство 10, и дверь можно открывать спокойно. Условие запирает только сирену: SMS при Send SMS = YES придёт в любом случае.</p>
-          </div>
-        </section>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>Охрана из аэропорта.</b> SMS <code>${'14#11*'}</code> ставит датчик 14 на охрану, ответ <code>${'OnOff: Pin14=ON'}</code> (при включённом общем ползунке <b>OnOff</b> в SIM800L Settings).</li>
+<li><b>Шаги в тёмном коридоре.</b> <b>Action</b> <code>${'6:1?Ss'}</code>: лампа 6 включается по движению только ночью (нужны время восхода и заката в Global Settings).</li>
+<li><b>Окно открыли.</b> Геркон <b>Normal open</b>, <b>Action</b> <code>${'8:1'}</code> (сирена), <b>Send SMS</b> = YES, <b>INFO</b> = <code>${'Window'}</code>: придёт SMS <code>${'ALARM:ID=15:Window'}</code>, событие уйдёт в MQTT на Swarm/security/.</li>
+<li><b>Режим "я дома".</b> <b>Action</b> <code>${'8:1?D10'}</code>: сирена включается, только когда включено устройство 10 (режим охраны). SMS при Send SMS = YES придёт в любом случае.</li>
+</ul>
+</section>
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Формат полей Action</h2>
           <p>Максимальное количество записей в формате <code>ID:Action</code> с разделителем <code>,</code> ограничено длиной строки - <b>124 символа</b>. Условия записываются в той же строке и занимают место, поэтому записей помещается меньше.</p>
@@ -762,18 +705,6 @@ const TabSecurity = () => {
             <li>Add the condition: <code>${'6:1?Ss'}</code>. Read it as: "turn on pin 6, but only at night".</li>
           </ol>
           <p class="mb-3">General form: <code>${'ID:command?condition'}</code>. Command: <b>0</b> - turn off, <b>1</b> - turn on, <b>2</b> - toggle to the opposite. Several actions are separated by commas, and each one may have its own condition or none at all.</p>
-
-          <h4 class="text-lg font-bold text-black mt-4 mb-2">Examples from real life</h4>
-          <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-            <p class="mb-1">A motion sensor stands in the hallway, the hallway lamp is connected to pin 6. We want the lamp to turn on on motion only at night.</p>
-            <p class="mb-1">In the Action field we write: <code>${'6:1?Ss'}</code></p>
-            <p>Result: at night the lamp turns on. In the daytime the sensor also triggers, but the lamp stays off - the "it is night now" condition is not met.</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-amber-300 mb-3">
-            <p class="mb-1">The siren is connected to pin 8. Device 10 is your "guard mode": you turn it on when you leave home.</p>
-            <p class="mb-1">In the Action field we write: <code>${'8:1?D10'}</code></p>
-            <p>Result: while device 10 is off - the siren stays silent even if the sensor triggered. When device 10 is on - the siren turns on when the sensor triggers.</p>
-          </div>
 
           <h4 class="text-lg font-bold text-black mt-4 mb-2">What a condition is built from (words)</h4>
           <table class="w-full bg-white/70 mb-3">
@@ -979,28 +910,13 @@ const TabSecurity = () => {
         </section>
         <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Examples from real life: what this page can really do</h2>
-          <p class="mb-2">Four stories about how a home learns to guard itself.</p>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Your heart skipped a beat at the airport</p>
-            <p class="mb-1">You are already in the boarding line, and suddenly: did I arm the house? It is too late to go back, and your heart is pounding.</p>
-            <p class="mb-1">Relax! Take out your phone and send the SMS <code>${'14#11*'}</code>, where 14 is the ID of your sensor. You get <code>${'OnOff: Pin14=ON'}</code>: the command was executed, the sensor is armed. If there is no reply, check the common <b>OnOff</b> slider in the SIM800L Settings block.</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Steps in a dark hallway</p>
-            <p class="mb-1">At night you walk to the kitchen, feeling the wall for a switch. In the daytime the hallway light is not needed at all.</p>
-            <p class="mb-1">Relax! A motion sensor in the hallway, the <b>Action</b> field says <code>${'6:1?Ss'}</code>: lamp 6 turns on on motion, but only at night. In the daytime the sensor triggers too, and the lamp sleeps. The sunrise and sunset times must be set on the "Global Settings" page.</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">The window was opened while you are away</p>
-            <p class="mb-1">You are at work, and at home someone opens a window. You want to know right away, not in the evening.</p>
-            <p class="mb-1">Relax! A magnet on the sash, a <b>Normal open</b> reed switch on the frame: while the window is closed, the magnet is near. As soon as the sash is opened, the contacts open and the sensor triggers. The <b>Action</b> says <code>${'8:1'}</code> (siren), <b>Send SMS</b> = YES, <b>INFO</b> = <code>${'Window'}</code>. The siren howls, <code>${'ALARM:ID=15:Window'}</code> arrives on your phone, and an event goes to Swarm/security/ by MQTT.</p>
-          </div>
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">An alarm that knows you are home</p>
-            <p class="mb-1">A siren on the door is great, until you come home yourself. Explaining it to the neighbors is the last thing you want.</p>
-            <p class="mb-1">Relax! Device 10 is your "guard mode". The <b>Action</b> field of the door sensor says <code>${'8:1?D10'}</code>: the siren turns on only when device 10 is on. You came home - turn device 10 off, and the door can be opened in peace. The condition locks only the siren: with Send SMS = YES the SMS arrives anyway.</p>
-          </div>
-        </section>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>Arming from the airport.</b> SMS <code>${'14#11*'}</code> arms sensor 14, the reply is <code>${'OnOff: Pin14=ON'}</code> (if the common <b>OnOff</b> slider in SIM800L Settings is on).</li>
+<li><b>Steps in a dark hallway.</b> <b>Action</b> <code>${'6:1?Ss'}</code>: lamp 6 turns on by motion only at night (Global Settings needs sunrise and sunset times).</li>
+<li><b>A window was opened.</b> Reed switch <b>Normal open</b>, <b>Action</b> <code>${'8:1'}</code> (siren), <b>Send SMS</b> = YES, <b>INFO</b> = <code>${'Window'}</code>: you get SMS <code>${'ALARM:ID=15:Window'}</code> and the event goes to MQTT on Swarm/security/.</li>
+<li><b>"I am home" mode.</b> <b>Action</b> <code>${'8:1?D10'}</code>: the siren turns on only while device 10 (the arming mode) is on. With Send SMS = YES the SMS arrives anyway.</li>
+</ul>
+</section>
         <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Action Field Format</h2>
           <p>Maximum number of entries in <code>ID:Action</code> format with <code>,</code> separator is limited by string length - <b>124 characters</b>. Conditions are written in the same string and take space, so fewer entries fit.</p>

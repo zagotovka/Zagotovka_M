@@ -8,7 +8,7 @@ import { html } from './bundle.js';
 //   D<id>   - устройство с ID id включено: выход на пине DEVICE, PWM (яркость > 0) или
 //             Zigbee-устройство; !D<id> - выключено. Прежняя буква R (R<id>, RV<id>) тоже
 //             принимается прошивкой, DV<id> - значение диммера
-//   RV<id>  - значение диммера: DV1>0, DV2<200, DV1=255, DV1g100 (>=), DV1l100 (<=)
+//   RV<id>  - значение диммера: DV1>0, DV2<50, DV1=100, DV1g50 (>=), DV1l50 (<=); шкала диммера 0-100
 //   B<id>   - кнопка нажата;  BU<id> / !B<id> - не нажата;  BH<id> - удерживается
 //   T<id>   - температура x0.1: T5>25.5 (датчики OneWire/DHT22), T5.2 - датчик #2
 //   H<id>   - влажность x0.1 (DHT22): H4>50
@@ -16,7 +16,7 @@ import { html } from './bundle.js';
 //             Switch/Encoder/PID и строка Conditions в Global Settings)
 //   Sr/Ss   - день (восход..закат) / ночь: включать свет только ночью - "Ss"
 //   Операторы: ! (НЕ), & (И), | (ИЛИ), ( ), =, >, <, g (>=), l (<=)
-//   Пример: BH1|(D1&!D2)|(DV5=255)
+//   Пример: BH1|(D1&!D2)|(DV5=100)
 //
 // Страницы Switch / Encoder / PID: условие вводится СВОБОДНО (тот же синтаксис).
 // Прошивка хранит выражения в пуле на 48 уникальных строк и передаёт номер
@@ -118,8 +118,8 @@ export async function fetchCondData() {
 
 // Подсказка по синтаксису (RU/EN)
 export const COND_HINT = {
-  ru: 'Условие после "?": D1 - устройство с ID 1 включено (выход на пине DEVICE, PWM с яркостью больше 0 или Zigbee-устройство; ID из первой колонки таблицы; прежняя запись R1 тоже работает), !D2 - выключено, DV1>0 / DV1=255 / DV1g100 / DV1l100 - диммер, B1 - кнопка нажата, BU1 - не нажата, BH1 - удерживается, T5>25.5 - температура, H4>50 - влажность, Sr - день, Ss - ночь. Операторы: ! & | ( ) = > < g l. Пример: BH1|(D1&!D2)|(DV5=255). Мёртвый датчик: T/H-сравнение «неизвестно», блокирует действие даже под ! (Клейни), НО явная истина через | перекрывает: T5<25|D1 сработает при мёртвом T5, если D1 вкл. C3 - ссылка на условие №3 из библиотеки (работает цепочка из 2 вложенных ссылок, глубже - блокировка). ВНИМАНИЕ: прямое управление (ползунок On/Off, MQTT/API) условие НЕ проверяет - это не защита от одновременного включения',
-  en: 'Condition after "?": D1 - device with ID 1 is on (an output on a DEVICE pin, PWM with brightness above 0, or a Zigbee device; the ID is from the first table column; the old notation R1 also works), !D2 - off, DV1>0 / DV1=255 / DV1g100 / DV1l100 - dimmer, B1 - button pressed, BU1 - not pressed, BH1 - held, T5>25.5 - temperature, H4>50 - humidity, Sr - daytime, Ss - night. Operators: ! & | ( ) = > < g l. Example: BH1|(D1&!D2)|(DV5=255). If a sensor is dead, T/H is false. NOTE: direct control (On/Off toggle, MQTT/API) does NOT check conditions'
+  ru: 'Условие после "?": D1 - устройство с ID 1 включено (выход на пине DEVICE, PWM с яркостью больше 0 или Zigbee-устройство; ID из первой колонки таблицы; прежняя запись R1 тоже работает), !D2 - выключено, DV1>0 / DV1=100 / DV1g50 / DV1l50 - диммер, B1 - кнопка нажата, BU1 - не нажата, BH1 - удерживается, T5>25.5 - температура, H4>50 - влажность, Sr - день, Ss - ночь. Операторы: ! & | ( ) = > < g l. Пример: BH1|(D1&!D2)|(DV5=100). Мёртвый датчик: T/H-сравнение «неизвестно», блокирует действие даже под ! (Клейни), НО явная истина через | перекрывает: T5<25|D1 сработает при мёртвом T5, если D1 вкл. C3 - ссылка на условие №3 из библиотеки (работает цепочка из 2 вложенных ссылок, глубже - блокировка). ВНИМАНИЕ: прямое управление (ползунок On/Off, MQTT/API) условие НЕ проверяет - это не защита от одновременного включения',
+  en: 'Condition after "?": D1 - device with ID 1 is on (an output on a DEVICE pin, PWM with brightness above 0, or a Zigbee device; the ID is from the first table column; the old notation R1 also works), !D2 - off, DV1>0 / DV1=100 / DV1g50 / DV1l50 - dimmer, B1 - button pressed, BU1 - not pressed, BH1 - held, T5>25.5 - temperature, H4>50 - humidity, Sr - daytime, Ss - night. Operators: ! & | ( ) = > < g l. Example: BH1|(D1&!D2)|(DV5=100). If a sensor is dead, T/H is false. NOTE: direct control (On/Off toggle, MQTT/API) does NOT check conditions'
 };
 
 // Короткая подсказка для placeholder

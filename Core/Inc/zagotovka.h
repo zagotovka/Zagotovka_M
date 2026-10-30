@@ -321,6 +321,25 @@ void SendZigbeeEPCommand(const char *zbee_ieee, uint8_t endpoint,
 
 void action_handler(uint16_t button_id, const char* action_str, const char* press_type);
 
+/* ─── Разбор строки действий: общий обход для action_handler и пульта ───
+ * Токен "id:action" | "id.sub:action", опц. "?cond". eval_cond=false —
+ * только список целей (сборка /api/state/remote), без выполнения. */
+typedef void (*action_tok_cb)(int id, int sub_idx, int action, void *ctx);
+int action_str_walk(const char *action_str, action_tok_cb cb, void *ctx,
+                    bool eval_cond);
+
+/* ─── Пульт управления: общие функции команд (zagotovka.c), используются
+ * api_handler и handle_remote_cmd в net.c. Возврат — HTTP-статус
+ * 200/400/403/409/429/503 ─── */
+int cmd_switch_exec(int id, int value);                 /* 0/1, 2 = toggle */
+int cmd_button_exec(int id, int action);                /* 0=SC, 1=DC, 2=LP */
+int cmd_pwm_exec(int id, int value);                    /* 0..100 % */
+int cmd_zigbee_exec(int id, int on, int v, long color); /* -1 = не менять */
+int cmd_pid_exec(int id, bool has_sp, double sp, bool has_on, int on);
+int cmd_security_exec(int id, int on);
+int remote_out_state(int id);        /* 1/0, -1 — id не найден */
+uint32_t remote_state_hash(void);    /* FNV-хеш состояния для ETag */
+
 void parse_monitoring_json(char *json, struct dbPinsConf *PinsConf, const struct dbPinsInfo *PinsInfo, uint8_t count);
 
 double calculateSunriseOrSunset(int isSunrise);

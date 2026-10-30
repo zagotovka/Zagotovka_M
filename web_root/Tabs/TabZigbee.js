@@ -117,36 +117,14 @@ const HELP_CONTENT = {
         </section>
         <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Примеры из жизни: что на самом деле умеет эта страница</h2>
-          <p class="mb-2">Четыре истории о том, как беспроводные устройства становятся частью вашего дома. ID в них условные.</p>
-
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Выключатель, которого не было в стене</p>
-            <p class="mb-1">Вы лежите в кровати и вспоминаете: на кухне горит лампа. Вставать не хочется, а выключатель у двери, на другом конце комнаты. Тянуть провод - ремонт на выходные.</p>
-            <p class="mb-1">Спокойно! Беспроводную кнопку Zigbee можно приклеить прямо у кровати. Нажмите <b>«Обучение»</b>, нажмите кнопку, выберите роль <b>Кнопка</b> и тип <b>Одиночное</b>, нажмите <b>«Сохранить»</b>. Затем на странице <b>Button(s) pin(s)</b> в поле SINGLE CLICK этой кнопки впишите <code>${'93:2'}</code>, где 93 - лампа на кухне.</p>
-            <p class="mb-1"><b>Результат:</b> одно нажатие у изголовья переключает лампу на кухне, и без единого провода.</p>
-          </div>
-
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Ребёнок нажимает все клавиши подряд</p>
-            <p class="mb-1">Трёхклавишный Zigbee-выключатель в детской, и малыш уже нашёл, что клавиши щёлкают. Свет мигает, вы вздрагиваете от каждого щелчка.</p>
-            <p class="mb-1">Спокойно! Такой выключатель образует группу <b>Multi</b>: головная строка 93 и вложенные 93.1, 93.2, 93.3. Ползунок <b>On/Off</b> головной строки отключает всю группу сразу. Можно и с телефона: SMS <code>${'93#00*'}</code>, номер должен быть тем, что указан в настройках SIM800L.</p>
-            <p class="mb-1"><b>Результат:</b> клавиши перестают действовать. Когда малыш подрастёт, включите группу обратно ползунком или SMS <code>${'93#11*'}</code>.</p>
-          </div>
-
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Диммер, который не знал своих границ</p>
-            <p class="mb-1">Купили Zigbee-крутилку для света. Крутите её, а что именно она посылает контроллеру - непонятно. Не хочется гадать с цифрами.</p>
-            <p class="mb-1">Спокойно! Откройте <b>«Обучение»</b>: в окне есть блок <b>Определение диапазона диммера</b>. Покрутите регулятор до минимума и до максимума, и границы определятся автоматически.</p>
-            <p class="mb-1"><b>Результат:</b> контроллер знает диапазон вашей крутилки, и вы можете спокойно связывать её с диммируемой лампой.</p>
-          </div>
-
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">Пока ходили за чаем, окно закрылось</p>
-            <p class="mb-1">Вы начали обучать датчик, нажали на нём пару функций, отошли налить чаю, а вернувшись, видите: сессия закончилась. Неужели всё сначала?</p>
-            <p class="mb-1">Спокойно! Сессия обучения останавливается, если с устройством ничего не происходило 15 минут, но уже увиденные строки остаются в таблице. Нажмите <b>«Повторить»</b>, и сессия стартует заново.</p>
-            <p class="mb-1"><b>Результат:</b> ничего не потеряно: опишите строки, нажмите <b>«Сохранить»</b> и продолжайте.</p>
-          </div>
-        </section>
+<p class="mb-2">ID условные.</p>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>Выключатель, которого не было в стене.</b> <b>«Обучение»</b>, нажмите кнопку, роль <b>Кнопка</b>, тип <b>Одиночное</b>, <b>«Сохранить»</b>. Затем на <b>Button(s) pin(s)</b> в SINGLE CLICK впишите <code>${'93:2'}</code> (93 - лампа на кухне).</li>
+<li><b>Ребёнок нажимает все клавиши.</b> Трёхклавишный выключатель образует группу <b>Multi</b>: строки 93, 93.1, 93.2, 93.3. Ползунок <b>On/Off</b> головной строки отключает всю группу, то же делают SMS <code>${'93#00*'}</code> и <code>${'93#11*'}</code>.</li>
+<li><b>Диапазон диммера.</b> В <b>«Обучение»</b> блок <b>Определение диапазона диммера</b>: покрутите регулятор до минимума и максимума, границы определятся сами.</li>
+<li><b>Окно обучения закрылось.</b> Сессия останавливается через 15 минут без событий, но строки остаются в таблице: нажмите <b>«Повторить»</b>.</li>
+</ul>
+</section>
         <section class="rounded-2xl border-2 bg-orange-50 border-orange-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Не работает? Проверьте</h2>
           <ul class="list-disc ml-6 mt-1">
@@ -268,36 +246,14 @@ const HELP_CONTENT = {
         </section>
         <section class="rounded-2xl border-2 bg-rose-50 border-rose-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Real-life examples: what this page can really do</h2>
-          <p class="mb-2">Four stories about how wireless devices become part of your home. The IDs in them are made up.</p>
-
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">A switch that was never in the wall</p>
-            <p class="mb-1">You lie in bed and suddenly remember: the kitchen lamp is still on. You do not feel like getting up, and the switch is by the door on the other side of the room. Running a wire is a weekend renovation.</p>
-            <p class="mb-1">Relax! A wireless Zigbee button can be stuck right by the bed. Press <b>Learn</b>, press the button, choose the role <b>Button</b> and the type <b>Single click</b>, press <b>Save</b>. Then on the <b>Button(s) pin(s)</b> page type <code>${'93:2'}</code> into the SINGLE CLICK field of this button, where 93 is the kitchen lamp.</p>
-            <p class="mb-1"><b>Result:</b> one press at the bedside toggles the kitchen lamp, with no wire at all.</p>
-          </div>
-
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">The child presses all the keys in a row</p>
-            <p class="mb-1">A three-key Zigbee switch in the nursery, and the little one has already found out that the keys click. The light flickers, and you flinch at every click.</p>
-            <p class="mb-1">Relax! Such a switch forms a <b>Multi</b> group: the head row 93 and the child rows 93.1, 93.2, 93.3. The <b>On/Off</b> slider of the head row turns off the whole group at once. You can also do it from the phone: SMS <code>${'93#00*'}</code>, sent from the number set in the SIM800L settings.</p>
-            <p class="mb-1"><b>Result:</b> the keys stop working. When the little one grows up, turn the group back on with the slider or with SMS <code>${'93#11*'}</code>.</p>
-          </div>
-
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">A dimmer that did not know its limits</p>
-            <p class="mb-1">You bought a Zigbee knob for the light. You turn it, but what exactly it sends to the controller is a mystery. You do not want to guess with numbers.</p>
-            <p class="mb-1">Relax! Open <b>Learn</b>: the window has a <b>Dimmer range detection</b> block. Turn the knob to the minimum and to the maximum, and the limits are detected automatically.</p>
-            <p class="mb-1"><b>Result:</b> the controller knows the range of your knob, and you can safely link it with a dimmable lamp.</p>
-          </div>
-
-          <div class="p-4 rounded-xl bg-white/80 border border-rose-300">
-            <p class="text-lg font-bold text-black mb-1">The window closed while you fetched tea</p>
-            <p class="mb-1">You started learning a sensor, triggered a couple of functions, walked off to pour some tea, and when you come back the session is over. Do you have to start from scratch?</p>
-            <p class="mb-1">Relax! The learning session stops if nothing happened with the device for 15 minutes, but the rows already observed stay in the table. Press <b>Retry</b> and the session starts again.</p>
-            <p class="mb-1"><b>Result:</b> nothing is lost: describe the rows, press <b>Save</b> and carry on.</p>
-          </div>
-        </section>
+<p class="mb-2">IDs are made up.</p>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>A switch that was not in the wall.</b> <b>Learn</b>, press the button, role <b>Button</b>, type <b>Single click</b>, <b>Save</b>. Then on <b>Button(s) pin(s)</b> put <code>${'93:2'}</code> into SINGLE CLICK (93 is the kitchen lamp).</li>
+<li><b>A child presses every key.</b> A three-key switch forms a <b>Multi</b> group: rows 93, 93.1, 93.2, 93.3. The head-row <b>On/Off</b> slider disables the whole group; SMS <code>${'93#00*'}</code> and <code>${'93#11*'}</code> do the same.</li>
+<li><b>Dimmer range.</b> In <b>Learn</b> use the <b>Dimmer range detection</b> block: turn the knob to the minimum and maximum, the limits are detected automatically.</li>
+<li><b>The learning window closed.</b> The session stops after 15 minutes without events, but the rows stay in the table: press <b>Retry</b>.</li>
+</ul>
+</section>
         <section class="rounded-2xl border-2 bg-orange-50 border-orange-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">Not working? Check these</h2>
           <ul class="list-disc ml-6 mt-1">

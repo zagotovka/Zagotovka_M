@@ -65,6 +65,7 @@ import { TabZigbee } from './Tabs/TabZigbee.js';
 import { TabPid } from './Tabs/TabPid.js';
 import { TabOneWire } from './Tabs/TabOneWire.js';
 import { TabSecurity } from './Tabs/TabSecurity.js';
+import { TabRemote } from './Tabs/TabRemote.js';
 import { Settings } from './Tabs/Settings.js';
 import { ModalSwitch } from './Modals/ModalSwitch.js';
 import { ModalEncoder } from './Modals/ModalEncoder.js';
@@ -87,7 +88,7 @@ const Logo = (props) =>
   />`;
 // Animated wordmark for the sidebar. Look and animation are pure CSS, see logo.css.
 // Light theme -> dark-metal logo, dark theme -> silver logo (switched through [data-theme]).
-const WordLogo = () =>
+export const WordLogo = () =>
   html`<div class="zl" role="img" aria-label="Zagotovka Mongoose">
     <div class="zl-base"></div>
     <div class="zl-glint"></div>
@@ -222,6 +223,12 @@ function Sidebar({ url, show }) {
         <span class="pb-0.5 text-xs font-normal text-slate-400">${typeof __FW_VERSION__ !== 'undefined' ? __FW_VERSION__ : 'dev'}</span>
       <//>
       <div class="flex flex-1 flex-col">
+        <${NavLink}
+          title="Remote control" tone="logic"
+          icon=${Icons.navSwitch}
+          href="/remote"
+          url=${url}
+        />
         <${NavLink} title="Logger" tone="sys" icon=${Icons.navLogger} href="/" url=${url} />
         <${NavLink}
           title="Select pin" tone="io"
@@ -693,19 +700,22 @@ const App = function ({ }) {
       tipText="Default: admin / 12345678"
     />`; // If not logged in, show login screen
 
+  // «Чистый пульт»: на #remote скрываем Sidebar и Header (у пульта своя шапка)
+  const isRemote = url === '/remote';
+
   return html`<${StateContext.Provider} value=${commonData}>
    <div class="min-h-screen" id="mains">
-    <${Sidebar} url=${url} show=${showSidebar} />
-    ${showSidebar && html`<div class="fixed inset-0 z-[55] bg-black/30 lg:hidden" onclick=${() => setShowSidebar(false)}></div>`}
-    <${Header}
+    ${!isRemote && html`<${Sidebar} url=${url} show=${showSidebar} />`}
+    ${showSidebar && !isRemote && html`<div class="fixed inset-0 z-[55] bg-black/30 lg:hidden" onclick=${() => setShowSidebar(false)}></div>`}
+    ${!isRemote && html`<${Header}
       logout=${logout}
       user=${user}
       showSidebar=${showSidebar}
       setShowSidebar=${setShowSidebar}
       sessionExpired=${sessionExpired}
-    />
+    />`}
     <div
-      class="${showSidebar ? 'lg:pl-72' : ''} transition-all duration-300 min-w-0"
+      class="${showSidebar && !isRemote ? 'lg:pl-72' : ''} transition-all duration-300 min-w-0"
     >
       <${Router}
         onChange=${(ev) => {
@@ -726,6 +736,7 @@ const App = function ({ }) {
         <${TabZigbee} path="zigbee" />
         <${Settings} path="settings" />
         <${FirmwareUpdate} path="update" />
+        <${TabRemote} path="remote" />
       <//>
     <//>
    <//>

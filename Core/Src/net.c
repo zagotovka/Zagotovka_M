@@ -998,6 +998,400 @@ char *g_body;
 /* ── Лимит активных соединений ── */
 #define MAX_CONNS  8
 
+/* ═══════════════ /api/state/remote — состояние пульта ═══════════════
+ * Постраничная выдача, единый линейный курсор ?next=:
+ *   0..NUMPIN-1                 — физ. пины (sw/pw/bt/sc),
+ *   NUMPIN..NUMPIN+NUMZBEE-1    — Zigbee (zb/bt/sc),
+ *   далее PID-слоты, датчики DS18B20, датчики DHT22.
+ * Массивы разделов (sw,bt,pw,zb,pd,sc,ow) открываются лениво при первом
+ * элементе; пустые разделы не отдаются. В конце — "next": курсор следующей
+ * страницы или -1. Страница не больше REMOTE_PAGE_BUDGET байт.
+ * ETag = FNV-хеш состояния (remote_state_hash(), zagotovka.c). 304 отдаётся
+ * ТОЛЬКО при cursor==0: pollQueue хранит один ETag на ключ и не вызывает
+ * callback при 304 — на середине пагинации это намертво остановило бы
+ * опрос. RAM: только стек, новых static-буферов нет. */
+#define REMOTE_PAGE_BUDGET 4800
+#define REMOTE_BASE_ZBEE (NUMPIN)
+#define REMOTE_BASE_PID  (NUMPIN + NUMZBEE)
+#define REMOTE_BASE_DS   (REMOTE_BASE_PID + PID_MAX_SLOTS)
+#define REMOTE_BASE_DHT  (REMOTE_BASE_DS + (MAX_DS18B20_P * MAX_DS18B20_PER_PIN))
+#define REMOTE_END       (REMOTE_BASE_DHT + MAX_DHT22_P)
+
+/* Начало элемента плоского массива items: {"s":"раздел","d":
+ * Тело элемента печатает вызывающий код. Закрывающая } предыдущего элемента
+ * пишется здесь же при следующем открытии либо в конце ответа.
+ * Флаг any = "есть незакрытый элемент". */
+static int rem_sec_open(int pos, const char *name, bool *opened, bool *any) {
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "%s{\"s\":\"%s\",\"d\":",
+                    *any ? "}," : "", name);
+    *opened = true;
+    *any = true;
+    return pos;
+}
+
+/* Разделители теперь пишет rem_sec_open; функция оставлена, чтобы не
+ * менять вызовы в цикле. */
+static int rem_item_sep(int pos, bool opened, bool *first) {
+    (void) opened;
+    (void) first;
+    return pos;
+}
+
+/* Сборка списка целей кнопки: "id[.sub];...", не более 6 целей */
+typedef struct { char *dst; int cap; int off; int n; } rem_tgt_ctx;
+static void rem_tgt_cb(int id, int sub_idx, int action, void *vctx) {
+    (void) action;
+    rem_tgt_ctx *t = (rem_tgt_ctx *)vctx;
+    char tok[16];
+    snprintf(tok, sizeof(tok), "%d%s", id, sub_idx > 0 ? ".z" : "");
+
+    /* Пропуск повторов: цель уже есть в списке (токен целиком между ';') */
+    size_t tl = strlen(tok);
+    for (const char *p = t->dst; *p != '\0'; ) {
+        const char *e = strchr(p, ';');
+        size_t l = e ? (size_t)(e - p) : strlen(p);
+        if (l == tl && strncmp(p, tok, l) == 0) return;
+        if (e == NULL) break;
+        p = e + 1;
+    }
+
+    if (t->n >= 6 || t->off + 14 >= t->cap) return;
+    t->off += snprintf(t->dst + t->off, (size_t)(t->cap - t->off),
+                       "%s%s", t->n ? ";" : "", tok);
+    t->n++;
+}
+
+static void handle_remote_state(struct mg_connection *c,
+                                struct mg_http_message *hm) {
+    /* Версия состояния — в начале сборки: если данные изменятся во время
+     * сборки, клиент получит старый ETag и перезапросит (безопасная сторона) */
+    uint32_t etag = remote_state_hash();
+    char etag_q[16];
+    snprintf(etag_q, sizeof(etag_q), "\"%08lX\"", (unsigned long)etag);
+
+    int cursor = 0;
+    char vb[12];
+    if (mg_http_get_var(&hm->query, "next", vb, sizeof(vb)) > 0) {
+        long v = mg_json_get_long(mg_str(vb), "$", 0);
+        if (v > 0) cursor = (v < (long)REMOTE_END) ? (int)v : REMOTE_END;
+    }
+
+    /* 304 — только на первой странице (см. комментарий выше) */
+    if (cursor == 0) {
+        struct mg_str *inm = mg_http_get_header(hm, "If-None-Match");
+        if (inm && mg_strcmp(*inm, mg_str(etag_q)) == 0) {
+            char hdr[80];
+            snprintf(hdr, sizeof(hdr),
+                     "ETag: %s\r\nCache-Control: no-cache\r\n", etag_q);
+            mg_http_reply(c, 304, hdr, "");
+            return;
+        }
+    }
+
+    int pos = 0;
+    int next = -1;
+    bool any = false;
+    bool o_sw = false, o_bt = false, o_pw = false, o_zb = false;
+    bool o_pd = false, o_sc = false, o_ow = false;
+    bool f_sw = true, f_bt = true, f_pw = true, f_zb = true;
+    bool f_pd = true, f_sc = true, f_ow = true;
+
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                    "{\"lang\":\"%s\",\"etag\":\"%08lX\",\"items\":[",
+                    SetSettings.lang, (unsigned long)etag);
+
+    /* ── Физ. пины: sw (topin 3), pw (topin 5), bt (topin 1), sc (topin 10) ── */
+    for (int i = (cursor < NUMPIN ? cursor : NUMPIN);
+         i < NUMPIN && next < 0; i++) {
+        if (pos > REMOTE_PAGE_BUDGET) { next = i; break; }
+        if ((int)G_BODY_SIZE - pos < 700) { next = i; break; }
+
+        /* Главная карточка охраны (id 0) — первой строкой раздела sc */
+        if (i == 0 && cursor == 0) {
+            pos = rem_sec_open(pos, "sc", &o_sc, &any);
+            pos = rem_item_sep(pos, o_sc, &f_sc);
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                            "{\"id\":0,\"n\":\"\",\"t\":\"\",\"on\":%d}",
+                            (int)PinsConf[1].onoff);
+        }
+
+        const struct dbPinsConf *p = &PinsConf[i];
+        char esc_info[64], esc_pins[16];
+        json_escape_str(esc_info, p->info, sizeof(esc_info));
+        json_escape_str(esc_pins, PinsInfo[i].pins, sizeof(esc_pins));
+        int id = i + 1;
+
+        if (p->topin == 3) { /* ── переключатели ── */
+            pos = rem_sec_open(pos, "sw", &o_sw, &any);
+            pos = rem_item_sep(pos, o_sw, &f_sw);
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                            "{\"id\":%d,\"n\":\"%s\",\"t\":\"%s\","
+                            "\"on\":%d,\"st\":%d}",
+                            id, esc_pins, esc_info,
+                            (int)p->onoff, (int)p->state);
+        } else if (p->topin == 5) { /* ── PWM ── */
+            int onoff_eff = (p->pwm_flags & PWMF_SWITCH) ? p->onoff : 1;
+            pos = rem_sec_open(pos, "pw", &o_pw, &any);
+            pos = rem_item_sep(pos, o_pw, &f_pw);
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                            "{\"id\":%d,\"n\":\"%s\",\"t\":\"%s\","
+                            "\"v\":%d,\"on\":%d,\"lk\":%d}",
+                            id, esc_pins, esc_info,
+                            p->dvalue, onoff_eff,
+                            is_pin_in_autotune((uint8_t)i) ? 1 : 0);
+        } else if (p->topin == 1) { /* ── кнопки ── */
+            if (p->onoff == 0) continue;
+            const char *acts[3] = {p->sclick, p->dclick, p->lpress};
+            bool has_any = false;
+            for (int a = 0; a < 3; a++) {
+                if (acts[a][0] != '\0' && strcmp(acts[a], "None") != 0)
+                    has_any = true;
+            }
+            if (!has_any) continue;
+            char targets[96];
+            rem_tgt_ctx tctx = {targets, (int)sizeof(targets), 0, 0};
+            targets[0] = '\0';
+            for (int a = 0; a < 3; a++) {
+                if (acts[a][0] != '\0' && strcmp(acts[a], "None") != 0)
+                    action_str_walk(acts[a], rem_tgt_cb, &tctx, false);
+            }
+            pos = rem_sec_open(pos, "bt", &o_bt, &any);
+            pos = rem_item_sep(pos, o_bt, &f_bt);
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                            "{\"id\":%d,\"n\":\"%s\",\"t\":\"%s\","
+                            "\"sc\":%d,\"dc\":%d,\"lp\":%d,\"a\":\"%s\"}",
+                            id, esc_pins, esc_info,
+                            (acts[0][0] && strcmp(acts[0], "None")) ? 1 : 0,
+                            (acts[1][0] && strcmp(acts[1], "None")) ? 1 : 0,
+                            (acts[2][0] && strcmp(acts[2], "None")) ? 1 : 0,
+                            targets);
+        } else if (p->topin == 10) { /* ── датчики охраны ── */
+            pos = rem_sec_open(pos, "sc", &o_sc, &any);
+            pos = rem_item_sep(pos, o_sc, &f_sc);
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                            "{\"id\":%d,\"n\":\"%s\",\"t\":\"%s\","
+                            "\"on\":%d}",
+                            id, esc_pins, esc_info, (int)p->onoff);
+        }
+    }
+
+    /* ── Zigbee: bt (Trigger), sc (PIR), zb (прочие) ── */
+    for (int k = (cursor > REMOTE_BASE_ZBEE ? cursor - REMOTE_BASE_ZBEE : 0);
+         k < NUMZBEE && next < 0; k++) {
+        if (pos > REMOTE_PAGE_BUDGET) { next = REMOTE_BASE_ZBEE + k; break; }
+        if ((int)G_BODY_SIZE - pos < 700) { next = REMOTE_BASE_ZBEE + k; break; }
+        const ZigbeeVirtualPin *z = &ZigbeeConf[k];
+        if (z->zbee_ieee[0] == '\0') continue;
+        int id = ZbeeIdFromIdx(k);
+        char esc_label[64];
+        json_escape_str(esc_label, z->zbee_label, sizeof(esc_label));
+
+        if (z->zbee_role == ZBEE_ROLE_TRIGGER) {
+            if (z->onoff == 0) continue;
+            const char *acts[3] = {zbee_action_sclick(k), zbee_action_dclick(k),
+                                   zbee_action_lpress(k)};
+            bool has_any = false;
+            for (int a = 0; a < 3; a++) {
+                if (acts[a] && acts[a][0] != '\0' && strcmp(acts[a], "None") != 0)
+                    has_any = true;
+            }
+            if (!has_any) continue;
+            char targets[96];
+            rem_tgt_ctx tctx = {targets, (int)sizeof(targets), 0, 0};
+            targets[0] = '\0';
+            for (int a = 0; a < 3; a++) {
+                if (acts[a] && acts[a][0] != '\0' && strcmp(acts[a], "None") != 0)
+                    action_str_walk(acts[a], rem_tgt_cb, &tctx, false);
+            }
+            pos = rem_sec_open(pos, "bt", &o_bt, &any);
+            pos = rem_item_sep(pos, o_bt, &f_bt);
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                            "{\"id\":%d,\"n\":\"%s\",\"t\":\"%s\","
+                            "\"sc\":%d,\"dc\":%d,\"lp\":%d,\"a\":\"%s\"}",
+                            id, esc_label, esc_label,
+                            (acts[0] && acts[0][0] && strcmp(acts[0], "None")) ? 1 : 0,
+                            (acts[1] && acts[1][0] && strcmp(acts[1], "None")) ? 1 : 0,
+                            (acts[2] && acts[2][0] && strcmp(acts[2], "None")) ? 1 : 0,
+                            targets);
+        } else if (zbee_is_pir(z)) { /* ── PIR в разделе охраны ── */
+            pos = rem_sec_open(pos, "sc", &o_sc, &any);
+            pos = rem_item_sep(pos, o_sc, &f_sc);
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                            "{\"id\":%d,\"n\":\"%s\",\"t\":\"%s\","
+                            "\"on\":%d}",
+                            id, esc_label, esc_label, (int)z->onoff);
+        } else { /* ── actuators / switches ── */
+            const char *kind = (z->zbee_role == ZBEE_ROLE_SWITCH) ? "sw"
+                             : (z->cluster_flags & ZBEE_CL_COLOR)  ? "clr"
+                             : (z->cluster_flags & ZBEE_CL_DIMMER) ? "dim"
+                                                                   : "rly";
+            pos = rem_sec_open(pos, "zb", &o_zb, &any);
+            pos = rem_item_sep(pos, o_zb, &f_zb);
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                            "{\"id\":%d,\"n\":\"%s\",\"k\":\"%s\","
+                            "\"on\":%d,\"st\":%d,\"v\":%d,\"c\":\"#%06lX\"}",
+                            id, esc_label, kind,
+                            (int)z->onoff, (int)z->state, z->dvalue,
+                            (unsigned long)(z->color_hex & 0xFFFFFF));
+        }
+    }
+
+    /* ── PID-слоты ── */
+    for (int s = (cursor > REMOTE_BASE_PID ? cursor - REMOTE_BASE_PID : 0);
+         s < PID_MAX_SLOTS && next < 0; s++) {
+        if (pos > REMOTE_PAGE_BUDGET) { next = REMOTE_BASE_PID + s; break; }
+        if ((int)G_BODY_SIZE - pos < 500) { next = REMOTE_BASE_PID + s; break; }
+        const dbPidConf *pp = &PidConf[s];
+        if (pp->pwm_pin_id == 0) continue;
+        char esc_info[64];
+        char s_sp[16], s_cu[16];
+        json_escape_str(esc_info, pp->info, sizeof(esc_info));
+        fmt_float(s_sp, sizeof(s_sp), pp->tmpset, 1);
+        fmt_float(s_cu, sizeof(s_cu), pp->tmpcur, 1);
+        pos = rem_sec_open(pos, "pd", &o_pd, &any);
+        pos = rem_item_sep(pos, o_pd, &f_pd);
+        pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                        "{\"id\":%d,\"t\":\"%s\",\"on\":%d,"
+                        "\"sp\":%s,\"cu\":%s,\"lk\":%d}",
+                        s + 1, esc_info, (int)pp->onoff, s_sp, s_cu,
+                        (pp->tune_state == PID_TUNE_STEP ||
+                         pp->tune_state == PID_TUNE_BIAS) ? 1 : 0);
+    }
+
+    /* ── Датчики DS18B20 (по строке на датчик) ── */
+    int ds_cur = (cursor > REMOTE_BASE_DS) ? cursor - REMOTE_BASE_DS : 0;
+    for (int j = 0; j < MAX_DS18B20_P && next < 0; j++) {
+        if (ds18b20[j].typsensr != 1 || ds18b20[j].id == 0) continue;
+        int n = ds18b20[j].numsens;
+        if (n > MAX_DS18B20_PER_PIN) n = MAX_DS18B20_PER_PIN;
+        for (int s = 0; s < n && next < 0; s++) {
+            int cur = j * MAX_DS18B20_PER_PIN + s;
+            if (cur < ds_cur) continue;
+            if (pos > REMOTE_PAGE_BUDGET) { next = REMOTE_BASE_DS + cur; break; }
+            if ((int)G_BODY_SIZE - pos < 400) { next = REMOTE_BASE_DS + cur; break; }
+            char esc_info[64], esc_pins[16];
+            char s_t[16];
+            json_escape_str(esc_info, ds18b20[j].sensors[s].info,
+                            sizeof(esc_info));
+            json_escape_str(esc_pins, ds18b20[j].pin, sizeof(esc_pins));
+            fmt_float(s_t, sizeof(s_t), ds18b20[j].sensors[s].temp, 1);
+            pos = rem_sec_open(pos, "ow", &o_ow, &any);
+            pos = rem_item_sep(pos, o_ow, &f_ow);
+            if (ds18b20[j].sensors[s].valid) {
+                pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                                "{\"id\":%d,\"sub\":%d,\"n\":\"%s\","
+                                "\"t\":\"%s\",\"v\":%s,\"ok\":1}",
+                                (int)ds18b20[j].id, s, esc_pins, esc_info, s_t);
+            } else {
+                pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                                "{\"id\":%d,\"sub\":%d,\"n\":\"%s\","
+                                "\"t\":\"%s\",\"ok\":0}",
+                                (int)ds18b20[j].id, s, esc_pins, esc_info);
+            }
+        }
+    }
+
+    /* ── Датчики DHT22 ── */
+    for (int j = (cursor > REMOTE_BASE_DHT ? cursor - REMOTE_BASE_DHT : 0);
+         j < MAX_DHT22_P && next < 0; j++) {
+        if (dht22 == NULL || dht22[j].typsensr != 2 || dht22[j].id == 0)
+            continue;
+        if (pos > REMOTE_PAGE_BUDGET) { next = REMOTE_BASE_DHT + j; break; }
+        if ((int)G_BODY_SIZE - pos < 400) { next = REMOTE_BASE_DHT + j; break; }
+        char esc_info[64], esc_pins[16];
+        char s_t[16], s_h[16];
+        json_escape_str(esc_info, dht22[j].info, sizeof(esc_info));
+        json_escape_str(esc_pins, dht22[j].pin, sizeof(esc_pins));
+        fmt_float(s_t, sizeof(s_t), dht22[j].temp, 1);
+        fmt_float(s_h, sizeof(s_h), dht22[j].humid, 1);
+        pos = rem_sec_open(pos, "ow", &o_ow, &any);
+        pos = rem_item_sep(pos, o_ow, &f_ow);
+        if (dht22[j].valid) {
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                            "{\"id\":%d,\"n\":\"%s\",\"t\":\"%s\","
+                            "\"v\":%s,\"h\":%s,\"ok\":1}",
+                            (int)dht22[j].id, esc_pins, esc_info, s_t, s_h);
+        } else {
+            pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
+                            "{\"id\":%d,\"n\":\"%s\",\"t\":\"%s\",\"ok\":0}",
+                            (int)dht22[j].id, esc_pins, esc_info);
+        }
+    }
+
+    /* ── Закрытие разделов + курсор следующей страницы ── */
+    if (any) pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "}");
+    pos += snprintf(g_body + pos, G_BODY_SIZE - pos, "],\"next\":%d}", next);
+
+    char hdr[80];
+    snprintf(hdr, sizeof(hdr),
+             "ETag: %s\r\nCache-Control: no-cache\r\n", etag_q);
+    mg_printf(c, "HTTP/1.1 200 OK\r\n%s%sContent-Length: %d\r\n\r\n",
+              s_json_header, hdr, pos);
+    mg_send(c, g_body, pos);
+    c->is_resp = 0;
+}
+
+/* ═══════════════ POST /api/remote/cmd — команды пульта ═══════════════
+ * Тело ≤256 байт: {"t":"sw","id":5,"v":1}. Диспетчер вызывает общие
+ * cmd_*_exec (zagotovka.c) — логика с api_handler не дублируется.
+ * Ответ: {"ok":true} либо {"ok":false,"code":N}, N из 400/403/409/429/503. */
+static void handle_remote_cmd(struct mg_connection *c,
+                              struct mg_http_message *hm) {
+    if (!require_post_json(c, hm)) return; /* 405/415 */
+    if (hm->body.len == 0 || hm->body.len >= 256) {
+        mg_http_reply(c, 400, s_json_header, "{\"ok\":false,\"code\":400}");
+        return;
+    }
+    char body[256];
+    memcpy(body, hm->body.buf, hm->body.len);
+    body[hm->body.len] = '\0';
+    struct mg_str json = mg_str(body);
+
+    int id = (int)mg_json_get_long(json, "$.id", -1);
+    char *t = mg_json_get_str(json, "$.t");
+    if (t == NULL || id < 0) {
+        if (t) mg_free(t);
+        mg_http_reply(c, 400, s_json_header, "{\"ok\":false,\"code\":400}");
+        return;
+    }
+
+    int st = 400;
+    if (strcmp(t, "sw") == 0) {
+        st = cmd_switch_exec(id, (int)mg_json_get_long(json, "$.v", -1));
+    } else if (strcmp(t, "bt") == 0) {
+        st = cmd_button_exec(id, (int)mg_json_get_long(json, "$.a", -1));
+    } else if (strcmp(t, "pw") == 0) {
+        st = cmd_pwm_exec(id, (int)mg_json_get_long(json, "$.v", -1));
+    } else if (strcmp(t, "zb") == 0) {
+        int on   = (int)mg_json_get_long(json, "$.on", -1);
+        int v    = (int)mg_json_get_long(json, "$.v", -1);
+        long col = (long)mg_json_get_long(json, "$.c", -1);
+        st = cmd_zigbee_exec(id, on, v, col);
+    } else if (strcmp(t, "pd") == 0) {
+        bool has_sp = mg_json_get(json, "$.sp", NULL) >= 0;
+        double sp = 0;
+        if (has_sp && !mg_json_get_num(json, "$.sp", &sp))
+            sp = (double)mg_json_get_long(json, "$.sp", 0);
+        bool has_on = mg_json_get(json, "$.on", NULL) >= 0;
+        int on = (int)mg_json_get_long(json, "$.on", 0);
+        st = cmd_pid_exec(id, has_sp, sp, has_on, on);
+    } else if (strcmp(t, "sc") == 0) {
+        long on = mg_json_get_long(json, "$.on", -1);
+        if (on < 0) on = mg_json_get_long(json, "$.v", -1);
+        st = cmd_security_exec(id, (int)on);
+    }
+    mg_free(t);
+
+    MG_INFO(("%lu remote/cmd t=%.*s id=%d -> %d", c->id,
+             (int) hm->body.len > 8 ? 8 : (int) hm->body.len, hm->body.buf,
+             id, st));
+    if (st == 200) {
+        mg_http_reply(c, 200, s_json_header, "{\"ok\":true}");
+    } else {
+        mg_http_reply(c, st, s_json_header, "{\"ok\":false,\"code\":%d}", st);
+    }
+}
+
 void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 
 	// --- Логирование всех событий для отладки ---
@@ -1282,6 +1676,10 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 					if (!check_etag_304(c, hm, &g_ver_switch)) handle_switches_req(c, hm);
 				} else if (mg_match(hm->uri, mg_str("/api/state/encoder"), NULL)) {
 					if (!check_etag_304(c, hm, &g_ver_encoder)) handle_encoders(c, hm);
+				} else if (mg_match(hm->uri, mg_str("/api/state/remote"), NULL)) {
+					/* ETag/304 внутри хендлера: хеш считается на лету,
+					 * 304 допустим только на первой странице */
+					handle_remote_state(c, hm);
 				} else {
 					mg_http_reply(c, 404, "", "");
 				}
@@ -1592,6 +1990,11 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/zigbee/learn/stop"), NULL)) {
 				MG_INFO(("%lu Processing /api/zigbee/learn/stop", c->id));
 				handle_zigbee_learn_stop(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/remote/cmd"), NULL)) {
+				MG_INFO(("%lu Processing /api/remote/cmd", c->id));
+				handle_remote_cmd(c, hm);
+				keep_alive = true;
+				break;
 			} else if (mg_match(hm->uri, mg_str("/api/onoff/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/onoff/set", c->id));
 				handle_onoff_set(c, hm);

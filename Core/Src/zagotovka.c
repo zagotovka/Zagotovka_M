@@ -4617,6 +4617,340 @@ void handle_connection_del(struct mg_connection *c, struct mg_http_message *hm,
   mg_free(pin_str);
   if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
 }
+
+/* Статусные версии отправки команд Zigbee определены ниже (около
+ * SendZigbeeCommand); здесь — ранние объявления для cmd_zigbee_exec(). */
+static int zbee_send_cmd_status(const char *zbee_ieee, uint8_t endpoint,
+                                uint16_t cluster, uint8_t attribute,
+                                const char *json_cmd);
+static int zbee_send_ep_status(const char *zbee_ieee, uint8_t endpoint,
+                               uint16_t dp, const char *val);
+
+/* ═══════════════════ Пульт управления (/api/remote/cmd) ═══════════════════
+ * Общие функции команд пульта. Используются и здесь (api_handler), и
+ * обработчиком /api/remote/cmd в net.c — логика не дублируется. Возвращают
+ * HTTP-статус: 200 — выполнено, 400 — неверный id/значение, 403 — пин или
+ * устройство выключено, 409 — конфликт (идёт автотюн PID), 429 — throttle
+ * Zigbee, 503 — очередь команд Zigbee заполнена. */
+
+/* Отложенное сохранение на USB (единственный static пульта, 4 байта RAM):
+ * серия нажатий не должна забивать очередь usbQueue (16 элементов) и дёргать
+ * флешку на каждую команду. */
+#define REMOTE_SAVE_INTERVAL_MS 10000U
+static uint32_t s_remote_save_tick;
+
+static void remote_defer_save(uint8_t usbnum) {
+  uint32_t now = HAL_GetTick();
+  if (s_remote_save_tick != 0U &&
+      (uint32_t)(now - s_remote_save_tick) < REMOTE_SAVE_INTERVAL_MS) {
+    return;
+  }
+  s_remote_save_tick = now;
+  if (usbQueueHandle) xQueueSend(usbQueueHandle, &usbnum, 0);
+}
+
+/* Текущее состояние выхода для карточки пульта: 1/0, -1 — id не найден. */
+int remote_out_state(int id) {
+  if (IsZigbeePin(id)) {
+    return ZigbeeConf[ZbeeIdx(id)].state ? 1 : 0;
+  }
+  if (IsPinId(id)) {
+    int idx = PinIdxFromId(id);
+    if (PinsConf[idx].topin == 5) return PinsConf[idx].dvalue > 0 ? 1 : 0;
+    return PinsConf[idx].state ? 1 : 0;
+  }
+  return -1;
+}
+
+/* Переключатель (topin == 3). value: 0/1, 2 — toggle. */
+int cmd_switch_exec(int id, int value) {
+  if (!IsPinId(id)) return 400;
+  int idx = PinIdxFromId(id);
+  if (PinsConf[idx].topin != 3) return 400;
+  if (PinsConf[idx].onoff == 0) return 403; /* master off */
+  if (value == 2) value = PinsConf[idx].state ? 0 : 1;
+  if (value < 0 || value > 1) return 400;
+  PinsConf[idx].state = (uint8_t)value;
+  processPins((uint16_t)id, (uint8_t)value);
+  mark_slice_dirty(&g_ver_switch);
+  return 200;
+}
+
+/* Кнопка: физический пин (topin == 1) или Zigbee Trigger.
+ * action: 0 — одиночное нажатие, 1 — двойное, 2 — долгое. */
+int cmd_button_exec(int id, int action) {
+  if (action < 0 || action > 2) return 400;
+  static const char *const press_types[] = {"SC", "DC", "LP"};
+  if (IsPinId(id)) {
+    int idx = PinIdxFromId(id);
+    if (PinsConf[idx].topin != 1) return 400;
+    if (PinsConf[idx].onoff == 0) return 403;
+    const char *str = (action == 0) ? PinsConf[idx].sclick
+                    : (action == 1) ? PinsConf[idx].dclick
+                                    : PinsConf[idx].lpress;
+    if (str[0] == '\0' || strcmp(str, "None") == 0) return 400;
+    action_handler((uint16_t)id, str, press_types[action]);
+    return 200;
+  }
+  if (IsZigbeePin(id)) {
+    int zbi = ZbeeIdx(id);
+    ZigbeeVirtualPin *zp = &ZigbeeConf[zbi];
+    if (zp->zbee_role != ZBEE_ROLE_TRIGGER) return 400;
+    if (zp->onoff == 0) return 403;
+    const char *str = (action == 0) ? zbee_action_sclick(zbi)
+                    : (action == 1) ? zbee_action_dclick(zbi)
+                                    : zbee_action_lpress(zbi);
+    if (str == NULL || str[0] == '\0' || strcmp(str, "None") == 0) return 400;
+    vbtn_execute(zbi, action);
+    return 200;
+  }
+  return 400;
+}
+
+/* Яркость PWM-пина (topin == 5), value в процентах 0..100. */
+int cmd_pwm_exec(int id, int value) {
+  if (!IsPinId(id)) return 400;
+  uint8_t idx = (uint8_t)PinIdxFromId(id);
+  if (PinsConf[idx].topin != 5) return 400;
+  if (is_pin_in_autotune(idx)) return 409; /* AutoTune lock */
+  if (value < 0) value = 0;
+  if (value > 100) value = 100;
+  pwm_set_percent(idx, value); /* сам проверяет autotune и пишет dvalue/CCR */
+  mark_slice_dirty(&g_ver_encoder); /* topin == 5 живёт в срезе encoder */
+  return 200;
+}
+
+/* Команда Zigbee-устройству. on / v / color: -1 — не менять.
+ * v — яркость 0..100 (на сервере переводится в dimmer_min..dimmer_max),
+ * color — 0xRRGGBB. Возможные статусы: 200, 400, 403, 429, 503. */
+int cmd_zigbee_exec(int id, int on, int v, long color) {
+  if (!IsZigbeePin(id)) return 400;
+  int zbi = ZbeeIdx(id);
+  ZigbeeVirtualPin *zp = &ZigbeeConf[zbi];
+  if (zp->zbee_ieee[0] == '\0') return 400;
+  if (zp->onoff == 0 && on >= 0) return 403; /* master off */
+  int st = 200;
+
+  if (on >= 0) {
+    int onoff_cmd = on ? 1 : 0;
+    if (zp->zbee_role == ZBEE_ROLE_SWITCH) {
+      zp->state = (uint8_t)onoff_cmd;
+      mark_slice_dirty(&g_ver_zigbee);
+      processPins((uint16_t)ZbeeIdFromIdx(zbi), (uint8_t)onoff_cmd);
+    } else if (zp->ep_onoff > 0) {
+      char valbuf[8];
+      snprintf(valbuf, sizeof(valbuf), "%d", onoff_cmd);
+      st = zbee_send_ep_status(zp->zbee_ieee, zp->zbee_endpoint,
+                               zp->ep_onoff, valbuf);
+    } else {
+      st = zbee_send_cmd_status(zp->zbee_ieee, zp->zbee_endpoint, 6,
+                                ZBEE_ATTR_ONOFF,
+                                onoff_cmd ? "ON" : "OFF");
+    }
+    if (st == 200) {
+      zp->state = (uint8_t)onoff_cmd;
+      mark_slice_dirty(&g_ver_zigbee);
+    }
+  }
+
+  if (v >= 0 && st == 200) {
+    bool has_dimmer = (zp->cluster_flags & ZBEE_CL_DIMMER) ||
+                      zp->device_type_override == 2 ||
+                      zp->device_type_override == 3 ||
+                      zp->device_type_override == 4;
+    if (!has_dimmer) return 400;
+    int lo = zp->dimmer_min, hi = zp->dimmer_max;
+    if (hi > lo) {                     /* проценты -> шкала устройства */
+      if (v < 0) v = 0;
+      if (v > 100) v = 100;
+      v = lo + (int)(((int64_t)(hi - lo) * v) / 100);
+    }
+    char valbuf[12];
+    snprintf(valbuf, sizeof(valbuf), "%d", v);
+    if (zp->ep_brightness > 0) {
+      st = zbee_send_ep_status(zp->zbee_ieee, zp->zbee_endpoint,
+                               zp->ep_brightness, valbuf);
+    } else {
+      st = zbee_send_cmd_status(zp->zbee_ieee, zp->zbee_endpoint, 8,
+                                0x0004 /* Move to Level */, valbuf);
+    }
+    if (st == 200) {
+      zp->dvalue = v;
+      mark_slice_dirty(&g_ver_zigbee);
+    }
+  }
+
+  if (color >= 0 && st == 200) {
+    bool has_color = (zp->cluster_flags & ZBEE_CL_COLOR) ||
+                     zp->device_type_override == 4;
+    if (!has_color) return 400;
+    char valbuf[16];
+    if (zp->ep_color > 0) {
+      snprintf(valbuf, sizeof(valbuf), "%ld", color);
+      st = zbee_send_ep_status(zp->zbee_ieee, zp->zbee_endpoint,
+                               zp->ep_color, valbuf);
+    } else {
+      snprintf(valbuf, sizeof(valbuf), "#%06lX",
+               (unsigned long)(color & 0xFFFFFF));
+      st = zbee_send_cmd_status(zp->zbee_ieee, zp->zbee_endpoint, 768,
+                                0x0007 /* Move to Color */, valbuf);
+    }
+    if (st == 200) {
+      zp->color_hex = (uint32_t)color;
+      mark_slice_dirty(&g_ver_zigbee);
+    }
+  }
+  return st;
+}
+
+/* Уставка/включение PID-слота. id — 1..PID_MAX_SLOTS. */
+int cmd_pid_exec(int id, bool has_sp, double sp, bool has_on, int on) {
+  int slot = id - 1;
+  if (slot < 0 || slot >= PID_MAX_SLOTS) return 400;
+  if (PidConf[slot].pwm_pin_id == 0) return 400; /* слот не настроен */
+  if (PidConf[slot].tune_state == PID_TUNE_STEP ||
+      PidConf[slot].tune_state == PID_TUNE_BIAS) {
+    return 409; /* идёт автотюн */
+  }
+  if (has_sp) {
+    double lo = PidConf[slot].temp_min, hi = PidConf[slot].temp_max;
+    if (hi > lo && (sp < lo || sp > hi)) return 400;
+    PidConf[slot].tmpset = (float)sp;
+  }
+  if (has_on) PidConf[slot].onoff = on ? 1 : 0;
+  mark_slice_dirty(&g_ver_pid);
+  remote_defer_save(6); /* сохранение PID-слотов на USB */
+  if (my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
+  return 200;
+}
+
+/* Охрана: id == 0 — главная карточка (GPS/режим), иначе строка датчика
+ * (физический пин topin == 10 или Zigbee PIR). */
+int cmd_security_exec(int id, int on) {
+  if (id == 0) {
+    PinsConf[1].onoff = on ? 1 : 0; /* PA3 — главный выключатель охраны */
+    mark_slice_dirty(&g_ver_security);
+    remote_defer_save(1);
+    return 200;
+  }
+  if (IsZigbeePin(id)) {
+    int zbi = ZbeeIdx(id);
+    if (!zbee_is_pir(&ZigbeeConf[zbi])) return 400;
+    ZigbeeConf[zbi].onoff = on ? 1 : 0;
+    mark_slice_dirty(&g_ver_security);
+    remote_defer_save(7); /* сохранение ZigbeeConf на USB */
+    return 200;
+  }
+  if (IsPinId(id)) {
+    int idx = PinIdxFromId(id);
+    if (PinsConf[idx].topin != 10) return 400;
+    PinsConf[idx].onoff = on ? 1 : 0;
+    mark_slice_dirty(&g_ver_security);
+    remote_defer_save(1);
+    return 200;
+  }
+  return 400;
+}
+
+/* ── ETag состояния пульта ── FNV-1a по всему, что видно на странице:
+ * язык, физ. пины, связи, Zigbee, PID-слоты и датчики. Считается на лету,
+ * новых буферов и выделений памяти нет. */
+static uint32_t remote_fnv(uint32_t h, const void *p, size_t n) {
+  const uint8_t *b = (const uint8_t *)p;
+  while (n--) {
+    h ^= *b++;
+    h *= 16777619u;
+  }
+  return h;
+}
+
+static uint32_t remote_fnv_u32(uint32_t h, uint32_t v) {
+  return remote_fnv(h, &v, sizeof(v));
+}
+
+static uint32_t remote_fnv_str(uint32_t h, const char *s, size_t max) {
+  if (s == NULL) s = "";
+  size_t n = 0;
+  while (n < max && s[n]) n++;
+  h = remote_fnv(h, s, n);
+  const uint8_t sep = 0;
+  return remote_fnv(h, &sep, 1);
+}
+
+static uint32_t remote_fnv_f(uint32_t h, float f) {
+  /* Нормализуем "-0.0" и NaN-подобные значения не нужны: биты enough */
+  return remote_fnv(h, &f, sizeof(f));
+}
+
+uint32_t remote_state_hash(void) {
+  uint32_t h = 2166136261u;
+  h = remote_fnv_str(h, SetSettings.lang, sizeof(SetSettings.lang));
+  for (int i = 0; i < NUMPIN; i++) {
+    const struct dbPinsConf *p = &PinsConf[i];
+    h = remote_fnv_u32(h, p->topin);
+    h = remote_fnv_u32(h, p->onoff);
+    h = remote_fnv_u32(h, p->state);
+    h = remote_fnv_u32(h, (uint32_t)p->dvalue);
+    h = remote_fnv_str(h, p->info, sizeof(p->info));
+    if (p->topin == 1 || p->topin == 10) {
+      h = remote_fnv_str(h, p->sclick, sizeof(p->sclick));
+      h = remote_fnv_str(h, p->dclick, sizeof(p->dclick));
+      h = remote_fnv_str(h, p->lpress, sizeof(p->lpress));
+    }
+  }
+  for (int a = 0; a < NUMPINLINKS; a++) {
+    h = remote_fnv_u32(h, (uint32_t)PinsLinks[a].idin);
+    h = remote_fnv_u32(h, (uint32_t)PinsLinks[a].idout);
+  }
+  for (int i = 0; i < NUMZBEE; i++) {
+    const ZigbeeVirtualPin *z = &ZigbeeConf[i];
+    if (z->zbee_ieee[0] == '\0') continue;
+    h = remote_fnv_u32(h, z->zbee_role);
+    h = remote_fnv_u32(h, z->state);
+    h = remote_fnv_u32(h, (uint32_t)z->dvalue);
+    h = remote_fnv_u32(h, z->color_hex);
+    h = remote_fnv_u32(h, z->onoff);
+    h = remote_fnv_u32(h, z->device_type_override);
+    h = remote_fnv_u32(h, z->cluster_flags);
+    h = remote_fnv_u32(h, z->dimmer_min);
+    h = remote_fnv_u32(h, z->dimmer_max);
+    h = remote_fnv_str(h, z->zbee_label, sizeof(z->zbee_label));
+    h = remote_fnv_str(h, zbee_action_sclick(i), 125);
+    h = remote_fnv_str(h, zbee_action_dclick(i), 125);
+    h = remote_fnv_str(h, zbee_action_lpress(i), 125);
+  }
+  for (int i = 0; i < PID_MAX_SLOTS; i++) {
+    const dbPidConf *pp = &PidConf[i];
+    if (pp->pwm_pin_id == 0) continue;
+    h = remote_fnv_u32(h, pp->pwm_pin_id);
+    h = remote_fnv_u32(h, (uint32_t)pp->selsens);
+    h = remote_fnv_u32(h, pp->onoff);
+    h = remote_fnv_u32(h, (uint32_t)pp->tune_state);
+    h = remote_fnv_f(h, pp->tmpset);
+    h = remote_fnv_f(h, pp->tmpcur);
+    h = remote_fnv_str(h, pp->info, sizeof(pp->info));
+  }
+  for (int i = 0; i < MAX_DS18B20_P; i++) {
+    if (ds18b20[i].typsensr != 1 || ds18b20[i].id == 0) continue;
+    int n = ds18b20[i].numsens;
+    if (n > MAX_DS18B20_PER_PIN) n = MAX_DS18B20_PER_PIN;
+    for (int k = 0; k < n; k++) {
+      h = remote_fnv_u32(h, ds18b20[i].sensors[k].valid ? 1u : 0u);
+      h = remote_fnv_f(h, ds18b20[i].sensors[k].temp);
+      h = remote_fnv_str(h, ds18b20[i].sensors[k].info,
+                         sizeof(ds18b20[i].sensors[k].info));
+    }
+  }
+  for (int i = 0; i < MAX_DHT22_P; i++) {
+    if (dht22 == NULL || dht22[i].typsensr != 2 || dht22[i].id == 0) continue;
+    h = remote_fnv_u32(h, dht22[i].valid ? 1u : 0u);
+    h = remote_fnv_f(h, dht22[i].temp);
+    h = remote_fnv_f(h, dht22[i].humid);
+    h = remote_fnv_str(h, dht22[i].info, sizeof(dht22[i].info));
+  }
+  return h ? h : 1u; /* 0 зарезервирован "нет данных" */
+}
+
 void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
   char id_str[10], value_str[10], token[11];
   int id = -1, value = -1;
@@ -4663,16 +4997,21 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
         int pin_idx = id - 1;
         if (strncmp(command, "switch", cmdlen) == 0) {
           if (PinsConf[pin_idx].topin == 3) { // SWITCH
-            /* Master Enable: если onoff == 0, отклоняем API-команду */
-            if (PinsConf[pin_idx].onoff == 0) {
-              mg_http_reply(c, 403, "Content-Type: text/plain\r\n",
-                            "Switch %d DISABLED (master off)\n", id);
-            } else if (mg_http_get_var(&hm->query, "state", value_str,
+            if (mg_http_get_var(&hm->query, "state", value_str,
                                 sizeof(value_str)) > 0) {
               value = atoi(value_str);
-              processPins(id, value);
-              mg_http_reply(c, 200, "Content-Type: text/plain\r\n",
-                            "Switch %d set to %d\n", id, value);
+              /* Общая функция команд: используется и пультом /api/remote/cmd */
+              int st = cmd_switch_exec(id, value);
+              if (st == 403) {
+                mg_http_reply(c, 403, "Content-Type: text/plain\r\n",
+                              "Switch %d DISABLED (master off)\n", id);
+              } else if (st != 200) {
+                mg_http_reply(c, 400, NULL,
+                              "Error, switch with id = %d doesn't exist!\n", id);
+              } else {
+                mg_http_reply(c, 200, "Content-Type: text/plain\r\n",
+                              "Switch %d set to %d\n", id, value);
+              }
             } else {
               mg_http_reply(c, 400, NULL, "Missing state parameter\n");
             }
@@ -4682,50 +5021,27 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
           }
         } else if (strncmp(command, "button", cmdlen) == 0) {
           if (PinsConf[pin_idx].topin == 1) { // BUTTON
-            // Проверяем наличие параметров в URL
-            if (strstr(full_uri, "single_click") != NULL) {
-              if (strlen(PinsConf[pin_idx].sclick) > 0) {
-                printf("Executing single click actions: '%s'\n",
-                       PinsConf[pin_idx].sclick);
-                action_handler((uint16_t)id, PinsConf[pin_idx].sclick, "SC");
-                mg_http_reply(
-                    c, 200, "Content-Type: text/plain\r\n",
-                    "Button %d: The 'SINGLE CLICK' action was performed!\r\n",
-                    id);
-              } else {
-                mg_http_reply(c, 400, NULL,
-                              "No single click actions configured\n");
-              }
-            } else if (strstr(full_uri, "double_click") != NULL) {
-              if (strlen(PinsConf[pin_idx].dclick) > 0) {
-                printf("Executing double click actions: '%s'\n",
-                       PinsConf[pin_idx].dclick);
-                action_handler((uint16_t)id, PinsConf[pin_idx].dclick, "DC");
-                mg_http_reply(
-                    c, 200, "Content-Type: text/plain\r\n",
-                    "Button %d: The 'DOUBLE CLICK' action was performed!\r\n",
-                    id);
-              } else {
-                mg_http_reply(c, 400, NULL,
-                              "No double click actions configured\n");
-              }
-            } else if (strstr(full_uri, "long_press") != NULL) {
-              if (strlen(PinsConf[pin_idx].lpress) > 0) {
-                printf("Executing long press actions: '%s'\n",
-                       PinsConf[pin_idx].lpress);
-                action_handler((uint16_t)id, PinsConf[pin_idx].lpress, "LP");
-                mg_http_reply(
-                    c, 200, "Content-Type: text/plain\r\n",
-                    "Button %d: The 'LONG PRESS' action was performed!\r\n",
-                    id);
-              } else {
-                mg_http_reply(c, 400, NULL,
-                              "No long press actions configured\n");
-              }
-            } else {
+            int which = strstr(full_uri, "single_click") ? 0
+                      : strstr(full_uri, "double_click") ? 1
+                      : strstr(full_uri, "long_press")  ? 2 : -1;
+            const char *which_name = (which == 0) ? "SINGLE CLICK"
+                                   : (which == 1) ? "DOUBLE CLICK"
+                                   : (which == 2) ? "LONG PRESS" : NULL;
+            if (which_name == NULL) {
               mg_http_reply(c, 400, NULL,
                             "Missing click type parameter "
                             "(single_click/double_click/long_press)\n");
+            } else {
+              int st = cmd_button_exec(id, which);
+              if (st == 200) {
+                mg_http_reply(c, 200, "Content-Type: text/plain\r\n",
+                              "Button %d: The '%s' action was performed!\r\n",
+                              id, which_name);
+              } else {
+                mg_http_reply(c, 400, NULL, "No %s actions configured\n",
+                              (which == 0) ? "single click"
+                              : (which == 1) ? "double click" : "long press");
+              }
             }
           } else {
             mg_http_reply(c, 400, NULL,
@@ -4733,27 +5049,31 @@ void api_handler(struct mg_connection *c, struct mg_http_message *hm) {
           }
         } else if (strncmp(command, "pwm", cmdlen) == 0) {
           if (PinsConf[pin_idx].topin == 5) { // PWM
-            if (is_pin_in_autotune(pin_idx)) { /* AutoTune lock */
-              mg_http_reply(c, 409, "Content-Type: text/plain\r\n",
-                            "PWM %d locked by AutoTune\n", id);
-            } else if (mg_http_get_var(&hm->query, "dvalue", value_str,
+            if (mg_http_get_var(&hm->query, "dvalue", value_str,
                                 sizeof(value_str)) > 0) {
               value = atoi(value_str);
               if (value < 0)
                 value = 0;
               if (value > 100)
                 value = 100;
-              PinsConf[pin_idx].dvalue = value;
-              uint32_t pulse_web = pwm_gate_open((uint8_t)pin_idx)
-                  ? (uint32_t)((uint64_t)value * PinsConf[pin_idx].pwmmax / 100ULL)
-                  : 0;
-              __HAL_TIM_SET_COMPARE(&htim[pin_idx], PinsInfo[pin_idx].tim_channel,
-                                    pulse_web);
-              printf("PWM WEB [%d] %s: %d%% = %lu steps\r\n", id,
-                     PinsInfo[pin_idx].pins, value, (unsigned long)pulse_web);
-              mg_http_reply(c, 200, "Content-Type: text/plain\r\n",
-                            "PWM %d set to %d%% (%lu steps)\n", id, value,
-                            (unsigned long)pulse_web);
+              /* Общая функция команд: clamp + AutoTune lock + запись CCR */
+              int st = cmd_pwm_exec(id, value);
+              if (st == 409) {
+                mg_http_reply(c, 409, "Content-Type: text/plain\r\n",
+                              "PWM %d locked by AutoTune\n", id);
+              } else if (st != 200) {
+                mg_http_reply(c, 400, NULL,
+                              "Error, pwm with id = %d doesn't exist!\n", id);
+              } else {
+                uint32_t pulse_web = pwm_gate_open((uint8_t)pin_idx)
+                    ? (uint32_t)((uint64_t)value * PinsConf[pin_idx].pwmmax / 100ULL)
+                    : 0;
+                printf("PWM WEB [%d] %s: %d%% = %lu steps\r\n", id,
+                       PinsInfo[pin_idx].pins, value, (unsigned long)pulse_web);
+                mg_http_reply(c, 200, "Content-Type: text/plain\r\n",
+                              "PWM %d set to %d%% (%lu steps)\n", id, value,
+                              (unsigned long)pulse_web);
+              }
             } else {
               mg_http_reply(c, 400, NULL, "Missing dvalue parameter for pwm\n");
             }
@@ -7682,9 +8002,13 @@ void handle_zigbee_learn_stop(struct mg_connection *c, struct mg_http_message *h
                   "{\"status\":true}");
 }
 
-void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
-                       uint16_t cluster, uint8_t attribute,
-                       const char *json_cmd) {
+/* Статус отправки команды Zigbee: 200 — отправлена, 429 — throttle,
+ * 503 — очередь команд полна, 400 — слот не найден. SendZigbeeCommand /
+ * SendZigbeeEPCommand сохраняют прежний void-интерфейс; статус нужен пульту
+ * (/api/remote/cmd), чтобы вернуть клиенту 429/503 по ТЗ. */
+static int zbee_send_cmd_status(const char *zbee_ieee, uint8_t endpoint,
+                                uint16_t cluster, uint8_t attribute,
+                                const char *json_cmd) {
     extern osMessageQueueId_t zbeeCmdQueueHandle;
 
     int zbee_idx = -1;
@@ -7701,11 +8025,13 @@ void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
 
     if (zbee_idx < 0) {
         LOG_Z2M("zbee: NO MATCH for %s/%d\r\n", zbee_ieee, endpoint);
-        return;
+        return 400;
     }
 
     if (!zbee_cmd_throttle_ok(zbee_idx)) {
-        return;
+        LOG_Z2M("zbee: throttled cmd ieee=%s cl=%u attr=%u val='%s'\r\n",
+                zbee_ieee, (unsigned) cluster, (unsigned) attribute, json_cmd);
+        return 429;
     }
 
     char set_topic[80];
@@ -7727,13 +8053,21 @@ void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
 
     if (xQueueSend(zbeeCmdQueueHandle, &cmd, 0) != pdPASS) {
         LOG_Z2M("zbee: QUEUE FULL topic='%s'\r\n", set_topic);
-    } else {
-        LOG_Z2M("zbee: QUEUED topic='%s' payload='%s'\r\n", set_topic, json_cmd);
+        return 503;
     }
+    LOG_Z2M("zbee: QUEUED topic='%s' payload='%s'\r\n", set_topic, json_cmd);
+    return 200;
 }
 
-void SendZigbeeEPCommand(const char *zbee_ieee, uint8_t endpoint,
-                           uint16_t dp, const char *val) {
+void SendZigbeeCommand(const char *zbee_ieee, uint8_t endpoint,
+                       uint16_t cluster, uint8_t attribute,
+                       const char *json_cmd) {
+    (void)zbee_send_cmd_status(zbee_ieee, endpoint, cluster, attribute,
+                               json_cmd);
+}
+
+static int zbee_send_ep_status(const char *zbee_ieee, uint8_t endpoint,
+                               uint16_t dp, const char *val) {
     extern osMessageQueueId_t zbeeCmdQueueHandle;
 
     char set_topic[80];
@@ -7743,8 +8077,7 @@ void SendZigbeeEPCommand(const char *zbee_ieee, uint8_t endpoint,
 
     /* Формируем JSON payload для multi-EP */
     char json_payload[64];
-    snprintf(json_payload, sizeof(json_payload),
-             "{\"value\":%s}", val);
+    snprintf(json_payload, sizeof(json_payload), "{\"value\":%s}", val);
 
     ZbeeCmdMsg_t cmd;
     memset(&cmd, 0, sizeof(cmd));
@@ -7753,9 +8086,16 @@ void SendZigbeeEPCommand(const char *zbee_ieee, uint8_t endpoint,
 
     if (xQueueSend(zbeeCmdQueueHandle, &cmd, 0) != pdPASS) {
         LOG_Z2M("zbee: QUEUE FULL ep topic='%s'\r\n", set_topic);
-    } else {
-        LOG_Z2M("zbee: QUEUED ep topic='%s' payload='%s'\r\n", set_topic, json_payload);
+        return 503;
     }
+    LOG_Z2M("zbee: QUEUED ep topic='%s' payload='%s'\r\n", set_topic,
+            json_payload);
+    return 200;
+}
+
+void SendZigbeeEPCommand(const char *zbee_ieee, uint8_t endpoint,
+                           uint16_t dp, const char *val) {
+    (void)zbee_send_ep_status(zbee_ieee, endpoint, dp, val);
 }
 
 void mqtt_message_handler(const char *topic, const char *payload) {
@@ -7964,71 +8304,19 @@ void mqtt_message_handler(const char *topic, const char *payload) {
   }
 }
 
-void action_handler(uint16_t button_id, const char *action_str,
-                    const char *press_type) {
-  if (action_str == NULL || strlen(action_str) == 0 ||
-      strcmp(action_str, "None") == 0) {
-    return;
-  }
-  /* Используем стековый буфер вместо strdup (malloc) — макс. 125 байт из db.h
-   */
-  char str_buf[128];
-  size_t slen = strlen(action_str);
-  if (slen >= sizeof(str_buf))
-    slen = sizeof(str_buf) - 1;
-  memcpy(str_buf, action_str, slen);
-  str_buf[slen] = '\0';
-  char *str = str_buf;
-  char *saveptr = NULL;
-  char *token = strtok_r(str, ",", &saveptr);
-  while (token != NULL) {
-    /* Дополнительное условие срабатывания: "5:1?D2&DV3>50".
-     * Разбираем ДО поиска '.', т.к. условие может содержать точку (T5.2). */
-    const char *cond = NULL;
-    {
-      char *qmark = strchr(token, '?');
-      if (qmark != NULL) {
-        *qmark = '\0';
-        cond = qmark + 1;
-      }
-    }
-    if (cond != NULL && !cond_eval(cond)) {
-      /* Условие ложно - пропускаем это действие */
-      token = strtok_r(NULL, ",", &saveptr);
-      continue;
-    }
-    int id = 0;
-    int action = 0;
-    int sub_idx = 0;
-    /* Поддержка формата: 6:1, 93:2, 93.1:2 (sub-index для Zigbee триггеров) */
-    int dot_pos = -1;
-    for (int k = 0; token[k]; k++) {
-      if (token[k] == '.') { dot_pos = k; break; }
-    }
-    if (dot_pos >= 0) {
-      /* Есть десятичная часть: 93.1:2 */
-      token[dot_pos] = '\0';
-      id = atoi(token);
-      token[dot_pos] = '.';
-      sub_idx = atoi(token + dot_pos + 1);
-      char *colon = strchr(token + dot_pos, ':');
-      if (colon) {
-        action = atoi(colon + 1);
-      }
-    } else {
-      int result = sscanf(token, "%d:%d", &id, &action);
-      if (result != 2) {
-        token = strtok_r(NULL, ",", &saveptr);
-        continue;
-      }
-    }
+/* ─── Разбор строки действий ───
+ * Формат токена: "id:action" | "id.sub:action", опционально "id:action?cond".
+ * Один и тот же обход выполняет action_handler (реальное действие) и сборка
+ * ответа пульта /api/state/remote (только список целей, без выполнения и без
+ * проверки условий). */
+struct action_exec_ctx {
+  const char *press_type;
+};
 
-    if (action < 0 || action > 2) {
-      token = strtok_r(NULL, ",", &saveptr);
-      continue;
-    }
+static void action_exec_one(int id, int sub_idx, int action, void *vctx) {
+  const char *press_type = ((struct action_exec_ctx *)vctx)->press_type;
 
-      switch (action) {
+        switch (action) {
       case 0:
       case 1:
       case 2:
@@ -8216,10 +8504,86 @@ void action_handler(uint16_t button_id, const char *action_str,
         printf("Unknown action %d for ID %d\n", action, id);
         break;
       }
+}
+
+int action_str_walk(const char *action_str, action_tok_cb cb, void *ctx,
+                    bool eval_cond) {
+  if (action_str == NULL || action_str[0] == '\0' ||
+      strcmp(action_str, "None") == 0) {
+    return 0;
+  }
+  /* Используем стековый буфер вместо strdup (malloc) — макс. 125 байт из db.h
+   */
+  char str_buf[128];
+  size_t slen = strlen(action_str);
+  if (slen >= sizeof(str_buf))
+    slen = sizeof(str_buf) - 1;
+  memcpy(str_buf, action_str, slen);
+  str_buf[slen] = '\0';
+  char *saveptr = NULL;
+  int found = 0;
+  char *token = strtok_r(str_buf, ",", &saveptr);
+  while (token != NULL) {
+    /* Дополнительное условие срабатывания: "5:1?D2&DV3>50".
+     * Разбираем ДО поиска '.', т.к. условие может содержать точку (T5.2). */
+    const char *cond = NULL;
+    {
+      char *qmark = strchr(token, '?');
+      if (qmark != NULL) {
+        *qmark = '\0';
+        cond = qmark + 1;
+      }
+    }
+    if (eval_cond && cond != NULL && !cond_eval(cond)) {
+      /* Условие ложно - пропускаем это действие */
+      token = strtok_r(NULL, ",", &saveptr);
+      continue;
+    }
+    int id = 0;
+    int action = 0;
+    int sub_idx = 0;
+    /* Поддержка формата: 6:1, 93:2, 93.1:2 (sub-index для Zigbee триггеров) */
+    int dot_pos = -1;
+    for (int k = 0; token[k]; k++) {
+      if (token[k] == '.') { dot_pos = k; break; }
+    }
+    if (dot_pos >= 0) {
+      /* Есть десятичная часть: 93.1:2 */
+      token[dot_pos] = '\0';
+      id = atoi(token);
+      token[dot_pos] = '.';
+      sub_idx = atoi(token + dot_pos + 1);
+      char *colon = strchr(token + dot_pos, ':');
+      if (colon) {
+        action = atoi(colon + 1);
+      }
+    } else {
+      int result = sscanf(token, "%d:%d", &id, &action);
+      if (result != 2) {
+        token = strtok_r(NULL, ",", &saveptr);
+        continue;
+      }
+    }
+
+    if (action < 0 || action > 2) {
+      token = strtok_r(NULL, ",", &saveptr);
+      continue;
+    }
+
+    if (cb != NULL)
+      cb(id, sub_idx, action, ctx);
+    found++;
     token = strtok_r(NULL, ",", &saveptr);
   }
-  //    printf("Finished processing %s actions for button %d\n", press_type,
-  //    button_id);
+  return found;
+}
+
+void action_handler(uint16_t button_id, const char *action_str,
+                    const char *press_type) {
+  struct action_exec_ctx ctx;
+  ctx.press_type = press_type;
+  action_str_walk(action_str, action_exec_one, &ctx, true);
+  (void)button_id;
 }
 /****************************** Sunrise/Sunset
  * *******************************/
@@ -8314,7 +8678,23 @@ void Check_SunriseSunset_Actions() {
     //    printf("DEBUG: Sunset actions are disabled \r\n");
   }
 }
+static void processPins_core(uint16_t i, uint8_t action);
+
 void processPins(uint16_t i, uint8_t action) {
+  if (IsZigbeePin(i)) {
+    int links = 0;
+    for (int a = 0; a < NUMPINLINKS; a++) {
+      if (PinsLinks[a].idin == i) { links++; break; }
+    }
+    if (links == 0) {
+      LOG_Z2M("processPins id=%u action=%u: no links in pintopin\r\n",
+              (unsigned) i, (unsigned) action);
+    }
+  }
+  processPins_core(i, action);
+}
+
+static void processPins_core(uint16_t i, uint8_t action) {
   // Защита от OOB-доступа к PinsConf[] (ZIGBEE PLAN B)
   if (i >= 1 && i <= NUMPIN) {
     if (PinsConf[i - 1].onoff == 0) {

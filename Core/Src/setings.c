@@ -12,6 +12,7 @@
 #include "fatfs.h"
 #include "logger.h"
 #include "main.h"
+#include "mqtt_server.h"
 #include "multi_button.h"
 #include "usb_host.h"
 #include "zagotovka.h"
@@ -3801,7 +3802,11 @@ void SetLastState(void) {
 
 /* ---- Zigbee: применение режима после подключения к MQTT (пачками, чтобы не
  * переполнить outputQueue) ---- */
-#define PONR_ZB_DELAY_MS   15000u  /* пауза после подключения к MQTT */
+#define PONR_ZB_DELAY_MS    15000u  /* пауза после подключения к внешнему MQTT-брокеру */
+#define PONR_ZB_DELAY_GW_MS 2000u   /* пауза после подключения шлюза к встроенному брокеру
+                                     * (нужна, чтобы шлюз успел подписаться на cmd) */
+#define PONR_ZB_FALLBACK_MS 60000u  /* если шлюз не опознан по system_control, но какой-то
+                                     * клиент к брокеру подключён - применяем после этого времени */
 #define PONR_ZB_BATCH      8       /* слотов за один шаг (шаг - раз в секунду) */
 #define PONR_ZB_TRACK_MS   8000u   /* пауза перед отслеживанием state Zigbee */
 
@@ -3956,15 +3961,35 @@ void ponr_poll(void) {
   ponr_try_write(now);
 
 
-  /* Zigbee: режим применяется один раз после подключения к MQTT */
+  /* Zigbee: режим применяется один раз, когда есть кому принять команду:
+   * внешний MQTT-брокер подключён, либо к встроенному брокеру подключился шлюз.
+   * Состояние брокера читаем из снимка (обновляется в WebServerTask), а не из
+   * таблицы клиентов напрямую: ponr_poll работает в InputTask. */
   if (!s_zb_applied) {
-    bool link = mqtt_connected_reported || (SetSettings.check_mqtt_srv == 1);
-    if (!link) {
+    static bool s_zb_logged_wait = false;
+    static bool s_zb_logged_apply = false;
+    bool ext_link = mqtt_connected_reported;
+    bool gw_link  = (SetSettings.check_mqtt_srv == 1) &&
+                    (mqtt_server_slzb_connected_cached() ||
+                     (mqtt_server_clients_cached() > 0 && now > PONR_ZB_FALLBACK_MS));
+    uint32_t zb_delay = ext_link ? PONR_ZB_DELAY_MS : PONR_ZB_DELAY_GW_MS;
+
+    if (!(ext_link || gw_link)) {
       s_zb_wait = false;
+      if (!s_zb_logged_wait) {
+        s_zb_logged_wait = true;
+        LOG_Z2M("ponr: waiting for Zigbee gateway before applying power-on state\r\n");
+      }
     } else if (!s_zb_wait) {
       s_zb_wait = true;
       s_zb_wait_tick = now;
-    } else if ((uint32_t)(now - s_zb_wait_tick) >= PONR_ZB_DELAY_MS) {
+      LOG_Z2M("ponr: Zigbee link up (%s), applying power-on state in %lu ms\r\n",
+              ext_link ? "external MQTT" : "gateway", (unsigned long) zb_delay);
+    } else if ((uint32_t)(now - s_zb_wait_tick) >= zb_delay) {
+      if (!s_zb_logged_apply) {
+        s_zb_logged_apply = true;
+        LOG_Z2M("ponr: applying Zigbee power-on state now\r\n");
+      }
       ponr_apply_zigbee_step();
     }
   }

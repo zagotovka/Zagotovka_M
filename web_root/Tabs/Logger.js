@@ -152,32 +152,14 @@ const LOGGER_HELP = {
 
       <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">Примеры из жизни: что лог расскажет за минуту</h2>
-        <p class="mb-2">Четыре истории о том, как «дневник» контроллера превращает догадки в факты.</p>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-violet-300">
-          <p class="text-lg font-bold text-black mb-1">SMS ушла, а свет не зажёгся</p>
-          <p class="mb-1">Вы отправили команду, подождали, ещё подождали. Ничего. В голове уже три версии, и все плохие.</p>
-          <p class="mb-1">Спокойно! На <b>Global Settings</b> оставьте в <b>Фильтре логов</b> категорию <b>GSM</b>, отправьте SMS <code>${'30#SC*#'}</code> ещё раз и нажмите <b>Пауза</b>. В строках <code>${'[GSM]'}</code> видно, какие команды устройство разобрало и какие отвергло как неверные. Через минуту вы знаете, где потерялась команда: в SMS или в устройстве.</p>
-        </div>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-violet-300">
-          <p class="text-lg font-bold text-black mb-1">Zigbee-лампа молчит</p>
-          <p class="mb-1">Лампа не реагирует, и непонятно, кто виноват: лампа, Zigbee или MQTT.</p>
-          <p class="mb-1">Спокойно! Оставьте категорию <b>Z2M</b>, нажмите кнопку управления лампой (ID 93, номер условный) и посмотрите строки <code>${'[Z2M]'}</code>. По ним видно, опубликовало ли устройство команду в MQTT или отбросило её. Вы сразу понимаете, с какой стороны искать неполадку.</p>
-        </div>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-violet-300">
-          <p class="text-lg font-bold text-black mb-1">Сбой, который не любит свидетелей</p>
-          <p class="mb-1">Раз в день что-то идёт не так, а стоит сесть и посмотреть, как всё работает идеально. Знакомо?</p>
-          <p class="mb-1">Спокойно! Оставьте эту страницу открытой на экране. Когда сбой случится, сразу нажмите <b>Пауза</b>: последние около 4000 символов лога перед вами. Выделите, скопируйте и сохраните, чтобы разобрать на свежую голову или показать автору проекта.</p>
-        </div>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-violet-300">
-          <p class="text-lg font-bold text-black mb-1">Лог молчит. Устройство зависло?</p>
-          <p class="mb-1">Окно пустое, надпись об ожидании данных не исчезает. Сердце ёкнуло: неужели контроллер завис?</p>
-          <p class="mb-1">Спокойно! Скорее всего, категории просто выключены. Откройте <b>Global Settings</b>, блок <b>Фильтр логов</b>, и нажмите <b>Включить все</b>. Строки вернутся сразу, без перезагрузки.</p>
-        </div>
-      </section>
+<p class="mb-2">ID и номера условные.</p>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>SMS ушла, а свет не зажёгся.</b> В <b>Фильтре логов</b> Global Settings оставьте категорию <b>GSM</b>, повторите SMS <code>${'30#SC*#'}</code> и нажмите <b>Пауза</b>: строки <code>${'[GSM]'}</code> покажут, какие команды разобраны, а какие отвергнуты.</li>
+<li><b>Zigbee-лампа молчит.</b> Оставьте категорию <b>Z2M</b>, нажмите кнопку лампы (ID 93) и смотрите строки <code>${'[Z2M]'}</code>: видно, ушла ли команда в MQTT.</li>
+<li><b>Сбой без свидетелей.</b> Держите страницу открытой и сразу после сбоя нажмите <b>Пауза</b>: последние около 4000 символов лога можно скопировать и сохранить.</li>
+<li><b>Лог пуст.</b> Скорее всего, категории выключены: <b>Global Settings</b>, <b>Фильтр логов</b>, <b>Включить все</b>.</li>
+</ul>
+</section>
 
       <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">Лимиты и пропуски</h2>
@@ -371,32 +353,14 @@ const LOGGER_HELP = {
 
       <section class="rounded-2xl border-2 bg-violet-50 border-violet-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">Real-life examples: what the log tells you in a minute</h2>
-        <p class="mb-2">Four stories about how the diary of the controller turns guesses into facts.</p>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-violet-300">
-          <p class="text-lg font-bold text-black mb-1">The SMS went out, but the light stayed off</p>
-          <p class="mb-1">You sent the command, waited, waited some more. Nothing. Three theories are already in your head, and all of them are bad.</p>
-          <p class="mb-1">Stay calm! On <b>Global Settings</b>, keep only the <b>GSM</b> category in the <b>Log Filter</b>, send the SMS <code>${'30#SC*#'}</code> again and click <b>Pause</b>. The <code>${'[GSM]'}</code> lines show which commands the device parsed and which it rejected as invalid. In a minute you know where the command got lost: in the SMS or in the device.</p>
-        </div>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-violet-300">
-          <p class="text-lg font-bold text-black mb-1">The Zigbee lamp is silent</p>
-          <p class="mb-1">The lamp does not react, and it is unclear who is to blame: the lamp, Zigbee or MQTT.</p>
-          <p class="mb-1">Stay calm! Keep the <b>Z2M</b> category, press the control button of the lamp (ID 93, the number is just an example) and look at the <code>${'[Z2M]'}</code> lines. They show whether the device published the command to MQTT or dropped it. You immediately know which side to investigate.</p>
-        </div>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-violet-300">
-          <p class="text-lg font-bold text-black mb-1">The glitch that hates witnesses</p>
-          <p class="mb-1">Once a day something goes wrong, but as soon as you sit down to watch, everything works perfectly. Sounds familiar?</p>
-          <p class="mb-1">Stay calm! Keep this page open on the screen. When the glitch happens, click <b>Pause</b> right away: the last ~4000 characters of the log are in front of you. Select, copy and save them to study later with a fresh head or to show the project author.</p>
-        </div>
-
-        <div class="p-4 rounded-xl bg-white/80 border border-violet-300">
-          <p class="text-lg font-bold text-black mb-1">The log is silent. Did the device freeze?</p>
-          <p class="mb-1">The window is empty, and the waiting-for-data message will not go away. Your heart skips a beat: has the controller frozen?</p>
-          <p class="mb-1">Stay calm! Most likely the categories are simply switched off. Open <b>Global Settings</b>, the <b>Log Filter</b> block, and click <b>Enable All</b>. The lines come back at once, no reboot needed.</p>
-        </div>
-      </section>
+<p class="mb-2">IDs and numbers are made up.</p>
+<ul class="list-disc ml-6 space-y-1">
+<li><b>SMS sent, light did not come on.</b> In <b>Log Filter</b> on Global Settings keep the <b>GSM</b> category, send SMS <code>${'30#SC*#'}</code> again and press <b>Pause</b>: the <code>${'[GSM]'}</code> lines show which commands were parsed and which were rejected.</li>
+<li><b>Zigbee lamp is silent.</b> Keep the <b>Z2M</b> category, press the lamp button (ID 93) and read the <code>${'[Z2M]'}</code> lines: they show whether the command reached MQTT.</li>
+<li><b>A failure that avoids witnesses.</b> Keep this page open and press <b>Pause</b> right after the failure: the last ~4000 characters of the log can be copied and saved.</li>
+<li><b>The log is empty.</b> Most likely the categories are off: <b>Global Settings</b>, <b>Log Filter</b>, <b>Enable All</b>.</li>
+</ul>
+</section>
 
       <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
         <h2 class="text-xl font-bold text-black">Limits and gaps</h2>

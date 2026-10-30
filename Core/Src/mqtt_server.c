@@ -559,7 +559,25 @@ static void srv_handle_subscribe(struct mg_connection *c,
           int plen = snprintf(pattern, sizeof(pattern), "%s/system_control/", zbtop);
           if (plen > 0 && (size_t) plen <= tlen &&
               memcmp(topic, pattern, (size_t) plen) == 0) {
-            cl->is_slzb = 1;
+              cl->is_slzb = 1;
+              {
+                  char gw_peer[48];
+                  mg_snprintf(gw_peer, sizeof(gw_peer), "%M", mg_print_ip_port, &c->rem);
+                  LOG_Z2M("gateway: SLZB CONNECTED peer=%s, keepalive=%us, t=%lu ms after boot\r\n",
+                          gw_peer, (unsigned) cl->keepalive_s, (unsigned long) HAL_GetTick());
+              }
+              /* Шлюз один: старое соединение закрываем, сбросив флаги, чтобы оно
+               * не принимало рассылку и не считалось переподключением шлюза. */
+              for (int ev = 0; ev < MQTT_SRV_MAX_CLIENTS_HARDCAP; ev++) {
+                  MqttSrvClient_t *old = &s_cli[ev];
+                  if (old == cl || old->conn == NULL || old->conn == c) continue;
+                  if (!old->authenticated || !old->is_slzb) continue;
+                  if (old->conn->is_closing) continue;
+                  LOG_Z2M("gateway: stale SLZB connection in slot %d evicted\r\n", ev);
+                  old->authenticated = 0;
+                  old->is_slzb = 0;
+                  old->conn->is_closing = 1;
+              }
             SRV_LOG("[server] slot identified as SLZB (system_control sub)\r\n");
           }
         }
@@ -637,7 +655,29 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
   struct mg_mqtt_message *mm;
 
   switch (ev) {
-    case MG_EV_ACCEPT:
+  case MG_EV_ACCEPT:
+    /* Переподключение шлюза: если с того же IP уже висит опознанный SLZB-слот,
+     * закрываем его ДО проверки бюджета, иначе зависшее соединение занимает
+     * слот до keepalive-таймаута. Текущая попытка всё ещё может быть
+     * отклонена (старое соединение освободится на следующем poll), шлюз
+     * повторит попытку. */
+    if (s_cli != NULL) {
+      char ip_new[48], ip_old[48];
+      mg_snprintf(ip_new, sizeof(ip_new), "%M", mg_print_ip, &c->rem);
+      for (int ev = 0; ev < MQTT_SRV_MAX_CLIENTS_HARDCAP; ev++) {
+        MqttSrvClient_t *old = &s_cli[ev];
+        if (old->conn == NULL || old->conn == c) continue;
+        if (!old->is_slzb || old->conn->is_closing) continue;
+        mg_snprintf(ip_old, sizeof(ip_old), "%M", mg_print_ip, &old->conn->rem);
+        if (strcmp(ip_new, ip_old) == 0) {
+          LOG_Z2M("gateway: stale SLZB slot %d evicted on reconnect from %s\r\n",
+                  ev, ip_new);
+          old->authenticated = 0;
+          old->is_slzb = 0;
+          old->conn->is_closing = 1;
+        }
+      }
+    }
       /* Единый бюджет соединений (net_limits.h): MQTT не занимает последние
        * NET_WEB_RESERVED слотов (web-сессия всегда войдёт) и не принимается
        * при нехватке heap. RST ДО выделения слота - клиент переподключится. */
@@ -828,8 +868,26 @@ void mqtt_server_init(struct mg_mgr *mgr, uint16_t port) {
          (s_ret != NULL) ? MQTT_SRV_RETAIN_SLOTS : 0);
 }
 
+/* Снимок состояния для чтения из других задач (см. mqtt_server_*_cached).
+ * Пишет только mqtt_server_poll() в WebServerTask. */
+static volatile uint8_t s_pub_slzb_up = 0;
+static volatile uint8_t s_pub_clients = 0;
+
 void mqtt_server_poll(void) {
   if (!s_running || s_cli == NULL) return;
+
+  /* Снимок для чтения из других задач (см. mqtt_server_*_cached) */
+  {
+    uint8_t up = 0;
+    for (int k = 0; k < MQTT_SRV_MAX_CLIENTS_HARDCAP; k++) {
+      if (s_cli[k].conn != NULL && s_cli[k].authenticated && s_cli[k].is_slzb) {
+        up = 1;
+        break;
+      }
+    }
+    s_pub_slzb_up = up;
+    s_pub_clients = s_cli_count;
+  }
 
   /* Heartbeat: единственный "регулярный" лог во всём файле. poll()
    * вызывается на каждой итерации WebServerTask (потенциально сотни
@@ -912,6 +970,9 @@ void mqtt_server_publish(const char *topic, const char *payload) {
     mg_mqtt_pub(cl->conn, &o);
   }
 }
+
+uint8_t mqtt_server_slzb_connected_cached(void) { return s_pub_slzb_up; }
+uint8_t mqtt_server_clients_cached(void)        { return s_pub_clients; }
 
 uint8_t mqtt_server_client_count(void) {
   return s_cli_count;
