@@ -494,6 +494,11 @@ html[data-theme="dark"] .rem-wrap {
 .rem-wrap.is-locked .rem-pd-set { opacity: 0.6; }
 .rem-wrap.is-locked .rem-slider-thumb { cursor: not-allowed; }
 
+/* ── Всплывающее уведомление (тост) ──
+ * Цвета инвертируются относительно темы — так же, как подсказки [data-tip]
+ * на странице Select pin(s): светлая тема даёт тёмный фон со светлым
+ * текстом, тёмная — светлый фон с тёмным текстом. На фоне пульта в любой
+ * теме уведомление контрастно и заметно. */
 .rem-toast {
   position: fixed;
   left: 50%;
@@ -503,11 +508,18 @@ html[data-theme="dark"] .rem-wrap {
   max-width: calc(100vw - 32px);
   padding: 10px 16px;
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.92);
-  color: #fff;
+  background: #1a2332;
+  color: #e8f4f8;
+  border: 1px solid rgba(0, 188, 188, 0.35);
   font-size: 13px;
   font-weight: 600;
   text-align: center;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.3);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
   pointer-events: none;
+}
+html[data-theme="dark"] .rem-toast {
+  background: #e6eef4;
+  color: #14202b;
+  border: 1px solid rgba(0, 160, 170, 0.65);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.65);
 }

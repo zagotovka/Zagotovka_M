@@ -9,6 +9,11 @@
  * но callback заменяется на no-op. Это предотвращает cascade abort storm
  * при быстром переключении вкладок.
  *
+ * lastPollActivity(key) — время последнего ответа контроллера по ключу
+ * (2xx/3xx/4xx, включая 304 Not Modified): ответ означает, что связь есть,
+ * даже если callback по data не вызывался. 5xx, таймаут и сетевой отказ
+ * время не обновляют — это реальная потеря связи.
+ *
  * Использование:
  *   import { registerPoll, unregisterPoll } from './pollQueue.js';
  *
@@ -21,6 +26,7 @@
  */
 
 const _registered = new Map();  // key → { url, callback, etag, oneShot, failCount, backoffMs, method, body }
+const _lastResp = new Map();    // key → Date.now() последнего ответа контроллера (код < 500, включая 304)
 let _active = false;
 let _paused = false;
 let _timer = null;
@@ -82,6 +88,18 @@ export function registerPoll(key, url, callback, opts = {}) {
 /** true, если ключ ещё зарегистрирован (после MAX_FAILS ошибок подряд опрос снимается сам). */
 export function isPollActive(key) { return _registered.has(key); }
 
+/**
+ * @param {string} key
+ * @returns {number} Date.now() момента последнего HTTP-ответа по ключу,
+ * 0 — ответов ещё не было.
+ *
+ * Обновляется на ответ контроллера 2xx/3xx/4xx, включая 304 Not Modified
+ * (данные не изменились, но соединение живо). Не обновляется на 5xx (прошивка
+ * вернула ошибку, прокси ответил 502/504 вместо молчащего МК), таймаут и
+ * сетевой отказ — там связь реально потеряна. Запись переживает unregisterPoll/MAX_FAILS: пока ответы шли, связь была.
+ */
+export function lastPollActivity(key) { return _lastResp.get(key) || 0; }
+
 export function unregisterPoll(key) {
   // НЕ абортим in-flight запрос — даём ему завершиться,
   // но заменяем callback на no-op чтобы избежать stale update
@@ -136,6 +154,11 @@ async function _tick() {
       }
       const r = await fetch((typeof entry.url === 'function') ? entry.url() : entry.url, init);
       clearTimeout(timeoutId);
+      /* Ответ МК (2xx/3xx/4xx, включая 304 «без изменений») — связь есть,
+       * даже если callback по data ниже не вызывается. 5xx (500 из прошивки,
+       * 502/504 от прокси, когда МК не ответил) и сетевые отказы/таймауты
+       * временем ответа не считаются: это и есть потеря связи. */
+      if (r.status < 500) _lastResp.set(key, Date.now());
 
       const newEtag = r.headers.get('ETag');
       if (newEtag) entry.etag = newEtag;

@@ -13,16 +13,118 @@
  *
  * Защита от случайных нажатий: управление заблокировано при входе и
  * разблокируется удержанием кнопки-замка; блокировка возвращается сама через
- * UNLOCK_TTL_MS без действий и при сворачивании страницы. Ползунки двигаются
+ * UNLOCK_TTL_MS без действий и при сворачивании страницы. Любая попытка
+ * изменить параметр при замке: мигание замка + тост + вибрация телефона
+ * (navigator.vibrate, где поддерживается). Ползунки двигаются
  * только перетаскиванием бегунка (тап по дорожке и вертикальный свайп значение
  * не меняют). Рубрики по умолчанию свёрнуты (аккордеон).
+ *
+ * Связь: баннер «Нет связи с контроллером» показывается по последнему ответу
+ * контроллера (lastPollActivity: 2xx/3xx/4xx, включая 304 Not Modified) — пока
+ * ответы идут, связь есть, даже если данные не менялись. 5xx (прошивка отвечает
+ * ошибкой, прокси отдаёт 502 вместо молчащего МК), таймауты и сетевые отказы
+ * связью не считаются. Если pollQueue снял опрос после MAX_FAILS ошибок
+ * подряд, сторож регистрирует его заново.
  */
 import { h, useState, useEffect, useRef, html } from '../bundle.js';
-import { registerPoll, unregisterPoll } from '../pollQueue.js';
+import { registerPoll, unregisterPoll, isPollActive, lastPollActivity } from '../pollQueue.js';
 import { postJson } from '../safeFetch.js';
 import { ThemeToggle } from '../theme.js';
 import { WordLogo } from '../main.js';
 import '../remote.css';
+
+// ---------------------------------------------------------------------------
+// Глобальный tooltip-хелпер (портал в document.body, position:fixed)
+// Инициализируется один раз, работает для всех [data-tip] на странице.
+// Цвета инвертируются относительно темы (как на странице Select pin(s)):
+// светлая тема — тёмный фон с светлым текстом, тёмная — светлый фон
+// с тёмным текстом, поэтому подсказка видна на любом фоне.
+// ---------------------------------------------------------------------------
+function initGlobalTooltip() {
+  if (document.__tipInited) return;
+  document.__tipInited = true;
+
+  const tip = document.createElement('div');
+  tip.id = '__global_tip';
+  Object.assign(tip.style, {
+    position:      'fixed',
+    zIndex:        '99999',
+    maxWidth:      '280px',
+    background:    '#1a2332',
+    color:         '#e8f4f8',
+    padding:       '8px 12px',
+    borderRadius:  '8px',
+    border:        '1px solid rgba(0,188,188,0.35)',
+    fontSize:      '12px',
+    lineHeight:    '1.6',
+    boxShadow:     '0 6px 20px rgba(0,0,0,0.45)',
+    pointerEvents: 'none',
+    whiteSpace:    'normal',
+    display:       'none',
+    transition:    'opacity 0.12s ease',
+    opacity:       '0',
+  });
+  document.body.appendChild(tip);
+
+  let hideTimer = null;
+
+  function show(el) {
+    clearTimeout(hideTimer);
+    tip.innerHTML = el.dataset.tip;
+    const darkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+    tip.style.background = darkTheme ? '#e6eef4' : '#1a2332';
+    tip.style.color      = darkTheme ? '#14202b' : '#e8f4f8';
+    tip.style.border     = darkTheme ? '1px solid rgba(0,160,170,0.65)' : '1px solid rgba(0,188,188,0.35)';
+    tip.style.boxShadow  = darkTheme ? '0 6px 22px rgba(0,0,0,0.65)' : '0 6px 20px rgba(0,0,0,0.45)';
+    tip.style.display = 'block';
+
+    tip.style.opacity = '0';
+    tip.style.left = '0px';
+    tip.style.top  = '0px';
+
+    requestAnimationFrame(() => {
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      const vw = window.innerWidth;
+      const r  = el.getBoundingClientRect();
+
+      let left = r.left + r.width / 2 - tw / 2;
+      left = Math.max(8, Math.min(left, vw - tw - 8));
+
+      let top = r.top - th - 8;
+      if (top < 8) top = r.bottom + 8;
+
+      tip.style.left    = left + 'px';
+      tip.style.top     = top  + 'px';
+      tip.style.opacity = '1';
+    });
+  }
+
+  function hide() {
+    hideTimer = setTimeout(() => {
+      tip.style.opacity = '0';
+      setTimeout(() => { tip.style.display = 'none'; }, 120);
+    }, 80);
+  }
+
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el);
+  });
+
+  document.addEventListener('mouseout', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) hide();
+  });
+
+  // Touch screens: tap on an element with a tooltip shows it, tap elsewhere hides it
+  document.addEventListener('click', e => {
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el); else hide();
+  });
+}
+// ---------------------------------------------------------------------------
 
 const CMD_MIN_INTERVAL_MS = 250; // пауза между командами (Zigbee throttle)
 const UNLOCK_TTL_MS = 20000;    // автоблокировка управления без действий
@@ -30,11 +132,28 @@ const HOLD_MS = 600;            // удержание кнопки-замка д
 const ACCORDION_EXCLUSIVE = true; // true: открыта одна рубрика, false: можно несколько
 const THUMB_PX = 22;            // видимый диаметр бегунка ползунка
 const THUMB_HIT_PX = 44;        // зона касания бегунка
+const OFFLINE_AFTER_MS = 15000; // ответов от контроллера нет дольше — «нет связи»
+const OFFLINE_CHECK_MS = 5000;  // как часто проверяем наличие ответов
+const WATCHDOG_MS = 10000;      // перерегистрация опроса, если его сняли в pollQueue
+const BLOCK_VIBRATE = [80, 60, 80]; // вибрация при попытке изменить заблокированное
 
 const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
 const fsSupported = () => {
   const el = document.documentElement;
   return !!(el.requestFullscreen || el.webkitRequestFullscreen);
+};
+
+/* Вибрация на телефоне при попытке изменить заблокированное управление:
+ * красный мигающий замок и тост слышит не каждый, а тактильный отклик
+ * чувствуется сразу. navigator.vibrate() поддерживают Android-браузеры,
+ * в iOS Safari метода нет, а часть окружений бросает исключение на вызове —
+ * оба случая не должны ронять обработчик. */
+const vibrateBlocked = () => {
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate(BLOCK_VIBRATE);
+    }
+  } catch (_) { /* вибрация недоступна — предупреждение видно на экране */ }
 };
 
 const T = {
@@ -76,8 +195,8 @@ const T = {
     sclick: '1 наж.',
     dclick: '2 наж.',
     lpress: 'долг.',
-    lockedMsg: 'Управление заблокировано. Удерживайте замок для разблокировки',
-    holdUnlock: 'Удерживайте для разблокировки',
+    lockedMsg: 'Управление заблокировано для защиты от случайных касаний. Удерживайте замок, чтобы разблокировать',
+    holdUnlock: 'Удерживайте, чтобы разблокировать',
     lockNow: 'Заблокировать',
     fsEnter: 'На весь экран',
     fsExit: 'Выйти из полноэкранного режима'
@@ -120,7 +239,7 @@ const T = {
     sclick: 'single',
     dclick: 'double',
     lpress: 'long',
-    lockedMsg: 'Controls are locked. Hold the padlock to unlock',
+    lockedMsg: 'Controls are locked to prevent accidental changes. Press and hold the lock to unlock',
     holdUnlock: 'Hold to unlock',
     lockNow: 'Lock now',
     fsEnter: 'Full screen',
@@ -192,7 +311,7 @@ const LockBtn = ({ locked, pulse, labels, onUnlock, onLock }) => {
       type="button"
       class=${'rem-lock' + (locked ? '' : ' is-open') + (holding ? ' is-holding' : '') + (pulse ? ' is-pulse' : '')}
       style=${holding ? 'animation-duration:' + HOLD_MS + 'ms' : ''}
-      title=${locked ? labels.holdUnlock : labels.lockNow}
+      data-tip=${locked ? labels.holdUnlock : labels.lockNow}
       aria-label=${locked ? labels.holdUnlock : labels.lockNow}
       aria-pressed=${!locked}
       onPointerDown=${start}
@@ -303,7 +422,7 @@ const toRgbInt = (c) => {
 };
 
 /* ── Цветовая панель: пресеты-градиенты + системный выбор цвета ── */
-const ColorPanel = ({ color, disabled, locked, onBlocked, onPick }) => {
+const ColorPanel = ({ color, disabled, locked, onBlocked, onPick, pickLabel }) => {
   const hex = '#' + ('000000' + toRgbInt(color).toString(16).toUpperCase()).slice(-6);
   return html`
     <div class="rem-colors">
@@ -317,7 +436,7 @@ const ColorPanel = ({ color, disabled, locked, onBlocked, onPick }) => {
           onClick=${() => onPick(parseInt(c.slice(1), 16))}
         ></button>`
   )}
-      <label class="rem-swatch rem-swatch-pick" title="custom">
+      <label class="rem-swatch rem-swatch-pick" data-tip=${pickLabel}>
         <input
           type="color"
           value=${hex.toLowerCase()}
@@ -339,7 +458,7 @@ export function TabRemote({ }) {
   const [loaded, setLoaded] = useState(false);
 
   const cursorRef = useRef(0);
-  const lastDataRef = useRef(0);
+  const mountedRef = useRef(Date.now()); // открытие страницы: fallback, пока нет ни одного ответа
   const queueRef = useRef(new Map()); // key -> job {t, id, body, prev}
   const busyRef = useRef(false);
   const seenRef = useRef(new Set()); // ключи, пришедшие за текущий проход по страницам
@@ -355,9 +474,13 @@ export function TabRemote({ }) {
     clearTimeout(idleRef.current);
     idleRef.current = setTimeout(() => setLocked(true), UNLOCK_TTL_MS);
   };
+  // Подсказки [data-tip] (замок, полный экран, выход и т.п.) инициализируем
+  // один раз при монтировании пульта — цвета зависят от активной темы.
+  useEffect(() => { initGlobalTooltip(); }, []);
   const unlock = () => { setLocked(false); armIdle(); };
   const lockNow = () => { clearTimeout(idleRef.current); setLocked(true); };
   const flashBlocked = () => {
+    vibrateBlocked(); // тактильный отклик: предупреждение чувствуется, а не только видно
     setHint(true);
     setPulse(true);
     clearTimeout(hintRef.current);
@@ -401,16 +524,18 @@ export function TabRemote({ }) {
 
   const L = T[lang] || T.ru;
 
-  /* ── Опрос: пагинация через ?next=, пока не придёт next == -1 ── */
+  /* ── Опрос: пагинация через ?next=, пока не придёт next == -1 ──
+   * После MAX_FAILS ошибок подряд pollQueue снимает ключ и больше сам его
+   * не возвращает — сторож (как в TabPid) регистрирует опрос заново, иначе
+   * страница навсегда остаётся с баннером «нет связи с контроллером». */
   useEffect(() => {
-    registerPoll(
+    const start = () => registerPoll(
       'remote',
       () => (cursorRef.current > 0
         ? '/api/state/remote?next=' + cursorRef.current
         : '/api/state/remote'),
       (d) => {
         if (!d || d.__session_expired) return;
-        lastDataRef.current = Date.now();
         setOffline(false);
         setLoaded(true);
         if (d.lang) setLang(d.lang);
@@ -450,17 +575,38 @@ export function TabRemote({ }) {
       },
       { immediate: true }
     );
-    return () => unregisterPoll('remote');
+    start();
+    /* Сторож: после MAX_FAILS подряд ошибок pollQueue снимает ключ и сам его
+     * больше не возвращает — без перерегистрации страница навсегда показывает
+     * «нет связи». Повторная регистрация даёт чистый ETag, поэтому первый же
+     * ответ после восстановления будет 200, а не 304. */
+    const watchdog = setInterval(() => {
+      if (!isPollActive('remote')) start();
+    }, WATCHDOG_MS);
+    return () => {
+      clearInterval(watchdog);
+      unregisterPoll('remote');
+    };
   }, []);
 
-  /* ── Баннер «нет связи»: данные не приходили > 15 с ── */
+  /* ── Баннер «нет связи»: ответов от контроллера нет дольше OFFLINE_AFTER_MS ──
+   * Отсчёт по lastPollActivity — моменту последнего ответа контроллера
+   * (2xx/3xx/4xx, включая 304 Not Modified): пока ответы идут, связь есть,
+   * даже если данные стоят на месте. Раньше здесь был момент последнего
+   * callback'а, а pollQueue его при 304 не вызывает — статичный пульт через
+   * 15 с начинал «терять» связь, хотя всё работало. 5xx/таймаут/обрыв
+   * связью не считаются: если ответов нет, баннер загорается, а сторож выше
+   * возвращает опрос после MAX_FAILS. */
   useEffect(() => {
-    const t = setInterval(() => {
-      setOffline(loaded && lastDataRef.current > 0
-        && (Date.now() - lastDataRef.current > 15000));
-    }, 5000);
+    const check = () => {
+      /* При ответах 0 (ещё не было ни одного) отсчитываем от открытия страницы */
+      const alive = lastPollActivity('remote') || mountedRef.current;
+      setOffline(Date.now() - alive > OFFLINE_AFTER_MS);
+    };
+    check();
+    const t = setInterval(check, OFFLINE_CHECK_MS);
     return () => clearInterval(t);
-  }, [loaded]);
+  }, []);
 
   /* ── Оптимистичное изменение полей элемента ── */
   const patchItem = (section, id, fields, prevFields) => {
@@ -702,6 +848,7 @@ export function TabRemote({ }) {
             locked=${locked}
             onBlocked=${flashBlocked}
             onPick=${(c) => !dis && setZbColor(it, c)}
+            pickLabel=${L.colorPick}
           />` : null}
       </div>`;
   };
@@ -837,7 +984,7 @@ export function TabRemote({ }) {
       onPointerUp=${armIfOpen}
     >
       <header class="rem-topbar">
-        <a href="#/" class="rem-exit" title=${L.exit}>
+        <a href="#/" class="rem-exit" data-tip=${L.exit}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/></svg>
           <span class="rem-exit-label">${L.exit}</span>
         </a>
@@ -849,7 +996,7 @@ export function TabRemote({ }) {
             <button
               type="button"
               class=${'rem-iconbtn' + (fs ? ' is-on' : '')}
-              title=${fs ? L.fsExit : L.fsEnter}
+              data-tip=${fs ? L.fsExit : L.fsEnter}
               aria-label=${fs ? L.fsExit : L.fsEnter}
               onClick=${toggleFs}
             ><${IconFs} on=${fs} /></button>` : null}
