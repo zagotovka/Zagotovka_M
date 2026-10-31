@@ -3427,6 +3427,17 @@ static volatile uint32_t s_last_write_tick = 0;
 static bool              s_wr_fail_logged = false;
 
 
+/* Снимок того, что лежит в последнем успешно записанном (или загруженном при
+ * старте) файле состояния. Нужен, чтобы не писать файл, если текущее состояние
+ * ничем не отличается от уже сохранённого. Меняется только в задаче USB, под
+ * критической секцией (читается из InputTask). */
+static uint8_t s_saved_pin[PONR_PIN_BYTES];
+static uint8_t s_saved_zbee[PONR_ZBEE_BYTES];
+static uint8_t s_saved_dv[NUMPIN];
+static uint8_t s_saved_fl[NUMPIN];
+static bool    s_saved_valid = false;
+
+
 static inline bool ponr_bm_get(const uint8_t *b, int i) {
   return ((b[i >> 3] >> (i & 7)) & 1u) != 0;
 }
@@ -3529,6 +3540,48 @@ uint8_t ponr_sanitize(int topin, long v) {
 /* Последнее сохранённое состояние физического выхода (для InitPin) */
 bool ponr_last_get(int i) {
   return (i >= 0 && i < NUMPIN) && ponr_bm_get(s_last_pin, i);
+}
+
+
+/* true, если хотя бы один выход сейчас работает в режиме LAST (физический
+ * Device/PWM, энкодер с привязанным PWM или Zigbee-слот). Если таких выходов
+ * нет (все в режимах Nothing / Off / On / Switch), состояние на флешку писать
+ * незачем: при старте оно никому не нужно. */
+static bool ponr_any_last(void) {
+  for (int i = 0; i < NUMPIN; i++) {
+    uint8_t t = PinsConf[i].topin;
+    if (t == 2 || t == 5) {
+      if (ponr_eff_pin(i) == PONR_LAST) return true;
+    } else if (t == 8) {
+      if (ponr_eff_enc(i) == PONR_LAST) return true;
+    }
+  }
+  for (int z = 0; z < NUMZBEE; z++) {
+    if (ZigbeeConf[z].topin == 11 && ponr_eff_zbee(z) == PONR_LAST) return true;
+  }
+  return false;
+}
+
+
+/* true, если рабочие таблицы состояния отличаются от записанных на флешку.
+ * Пока ни одного файла не загружено и не записано - считаем, что отличаются. */
+static bool ponr_differs_from_saved(void) {
+  bool diff;
+  taskENTER_CRITICAL();
+  diff = !s_saved_valid ||
+         memcmp(s_saved_pin, s_last_pin, sizeof(s_last_pin)) != 0 ||
+         memcmp(s_saved_zbee, s_last_zbee, sizeof(s_last_zbee)) != 0 ||
+         memcmp(s_saved_dv, s_w_dv, sizeof(s_w_dv)) != 0 ||
+         memcmp(s_saved_fl, s_w_fl, sizeof(s_w_fl)) != 0;
+  taskEXIT_CRITICAL();
+  return diff;
+}
+
+
+/* Запись нужна, только если есть выход в режиме LAST и его состояние
+ * действительно отличается от сохранённого. */
+static bool ponr_write_needed(void) {
+  return ponr_any_last() && ponr_differs_from_saved();
 }
 
 
@@ -3720,6 +3773,12 @@ void GetLastState(void) {
     memcpy(s_w_fl, rec[pick].fl, sizeof(s_w_fl));
   }
   s_ls_seq = rec[pick].seq;
+  /* То, что загружено с флешки, и есть сохранённое состояние */
+  memcpy(s_saved_pin, s_last_pin, sizeof(s_saved_pin));
+  memcpy(s_saved_zbee, s_last_zbee, sizeof(s_saved_zbee));
+  memcpy(s_saved_dv, s_w_dv, sizeof(s_saved_dv));
+  memcpy(s_saved_fl, s_w_fl, sizeof(s_saved_fl));
+  s_saved_valid = true;
   s_ls_next_slot = (pick == 0) ? 1 : 0;
   printf("[SYSTEM] PONR state loaded from %s, seq=%lu\r\n",
          pick == 0 ? PONR_FILE_A : PONR_FILE_B, (unsigned long)s_ls_seq);
@@ -3746,6 +3805,18 @@ void SetLastState(void) {
 	memcpy(dv, s_w_dv, sizeof(dv));
 	memcpy(fl, s_w_fl, sizeof(fl));
 	taskEXIT_CRITICAL();
+
+	/* Страховка: если копия на флешке уже совпадает с текущим состоянием,
+	 * файл не перезаписываем (лишний цикл записи USB-накопителя). */
+	if (s_saved_valid &&
+	    memcmp(pp, s_saved_pin, sizeof(pp)) == 0 &&
+	    memcmp(zz, s_saved_zbee, sizeof(zz)) == 0 &&
+	    memcmp(dv, s_saved_dv, sizeof(dv)) == 0 &&
+	    memcmp(fl, s_saved_fl, sizeof(fl)) == 0) {
+		printf("[SYSTEM] PONR state unchanged, write skipped\r\n");
+		s_wr_pending = false;
+		return;
+	}
 
 	uint32_t seq = s_ls_seq + 1;
 	uint32_t crc = ponr_payload_crc(seq, pp, zz, dv, fl);
@@ -3785,6 +3856,13 @@ void SetLastState(void) {
   s_written_once = true;
   if (ok) {
     s_ls_seq = seq;
+    taskENTER_CRITICAL();
+    memcpy(s_saved_pin, pp, sizeof(s_saved_pin));
+    memcpy(s_saved_zbee, zz, sizeof(s_saved_zbee));
+    memcpy(s_saved_dv, dv, sizeof(s_saved_dv));
+    memcpy(s_saved_fl, fl, sizeof(s_saved_fl));
+    s_saved_valid = true;
+    taskEXIT_CRITICAL();
     s_ls_next_slot ^= 1u;
     s_wr_fail_logged = false;
     printf("[SYSTEM] PONR state saved, seq=%lu\r\n", (unsigned long)seq);
@@ -3908,6 +3986,12 @@ static void ponr_try_write(uint32_t now) {
   bool aged  = (uint32_t)(now - s_dirty_since) >= PONR_MAX_WAIT_MS;
   bool gap   = !s_written_once || (uint32_t)(now - s_last_write_tick) >= PONR_MIN_GAP_MS;
   if (!(quiet || aged) || !gap) return;
+  /* Писать нечего: нет выходов в режиме LAST (Nothing / Off / On / Switch)
+   * либо состояние вернулось к уже сохранённому. Флаг сбрасываем без записи. */
+  if (!ponr_write_needed()) {
+    s_dirty = false;
+    return;
+  }
   uint8_t u = 9;
   if (xQueueSend(usbQueueHandle, &u, 0) == pdPASS) {
     s_wr_pending = true;
@@ -3924,6 +4008,10 @@ void ponr_flush_before_reset(void) {
   uint32_t now = HAL_GetTick();
   if (ponr_scan(now, true)) ponr_mark_dirty(now);
   if (!s_dirty && !s_wr_pending) return;
+  if (s_dirty && !s_wr_pending && !ponr_write_needed()) {
+    s_dirty = false;
+    return;
+  }
   if (s_dirty && !s_wr_pending) {
     uint8_t u = 9;
     if (xQueueSend(usbQueueHandle, &u, 0) == pdPASS) {
@@ -3954,7 +4042,7 @@ void ponr_poll(void) {
    * а не ждём первого изменения состояния. */
   if (!s_initial_done) {
     s_initial_done = true;
-    if (s_ls_seq == 0) ponr_mark_dirty(now);
+    if (s_ls_seq == 0 && ponr_any_last()) ponr_mark_dirty(now);
   }
 
   if (ponr_scan(now, false)) ponr_mark_dirty(now);
