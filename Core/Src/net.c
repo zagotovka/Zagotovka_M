@@ -1261,7 +1261,10 @@ static void handle_remote_state(struct mg_connection *c,
     /* ── Датчики DS18B20 (по строке на датчик) ── */
     int ds_cur = (cursor > REMOTE_BASE_DS) ? cursor - REMOTE_BASE_DS : 0;
     for (int j = 0; j < MAX_DS18B20_P && next < 0; j++) {
-        if (ds18b20[j].typsensr != 1 || ds18b20[j].id == 0) continue;
+        /* Слот учитываем только пока его пин реально OneWire (topin==4):
+         * после перевода пина в NONE слот не должен попадать в пульт. */
+        if (ds18b20[j].typsensr != 1 || !IsPinId(ds18b20[j].id) ||
+            PinsConf[PinIdxFromId(ds18b20[j].id)].topin != 4) continue;
         int n = ds18b20[j].numsens;
         if (n > MAX_DS18B20_PER_PIN) n = MAX_DS18B20_PER_PIN;
         for (int s = 0; s < n && next < 0; s++) {
@@ -1294,7 +1297,9 @@ static void handle_remote_state(struct mg_connection *c,
     /* ── Датчики DHT22 ── */
     for (int j = (cursor > REMOTE_BASE_DHT ? cursor - REMOTE_BASE_DHT : 0);
          j < MAX_DHT22_P && next < 0; j++) {
-        if (dht22 == NULL || dht22[j].typsensr != 2 || dht22[j].id == 0)
+        if (dht22 == NULL || dht22[j].typsensr != 2 ||
+            !IsPinId(dht22[j].id) ||
+            PinsConf[PinIdxFromId(dht22[j].id)].topin != 4)
             continue;
         if (pos > REMOTE_PAGE_BUDGET) { next = REMOTE_BASE_DHT + j; break; }
         if ((int)G_BODY_SIZE - pos < 400) { next = REMOTE_BASE_DHT + j; break; }

@@ -3065,6 +3065,16 @@ void StartDs18b20Task(void *argument)
   uint8_t owpinnum = 0;
 
   printf("\r\n[DEBUG] Searching for DS18B20 sensors...\r\n");
+  /* Остатки старых конфигураций: слот датчика, чей пин больше не OneWire
+   * (topin != 4), освобождаем. Иначе он занимает один из MAX_DS18B20_P
+   * слотов и попадает в списки датчиков. */
+  for (uint8_t j = 0; j < MAX_DS18B20_P; j++) {
+    if (ds18b20[j].typsensr != 1) continue;
+    uint8_t sid = ds18b20[j].id;
+    if (sid < 1 || sid > NUMPIN || PinsConf[sid - 1].topin != 4) {
+      memset(&ds18b20[j], 0, sizeof(ds18b20[j]));
+    }
+  }
   // Initialize configuration array
   for (uint8_t i = 0; i < NUMPIN; i++) {
     if (PinsConf[i].topin == 4) { // OneWire pin found

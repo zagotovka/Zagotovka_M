@@ -895,6 +895,37 @@ static int strip_id_from_sunrise_sunset(char *str, int target_id) {
   return removed;
 }
 
+/* Освобождает слот датчика OneWire (DS18B20 или DHT22), привязанный к
+ * физическому пину pin_id. Вызывается, когда пин перестал быть OneWire
+ * (NONE или другой тип). Без этого слот с typsensr != 0 остаётся занятым:
+ * попадает в /api/state/remote, сохраняется в файл и занимает один из
+ * MAX_DS18B20_P слотов, из-за чего новый OneWire пин настроить нельзя.
+ * Возвращает true, если какой-либо слот был освобождён. */
+static bool onewire_slot_release(int pin_id) {
+  bool released = false;
+  if (!IsPinId(pin_id)) return false; /* Zigbee-id сюда не относятся */
+
+  for (int i = 0; i < MAX_DS18B20_P; i++) {
+    if (ds18b20[i].typsensr != 1 || ds18b20[i].id != (uint8_t)pin_id) continue;
+    ds18b20[i].onoff = 0; /* StartDs18b20Task пропускает слот с onoff == 0 */
+    taskENTER_CRITICAL();
+    memset(&ds18b20[i], 0, sizeof(ds18b20[i]));
+    taskEXIT_CRITICAL();
+    released = true;
+  }
+  if (dht22 != NULL) {
+    for (int i = 0; i < MAX_DHT22_P; i++) {
+      if (dht22[i].typsensr != 2 || dht22[i].id != (uint8_t)pin_id) continue;
+      dht22[i].onoff = 0;
+      taskENTER_CRITICAL();
+      memset(&dht22[i], 0, sizeof(dht22[i]));
+      taskEXIT_CRITICAL();
+      released = true;
+    }
+  }
+  return released;
+}
+
 // Каскадная очистка всех связей для удалённого пина (физического или Zigbee)
 static void cascade_delete_pin_id(int deleted_id) {
   extern struct dbPinToPin *PinsLinks;  /* выделяется в DTCM через dtcm_pinslinks (main) */
@@ -1003,6 +1034,9 @@ static void cascade_delete_pin_id(int deleted_id) {
     if (cond_strip_id(dht22[i].actuh, deleted_id) > 0) changed_onewire = true;
     if (cond_strip_id(dht22[i].actlh, deleted_id) > 0) changed_onewire = true;
   }
+
+  // 7b. OneWire: освободить сам слот датчика, привязанный к удаляемому пину
+  if (onewire_slot_release(deleted_id)) changed_onewire = true;
 
   // 8. Zigbee Virtual Buttons — очистить action pool
   for (int i = 0; i < NUMZBEE; i++) {
@@ -1113,6 +1147,7 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
 
   size_t pos = 0;
   int zbee_count = 0;
+  bool ow_released = false; /* слот OneWire освобождён сменой типа пина */
   struct mg_str key, elem;
   while ((pos = mg_json_next(arr, pos, &key, &elem)) > 0) {
     long id = mg_json_get_long(elem, "$.id", -1);
@@ -1121,6 +1156,10 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
       uint8_t new_topin = (uint8_t)mg_json_get_long(elem, "$.topin", 0);
       if (new_topin == 0 && PinsConf[pin_idx].topin != 0) {
         cascade_delete_pin_id((int)id);
+      } else if (PinsConf[pin_idx].topin == 4 && new_topin != 4) {
+        /* OneWire -> другой тип (не NONE): слот датчика освобождаем здесь,
+         * каскад в этом случае не вызывается */
+        if (onewire_slot_release((int)id)) ow_released = true;
       }
       uint8_t old_topin = PinsConf[pin_idx].topin;
       PinsConf[pin_idx].topin = new_topin;
@@ -1214,6 +1253,12 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
   xQueueSend(usbQueueHandle, &usbnum, 0);
   usbnum = 2;
   xQueueSend(usbQueueHandle, &usbnum, 0);
+  if (ow_released) {
+    mark_slice_dirty(&g_ver_onewire);
+    mark_slice_dirty(&g_ver_sensors);
+    usbnum = 5;
+    xQueueSend(usbQueueHandle, &usbnum, 0);
+  }
   if (zbee_count > 0) {
     usbnum = 7;
     xQueueSend(usbQueueHandle, &usbnum, 0);
@@ -4931,7 +4976,8 @@ uint32_t remote_state_hash(void) {
     h = remote_fnv_str(h, pp->info, sizeof(pp->info));
   }
   for (int i = 0; i < MAX_DS18B20_P; i++) {
-    if (ds18b20[i].typsensr != 1 || ds18b20[i].id == 0) continue;
+    if (ds18b20[i].typsensr != 1 || !IsPinId(ds18b20[i].id) ||
+        PinsConf[PinIdxFromId(ds18b20[i].id)].topin != 4) continue;
     int n = ds18b20[i].numsens;
     if (n > MAX_DS18B20_PER_PIN) n = MAX_DS18B20_PER_PIN;
     for (int k = 0; k < n; k++) {
@@ -4942,7 +4988,8 @@ uint32_t remote_state_hash(void) {
     }
   }
   for (int i = 0; i < MAX_DHT22_P; i++) {
-    if (dht22 == NULL || dht22[i].typsensr != 2 || dht22[i].id == 0) continue;
+    if (dht22 == NULL || dht22[i].typsensr != 2 || !IsPinId(dht22[i].id) ||
+        PinsConf[PinIdxFromId(dht22[i].id)].topin != 4) continue;
     h = remote_fnv_u32(h, dht22[i].valid ? 1u : 0u);
     h = remote_fnv_f(h, dht22[i].temp);
     h = remote_fnv_f(h, dht22[i].humid);
