@@ -23,13 +23,15 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+/* Задержка в мкс на счётчике циклов ядра (DWT->CYCCNT, DWT_Init() вызывается
+ * при старте). Не использовать TIM1 или другой таймер ШИМ: их PSC/ARR задаются
+ * частотой ШИМ, и обнуление CNT ломает ШИМ. */
 void ONEWIRE_DELAY(uint16_t time_us)
 {
-	_DS18B20_TIMER.Instance->CNT = 0;
-	/* Аварийный счётчик: не более ~2 млн итераций (≈ 10 мс @216 МГц) */
-	volatile uint32_t guard = 2000000;
-	while(_DS18B20_TIMER.Instance->CNT <= time_us) {
-		if (--guard == 0) break;  /* аварийный выход */
+	uint32_t cycles = (uint32_t)time_us * (SystemCoreClock / 1000000U);
+	uint32_t start  = DWT->CYCCNT;
+	while ((DWT->CYCCNT - start) < cycles) {
+		/* wait */
 	}
 }
 void ONEWIRE_LOW(OneWire_t *gp)
@@ -40,32 +42,35 @@ void ONEWIRE_HIGH(OneWire_t *gp)
 {
 	gp->GPIOx->BSRR = gp->GPIO_Pin;
 }
+/* Пин всегда в режиме Open-Drain (настраивается один раз в OneWire_Init).
+ * "INPUT" = отпустить линию (записать 1 в ODR -> Hi-Z), чтение через IDR
+ * работает и в режиме выхода. Никаких HAL_GPIO_Init в битовых слотах -
+ * он слишком медленный и ломает тайминг 1-Wire. */
 void ONEWIRE_INPUT(OneWire_t *gp)
 {
-	GPIO_InitTypeDef	gpinit;
-	gpinit.Mode = GPIO_MODE_INPUT;
-	gpinit.Pull = GPIO_NOPULL;
+	gp->GPIOx->BSRR = gp->GPIO_Pin;           /* release */
+}
+/* Полная (медленная) настройка пина - вызывать только из OneWire_Init */
+static void ONEWIRE_CONFIG_OD(OneWire_t *gp)
+{
+	GPIO_InitTypeDef	gpinit = {0};
+	gpinit.Mode = GPIO_MODE_OUTPUT_OD;
+	gpinit.Pull = GPIO_PULLUP;   /* доп. внутренняя подтяжка ~40 кОм параллельно внешней */
 	gpinit.Speed = GPIO_SPEED_FREQ_HIGH;
 	gpinit.Pin = gp->GPIO_Pin;
 	HAL_GPIO_Init(gp->GPIOx,&gpinit);
 }
 void ONEWIRE_OUTPUT(OneWire_t *gp)
 {
-	GPIO_InitTypeDef	gpinit;
-	gpinit.Mode = GPIO_MODE_OUTPUT_OD;
-	gpinit.Pull = GPIO_NOPULL;
-	gpinit.Speed = GPIO_SPEED_FREQ_HIGH;
-	gpinit.Pin = gp->GPIO_Pin;
-	HAL_GPIO_Init(gp->GPIOx,&gpinit);
-
+	(void)gp;   /* режим уже OD, ничего не делаем */
 }
 void OneWire_Init(OneWire_t* OneWireStruct, GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin)
 {
-	HAL_TIM_Base_Start(&_DS18B20_TIMER);
-
+	/* TIM1 не запускаем: задержки идут на DWT, TIM1 целиком отдан ШИМ */
 	OneWireStruct->GPIOx = GPIOx;
 	OneWireStruct->GPIO_Pin = GPIO_Pin;
-	ONEWIRE_OUTPUT(OneWireStruct);
+	ONEWIRE_HIGH(OneWireStruct);              /* ODR=1 до смены режима, без импульса */
+	ONEWIRE_CONFIG_OD(OneWireStruct);
 	ONEWIRE_HIGH(OneWireStruct);
 	OneWireDelay(1000);
 	ONEWIRE_LOW(OneWireStruct);
@@ -80,7 +85,6 @@ inline uint8_t OneWire_Reset(OneWire_t* OneWireStruct)
 
 	/* Line low, and wait 480us */
 	ONEWIRE_LOW(OneWireStruct);
-	ONEWIRE_OUTPUT(OneWireStruct);
 	ONEWIRE_DELAY(480);
 	ONEWIRE_DELAY(20);
 	/* Release line and wait for 70us */
@@ -102,31 +106,19 @@ inline void OneWire_WriteBit(OneWire_t* OneWireStruct, uint8_t bit)
 	taskENTER_CRITICAL();
 	if (bit)
 	{
-		/* Set line low */
+		/* Write 1: низкий 6 мкс, потом отпустить, слот ~70 мкс */
 		ONEWIRE_LOW(OneWireStruct);
-		ONEWIRE_OUTPUT(OneWireStruct);
-		ONEWIRE_DELAY(10);
-
-		/* Bit high */
+		ONEWIRE_DELAY(6);
 		ONEWIRE_INPUT(OneWireStruct);
-
-		/* Wait for 55 us and release the line */
-		ONEWIRE_DELAY(55);
-		ONEWIRE_INPUT(OneWireStruct);
+		ONEWIRE_DELAY(64);
 	}
 	else
 	{
-		/* Set line low */
+		/* Write 0: низкий 65 мкс, отпустить, пауза восстановления */
 		ONEWIRE_LOW(OneWireStruct);
-		ONEWIRE_OUTPUT(OneWireStruct);
 		ONEWIRE_DELAY(65);
-
-		/* Bit high */
 		ONEWIRE_INPUT(OneWireStruct);
-
-		/* Wait for 5 us and release the line */
 		ONEWIRE_DELAY(5);
-		ONEWIRE_INPUT(OneWireStruct);
 	}
 	taskEXIT_CRITICAL();
 }
@@ -135,25 +127,19 @@ inline uint8_t OneWire_ReadBit(OneWire_t* OneWireStruct)
 {
 	uint8_t bit = 0;
 	taskENTER_CRITICAL();
-	/* Line low */
+	/* Низкий 2 мкс, отпустить */
 	ONEWIRE_LOW(OneWireStruct);
-	ONEWIRE_OUTPUT(OneWireStruct);
 	ONEWIRE_DELAY(2);
-
-	/* Release line */
 	ONEWIRE_INPUT(OneWireStruct);
-	ONEWIRE_DELAY(10);
-
-	/* Read line value — timing-critical sample window, ISR jitter ~5us is tolerable */
+	/* Семплируем через ~8 мкс после отпускания (итого ~11-12 мкс от
+	 * падающего фронта, строго < 15 мкс) */
+	ONEWIRE_DELAY(8);
 	if (HAL_GPIO_ReadPin(OneWireStruct->GPIOx, OneWireStruct->GPIO_Pin)) {
-		/* Bit is HIGH */
 		bit = 1;
 	}
-
-	/* Wait 50us to complete 60us period */
+	/* Дожидаемся конца слота (~60+ мкс) */
 	ONEWIRE_DELAY(50);
 	taskEXIT_CRITICAL();
-	/* Return bit value */
 	return bit;
 }
 
@@ -436,4 +422,55 @@ uint8_t OneWire_CRC8(uint8_t *addr, uint8_t len) {
 
 	/* Return calculated CRC */
 	return crc;
+}
+
+/* Диагностика физики линии: время нарастания и первые 8 пар бит Search */
+void OneWire_Diag(OneWire_t* ow, uint8_t pin_id)
+{
+	uint16_t rise_us = 0xFFFF;
+	char     pairs[8 * 3 + 1];
+	uint8_t  presence;
+
+	/* 1) Время нарастания: тянем линию вниз 500 мкс, отпускаем, ждём HIGH */
+	taskENTER_CRITICAL();
+	ONEWIRE_LOW(ow);
+	ONEWIRE_DELAY(500);
+	ONEWIRE_INPUT(ow);
+	{
+		uint32_t cpm   = SystemCoreClock / 1000000U;
+		uint32_t start = DWT->CYCCNT;
+		while ((DWT->CYCCNT - start) < (1000U * cpm)) {
+			if (HAL_GPIO_ReadPin(ow->GPIOx, ow->GPIO_Pin)) {
+				rise_us = (uint16_t)((DWT->CYCCNT - start) / cpm);
+				break;
+			}
+		}
+	}
+	taskEXIT_CRITICAL();
+	osDelay(5);
+
+	/* 2) Presence + первые 8 пар (id_bit, cmp_id_bit) команды Search ROM.
+	 * Для семейства 0x28 ожидается: 01 01 10 01 10 01 01 01 */
+	pairs[0] = '\0';
+	presence = OneWire_Reset(ow);
+	if (presence == 0) {
+		OneWire_WriteByte(ow, ONEWIRE_CMD_SEARCHROM);
+		for (uint8_t i = 0; i < 8; i++) {
+			uint8_t id  = OneWire_ReadBit(ow);
+			uint8_t cmp = OneWire_ReadBit(ow);
+			pairs[i * 3]     = id  ? '1' : '0';
+			pairs[i * 3 + 1] = cmp ? '1' : '0';
+			pairs[i * 3 + 2] = ' ';
+			OneWire_WriteBit(ow, id);
+		}
+		pairs[8 * 3] = '\0';
+	}
+	OneWire_Reset(ow);   /* прервать поиск */
+
+	printf("[OW-DIAG2] pin %d rise=%s%u us presence=%s pairs=[%s]\r\n",
+	       pin_id,
+	       rise_us == 0xFFFF ? ">" : "",
+	       (unsigned)(rise_us == 0xFFFF ? 1000 : rise_us),
+	       presence == 0 ? "YES" : "NO",
+	       pairs);
 }

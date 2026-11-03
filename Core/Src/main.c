@@ -3062,12 +3062,10 @@ void StartDs18b20Task(void *argument)
   /* USER CODE BEGIN StartDs18b20Task */
   ulTaskNotifyTake(0, portMAX_DELAY);
   uint8_t dscount = 0;
-  uint8_t owpinnum = 0;
 
   printf("\r\n[DEBUG] Searching for DS18B20 sensors...\r\n");
   /* Остатки старых конфигураций: слот датчика, чей пин больше не OneWire
-   * (topin != 4), освобождаем. Иначе он занимает один из MAX_DS18B20_P
-   * слотов и попадает в списки датчиков. */
+   * (topin != 4), освобождаем. */
   for (uint8_t j = 0; j < MAX_DS18B20_P; j++) {
     if (ds18b20[j].typsensr != 1) continue;
     uint8_t sid = ds18b20[j].id;
@@ -3075,93 +3073,96 @@ void StartDs18b20Task(void *argument)
       memset(&ds18b20[j], 0, sizeof(ds18b20[j]));
     }
   }
-  // Initialize configuration array
+
+  /* ВАЖНО: ow_conf индексируется ТЕМ ЖЕ индексом j, что и ds18b20[j].
+   * Раньше при инициализации использовался отдельный счётчик owpinnum,
+   * а в основном цикле - j, из-за чего индексы могли разъехаться. */
   for (uint8_t i = 0; i < NUMPIN; i++) {
-    if (PinsConf[i].topin == 4) { // OneWire pin found
-      for (uint8_t j = 0; j < MAX_DS18B20_P; j++) {
-        if (ds18b20[j].id == (uint8_t)(i + 1) && ds18b20[j].typsensr == 1) {
-          if (dscount >= MAX_DS18B20_P) {
-            printf("[ERROR] Too many DS18B20 pins! Max: %d\r\n", MAX_DS18B20_P);
-            break;
-          }
-          ow_conf[owpinnum].OneWirePort = PinsInfo[i].gpio_name;
-          ow_conf[owpinnum].OneWirePin = PinsInfo[i].hal_pin;
-          snprintf(ds18b20[j].pin, sizeof(ds18b20[j].pin), "%.*s", (int)sizeof(ds18b20[j].pin) - 1, PinsInfo[i].pins);
+    if (PinsConf[i].topin != 4) continue;           /* не OneWire */
+    for (uint8_t j = 0; j < MAX_DS18B20_P; j++) {
+      if (ds18b20[j].id != (uint8_t)(i + 1) || ds18b20[j].typsensr != 1) continue;
 
-          init_ds18b20(&ow_conf[owpinnum].OneWire,
-                       ow_conf[owpinnum].OneWirePort,
-                       ow_conf[owpinnum].OneWirePin, &ow_conf[owpinnum].owflag,
-                       &ow_conf[owpinnum].temp_cnt, ds18b20[j].id, j);
+      ow_conf[j].OneWirePort = PinsInfo[i].gpio_name;
+      ow_conf[j].OneWirePin  = PinsInfo[i].hal_pin;
+      snprintf(ds18b20[j].pin, sizeof(ds18b20[j].pin), "%.*s",
+               (int)sizeof(ds18b20[j].pin) - 1, PinsInfo[i].pins);
 
-          if (ow_conf[owpinnum].owflag && ow_conf[owpinnum].temp_cnt > 0) {
-            ds18b20[j].onoff = 1;
-            ds18b20[j].numsens = ow_conf[owpinnum].temp_cnt;
-            for (uint8_t k = 0; k < ds18b20[j].numsens; k++) {
-              ds18b20[j].sensors[k].valid = true;
-            }
-            dscount++;
-            owpinnum++;
-          }
-          break;
+      init_ds18b20(&ow_conf[j].OneWire,
+                   ow_conf[j].OneWirePort,
+                   ow_conf[j].OneWirePin, &ow_conf[j].owflag,
+                   &ow_conf[j].temp_cnt, ds18b20[j].id, j);
+
+      if (ow_conf[j].owflag && ow_conf[j].temp_cnt > 0) {
+        ds18b20[j].onoff = 1;
+        ds18b20[j].numsens = ow_conf[j].temp_cnt;
+        ds18b20[j].error_cnt = 0;
+        ds18b20[j].auto_disabled = 0;
+        for (uint8_t k = 0; k < ds18b20[j].numsens; k++) {
+          ds18b20[j].sensors[k].valid = true;
         }
+        dscount++;
+      } else {
+        /* Датчики не найдены на старте: помечаем шину для периодической
+         * переинициализации (раньше повторных попыток не было вообще). */
+        ds18b20[j].auto_disabled = 1;
       }
+      break;
     }
   }
+
   if (dscount != 0) {
     printf("[DEBUG] Found DS18B20 pins: %d\r\n", dscount);
   } else {
-    printf("[DEBUG] No DS18B20 pins found!\r\n");
+    printf("[DEBUG] No DS18B20 pins found! Will retry every %d sec.\r\n",
+           DS18B20_REINIT_INTERVAL_MS / 1000);
   }
-  /* Таймер для периодической переинициализации отключённых шин */
   uint32_t reinit_tick = HAL_GetTick();
 
   /* Infinite loop */
   for (;;) {
-    if (dscount != 0) {
-      for (uint8_t i = 0; i < MAX_DS18B20_P; i++) {
-        if (ds18b20[i].onoff && ow_conf[i].owflag) {
-          process_ds18b20(&ow_conf[i].OneWire, ow_conf[i].owflag, i);
-        }
+    /* Опрос рабочих шин */
+    for (uint8_t i = 0; i < MAX_DS18B20_P; i++) {
+      if (ds18b20[i].typsensr == 1 && ds18b20[i].onoff && ow_conf[i].owflag) {
+        process_ds18b20(&ow_conf[i].OneWire, ow_conf[i].owflag, i);
       }
+    }
 
-      /* ── Авто-переинициализация отключённых шин каждые DS18B20_REINIT_INTERVAL_MS ── */
-      if ((HAL_GetTick() - reinit_tick) >= DS18B20_REINIT_INTERVAL_MS) {
-        reinit_tick = HAL_GetTick();
-        for (uint8_t i = 0; i < MAX_DS18B20_P; i++) {
-          if (ds18b20[i].auto_disabled && ds18b20[i].typsensr == 1) {
-            printf("[INFO] Attempting reinit of auto-disabled DS18B20 bus idx %d (pin %s)...\r\n",
-                   i, ds18b20[i].pin);
-            /* Сброс флагов */
-            ds18b20[i].error_cnt = 0;
-            ds18b20[i].auto_disabled = 0;
-            ow_conf[i].owflag = 0;
-            ow_conf[i].temp_cnt = 0;
+    /* Авто-переинициализация отключённых/не найденных шин.
+     * Теперь работает и когда на старте не найдено НИ ОДНОЙ шины. */
+    if ((HAL_GetTick() - reinit_tick) >= DS18B20_REINIT_INTERVAL_MS) {
+      reinit_tick = HAL_GetTick();
+      for (uint8_t i = 0; i < MAX_DS18B20_P; i++) {
+        if (!(ds18b20[i].auto_disabled && ds18b20[i].typsensr == 1)) continue;
+        if (ow_conf[i].OneWirePort == NULL) continue;   /* слот не инициализировался */
 
-            /* Переинициализация */
-            init_ds18b20(&ow_conf[i].OneWire,
-                         ow_conf[i].OneWirePort,
-                         ow_conf[i].OneWirePin, &ow_conf[i].owflag,
-                         &ow_conf[i].temp_cnt, ds18b20[i].id, i);
+        printf("[INFO] Attempting reinit of DS18B20 bus idx %d (pin %s)...\r\n",
+               i, ds18b20[i].pin);
+        ds18b20[i].error_cnt = 0;
+        ds18b20[i].auto_disabled = 0;
+        ow_conf[i].owflag = 0;
+        ow_conf[i].temp_cnt = 0;
 
-            if (ow_conf[i].owflag && ow_conf[i].temp_cnt > 0) {
-              ds18b20[i].onoff = 1;
-              ds18b20[i].numsens = ow_conf[i].temp_cnt;
-              for (uint8_t k = 0; k < ds18b20[i].numsens; k++) {
-                ds18b20[i].sensors[k].valid = true;
-                ds18b20[i].sensors[k].errorflg = false;
-              }
-              mark_slice_dirty(&g_ver_sensors);
-              mark_slice_dirty(&g_ver_onewire);
-              mark_slice_dirty(&g_ver_pins);
-              printf("[INFO] DS18B20 bus idx %d REINIT OK - %d sensors found!\r\n",
-                     i, ds18b20[i].numsens);
-            } else {
-              /* Не удалось — снова отключаем, попробуем через DS18B20_REINIT_INTERVAL_MS */
-              ds18b20[i].auto_disabled = 1;
-              printf("[WARN] DS18B20 bus idx %d reinit FAILED — will retry in %d sec.\r\n",
-                     i, DS18B20_REINIT_INTERVAL_MS / 1000);
-            }
+        init_ds18b20(&ow_conf[i].OneWire,
+                     ow_conf[i].OneWirePort,
+                     ow_conf[i].OneWirePin, &ow_conf[i].owflag,
+                     &ow_conf[i].temp_cnt, ds18b20[i].id, i);
+
+        if (ow_conf[i].owflag && ow_conf[i].temp_cnt > 0) {
+          ds18b20[i].onoff = 1;
+          ds18b20[i].numsens = ow_conf[i].temp_cnt;
+          for (uint8_t k = 0; k < ds18b20[i].numsens; k++) {
+            ds18b20[i].sensors[k].valid = true;
+            ds18b20[i].sensors[k].errorflg = false;
           }
+          mark_slice_dirty(&g_ver_sensors);
+          mark_slice_dirty(&g_ver_onewire);
+          mark_slice_dirty(&g_ver_pins);
+          printf("[INFO] DS18B20 bus idx %d REINIT OK - %d sensors found!\r\n",
+                 i, ds18b20[i].numsens);
+        } else {
+          ds18b20[i].auto_disabled = 1;
+          printf("[WARN] DS18B20 bus idx %d reinit FAILED - will retry in %d sec.\r\n",
+                 i, DS18B20_REINIT_INTERVAL_MS / 1000);
         }
       }
     }

@@ -54,6 +54,7 @@ void OneWire_GetFullROM(OneWire_t* OneWireStruct, uint8_t pin_index, uint8_t sen
 void OneWire_Select(OneWire_t* OneWireStruct, uint8_t* addr);
 void OneWire_SelectWithPointer(OneWire_t* OneWireStruct, uint8_t* ROM);
 uint8_t OneWire_CRC8(uint8_t* addr, uint8_t len);
+void OneWire_Diag(OneWire_t* OneWireStruct, uint8_t pin_id);
 
 #ifdef __cplusplus
 }

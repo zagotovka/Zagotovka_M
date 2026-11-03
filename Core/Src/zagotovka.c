@@ -9089,11 +9089,24 @@ void init_ds18b20(OneWire_t *OneWire, GPIO_TypeDef *OneWirePort,
 
   uint8_t Ds18b20TryToFind = 5;
   do {
+	  /* 1-Wire использует DWT->CYCCNT, а не TIM1: TIM1 перенастраивается кодом ШИМ
+	   * (PSC/ARR зависят от заданной частоты), поэтому его тик не равен 1 мкс. */
     OneWire_Init(OneWire, OneWirePort, OneWirePin);
-    //		printf("[DEBUG] OneWire initialized. Searching for
-    // devices...\r\n");
     *temp_cnt = 0;
     osDelay(3000);
+
+    /* ── ДИАГНОСТИКА физического уровня шины ── */
+    {
+      uint8_t idle_high =
+          (HAL_GPIO_ReadPin(OneWirePort, OneWirePin) == GPIO_PIN_SET) ? 1 : 0;
+      uint8_t presence = OneWire_Reset(OneWire);   /* 0 = датчик ответил */
+      printf("[OW-DIAG] pin %d try %d/5: idle=%s presence=%s\r\n",
+             pin_id, 6 - Ds18b20TryToFind,
+             idle_high ? "HIGH" : "LOW",
+             presence == 0 ? "YES" : "NO");
+      OneWire_Diag(OneWire, pin_id);
+    }
+
     OneWireDevices = OneWire_First(OneWire);
 
     while (OneWireDevices) {
