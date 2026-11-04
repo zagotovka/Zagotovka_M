@@ -68,8 +68,11 @@ function initGlobalTooltip() {
 
   let hideTimer = null;
 
+  let curTipEl = null; // элемент, чья подсказка сейчас показана
+
   function show(el) {
     clearTimeout(hideTimer);
+    curTipEl = el;
     tip.innerHTML = el.dataset.tip;
     const darkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
     tip.style.background = darkTheme ? '#e6eef4' : '#1a2332';
@@ -103,9 +106,38 @@ function initGlobalTooltip() {
   function hide() {
     hideTimer = setTimeout(() => {
       tip.style.opacity = '0';
-      setTimeout(() => { tip.style.display = 'none'; }, 120);
+      /* второй таймер может отменить новый show() — иначе появившаяся
+       * в этот момент подсказка исчезнет через 120 мс */
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => { tip.style.display = 'none'; }, 120);
     }, 80);
   }
+
+  /* Мгновенно скрыть подсказку: клик, смена «страницы» (hashchange —
+   * например, «Back to interface» ведёт на #/) или скролл. Обычный
+   * mouseout на элементе, удалённом из DOM, не приходит: маршрутизатор
+   * вырезает блок вкладки, и tooltip «зависает» на экране до наведения
+   * на другой [data-tip]. */
+  function hideNow() {
+    clearTimeout(hideTimer);
+    curTipEl = null;
+    tip.style.opacity = '0';
+    hideTimer = setTimeout(() => { tip.style.display = 'none'; }, 120);
+  }
+
+  /* Страховка: элемент, чью подсказку мы показываем, удалён из DOM
+   * (переход на другую «страницу» портала) — прячем tooltip сам. */
+  setInterval(() => {
+    if (curTipEl && !document.contains(curTipEl)) hideNow();
+  }, 300);
+
+  // Escape тоже прячет подсказку
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideNow(); });
+  // Кликомышью (mousedown — до смены хэша): прячем сразу
+  document.addEventListener('mousedown', hideNow);
+  // Смена страницы через хэш-роутер: подсказка от старой страницы не нужна
+  window.addEventListener('hashchange', hideNow);
+  window.addEventListener('scroll', hideNow, true);
 
   document.addEventListener('mouseover', e => {
     const el = e.target.closest('[data-tip]');

@@ -26,8 +26,11 @@ function initGlobalTooltip() {
   });
   document.body.appendChild(tip);
   let hideTimer = null;
+  let curTipEl = null; // элемент, чья подсказка сейчас показана
+
   function show(el) {
     clearTimeout(hideTimer);
+    curTipEl = el;
     tip.innerHTML = el.dataset.tip;
     const darkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
     tip.style.background = darkTheme ? '#e6eef4' : '#1a2332';
@@ -45,7 +48,20 @@ function initGlobalTooltip() {
       tip.style.left = left + 'px'; tip.style.top = top + 'px'; tip.style.opacity = '1';
     });
   }
-  function hide() { hideTimer = setTimeout(() => { tip.style.opacity = '0'; setTimeout(() => { tip.style.display = 'none'; }, 120); }, 80); }
+  function hide() { hideTimer = setTimeout(() => { tip.style.opacity = '0'; clearTimeout(hideTimer); hideTimer = setTimeout(() => { tip.style.display = 'none'; }, 120); }, 80); }
+  // Мгновенное скрытие: клик, hashchange (переход по ссылкам портала), скролл.
+  // mouseout на элементе, удалённом из DOM, не приходит — tooltip «зависает».
+  function hideNow() {
+    clearTimeout(hideTimer);
+    curTipEl = null;
+    tip.style.opacity = '0';
+    hideTimer = setTimeout(() => { tip.style.display = 'none'; }, 120);
+  }
+  setInterval(() => { if (curTipEl && !document.contains(curTipEl)) hideNow(); }, 300);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideNow(); });
+  document.addEventListener('mousedown', hideNow);
+  window.addEventListener('hashchange', hideNow);
+  window.addEventListener('scroll', hideNow, true);
   document.addEventListener('mouseover', e => { const el = e.target.closest('[data-tip]'); if (el) show(el); });
   document.addEventListener('mouseout', e => { const el = e.target.closest('[data-tip]'); if (el) hide(); });
   // Touch screens: tap on an element with a tooltip shows it, tap elsewhere hides it

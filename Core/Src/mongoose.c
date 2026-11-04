@@ -15192,6 +15192,30 @@ __attribute__((section(".itcm"))) static bool mg_tls_server_send_finish(struct m
   return true;
 }
 
+// [ZAG] short alert names (mg_error truncates to ~63 chars!)
+static const char *mg_tls_alert_text(uint8_t d) {
+  switch (d) {
+    case 0:   return "close_notify";
+    case 10:  return "unexpected_msg";
+    case 20:  return "bad_record_mac";
+    case 40:  return "handshake_fail";
+    case 42:  return "bad_cert";
+    case 43:  return "unsupp_cert";
+    case 44:  return "cert_revoked";
+    case 45:  return "cert_expired";
+    case 46:  return "cert_unknown";
+    case 47:  return "illegal_param";
+    case 48:  return "unknown_ca";
+    case 50:  return "decode_error";
+    case 51:  return "decrypt_error";
+    case 70:  return "protocol_ver";
+    case 71:  return "insufficient_sec";
+    case 80:  return "internal_error";
+    case 90:  return "user_canceled";
+    default:  return "other";
+  }
+}
+
 __attribute__((section(".itcm"))) static int mg_tls_server_recv_finish(struct mg_connection *c) {
   struct tls_data *tls = (struct tls_data *) c->tls;
   unsigned char *recv_buf;
@@ -15205,7 +15229,14 @@ __attribute__((section(".itcm"))) static int mg_tls_server_recv_finish(struct mg
   if (tls->content_type == MG_TLS_ALERT) {
     recv_buf = &c->rtls.buf[tls->recv_offset];
     uint8_t level = recv_buf[0], desc = (tls->recv_len > 1) ? recv_buf[1] : 0;
-    mg_error(c, "received TLS Alert: level=%d, desc=%d", level, desc);
+    mg_error(c, "received TLS Alert: level=%d, desc=%d (%s)", level, desc,
+             mg_tls_alert_text(desc));
+    if (desc == 42 || desc == 45 || desc == 46 || desc == 48)
+      printf("[TLS] conn=%lu: CLIENT REJECTS OUR CERT (alert %d): CA not installed on client, "
+             "or host/IP not in cert SAN, or wrong client date\r\n",
+             (unsigned long) c->id, (int) desc);
+    else if (desc == 51)
+      printf("[TLS] conn=%lu: cert/key mismatch (alert 51)\r\n", (unsigned long) c->id);
     return -1;
   }
   recv_buf = &c->rtls.buf[tls->recv_offset];

@@ -960,12 +960,22 @@ static void net_reject_conn(struct mg_connection *c, const char *why,
   g_net_rejects++;
   if (now - s_last_log > 2000u) {
     s_last_log = now;
-    printf("[NET] REJECT %s conn=%lu client=%s heap=%lu hs=%u web=%u mqtt=%u "
-           "(rst=%lu syn_drop=%lu)\r\n",
-           why, (unsigned long) c->id, rem,
-           (unsigned long) xPortGetFreeHeapSize(), (unsigned) cs->hs_total,
-           (unsigned) (cs->web_est + cs->web_hs),
-           (unsigned) (cs->mqtt_srv + cs->mqtt_out),
+    HeapStats_t hst;
+    vPortGetHeapStats(&hst);
+    const bool https = (mg_ntohs(c->loc.port) == (unsigned) atoi(HTTPS_PORT));
+    const char *reason =
+        !strcmp(why, "heap")   ? (https ? "heap/fragmentation < HS min (30K / largest 12K)"
+                                        : "heap < 20K") :
+        !strcmp(why, "hs")     ? "another TLS handshake in progress (max 1)" :
+        !strcmp(why, "budget") ? "no idle conn to evict (per-IP 2 / web 3 / total 8)" :
+                                 "other";
+    printf("[NET] REJECT %s %s conn=%lu client=%s | %s | heap free=%lu largest=%lu "
+           "hs=%u web=%u(same_ip=%u) mqtt=%u (rst=%lu syn_drop=%lu)\r\n",
+           https ? "HTTPS" : "HTTP", why, (unsigned long) c->id, rem, reason,
+           (unsigned long) hst.xAvailableHeapSpaceInBytes,
+           (unsigned long) hst.xSizeOfLargestFreeBlockInBytes,
+           (unsigned) cs->hs_total, (unsigned) (cs->web_est + cs->web_hs),
+           (unsigned) cs->same_ip, (unsigned) (cs->mqtt_srv + cs->mqtt_out),
            (unsigned long) g_net_rejects, (unsigned long) g_net_syn_drops);
   }
 #if MG_ENABLE_TCPIP
@@ -1493,6 +1503,16 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
         }
 
         MG_INFO(("Accept: local %M remote %M", mg_print_ip_port, &c->loc, mg_print_ip_port, &c->rem));
+
+        /* [ZAG] Метим время accept: пустые speculative-сокеты браузера (Firefox)
+         * без этого имели last_used==0, не вытеснялись и не закрывались watchdog'ом,
+         * занимая лимит per-IP, и реальный запрос получал RST.
+         * HAL_GetTick() — тот же источник времени, что и запись last_used
+         * в MG_EV_HTTP_MSG (net.c), watchdog сравнивает с ним же. */
+        if (local_port == atoi(HTTP_PORT) || local_port == atoi(HTTPS_PORT)) {
+            uint32_t t0 = HAL_GetTick();
+            *(uint32_t *) c->data = t0 ? t0 : 1u;
+        }
 
         /* ── Блокировка внешних сканеров при ОТКлюченном HTTPS ── */
         if (local_port == atoi(HTTP_PORT) && !c->rem.is_ip6) {
