@@ -1,0 +1,30 @@
+Rust-утилита "make_first_flash" не зависит от CubeProgrammer, Java и Python она сама стирает flash и пишет образ через probe-rs и не вызывает `STM32_Programmer_CLI`. Нужны только сам бинарник Zagotovka_M/Bootloader/DO_NOT_TOUCH/Zagotovka_M_BOOTLOADER.bin и ST-LINK. 
+
+**Windows и macOS:** код написан так, чтобы собираться под них, но проверен я только на Debuan13 Linux.
+- Бинарник нужно собрать под каждую систему отдельно (на Debian получится только Linux-версия). Для этого и создан файл `make_first_flash_tool.yml` — это конфигурация для GitHub Actions. Он запустится автоматически на стороне GitHub после того, как вы загрузите его в репозиторий.
+- Windows может потребовать USB-драйвер для ST-LINK, а на Linux нужны правила udev.
+- На macOS бинарник, скачанный из интернета, может блокироваться системой безопасности.
+
+Пока реально проверено: Debian 13 с ST-LINK V2-1 и чипом STM32F767.
+
+
+Linux:
+cd Zagotovka_M/scripts
+chmod +x make_first_flash
+./make_first_flash
+PS - Права chmod +x нужны потому, что архивы GitHub не сохраняют признак исполняемого файла.
+
+macOS (архив нужно выбрать под процессор):
+cd Zagotovka_M/scripts
+chmod +x make_first_flash
+xattr -d com.apple.quarantine make_first_flash
+./make_first_flash
+
+Windows (PowerShell), либо двойной клик по файлу:
+cd Zagotovka_M\scripts
+.\make_first_flash.exe
+
+
+В чём смысл Rust-утилиты: убрать тяжёлые зависимости (CubeProgrammer с Java на несколько сотен МБ и Python) и оставить один файл плюс одноразовую настройку USB. Если ваша цель «ничего вообще не ставить на Windows», то она достигнута только если драйвер там появляется сам или кладётся рядом. Это нужно проверить на чистой Windows-машине.
+
+Предлагаю так: вы запускаете сборку на GitHub, пробуете .exe на Windows без CubeProgrammer и присылаете, что выдаст программа. Тогда я точно напишу, какой драйвер нужен, и добавлю короткую инструкцию в README.

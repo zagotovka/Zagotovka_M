@@ -1,0 +1,15 @@
+[package]
+name = "make_first_flash"
+version = "2.0.0"
+edition = "2021"
+description = "Build the first-flash image (bootloader + Bank A) for Zagotovka_M and program it through probe-rs (no STM32CubeProgrammer needed)"
+
+[dependencies]
+anyhow = "1"
+sha2 = "0.10"
+probe-rs = { version = "0.32", features = ["builtin-formats"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true

@@ -1,51 +1,124 @@
 /*
- * remote.css — стили пульта управления (#remote, классы rem-*).
- * Самодостаточные CSS-переменные: светлая/тёмная тема переключается
- * атрибутом <html data-theme="dark"> (см. theme.js), Tailwind не требуется.
+ * remote.css — пульт управления (#remote, классы rem-*). Редизайн.
+ *
+ * Идея: «состояние = свет». Включённое устройство светится (кромка, подсветка
+ * угла, свет тумблера), выключенное — погашено. Всё чисто на CSS поверх
+ * существующей разметки TabRemote.js, JS менять не нужно.
+ *
+ * Вес: без картинок и шрифтов, только градиенты. backdrop-filter — лишь на
+ * верхней панели, заголовках рубрик и нижнем меню (десяток элементов).
+ * Нужен современный Chrome/Safari (:has, color-mix, @property).
+ *
+ * Тема переключается атрибутом <html data-theme="dark"> (см. theme.js).
  */
 
-.rem-wrap {
-  --rem-bg: #eef2f7;
-  --rem-panel: rgba(255, 255, 255, 0.78);
-  --rem-panel-border: rgba(148, 163, 184, 0.28);
-  --rem-text: #1e293b;
-  --rem-muted: #64748b;
-  --rem-accent: #0d9488;
-  --rem-accent-2: #06b6d4;
-  --rem-on: #14b8a6;
-  --rem-off: #cbd5e1;
-  --rem-danger: #ef4444;
-  --rem-wait: #f59e0b;
-  --rem-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
-  --rem-head-bg: #d5efec;
-  --rem-head-border: #99d5cf;
-  --rem-head-text: #0f3d3a;
-  --rem-nav-bg: rgba(255, 255, 255, 0.97);
-  --rem-nav-btn-bg: #eef2f7;
+/* Для «заливки по часовой» на кнопке-замке при удержании */
+@property --rem-a {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
 
+/* Свой шрифт (по желанию). Положите variable woff2 рядом и раскомментируйте;
+ * пока работает шрифт страницы.
+@font-face {
+  font-family: 'RemSans';
+  src: url('./fonts/Sora-Variable.woff2') format('woff2');
+  font-weight: 300 800;
+  font-display: swap;
+}
+.rem-wrap { --rem-font: 'RemSans', system-ui, sans-serif; }
+*/
+
+/* ═══════════════════════════ Токены: светлая тема ═══════════════════════════ */
+.rem-wrap {
+  --rem-bg: #e8eef6;
+  --rem-blob-1: rgba(20, 184, 166, 0.30);
+  --rem-blob-2: rgba(99, 102, 241, 0.20);
+  --rem-blob-3: rgba(14, 165, 233, 0.22);
+
+  --rem-card-bg: rgba(255, 255, 255, 0.72);
+  --rem-panel-border: rgba(20, 50, 90, 0.11);
+  --rem-hi: rgba(255, 255, 255, 0.95);       /* верхний блик карточки */
+  --rem-shadow: 0 1px 2px rgba(15, 40, 70, 0.05), 0 16px 32px -18px rgba(15, 40, 70, 0.30);
+
+  --rem-text: #0e1b2c;
+  --rem-muted: #56667c;
+
+  --rem-accent: #0b9d90;
+  --rem-accent-2: #0ea5e9;
+  --rem-on: #14b8a6;
+  --rem-on-2: #22c3e6;
+  --rem-on-text: #0a7f74;
+  --rem-on-ink: #ffffff;
+  --rem-glow: rgba(20, 184, 166, 0.40);
+
+  --rem-off: rgba(20, 50, 90, 0.18);
+  --rem-groove: rgba(20, 50, 90, 0.09);
+  --rem-danger: #e5394b;
+  --rem-wait: #e59a0b;
+
+  --rem-head-bg: rgba(243, 248, 252, 0.90);
+  --rem-bar-bg: rgba(240, 246, 252, 0.80);
+  --rem-nav-bg: rgba(255, 255, 255, 0.84);
+
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
   background: var(--rem-bg);
   color: var(--rem-text);
-  padding-bottom: 84px; /* место под нижнюю навигацию */
-  font-family: inherit;
-}
-html[data-theme="dark"] .rem-wrap {
-  --rem-bg: #0b1220;
-  --rem-panel: rgba(30, 41, 59, 0.72);
-  --rem-panel-border: rgba(148, 163, 184, 0.22);
-  --rem-text: #e2e8f0;
-  --rem-muted: #94a3b8;
-  --rem-on: #2dd4bf;
-  --rem-off: #475569;
-  --rem-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-  --rem-head-bg: #123a40;
-  --rem-head-border: #1f6f73;
-  --rem-head-text: #e6fffb;
-  --rem-nav-bg: rgba(15, 23, 42, 0.97);
-  --rem-nav-btn-bg: #1e293b;
+  padding-bottom: 104px; /* место под плавающее нижнее меню */
+  font-family: var(--rem-font, inherit);
 }
 
-/* ── Верхняя панель ── */
+/* ═══════════════════════════ Токены: тёмная тема ════════════════════════════ */
+html[data-theme="dark"] .rem-wrap {
+  --rem-bg: #060a14;
+  --rem-blob-1: rgba(20, 184, 166, 0.20);
+  --rem-blob-2: rgba(99, 102, 241, 0.24);
+  --rem-blob-3: rgba(14, 165, 233, 0.14);
+
+  --rem-card-bg: rgba(16, 25, 42, 0.74);
+  --rem-panel-border: rgba(150, 190, 255, 0.12);
+  --rem-hi: rgba(255, 255, 255, 0.06);
+  --rem-shadow: 0 16px 30px -16px rgba(0, 0, 0, 0.75);
+
+  --rem-text: #e8eef8;
+  --rem-muted: #8b9ab2;
+
+  --rem-accent: #2ee6cf;
+  --rem-accent-2: #27b7f5;
+  --rem-on: #2ee6cf;
+  --rem-on-2: #27b7f5;
+  --rem-on-text: #5cf0dc;
+  --rem-on-ink: #032320;
+  --rem-glow: rgba(46, 230, 207, 0.42);
+
+  --rem-off: rgba(255, 255, 255, 0.15);
+  --rem-groove: rgba(255, 255, 255, 0.07);
+  --rem-danger: #ff5a6a;
+  --rem-wait: #f5b83d;
+
+  --rem-head-bg: rgba(12, 19, 33, 0.90);
+  --rem-bar-bg: rgba(8, 13, 24, 0.74);
+  --rem-nav-bg: rgba(10, 16, 28, 0.82);
+}
+
+/* Фон: три размытых «свечения» вместо плоской заливки */
+.rem-wrap::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 45% at 0% 0%, var(--rem-blob-1), transparent 70%),
+    radial-gradient(60% 45% at 100% 32%, var(--rem-blob-2), transparent 70%),
+    radial-gradient(70% 45% at 25% 100%, var(--rem-blob-3), transparent 70%),
+    var(--rem-bg);
+}
+
+/* ═══════════════════════════ Верхняя панель ═════════════════════════════════ */
 .rem-topbar {
   position: sticky;
   top: 0;
@@ -56,9 +129,22 @@ html[data-theme="dark"] .rem-wrap {
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
-  background: var(--rem-panel);
+  background: var(--rem-bar-bg);
   border-bottom: 1px solid var(--rem-panel-border);
-  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  backdrop-filter: blur(16px) saturate(1.4);
+}
+/* Управление разблокировано — по низу панели горит линия */
+.rem-wrap:not(.is-locked) .rem-topbar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--rem-on), var(--rem-on-2), transparent);
+  box-shadow: 0 0 16px var(--rem-glow);
+  pointer-events: none;
 }
 .rem-title {
   flex: 1;
@@ -72,14 +158,15 @@ html[data-theme="dark"] .rem-wrap {
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--rem-text);
   background: transparent;
   border: 1px solid var(--rem-panel-border);
   text-decoration: none;
   font-size: 13px;
+  transition: border-color 0.15s, color 0.15s;
 }
-.rem-exit:hover { border-color: var(--rem-accent); color: var(--rem-accent); }
+.rem-exit:hover { border-color: var(--rem-on); color: var(--rem-on-text); }
 .rem-logo { display: flex; align-items: center; justify-content: center; min-width: 0; }
 .rem-logo .zl { width: clamp(96px, 32vw, 150px); }
 .rem-actions { display: flex; align-items: center; gap: 6px; flex: none; }
@@ -94,26 +181,27 @@ html[data-theme="dark"] .rem-wrap {
   position: sticky;
   top: 60px;
   z-index: 39;
-  margin: 8px 16px 0;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: linear-gradient(rgba(239, 68, 68, 0.14), rgba(239, 68, 68, 0.14)), var(--rem-bg);
-  border: 1px solid rgba(239, 68, 68, 0.45);
+  margin: 10px 16px 0;
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: linear-gradient(rgba(239, 68, 68, 0.16), rgba(239, 68, 68, 0.16)), var(--rem-head-bg);
+  border: 1px solid rgba(239, 68, 68, 0.5);
   color: var(--rem-danger);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 650;
   text-align: center;
+  box-shadow: 0 8px 24px -10px rgba(239, 68, 68, 0.5);
 }
 
-/* ── Тело страницы ── */
-.rem-body { padding: 12px 16px 24px; max-width: 1100px; margin: 0 auto; }
+/* ═══════════════════════════ Тело страницы ══════════════════════════════════ */
+.rem-body { padding: 14px 16px 24px; max-width: 1100px; margin: 0 auto; }
 .rem-empty {
   margin: 48px auto;
   text-align: center;
   color: var(--rem-muted);
   font-size: 15px;
 }
-.rem-section { margin-bottom: 12px; scroll-margin-top: 68px; }
+.rem-section { margin-bottom: 10px; scroll-margin-top: 68px; }
 .rem-section.is-open { margin-bottom: 26px; }
 .rem-section-h {
   position: sticky;
@@ -122,6 +210,8 @@ html[data-theme="dark"] .rem-wrap {
   margin: 0;
 }
 .rem-section.is-open .rem-section-h { margin: 0 0 12px; }
+
+/* Заголовок рубрики: строка-«рейка», без капса и цветной полосы */
 .rem-section-head {
   appearance: none;
   -webkit-appearance: none;
@@ -129,158 +219,263 @@ html[data-theme="dark"] .rem-wrap {
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  min-height: 48px;
-  border-radius: 12px;
-  border: 1px solid var(--rem-head-border);
-  border-left: 5px solid var(--rem-accent);
+  gap: 12px;
+  padding: 12px 16px;
+  min-height: 54px;
+  border-radius: 18px;
+  border: 1px solid var(--rem-panel-border);
   background: var(--rem-head-bg);
-  box-shadow: var(--rem-shadow);
-  color: var(--rem-head-text);
+  box-shadow: var(--rem-shadow), inset 0 1px 0 var(--rem-hi);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: var(--rem-text);
   font: inherit;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   text-align: left;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+.rem-section-head[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--rem-on) 50%, transparent);
+  box-shadow:
+    var(--rem-shadow),
+    0 0 26px -8px var(--rem-glow),
+    inset 0 1px 0 var(--rem-hi);
 }
 .rem-chevron {
   flex: none;
   width: 8px;
   height: 8px;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
+  border-right: 2px solid var(--rem-muted);
+  border-bottom: 2px solid var(--rem-muted);
   transform: rotate(-45deg);
-  transition: transform 0.15s;
+  transition: transform 0.22s cubic-bezier(0.3, 1.4, 0.5, 1), border-color 0.2s;
 }
-.rem-section.is-open .rem-chevron { transform: rotate(45deg); }
+.rem-section.is-open .rem-chevron { transform: rotate(45deg); border-color: var(--rem-on-text); }
 .rem-count {
   margin-left: auto;
-  min-width: 26px;
-  padding: 2px 9px;
+  min-width: 28px;
+  padding: 3px 10px;
   border-radius: 999px;
-  background: var(--rem-accent);
-  color: #fff;
-  font-size: 12px;
+  background: color-mix(in srgb, var(--rem-on) 16%, transparent);
+  color: var(--rem-on-text);
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 .rem-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 12px;
+  animation: rem-rise 0.28s ease-out both;
+}
+/* Раскрытие рубрики — единственное «выходное» движение, и оно отвечает на тап */
+.rem-grid > * { animation: rem-rise 0.32s ease-out both; }
+.rem-grid > :nth-child(2) { animation-delay: 30ms; }
+.rem-grid > :nth-child(3) { animation-delay: 60ms; }
+.rem-grid > :nth-child(4) { animation-delay: 90ms; }
+.rem-grid > :nth-child(5) { animation-delay: 120ms; }
+.rem-grid > :nth-child(n+6) { animation-delay: 150ms; }
+@keyframes rem-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
 }
 
-/* ── Карточка ── */
+/* Разные рубрики — разная форма */
+#rem-grid-sw,
+#rem-grid-zb { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#rem-grid-zb > .rem-card:has(.rem-slider),
+#rem-grid-zb > .rem-card:has(.rem-colors) { grid-column: 1 / -1; }
+#rem-grid-pw,
+#rem-grid-pd,
+#rem-grid-bt { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 720px) {
+  #rem-grid-sw,
+  #rem-grid-zb { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+  #rem-grid-pw,
+  #rem-grid-pd,
+  #rem-grid-bt { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+}
+
+/* ═══════════════════════════ Карточка ═══════════════════════════════════════ */
 .rem-card {
-  background: var(--rem-panel);
+  position: relative;
+  overflow: hidden;
+  background: var(--rem-card-bg);
   border: 1px solid var(--rem-panel-border);
-  border-radius: 14px;
-  padding: 12px 14px;
-  box-shadow: var(--rem-shadow);
+  border-radius: 22px;
+  padding: 14px 16px;
+  box-shadow: var(--rem-shadow), inset 0 1px 0 var(--rem-hi);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  transition: border-color 0.3s, box-shadow 0.3s, background 0.3s;
 }
+.rem-card > * { position: relative; z-index: 1; }
+/* Подсветка угла: гаснет и загорается вместе с устройством */
+.rem-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(110% 90% at 100% 0%, var(--rem-glow), transparent 62%);
+  transition: opacity 0.4s;
+}
+
+/* Включено = свет: переключатель включён ИЛИ значение яркости не 0 */
+.rem-card:has(.rem-toggle.is-on),
+.rem-card:has(.rem-slider-thumb:not([aria-valuenow="0"])) {
+  border-color: color-mix(in srgb, var(--rem-on) 55%, transparent);
+  box-shadow:
+    var(--rem-shadow),
+    0 0 0 1px color-mix(in srgb, var(--rem-on) 14%, transparent),
+    0 14px 38px -12px var(--rem-glow),
+    inset 0 1px 0 var(--rem-hi);
+}
+.rem-card:has(.rem-toggle.is-on)::before,
+.rem-card:has(.rem-slider-thumb:not([aria-valuenow="0"]))::before { opacity: 0.55; }
+
 .rem-card-row {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 .rem-card-head {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
 }
+.rem-card-row > .rem-card-head { flex: 1 1 auto; align-items: center; }
+.rem-card-row > .rem-toggle,
+.rem-card-row > .rem-ow-val { flex: none; }
 .rem-card-name {
-  font-size: 14px;
-  font-weight: 600;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .rem-note { font-size: 12px; color: var(--rem-muted); }
 
-/* ── Тумблер ── */
+/* ═══════════════════════════ Тумблер ════════════════════════════════════════ */
 .rem-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--rem-panel-border);
+  gap: 12px;
+  padding: 0;
+  border: 0;
   background: transparent;
   color: var(--rem-text);
   cursor: pointer;
+  font: inherit;
   font-size: 14px;
+  font-weight: 650;
   min-height: 44px;
-  transition: border-color 0.15s, opacity 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.15s;
 }
 .rem-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
 .rem-toggle-knob {
-  width: 40px;
-  height: 22px;
+  width: 56px;
+  height: 32px;
   border-radius: 999px;
   background: var(--rem-off);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25);
   position: relative;
   flex: none;
-  transition: background 0.18s;
+  transition: background 0.25s, box-shadow 0.25s;
 }
 .rem-toggle-knob::after {
   content: '';
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: #fff;
-  transition: transform 0.18s;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.rem-toggle.is-on .rem-toggle-knob { background: var(--rem-on); }
-.rem-toggle.is-on .rem-toggle-knob::after { transform: translateX(18px); }
-.rem-toggle.is-busy { border-color: var(--rem-wait); }
-
-/* ── Ползунок ──
- * Меняется только перетаскиванием бегунка. Над дорожкой вертикальный жест
- * прокручивает страницу (pan-y), касание дорожки значение не меняет. */
-.rem-slider-row { display: flex; align-items: center; gap: 10px; }
-.rem-slider-val {
-  min-width: 44px;
-  text-align: right;
-  font-size: 13px;
+.rem-toggle-label {
   color: var(--rem-muted);
+  transition: color 0.25s;
+}
+.rem-toggle.is-on .rem-toggle-knob {
+  background: linear-gradient(135deg, var(--rem-on-2), var(--rem-on));
+  box-shadow: 0 0 20px var(--rem-glow), inset 0 1px 2px rgba(255, 255, 255, 0.35);
+}
+.rem-toggle.is-on .rem-toggle-knob::after { transform: translateX(24px); }
+.rem-toggle.is-on .rem-toggle-label { color: var(--rem-on-text); }
+.rem-toggle.is-busy .rem-toggle-knob {
+  background: var(--rem-wait);
+  animation: rem-busy 0.9s ease-in-out infinite;
+}
+@keyframes rem-busy {
+  50% { box-shadow: 0 0 18px color-mix(in srgb, var(--rem-wait) 70%, transparent); }
+}
+/* В плитках тумблер растянут: подпись слева, бегунок справа */
+#rem-grid-sw .rem-toggle,
+#rem-grid-zb .rem-toggle {
+  width: 100%;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+}
+/* Хотите, чтобы тапом работала вся плитка? Раскомментируйте (риск случайных нажатий выше):
+#rem-grid-sw .rem-card .rem-toggle::after,
+#rem-grid-zb .rem-card:not(:has(.rem-slider)) .rem-toggle::after {
+  content: ''; position: absolute; inset: 0; z-index: 2;
+}
+*/
+
+/* ═══════════════════════════ Ползунок ═══════════════════════════════════════
+ * Толстый «фейдер»: капсула с заливкой до значения и вертикальной ручкой.
+ * Логика та же: двигается только бегунок, тап по дорожке значение не меняет,
+ * вертикальный жест прокручивает страницу (pan-y). Геометрия бегунка
+ * (22 px видимый, 44 px зона касания) совпадает с THUMB_PX/THUMB_HIT_PX. */
+.rem-slider-row { display: flex; align-items: center; gap: 14px; }
+.rem-slider-val {
+  min-width: 56px;
+  text-align: right;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--rem-text);
   font-variant-numeric: tabular-nums;
 }
 .rem-slider {
   position: relative;
   flex: 1;
   height: 44px;
+  border-radius: 999px;
+  overflow: hidden;          /* скругляет заливку по форме капсулы */
+  background: var(--rem-groove);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25), inset 0 0 0 1px var(--rem-panel-border);
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
 }
-.rem-slider-track {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 8px;
-  margin-top: -4px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--rem-accent), var(--rem-accent-2));
-  opacity: 0.85;
-  pointer-events: none;
-}
+.rem-slider-track { display: none; }
 .rem-slider-thumb {
   position: absolute;
   top: 0;
+  z-index: 1;
   width: 44px;
   height: 44px;
   display: flex;
@@ -290,75 +485,126 @@ html[data-theme="dark"] .rem-wrap {
   cursor: grab;
   outline: none;
 }
+/* Заливка тянется от центра бегунка влево до края капсулы */
+.rem-slider-thumb::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  right: 50%;
+  top: 0;
+  width: 2000px;
+  height: 100%;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.30), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(90deg, var(--rem-on), var(--rem-on-2));
+  box-shadow: inset -2px 0 0 rgba(255, 255, 255, 0.35);
+}
+/* Ручка */
 .rem-slider-thumb::before {
   content: '';
   box-sizing: border-box;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
+  width: 6px;
+  height: 24px;
+  border-radius: 3px;
   background: #fff;
-  border: 2px solid var(--rem-accent);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-  transition: transform 0.12s;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45), 0 0 14px rgba(255, 255, 255, 0.55);
+  transition: height 0.15s, width 0.15s;
 }
 .rem-slider.is-drag .rem-slider-thumb { cursor: grabbing; }
-.rem-slider.is-drag .rem-slider-thumb::before { transform: scale(1.18); }
+.rem-slider.is-drag .rem-slider-thumb::before { height: 32px; width: 7px; }
 .rem-slider-thumb:focus-visible::before { box-shadow: 0 0 0 3px var(--rem-accent-2); }
 .rem-slider.is-disabled { opacity: 0.4; }
 .rem-slider.is-disabled .rem-slider-thumb { cursor: not-allowed; }
 
-/* ── Кнопки событий ── */
+/* ═══════════════════════════ Кнопки событий ═════════════════════════════════ */
 .rem-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .rem-btn {
   flex: 1;
   min-width: 70px;
-  min-height: 42px;
+  min-height: 48px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: 14px;
   border: 1px solid var(--rem-panel-border);
-  background: transparent;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--rem-text) 7%, transparent), transparent 70%),
+    var(--rem-groove);
+  box-shadow: inset 0 1px 0 var(--rem-hi), 0 2px 0 var(--rem-panel-border);
   color: var(--rem-text);
-  font-size: 13px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.08s, color 0.12s;
 }
 .rem-btn:hover:not(:disabled) {
-  background: rgba(13, 148, 136, 0.12);
-  border-color: var(--rem-accent);
+  border-color: color-mix(in srgb, var(--rem-on) 60%, transparent);
 }
-.rem-btn:active:not(:disabled) { transform: scale(0.97); }
-.rem-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+/* Нажатие — вспышка «клавиши» */
+.rem-btn:active:not(:disabled) {
+  background: linear-gradient(135deg, var(--rem-on-2), var(--rem-on));
+  border-color: transparent;
+  color: var(--rem-on-ink);
+  box-shadow: 0 0 24px var(--rem-glow);
+  transform: translateY(2px) scale(0.97);
+}
+.rem-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-/* ── Статус команды ── */
-.rem-status { font-size: 12px; white-space: nowrap; }
+/* ═══════════════════════════ Статус команды ═════════════════════════════════ */
+.rem-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.rem-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
 .rem-status.is-wait { color: var(--rem-wait); }
-.rem-status.is-ok { color: var(--rem-on); }
+.rem-status.is-wait::before { animation: rem-dot 0.9s ease-in-out infinite; }
+.rem-status.is-ok { color: var(--rem-on-text); }
 .rem-status.is-err { color: var(--rem-danger); }
+@keyframes rem-dot { 50% { opacity: 0.25; } }
 
-/* ── Цветовая панель ── */
-.rem-colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+/* ═══════════════════════════ Цветовая панель ════════════════════════════════ */
+.rem-colors { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .rem-swatch {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  border: 2px solid transparent;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
   cursor: pointer;
   padding: 0;
+  transition: transform 0.15s;
 }
-.rem-swatch.is-active { border-color: var(--rem-text); }
+.rem-swatch:hover:not(:disabled) { transform: scale(1.08); }
+.rem-swatch.is-active {
+  outline: 2px solid var(--rem-text);
+  outline-offset: 2px;
+}
 .rem-swatch:disabled { opacity: 0.4; cursor: not-allowed; }
 .rem-swatch-pick {
   position: relative;
   width: auto;
-  min-width: 30px;
+  min-width: 32px;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   background: transparent;
+  box-shadow: none;
   border: 1px dashed var(--rem-panel-border);
   font-size: 11px;
   color: var(--rem-muted);
-  padding: 2px 6px;
+  padding: 2px 10px;
 }
 .rem-swatch-pick input[type="color"] {
   position: absolute;
@@ -369,10 +615,28 @@ html[data-theme="dark"] .rem-wrap {
   padding: 0;
 }
 
-/* ── Термостаты ── */
-.rem-pd-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* ═══════════════════════════ Термостаты ═════════════════════════════════════ */
+.rem-pd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
 .rem-pd-cur { font-size: 13px; color: var(--rem-muted); }
-.rem-pd-cur b { color: var(--rem-text); font-size: 15px; }
+.rem-pd-cur b {
+  color: var(--rem-text);
+  font-size: 44px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s, text-shadow 0.3s;
+}
+.rem-card:has(.rem-toggle.is-on) .rem-pd-cur b {
+  color: var(--rem-on-text);
+  text-shadow: 0 0 26px var(--rem-glow);
+}
 .rem-pd-set {
   display: flex;
   align-items: center;
@@ -382,60 +646,95 @@ html[data-theme="dark"] .rem-wrap {
   color: var(--rem-muted);
 }
 .rem-pd-set input {
-  width: 96px;
-  padding: 8px 10px;
-  border-radius: 10px;
+  width: 108px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 14px;
   border: 1px solid var(--rem-panel-border);
-  background: transparent;
+  background: var(--rem-groove);
   color: var(--rem-text);
-  font-size: 14px;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-.rem-pd-set input:focus { outline: none; border-color: var(--rem-accent); }
+.rem-pd-set input:focus {
+  outline: none;
+  border-color: var(--rem-on);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rem-on) 28%, transparent);
+}
 
-/* ── Датчики ── */
-.rem-ow-val { font-size: 14px; font-variant-numeric: tabular-nums; }
+/* ═══════════════════════════ Датчики ════════════════════════════════════════ */
+.rem-ow-val {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#rem-grid-ow .rem-card { padding-left: 20px; }
+#rem-grid-ow .rem-card::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(180deg, var(--rem-on), var(--rem-on-2));
+  box-shadow: 0 0 12px var(--rem-glow);
+}
 
-/* ── Нижняя навигация по разделам ── */
+/* ═══════════════════════════ Нижняя навигация ═══════════════════════════════
+ * Плавающая стеклянная капсула вместо полосы во всю ширину. */
 .rem-nav {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: 10px;
+  right: 10px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
   z-index: 45;
   display: flex;
-  gap: 8px;
-  padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  gap: 6px;
+  padding: 7px;
+  border-radius: 24px;
   background: var(--rem-nav-bg);
-  border-top: 2px solid var(--rem-accent);
-  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.18);
+  border: 1px solid var(--rem-panel-border);
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.45), inset 0 1px 0 var(--rem-hi);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  backdrop-filter: blur(18px) saturate(1.5);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.rem-nav::-webkit-scrollbar { display: none; }
 .rem-nav-btn {
   flex: 1 0 auto;
-  min-height: 40px;
-  padding: 8px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--rem-panel-border);
-  background: var(--rem-nav-btn-bg);
-  color: var(--rem-text);
-  font-size: 13px;
-  font-weight: 600;
+  min-height: 42px;
+  padding: 8px 16px;
+  border-radius: 18px;
+  border: 0;
+  background: transparent;
+  color: var(--rem-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
 }
-.rem-nav-btn:hover { border-color: var(--rem-accent); color: var(--rem-accent); }
-.rem-nav { scrollbar-width: none; -ms-overflow-style: none; }
-.rem-nav::-webkit-scrollbar { display: none; }
+.rem-nav-btn:hover { color: var(--rem-text); }
 .rem-nav-btn.is-active,
 .rem-nav-btn.is-active:hover {
-  background: var(--rem-accent);
-  border-color: var(--rem-accent);
-  color: #fff;
+  background: linear-gradient(135deg, var(--rem-on-2), var(--rem-on));
+  color: var(--rem-on-ink);
+  box-shadow: 0 6px 20px -4px var(--rem-glow);
 }
 
-/* ── Кнопки верхней панели: полный экран и замок ── */
+/* ═══════════════════════════ Кнопки верхней панели: экран и замок ══════════ */
 .rem-iconbtn,
 .rem-lock {
   position: relative;
@@ -446,7 +745,7 @@ html[data-theme="dark"] .rem-wrap {
   width: 40px;
   height: 40px;
   padding: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--rem-panel-border);
   background: transparent;
   color: var(--rem-text);
@@ -456,33 +755,41 @@ html[data-theme="dark"] .rem-wrap {
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
 }
 .rem-iconbtn svg,
 .rem-lock svg { position: relative; z-index: 1; width: 20px; height: 20px; }
-.rem-iconbtn.is-on { border-color: var(--rem-accent); color: var(--rem-accent); }
+.rem-iconbtn.is-on { border-color: var(--rem-on); color: var(--rem-on-text); }
 .rem-lock.is-open {
-  background: var(--rem-accent);
-  border-color: var(--rem-accent);
-  color: #fff;
+  background: linear-gradient(135deg, var(--rem-on-2), var(--rem-on));
+  border-color: transparent;
+  color: var(--rem-on-ink);
+  box-shadow: 0 0 20px var(--rem-glow);
 }
+/* Удержание: заливка идёт по кругу, как стрелка часов */
 .rem-lock-fill {
   position: absolute;
   inset: 0;
-  background: var(--rem-accent);
+  background: conic-gradient(var(--rem-on) var(--rem-a), transparent 0);
   opacity: 0;
-  transform: scaleY(0);
-  transform-origin: bottom;
   pointer-events: none;
 }
 .rem-lock.is-holding .rem-lock-fill {
   animation: rem-hold 0.6s linear forwards;
 }
+.rem-lock.is-holding { border-color: var(--rem-on); }
 @keyframes rem-hold {
-  from { opacity: 0.45; transform: scaleY(0); }
-  to { opacity: 0.45; transform: scaleY(1); }
+  from { --rem-a: 0deg; opacity: 0.6; }
+  to { --rem-a: 360deg; opacity: 0.6; }
 }
-.rem-lock.is-pulse { animation: rem-pulse 0.5s ease 3; }
-@keyframes rem-pulse {
+/* Два одинаковых набора кадров с разными именами: JS чередует класс на каждое
+ * касание, смена animation-name заново запускает мигание. */
+.rem-lock.is-pulse-0 { animation: rem-pulse-a 0.5s ease 3; }
+.rem-lock.is-pulse-1 { animation: rem-pulse-b 0.5s ease 3; }
+@keyframes rem-pulse-a {
+  50% { border-color: var(--rem-danger); box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.35); }
+}
+@keyframes rem-pulse-b {
   50% { border-color: var(--rem-danger); box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.35); }
 }
 
@@ -494,32 +801,40 @@ html[data-theme="dark"] .rem-wrap {
 .rem-wrap.is-locked .rem-pd-set { opacity: 0.6; }
 .rem-wrap.is-locked .rem-slider-thumb { cursor: not-allowed; }
 
-/* ── Всплывающее уведомление (тост) ──
- * Цвета инвертируются относительно темы — так же, как подсказки [data-tip]
- * на странице Select pin(s): светлая тема даёт тёмный фон со светлым
- * текстом, тёмная — светлый фон с тёмным текстом. На фоне пульта в любой
- * теме уведомление контрастно и заметно. */
+/* ═══════════════════════════ Тост ═══════════════════════════════════════════
+ * Цвета инвертируются относительно темы, как подсказки [data-tip]. */
 .rem-toast {
   position: fixed;
   left: 50%;
-  bottom: calc(84px + env(safe-area-inset-bottom));
+  bottom: calc(92px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   z-index: 50;
   max-width: calc(100vw - 32px);
-  padding: 10px 16px;
-  border-radius: 12px;
+  padding: 11px 18px;
+  border-radius: 16px;
   background: #1a2332;
   color: #e8f4f8;
   border: 1px solid rgba(0, 188, 188, 0.35);
   font-size: 13px;
   font-weight: 600;
   text-align: center;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   pointer-events: none;
 }
 html[data-theme="dark"] .rem-toast {
   background: #e6eef4;
   color: #14202b;
   border: 1px solid rgba(0, 160, 170, 0.65);
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.65);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.65);
+}
+
+/* ═══════════════════════════ Доступность ════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  .rem-wrap *,
+  .rem-wrap *::before,
+  .rem-wrap *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

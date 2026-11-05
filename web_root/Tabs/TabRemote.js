@@ -341,7 +341,7 @@ const LockBtn = ({ locked, pulse, labels, onUnlock, onLock }) => {
   return html`
     <button
       type="button"
-      class=${'rem-lock' + (locked ? '' : ' is-open') + (holding ? ' is-holding' : '') + (pulse ? ' is-pulse' : '')}
+      class=${'rem-lock' + (locked ? '' : ' is-open') + (holding ? ' is-holding' : '') + (pulse ? ' is-pulse-' + (pulse % 2) : '')}
       style=${holding ? 'animation-duration:' + HOLD_MS + 'ms' : ''}
       data-tip=${locked ? labels.holdUnlock : labels.lockNow}
       aria-label=${locked ? labels.holdUnlock : labels.lockNow}
@@ -497,7 +497,7 @@ export function TabRemote({ }) {
   const [openSecs, setOpenSecs] = useState([]); // по умолчанию все рубрики свёрнуты
   const [locked, setLocked] = useState(true);   // при входе управление заблокировано
   const [hint, setHint] = useState(false);
-  const [pulse, setPulse] = useState(false);
+  const [pulse, setPulse] = useState(0); // счётчик касаний: смена значения перезапускает анимацию замка
   const [fs, setFs] = useState(!!fsElement());
   const idleRef = useRef(0);
   const hintRef = useRef(0);
@@ -514,9 +514,9 @@ export function TabRemote({ }) {
   const flashBlocked = () => {
     vibrateBlocked(); // тактильный отклик: предупреждение чувствуется, а не только видно
     setHint(true);
-    setPulse(true);
+    setPulse((n) => n + 1);
     clearTimeout(hintRef.current);
-    hintRef.current = setTimeout(() => { setHint(false); setPulse(false); }, 2500);
+    hintRef.current = setTimeout(() => { setHint(false); setPulse(0); }, 2500);
   };
 
   useEffect(() => {
@@ -796,7 +796,7 @@ export function TabRemote({ }) {
   const swCard = (it) => html`
     <div class="rem-card">
       <div class="rem-card-head">
-        <span class="rem-card-name">${it.n || 'ID ' + it.id}${it.t ? ' · ' + it.t : ''}</span>
+        <span class="rem-card-name">${it.n || 'ID ' + it.id}${it.t && it.t !== it.n ? ' · ' + it.t : ''}</span>
         ${statusLine('sw:' + it.id)}
       </div>
       <${ToggleBtn}
@@ -813,7 +813,7 @@ export function TabRemote({ }) {
     return html`
       <div class="rem-card">
         <div class="rem-card-head">
-          <span class="rem-card-name">${it.n || 'ID ' + it.id}${it.t ? ' · ' + it.t : ''}</span>
+          <span class="rem-card-name">${it.n || 'ID ' + it.id}${it.t && it.t !== it.n ? ' · ' + it.t : ''}</span>
           ${statusLine('pw:' + it.id)}
         </div>
         <${RemSlider}
@@ -923,7 +923,7 @@ export function TabRemote({ }) {
   const scRow = (it) => html`
     <div class="rem-card rem-card-row">
       <div class="rem-card-head">
-        <span class="rem-card-name">${it.n || 'ID ' + it.id}${it.t ? ' · ' + it.t : ''}</span>
+        <span class="rem-card-name">${it.n || 'ID ' + it.id}${it.t && it.t !== it.n ? ' · ' + it.t : ''}</span>
         ${statusLine('sc:' + it.id)}
       </div>
       <${ToggleBtn}
@@ -936,7 +936,7 @@ export function TabRemote({ }) {
 
   const owRow = (it) => html`
     <div class="rem-card rem-card-row">
-      <span class="rem-card-name">${it.n || 'ID ' + it.id}${typeof it.sub === 'number' ? ' #' + (it.sub + 1) : ''}${it.t ? ' · ' + it.t : ''}</span>
+      <span class="rem-card-name">${it.n || 'ID ' + it.id}${typeof it.sub === 'number' ? ' #' + (it.sub + 1) : ''}${it.t && it.t !== it.n ? ' · ' + it.t : ''}</span>
       <span class="rem-ow-val">
         ${it.ok
       ? html`${it.v} °C${typeof it.h === 'number' ? html` · ${L.h} ${it.h}%` : ''}`

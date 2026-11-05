@@ -10,7 +10,7 @@ Bank_B/
 .settings/
 .project
 .cproject
-.launch
+*.launch
 
 # Временные бэкапы файлов и редакторов
 *.bak
@@ -21,6 +21,11 @@ Bank_B/
 /scripts/_pack_work/
 /scripts/.web_build_status
 mx.scratch
+
+# Утилита make_first_flash: сборка Rust и готовый бинарник
+/scripts/make_first_flash_probe/target/
+/scripts/make_first_flash
+/scripts/make_first_flash.exe
 
 # Веб-сборка и зависимости
 /web_root/dist/

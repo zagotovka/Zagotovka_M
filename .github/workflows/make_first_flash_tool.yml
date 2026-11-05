@@ -1,0 +1,51 @@
+name: Build make_first_flash tool
+
+# Builds scripts/make_first_flash_probe for Windows, Linux and macOS.
+# Put this file into  .github/workflows/  in the ROOT of the repository
+# (next to the existing build.yml, codeql.yml, update.yml) - do not replace them.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["tool-v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin: make_first_flash.exe
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bin: make_first_flash
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bin: make_first_flash
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bin: make_first_flash
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: scripts/make_first_flash_probe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libudev (Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
+
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: make_first_flash-${{ matrix.target }}
+          path: scripts/make_first_flash_probe/target/${{ matrix.target }}/release/${{ matrix.bin }}
