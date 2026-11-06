@@ -8,9 +8,10 @@
 //! Steps: build image -> read FLASH->OPTCR -> (Single Bank -> Dual Bank)
 //!        -> mass erase of both banks -> program -> reset, read back, compare -> run.
 //!
-//! Where it lives: <project>/scripts/make_first_flash(.exe)
-//! Paths are counted from the project root (the folder above scripts/).
-//! The root is found automatically; override with --root or FIRST_FLASH_ROOT.
+//! It can be started from any folder. Files are taken in this order: given on the
+//! command line (or dragged onto the program) -> the project found above the program
+//! -> GitHub (the VERSION file selects the Bank A version) -> files saved earlier,
+//! and the bootloader built into the program. Override with --root or FIRST_FLASH_ROOT.
 //!
 //! The erase and the option bytes are handled directly through the flash controller
 //! registers (offsets, keys and bit positions are from RM0410 - check them there).
@@ -25,7 +26,7 @@ use probe_rs::{Core, MemoryInterface, Permissions, Session};
 use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::thread::sleep;
@@ -42,9 +43,18 @@ const BANK_CAPACITY: u32 = 0x000C_0000; // 768 KB
 const SRAM_BASE: u32 = 0x2000_0000;
 const SRAM_END: u32 = 0x2008_0000;
 
+// ---- files from GitHub -----------------------------------------------------
+const REPO_RAW: &str = "https://raw.githubusercontent.com/zagotovka/Zagotovka_M";
+const DEFAULT_REF: &str = "main";
+// A copy of the bootloader built into the program: the last resort without network.
+static EMBEDDED_BOOTLOADER: &[u8] =
+    include_bytes!("../../../Bootloader/DO_NOT_TOUCH/Zagotovka_M_BOOTLOADER.bin");
+
 // ---- project layout (relative to the project root) -------------------------
 struct Layout {
     root: PathBuf,
+    portable: bool, // no project found: working files live in the temp folder
+    cache: PathBuf,
     release_dir: PathBuf,
     boot_bin: PathBuf,
     output_dir: PathBuf,
@@ -52,53 +62,65 @@ struct Layout {
 }
 
 impl Layout {
-    fn new(root: PathBuf) -> Self {
+    fn new(root: PathBuf, portable: bool) -> Self {
+        let cache = cache_dir();
         Layout {
             release_dir: root.join("Proshivka"),
             boot_bin: root
                 .join("Bootloader")
                 .join("DO_NOT_TOUCH")
                 .join("Zagotovka_M_BOOTLOADER.bin"),
-            output_dir: root.join("Proshivka").join("First_flash"),
+            output_dir: if portable {
+                cache.clone()
+            } else {
+                root.join("Proshivka").join("First_flash")
+            },
             bank_a_build: root.join("Bank_A").join("Zagotovka_Bank_A.bin"),
+            cache,
+            portable,
             root,
         }
     }
 
     fn rel(&self, p: &Path) -> String {
+        if self.portable {
+            return p.display().to_string();
+        }
         p.strip_prefix(&self.root).unwrap_or(p).display().to_string()
     }
 }
 
-fn detect_root(explicit: Option<&PathBuf>) -> PathBuf {
+fn cache_dir() -> PathBuf {
+    env::temp_dir().join("zagotovka_first_flash")
+}
+
+fn is_project_root(d: &Path) -> bool {
+    d.join("Bootloader").join("DO_NOT_TOUCH").is_dir() || d.join("Proshivka").is_dir()
+}
+
+/// Looks for the project folder upwards from the program and from the current folder.
+/// None means: no project here, the files will come from GitHub.
+fn detect_root(explicit: Option<&PathBuf>) -> Option<PathBuf> {
     if let Some(r) = explicit {
-        return r.clone();
+        return Some(r.clone());
     }
     if let Ok(r) = env::var("FIRST_FLASH_ROOT") {
         if !r.is_empty() {
-            return PathBuf::from(r);
+            return Some(PathBuf::from(r));
         }
     }
     let exe_dir = env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()));
     let cwd = env::current_dir().ok();
-
-    let mut cands: Vec<PathBuf> = Vec::new();
-    for base in [exe_dir.clone(), cwd].into_iter().flatten() {
-        cands.push(base.clone());
-        if let Some(p) = base.parent() {
-            cands.push(p.to_path_buf());
+    for base in [exe_dir, cwd].into_iter().flatten() {
+        for d in base.ancestors().take(12) {
+            if is_project_root(d) {
+                return Some(d.to_path_buf());
+            }
         }
     }
-    for c in &cands {
-        if c.join("Bootloader").is_dir() || c.join("Proshivka").is_dir() {
-            return c.clone();
-        }
-    }
-    exe_dir
-        .and_then(|d| d.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| PathBuf::from("."))
+    None
 }
 
 // ---- command line ----------------------------------------------------------
@@ -111,12 +133,14 @@ struct Args {
     chip: String,
     speed_khz: u32,
     root: Option<PathBuf>,
+    offline: bool,
+    git_ref: String,
 }
 
 fn print_usage() {
     println!(
         "Make a single first-flash .bin (bootloader + Bank A) and program it\n\n\
-         USAGE: make_first_flash [OPTIONS]\n\n\
+         USAGE: make_first_flash [OPTIONS] [FILE.bin ...]\n\n\
          OPTIONS:\n\
          \x20 --bootloader <FILE>   bootloader .bin (default: found automatically)\n\
          \x20 --bank-a <FILE>       Bank A application .bin (default: found automatically)\n\
@@ -126,6 +150,10 @@ fn print_usage() {
          \x20 --chip <NAME>         probe-rs chip name (default: STM32F767ZITx)\n\
          \x20 --speed <KHZ>         SWD clock request (default: 4000; the probe may lower it)\n\
          \x20 --root <DIR>          project root (default: found automatically)\n\
+         \x20 --ref <NAME>          git branch or tag to download from (default: main)\n\
+         \x20 --offline             do not download anything from GitHub\n\
+         \x20 FILE.bin              a file dragged onto the program: the bootloader if its\n\
+         \x20                       name contains \"bootloader\", otherwise Bank A\n\
          \x20 -h, --help            show this help"
     );
 }
@@ -140,6 +168,8 @@ fn parse_args(argv: Vec<String>) -> Result<Args, String> {
         chip: "STM32F767ZITx".to_string(),
         speed_khz: 4000,
         root: None,
+        offline: false,
+        git_ref: DEFAULT_REF.to_string(),
     };
     let mut it = argv.into_iter();
     while let Some(arg) = it.next() {
@@ -173,6 +203,16 @@ fn parse_args(argv: Vec<String>) -> Result<Args, String> {
                     .map_err(|_| "ERROR: --speed needs a number in kHz".to_string())?
             }
             "--root" => a.root = Some(PathBuf::from(value(&mut it)?)),
+            "--offline" => a.offline = true,
+            "--ref" => a.git_ref = value(&mut it)?,
+            other if !other.starts_with('-') && other.to_lowercase().ends_with(".bin") => {
+                // a file dragged onto the program: bootloader or Bank A, by its name
+                if file_name(Path::new(other)).to_lowercase().contains("bootloader") {
+                    a.bootloader = Some(PathBuf::from(other));
+                } else {
+                    a.bank_a = Some(PathBuf::from(other));
+                }
+            }
             other => return Err(format!("ERROR: unknown option {} (see --help)", other)),
         }
     }
@@ -242,19 +282,124 @@ fn newest(paths: Vec<PathBuf>) -> Option<PathBuf> {
         .max_by_key(|p| version_key(p))
 }
 
-fn find_bootloader(l: &Layout) -> Result<PathBuf, String> {
+fn raw_url(git_ref: &str, path: &str) -> String {
+    format!("{}/{}/{}", REPO_RAW, git_ref, path)
+}
+
+fn http_get(url: &str, max: u64) -> Result<Vec<u8>, String> {
+    let mut builder = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(10))
+        .timeout(Duration::from_secs(60));
+    for var in ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"] {
+        if let Ok(v) = env::var(var) {
+            if !v.is_empty() {
+                if let Ok(p) = ureq::Proxy::new(&v) {
+                    builder = builder.proxy(p);
+                }
+                break;
+            }
+        }
+    }
+    let agent = builder.build();
+    let resp = agent.get(url).call().map_err(|e| match e {
+        ureq::Error::Status(code, _) => format!("{} answered HTTP {}", url, code),
+        other => format!("cannot download {}: {}", url, other),
+    })?;
+    let mut buf = Vec::new();
+    resp.into_reader()
+        .take(max + 1)
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("download of {} failed: {}", url, e))?;
+    if buf.len() as u64 > max {
+        return Err(format!("{} is larger than {} bytes, refusing it", url, max));
+    }
+    Ok(buf)
+}
+
+fn download(url: &str, dest: &Path, max: u64) -> Result<(), String> {
+    print!("Downloading {} ... ", url);
+    let _ = io::stdout().flush();
+    let data = http_get(url, max).map_err(|e| {
+        println!("failed");
+        e
+    })?;
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("ERROR: cannot create {}: {}", parent.display(), e))?;
+    }
+    fs::write(dest, &data)
+        .map_err(|e| format!("ERROR: cannot write {}: {}", dest.display(), e))?;
+    println!("{} bytes", data.len());
+    Ok(())
+}
+
+/// Removes files of other versions left in the temp folder by earlier runs.
+fn clean_cache(dir: &Path, keep_ver: &str) {
+    let tag = format!("_v{}.bin", keep_ver);
+    if let Ok(rd) = fs::read_dir(dir) {
+        for e in rd.filter_map(|e| e.ok()) {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let ours =
+                name.starts_with("Zagotovka_Bank_A_v") || name.starts_with("Zagotovka_FIRST_FLASH");
+            if ours && !name.ends_with(&tag) {
+                let _ = fs::remove_file(e.path());
+            }
+        }
+    }
+}
+
+/// The VERSION file in the repository root selects the Bank A file.
+fn fetch_bank_a(l: &Layout, git_ref: &str) -> Result<PathBuf, String> {
+    let text = http_get(&raw_url(git_ref, "VERSION"), 64)?;
+    let ver = String::from_utf8_lossy(&text)
+        .trim()
+        .trim_start_matches('v')
+        .to_string();
+    if parse_tail(&ver).is_none() {
+        return Err(format!("the VERSION file on GitHub has unexpected content: {:?}", ver));
+    }
+    println!("Version on GitHub ({}): {}", git_ref, ver);
+    let name = format!("Zagotovka_Bank_A_v{}.bin", ver);
+    let dest = l.cache.join(&name);
+    let url = raw_url(git_ref, &format!("Proshivka/{}", name));
+    download(&url, &dest, BANK_CAPACITY as u64).map_err(|e| {
+        format!(
+            "{}\n(VERSION may be updated before the file is uploaded; try again later or use --ref <tag>)",
+            e
+        )
+    })?;
+    clean_cache(&l.cache, &ver);
+    Ok(dest)
+}
+
+fn find_bootloader(l: &Layout, args: &Args) -> Result<PathBuf, String> {
     if l.boot_bin.is_file() {
         return Ok(l.boot_bin.clone());
     }
-    Err(format!(
-        "ERROR: bootloader not found: {}\n\
-         Build the Zagotovka_M_BOOTLOADER project (Convert to binary must be on)\n\
-         and copy its .bin to that place, or pass it with --bootloader.",
-        l.rel(&l.boot_bin)
-    ))
+    let cached = l.cache.join("Zagotovka_M_BOOTLOADER.bin");
+    if !args.offline {
+        let url = raw_url(&args.git_ref, "Bootloader/DO_NOT_TOUCH/Zagotovka_M_BOOTLOADER.bin");
+        match download(&url, &cached, BOOT_SIZE as u64) {
+            Ok(()) => return Ok(cached),
+            Err(e) => println!("NOTE: {}", e),
+        }
+    }
+    if cached.is_file() {
+        println!("NOTE: using the bootloader downloaded earlier: {}", cached.display());
+        return Ok(cached);
+    }
+    fs::create_dir_all(&l.cache)
+        .map_err(|e| format!("ERROR: cannot create {}: {}", l.cache.display(), e))?;
+    fs::write(&cached, EMBEDDED_BOOTLOADER)
+        .map_err(|e| format!("ERROR: cannot write {}: {}", cached.display(), e))?;
+    println!(
+        "NOTE: no project and no download, using the bootloader built into this program ({} bytes)",
+        EMBEDDED_BOOTLOADER.len()
+    );
+    Ok(cached)
 }
 
-fn find_bank_a(l: &Layout) -> Result<PathBuf, String> {
+fn find_bank_a(l: &Layout, args: &Args) -> Result<PathBuf, String> {
     if l.release_dir.is_dir() {
         if let Ok(rd) = fs::read_dir(&l.release_dir) {
             let list: Vec<PathBuf> = rd
@@ -281,12 +426,31 @@ fn find_bank_a(l: &Layout) -> Result<PathBuf, String> {
         );
         return Ok(l.bank_a_build.clone());
     }
-    Err(format!(
-        "ERROR: Bank A .bin not found in {} or {}.\n\
-         Build the Bank_A configuration or pass the file with --bank-a.",
-        l.rel(&l.release_dir),
-        l.rel(&l.bank_a_build)
-    ))
+    if !args.offline {
+        match fetch_bank_a(l, &args.git_ref) {
+            Ok(p) => return Ok(p),
+            Err(e) => println!("NOTE: {}", e),
+        }
+    }
+    if let Ok(rd) = fs::read_dir(&l.cache) {
+        let list: Vec<PathBuf> = rd
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| {
+                let n = file_name(p);
+                n.starts_with("Zagotovka_Bank_A_v") && n.ends_with(".bin")
+            })
+            .collect();
+        if let Some(f) = newest(list) {
+            println!("NOTE: using the Bank A file downloaded earlier: {}", f.display());
+            return Ok(f);
+        }
+    }
+    Err(
+        "ERROR: Bank A .bin not found and could not be downloaded.\n\
+         Drag the Bank A .bin file onto the program or pass it with --bank-a."
+            .to_string(),
+    )
 }
 
 fn read_image(path: &Path) -> Result<Vec<u8>, String> {
@@ -370,11 +534,11 @@ fn check_bank_a(img: &[u8]) -> Result<(), String> {
 fn build_image(args: &Args, l: &Layout) -> Result<PathBuf, String> {
     let boot_path = match &args.bootloader {
         Some(p) => p.clone(),
-        None => find_bootloader(l)?,
+        None => find_bootloader(l, args)?,
     };
     let app_path = match &args.bank_a {
         Some(p) => p.clone(),
-        None => find_bank_a(l)?,
+        None => find_bank_a(l, args)?,
     };
 
     let out_path = match &args.output {
@@ -750,7 +914,17 @@ fn verify_only(args: &Args, image: &Path) -> AResult<()> {
 // ---- main ------------------------------------------------------------------
 fn run(argv: Vec<String>) -> AResult<()> {
     let args = parse_args(argv).map_err(anyhow::Error::msg)?;
-    let layout = Layout::new(detect_root(args.root.as_ref()));
+    let (root, portable) = match detect_root(args.root.as_ref()) {
+        Some(r) => (r, false),
+        None => {
+            println!(
+                "Project folder not found near the program, working files go to {}",
+                cache_dir().display()
+            );
+            (cache_dir(), true)
+        }
+    };
+    let layout = Layout::new(root, portable);
 
     let out_path = build_image(&args, &layout).map_err(anyhow::Error::msg)?;
     if args.image_only {
@@ -769,8 +943,8 @@ fn run(argv: Vec<String>) -> AResult<()> {
 
 fn main() {
     let argv: Vec<String> = env::args().skip(1).collect();
-    // Started by a double click on Windows: keep the window open
-    let double_click = cfg!(windows) && argv.is_empty();
+    // Double click or a file dragged onto the program (no options): keep the window open
+    let double_click = cfg!(windows) && !argv.iter().any(|a| a.starts_with('-'));
 
     let code = match run(argv) {
         Ok(()) => 0,

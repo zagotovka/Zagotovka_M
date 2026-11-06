@@ -1,30 +1,47 @@
-Rust-утилита "make_first_flash" не зависит от CubeProgrammer, Java и Python она сама стирает flash и пишет образ через probe-rs и не вызывает `STM32_Programmer_CLI`. Нужны только сам бинарник Zagotovka_M/Bootloader/DO_NOT_TOUCH/Zagotovka_M_BOOTLOADER.bin и ST-LINK. 
+make_first_flash - первая прошивка платы Zagotovka_M одним файлом
 
-**Windows и macOS:** код написан так, чтобы собираться под них, но проверен я только на Debuan13 Linux.
-- Бинарник нужно собрать под каждую систему отдельно (на Debian получится только Linux-версия). Для этого и создан файл `make_first_flash_tool.yml` — это конфигурация для GitHub Actions. Он запустится автоматически на стороне GitHub после того, как вы загрузите его в репозиторий.
-- Windows может потребовать USB-драйвер для ST-LINK, а на Linux нужны правила udev.
-- На macOS бинарник, скачанный из интернета, может блокироваться системой безопасности.
+Программа собирает образ (bootloader + Bank A), переключает STM32F767 в Dual Bank,
+стирает чип, прошивает образ через ST-LINK и сверяет результат. CubeProgrammer,
+Java и Python не нужны.
 
-Пока реально проверено: Debian 13 с ST-LINK V2-1 и чипом STM32F767.
+КАК ЗАПУСТИТЬ
+Положите программу в любую папку и запустите (в Windows - двойной клик). Переносить
+её в папку проекта не нужно.
 
+Файлы берутся в таком порядке:
+1. файлы, перетащенные на программу или заданные ключами --bootloader / --bank-a;
+2. проект Zagotovka_M рядом (программа ищет его вверх по папкам);
+3. GitHub (https://github.com/zagotovka/Zagotovka_M): версию Bank A определяет файл
+   VERSION, bootloader берётся из Bootloader/DO_NOT_TOUCH, Bank A из Proshivka;
+4. без сети: файлы, скачанные ранее, и копия bootloader, вшитая в программу.
+   Bank A без сети нужно перетащить на программу.
 
-Linux:
-cd Zagotovka_M/scripts
+Скачанные файлы лежат во временной папке (Windows: %TEMP%\zagotovka_first_flash).
+Образ FIRST_FLASH создаётся в Proshivka/First_flash, а без проекта - в той же
+временной папке.
+
+КЛЮЧИ
+--bootloader <файл>, --bank-a <файл>, -o <файл>, --image-only, --verify-only,
+--ref <ветка или тег> (скачивать из них, по умолчанию main), --offline,
+--root <папка>, --speed <кГц>, --chip <имя>. Список: make_first_flash --help
+
+WINDOWS
+Нужен драйвер WinUSB для ST-LINK. Без него: "The debug probe could not be created".
+1. Скачайте ST-LINK USB driver (STSW-LINK009) с
+   https://www.st.com/en/development-tools/stsw-link009.html и распакуйте архив.
+2. Запустите stlink_winusb_install.bat от имени администратора.
+3. Переподключите ST-LINK. Драйвер ставится один раз на компьютер.
+
+LINUX
 chmod +x make_first_flash
 ./make_first_flash
-PS - Права chmod +x нужны потому, что архивы GitHub не сохраняют признак исполняемого файла.
+Права на запуск нужны, потому что архивы GitHub не сохраняют признак исполняемого
+файла. Чтобы работать без root, нужны правила udev: проще всего поставить пакет
+stlink-tools (Debian/Ubuntu: sudo apt install stlink-tools; Arch: sudo pacman -S stlink;
+Fedora: sudo dnf install stlink), затем переподключите ST-LINK.
 
-macOS (архив нужно выбрать под процессор):
-cd Zagotovka_M/scripts
+MACOS (архив под свой процессор)
 chmod +x make_first_flash
 xattr -d com.apple.quarantine make_first_flash
 ./make_first_flash
-
-Windows (PowerShell), либо двойной клик по файлу:
-cd Zagotovka_M\scripts
-.\make_first_flash.exe
-
-
-В чём смысл Rust-утилиты: убрать тяжёлые зависимости (CubeProgrammer с Java на несколько сотен МБ и Python) и оставить один файл плюс одноразовую настройку USB. Если ваша цель «ничего вообще не ставить на Windows», то она достигнута только если драйвер там появляется сам или кладётся рядом. Это нужно проверить на чистой Windows-машине.
-
-Предлагаю так: вы запускаете сборку на GitHub, пробуете .exe на Windows без CubeProgrammer и присылаете, что выдаст программа. Тогда я точно напишу, какой драйвер нужен, и добавлю короткую инструкцию в README.
+Драйвер не нужен.

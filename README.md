@@ -97,46 +97,35 @@ The project now uses a dual-bank (Bank A / Bank B) flash layout. For a first-tim
 
 A brand-new STM32 chip has its memory set up in the "single" way. Zagotovka_M needs the "dual" way (it is called **Dual Bank**, the option `nDBANK = 0`). The firmware cannot change this by itself: when the memory mode changes, everything stored in the chip is destroyed, including the bootloader. So the mode is changed from the outside, **before** the firmware is written.
 
-You do not have to do it by hand. The script [`scripts/make_first_flash.py`](https://github.com/zagotovka/Zagotovka_M/blob/main/scripts/make_first_flash.py) does everything in one run:
+You do not have to do it by hand. The program `make_first_flash` does everything in one run:
 
-1. It builds one file `Zagotovka_FIRST_FLASH_<version>.bin` (the bootloader + the Bank A firmware) in the folder `Proshivka/First_flash`. It takes the newest `Zagotovka_Bank_A_v*.bin` from the folder `Proshivka` by itself, so you never type the version.
+1. It takes the bootloader and the newest Bank A firmware from this repository on GitHub (the version is read from the `VERSION` file), or from the project folder if it finds one next to the program, and builds one file `Zagotovka_FIRST_FLASH_<version>.bin` (the bootloader + the Bank A firmware).
 2. It asks the chip which memory mode it has.
 3. If the chip is in the old ("single") mode, it switches it to Dual Bank and waits until the chip restarts (up to 40 seconds, usually much less).
 4. It erases the whole chip, writes the file and checks that the data was written correctly.
 5. It prints `DONE`.
 
-If something is wrong (a file is missing, the chip is not connected), the script stops and says why, before it touches the chip.
+If something is wrong (a file is missing, the chip is not connected), the program stops and says why, before it touches the chip.
 
 **How to run it:**
 
-1. Install STM32CubeProgrammer (see below).
+1. Download the archive for your system from the folder [Proshivka/First_flash](https://github.com/zagotovka/Zagotovka_M/tree/main/Proshivka/First_flash) and unpack it anywhere. The program does not have to be placed in the project folder.
 2. Connect the board to the computer with a USB cable (the ST-LINK connector).
-3. Open the `scripts` folder, open a terminal (command line) in it and run:
-   - Windows: `python make_first_flash.py`
-   - macOS and Linux: `python3 make_first_flash.py`
+3. Run the program:
+   - Windows: double-click `make_first_flash.exe`.
+   - Linux: open a terminal in the folder with the program, run `chmod +x make_first_flash`, then `./make_first_flash`.
+   - macOS: the same as on Linux, and before the first start run `xattr -d com.apple.quarantine make_first_flash` (the system blocks files downloaded from the internet). Choose the archive for your processor (Intel or Apple M1-M4).
 
-Python 3 must be installed on the computer (it is free: <https://www.python.org/downloads/>); nothing extra is needed for it. After `DONE` the board restarts by itself and starts the firmware. If you only want to build the file and not touch the chip, add `--image-only` to the command.
+After `DONE` the board restarts by itself and starts the firmware; the terminal must show `[BOOT] Flash: Dual Bank (OK)`. If you only want to build the file and not touch the chip, run the program with `--image-only`; all options are shown by `--help`.
 
-> Do not just drag the `FIRST_FLASH` file onto the `NODE_F767ZI` USB drive of a brand-new board. Dragging a file does not change the memory mode, so the bootloader would print an error and would not start the firmware. Use the script above.
+The downloaded files are kept in the temporary folder of the computer, which the system cleans later. Without internet the program uses the files it downloaded earlier and the bootloader built into it; the Bank A `.bin` file can then be dragged onto the program with the mouse (or passed with `--bank-a`). To flash a fixed version instead of the newest one, add `--ref v3.1.2d` (any tag or branch).
 
-### STM32CubeProgrammer must be installed
+> Do not just drag the `FIRST_FLASH` file onto the `NODE_F767ZI` USB drive of a brand-new board. Dragging a file does not change the memory mode, so the bootloader would print an error and would not start the firmware. Use the program above.
 
-The script works the same way on **Linux, Windows and macOS**, but only if the program **STM32CubeProgrammer** is installed on the computer. It is free, but you have to install it yourself: the script does not include it and does not download it.
+**Two things that depend on the operating system, not on the program:**
 
-Why it is needed:
-
-- During installation it puts the drivers for the ST-LINK of the board into your system. Without them the computer does not see the board.
-- The script talks to the chip through its command-line tool `STM32_Programmer_CLI`.
-- Just in case, you can use it by hand to check the chip (see below).
-
-**Where to get it.** Download it from the official site: <https://www.st.com/en/development-tools/stm32cubeprog.html>. Choose the installer for your operating system and run it. The script was tested with version 2.23.0.
-
-**How to check the chip by hand.** Start STM32CubeProgrammer, choose `ST-LINK` in the list at the top right and press **Connect**. Open the **OB** tab (option bytes) and the group **User Configuration**: the box `nDBANK` must be **empty** (this is Dual Bank). If the box is ticked, the chip is still in the old mode: run the script again.
-
-**Two more things that do not depend on the script:**
-
-- **Windows.** The ST-LINK driver is needed (it is installed together with STM32CubeProgrammer or STM32CubeIDE). Type the command `python`, not `python3`.
-- **Linux.** If the programmer says that it does not see the ST-LINK, but on another computer everything works, then your user has no right to use the USB device. This is fixed by the `udev` rules from the CubeProgrammer package (the folder `Drivers/rules` inside its installation folder): copy the `*.rules` files to `/etc/udev/rules.d/`, run `sudo udevadm control --reload-rules && sudo udevadm trigger`, and plug the board in again.
+- **Windows.** The WinUSB driver for ST-LINK is needed. Without it the program says `The debug probe could not be created`. Download "ST-LINK USB driver" ([STSW-LINK009](https://www.st.com/en/development-tools/stsw-link009.html)) from the official ST site, unpack the archive, run `stlink_winusb_install.bat` as administrator and plug the board in again. This is done once per computer.
+- **Linux.** If the program says that it does not see the ST-LINK, but on another computer everything works, then your user has no right to use the USB device. Install the package with the `udev` rules (Debian/Ubuntu: `sudo apt install stlink-tools`, Arch: `sudo pacman -S stlink`, Fedora: `sudo dnf install stlink`) and plug the board in again. macOS needs no driver.
 
 ## Interface video guide.
 

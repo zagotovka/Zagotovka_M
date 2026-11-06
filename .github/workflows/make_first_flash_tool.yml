@@ -2,7 +2,7 @@ name: Build make_first_flash tool
 
 # Builds scripts/make_first_flash_probe for Windows, Linux and macOS.
 # Put this file into  .github/workflows/  in the ROOT of the repository
-# (next to the existing build.yml, codeql.yml, update.yml) - do not replace them.
+# (next to the existing codeql.yml, update.yml) - do not replace them.
 
 on:
   workflow_dispatch:
@@ -49,3 +49,29 @@ jobs:
         with:
           name: make_first_flash-${{ matrix.target }}
           path: scripts/make_first_flash_probe/target/${{ matrix.target }}/release/${{ matrix.bin }}
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/tool-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Pack archives
+        run: |
+          cd dist
+          for d in make_first_flash-*; do
+            chmod +x "$d"/make_first_flash*
+            (cd "$d" && zip -q "../$d.zip" *)
+          done
+          ls -l
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          prerelease: true
