@@ -109,16 +109,17 @@ If something is wrong (a file is missing, the chip is not connected), the progra
 
 **How to run it:**
 
-1. Download the archive for your system from the folder [Proshivka/First_flash](https://github.com/zagotovka/Zagotovka_M/tree/main/Proshivka/First_flash) and unpack it anywhere. The program does not have to be placed in the project folder.
-2. Connect the board to the computer with a USB cable (the ST-LINK connector).
-3. Run the program:
-   - Windows: double-click `make_first_flash.exe`.
-   - Linux: open a terminal in the folder with the program, run `chmod +x make_first_flash`, then `./make_first_flash`.
-   - macOS: the same as on Linux, and before the first start run `xattr -d com.apple.quarantine make_first_flash` (the system blocks files downloaded from the internet). Choose the archive for your processor (Intel or Apple M1-M4).
+1. Download the whole project: on the [project page](https://github.com/zagotovka/Zagotovka_M) click "Code" -> "Download ZIP" and unpack the archive (on Windows: right click -> "Extract All").
+2. In the unpacked project open the folder `Proshivka/First_flash/<your system>` (`Windows`, `Linux`, `MAC/Mac_Intel` or `MAC/Mac_M1_M2_M3_M4_Apple`) and unpack the archive that lies there. The program finds the bootloader and the firmware files of the project by itself, so no internet connection is needed.
+3. Connect the board to the computer with a USB cable (the ST-LINK connector).
+4. Open a terminal in the folder with the unpacked program and run it:
+   - Windows: in Explorer open the unpacked folder, type `powershell` in the address bar, press Enter and run `.\make_first_flash.exe` (double-clicking the file also works).
+   - Linux: run `chmod +x make_first_flash`, then `./make_first_flash`.
+   - macOS: run `xattr -d com.apple.quarantine make_first_flash` once (the system blocks files downloaded from the internet), then `chmod +x make_first_flash` and `./make_first_flash`. Choose the folder for your processor (Intel or Apple M1-M4).
 
 After `DONE` the board restarts by itself and starts the firmware; the terminal must show `[BOOT] Flash: Dual Bank (OK)`. If you only want to build the file and not touch the chip, run the program with `--image-only`; all options are shown by `--help`.
 
-The downloaded files are kept in the temporary folder of the computer, which the system cleans later. Without internet the program uses the files it downloaded earlier and the bootloader built into it; the Bank A `.bin` file can then be dragged onto the program with the mouse (or passed with `--bank-a`). To flash a fixed version instead of the newest one, add `--ref v3.1.2d` (any tag or branch).
+If you start the program outside the project folder, it downloads the bootloader and the newest Bank A firmware from GitHub into the temporary folder of the computer (the system cleans it later). Without internet it then uses the files it downloaded earlier and the bootloader built into it, and the Bank A `.bin` file has to be given with `--bank-a` (or dragged onto the program), for example `.\make_first_flash.exe --offline --bank-a "C:\path\Zagotovka_Bank_A_v<version>.bin"`. To flash a fixed version instead of the newest one, add `--ref <tag>` (any tag or branch of the repository).
 
 > Do not just drag the `FIRST_FLASH` file onto the `NODE_F767ZI` USB drive of a brand-new board. Dragging a file does not change the memory mode, so the bootloader would print an error and would not start the firmware. Use the program above.
 

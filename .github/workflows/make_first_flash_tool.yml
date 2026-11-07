@@ -75,3 +75,31 @@ jobs:
         with:
           files: dist/*.zip
           prerelease: true
+
+      - name: Check out main to update the archives
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: repo
+
+      - name: Replace the archives in Proshivka/First_flash
+        run: |
+          set -e
+          dest=repo/Proshivka/First_flash
+          find "$dest" -type f -name 'make_first_flash-*.zip' -delete
+          mkdir -p "$dest/Windows" "$dest/Linux" "$dest/MAC/Mac_Intel" "$dest/MAC/Mac_M1_M2_M3_M4_Apple"
+          cp dist/make_first_flash-x86_64-pc-windows-msvc.zip   "$dest/Windows/"
+          cp dist/make_first_flash-x86_64-unknown-linux-gnu.zip "$dest/Linux/"
+          cp dist/make_first_flash-x86_64-apple-darwin.zip      "$dest/MAC/Mac_Intel/"
+          cp dist/make_first_flash-aarch64-apple-darwin.zip     "$dest/MAC/Mac_M1_M2_M3_M4_Apple/"
+          cd repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A Proshivka/First_flash
+          if git diff --cached --quiet; then
+            echo "Nothing to commit"
+            exit 0
+          fi
+          git commit -m "First_flash: update make_first_flash archives to ${GITHUB_REF_NAME}"
+          git pull --rebase origin main
+          git push origin HEAD:main
