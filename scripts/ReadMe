@@ -32,6 +32,17 @@ WINDOWS
 2. Запустите stlink_winusb_install.bat от имени администратора.
 3. Переподключите ST-LINK. Драйвер ставится один раз на компьютер.
 
+Программа пока не подписана. SmartScreen: "Подробнее" -> "Выполнить в любом случае".
+Если Windows 11 пишет "Smart App Control заблокировал приложение" и кнопки запуска нет,
+эту защиту нельзя обойти для одной программы. Её можно выключить на время прошивки в
+"Безопасности Windows" (Управление приложениями и браузером -> параметры Smart App
+Control) и потом включить снова. Если пункт "Вкл." недоступен, обновите Windows; если
+и после этого недоступен - командная строка от имени администратора, затем перезагрузка
+или CiTool.exe -r (способ не из настроек Windows, на свой риск):
+  включить:      reg add "HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy" /v VerifiedAndReputablePolicyState /t REG_DWORD /d 1 /f
+  режим оценки:  reg add "HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy" /v VerifiedAndReputablePolicyState /t REG_DWORD /d 2 /f
+  выключить:     reg add "HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy" /v VerifiedAndReputablePolicyState /t REG_DWORD /d 0 /f
+
 LINUX
 chmod +x make_first_flash
 ./make_first_flash
