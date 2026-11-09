@@ -174,6 +174,23 @@ html[data-theme="dark"] .rem-wrap {
 .rem-theme .theme-toggle { position: static; top: auto; right: auto; }
 .rem-theme .theme-toggle__btn { width: 40px; height: 40px; }
 
+/* ── Сессия потеряна: шапка пульта красная, как Header на других страницах ── */
+.rem-wrap .rem-topbar.is-expired {
+  background: rgba(239, 68, 68, 0.92);
+  border-bottom: 1px solid #f87171;
+  color: #ffffff;
+  box-shadow: 0 6px 24px -8px rgba(239, 68, 68, 0.7);
+}
+.rem-wrap:not(.is-locked) .rem-topbar.is-expired::after { display: none; }
+.rem-topbar.is-expired .rem-exit,
+.rem-topbar.is-expired .rem-iconbtn,
+.rem-topbar.is-expired .rem-lock,
+.rem-topbar.is-expired .rem-title,
+.rem-topbar.is-expired .theme-toggle__btn {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
 /* ── Баннер отсутствия связи ── */
 .rem-banner {
   position: sticky;

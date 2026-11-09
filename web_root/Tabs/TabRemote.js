@@ -194,6 +194,7 @@ const T = {
     exit: 'Выйти в интерфейс',
     empty: 'Нет настроенных устройств',
     offline: 'Нет связи с контроллером',
+    expired: 'Сессия завершена. Управление недоступно, войдите заново',
     wait: 'ожидает',
     ok: 'подтверждено',
     err: 'не подтверждено',
@@ -238,6 +239,7 @@ const T = {
     exit: 'Back to interface',
     empty: 'No devices configured',
     offline: 'No connection to controller',
+    expired: 'Session ended. Control is unavailable, please sign in again',
     wait: 'pending',
     ok: 'confirmed',
     err: 'not confirmed',
@@ -487,6 +489,8 @@ export function TabRemote({ }) {
   const [lang, setLang] = useState('ru');
   const [statuses, setStatuses] = useState({}); // key -> 'wait'|'ok'|400|403|...
   const [offline, setOffline] = useState(false);
+  const [expired, setExpired] = useState(false);   // сессия потеряна: шапка красная
+  const expiredRef = useRef(false);
   const [loaded, setLoaded] = useState(false);
 
   const cursorRef = useRef(0);
@@ -567,7 +571,12 @@ export function TabRemote({ }) {
         ? '/api/state/remote?next=' + cursorRef.current
         : '/api/state/remote'),
       (d) => {
-        if (!d || d.__session_expired) return;
+        if (d && d.__session_expired) {
+          expiredRef.current = true;
+          setExpired(true);
+          return;
+        }
+        if (!d) return;
         setOffline(false);
         setLoaded(true);
         if (d.lang) setLang(d.lang);
@@ -613,7 +622,7 @@ export function TabRemote({ }) {
      * «нет связи». Повторная регистрация даёт чистый ETag, поэтому первый же
      * ответ после восстановления будет 200, а не 304. */
     const watchdog = setInterval(() => {
-      if (!isPollActive('remote')) start();
+      if (!expiredRef.current && !isPollActive('remote')) start();
     }, WATCHDOG_MS);
     return () => {
       clearInterval(watchdog);
@@ -633,6 +642,7 @@ export function TabRemote({ }) {
     const check = () => {
       /* При ответах 0 (ещё не было ни одного) отсчитываем от открытия страницы */
       const alive = lastPollActivity('remote') || mountedRef.current;
+      if (expiredRef.current) { setOffline(false); return; }
       setOffline(Date.now() - alive > OFFLINE_AFTER_MS);
     };
     check();
@@ -676,6 +686,7 @@ export function TabRemote({ }) {
           }, 2000);
         } else {
           const code = r ? r.status : 0;
+          if (code === 401) { expiredRef.current = true; setExpired(true); }
           setStatuses((s) => ({ ...s, [key]: code || 'net' }));
           if (job.revert) job.revert(); // откат оптимистичного значения
         }
@@ -692,6 +703,7 @@ export function TabRemote({ }) {
 
   /* cmd: {section, id, body, fields, prevFields} */
   const sendCmd = ({ section, id, body, fields, prevFields }) => {
+    if (expiredRef.current) return; // сессия потеряна: команды не уходят
     if (locked) { flashBlocked(); return; } // заблокировано: команда не уходит
     armIdle();
     const key = body.t + ':' + id;
@@ -1015,7 +1027,7 @@ export function TabRemote({ }) {
       onPointerDown=${armIfOpen}
       onPointerUp=${armIfOpen}
     >
-      <header class="rem-topbar">
+      <header class=${'rem-topbar' + (expired ? ' is-expired' : '')}>
         <a href="#/" class="rem-exit" data-tip=${L.exit} aria-label=${L.exit}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-6 w-6"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
         </a>
@@ -1044,7 +1056,9 @@ export function TabRemote({ }) {
         </div>
       </header>
 
-      ${offline ? html`<div class="rem-banner">${L.offline}</div>` : null}
+      ${expired
+        ? html`<div class="rem-banner">${L.expired}</div>`
+        : (offline ? html`<div class="rem-banner">${L.offline}</div>` : null)}
 
       <main class="rem-body">
         ${loaded && totalItems === 0 ? html`
