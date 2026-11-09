@@ -1016,9 +1016,8 @@ export function TabRemote({ }) {
       onPointerUp=${armIfOpen}
     >
       <header class="rem-topbar">
-        <a href="#/" class="rem-exit" data-tip=${L.exit}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/></svg>
-          <span class="rem-exit-label">${L.exit}</span>
+        <a href="#/" class="rem-exit" data-tip=${L.exit} aria-label=${L.exit}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-6 w-6"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
         </a>
         <div class="rem-title rem-logo">
           <${WordLogo} />

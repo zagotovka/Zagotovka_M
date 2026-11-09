@@ -30,9 +30,19 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, onTouche
     setDpSlots(dpSlotsRaw);
   }, [allDevices]);
 
-  const initialOverride = device.override !== 0 
-    ? device.override 
+  const initialOverrideRaw = device.override !== 0
+    ? device.override
     : (isSwitch ? 5 : (isTrigger ? 6 : 0));
+  /* Старое значение 2 (Диммер) работает так же, как 3 (Лампа яркость): показываем как 3 */
+  const initialOverride = initialOverrideRaw === 2 ? 3 : initialOverrideRaw;
+  /* Кнопка/выключатель заданы через «Обучение»: тип здесь менять нельзя */
+  const lockedByRole = device.zbee_role === 3 || device.zbee_role === 5;
+  const autoClusters = device.clusters || [];
+  const autoLabel = autoClusters.includes(768)
+    ? (lang === 'ru' ? 'Лампа (яркость + цвет)' : 'Lamp (brightness + color)')
+    : autoClusters.includes(8)
+      ? (lang === 'ru' ? 'Лампа (яркость)' : 'Lamp (brightness)')
+      : (lang === 'ru' ? 'Розетка (On/Off)' : 'Socket (On/Off)');
   const [overrideType, setOverrideType] = useState(initialOverride);
 
   const applyOverrideType = (e) => {
@@ -245,22 +255,32 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, onTouche
 
           <div class="space-y-4">
             
-            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 flex justify-between items-center">
-              <span class="text-sm font-medium text-slate-600">${lang === 'ru' ? 'Тип устройства:' : 'Device Type:'}</span>
-              <select 
-                class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5"
-                value=${overrideType}
-                onChange=${applyOverrideType}
-              >
-                <option value="0">${lang === 'ru' ? 'Автоматически' : 'Auto-detect'}</option>
-                <option value="1">${lang === 'ru' ? 'Розетка (On/Off)' : 'Socket (On/Off)'}</option>
-                <option value="2">${lang === 'ru' ? 'Диммер' : 'Dimmer'}</option>
-                <option value="3">${lang === 'ru' ? 'Лампа (яркость)' : 'Lamp (brightness)'}</option>
-                <option value="4">${lang === 'ru' ? 'Лампа (яркость + цвет)' : 'Lamp (brightness + color)'}</option>
-                <option value="5">${lang === 'ru' ? 'Выключатель (Switch)' : 'Switch'}</option>
-                <option value="6">${lang === 'ru' ? 'Кнопка (Button)' : 'Button'}</option>
-                <option value="7">${lang === 'ru' ? 'PIR (датчик движения)' : 'PIR (motion sensor)'}</option>
-              </select>
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <div class="flex justify-between items-center">
+                <span class="text-sm font-medium text-slate-600">${lang === 'ru' ? 'Тип устройства:' : 'Device Type:'}</span>
+                ${lockedByRole ? html`
+                  <span class="text-sm font-semibold text-slate-700">${isSwitch ? (lang === 'ru' ? 'Выключатель (Switch)' : 'Switch') : (lang === 'ru' ? 'Кнопка (Button)' : 'Button')}</span>
+                ` : html`
+                  <select
+                    class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5"
+                    value=${overrideType}
+                    onChange=${applyOverrideType}
+                  >
+                    <option value="0">${lang === 'ru' ? 'Автоматически (сейчас: ' + autoLabel + ')' : 'Automatic (now: ' + autoLabel + ')'}</option>
+                    <option value="1">${lang === 'ru' ? 'Розетка (On/Off)' : 'Socket (On/Off)'}</option>
+                    <option value="3">${lang === 'ru' ? 'Лампа (яркость)' : 'Lamp (brightness)'}</option>
+                    <option value="4">${lang === 'ru' ? 'Лампа (яркость + цвет)' : 'Lamp (brightness + color)'}</option>
+                    <option value="7">${lang === 'ru' ? 'PIR (датчик движения)' : 'PIR (motion sensor)'}</option>
+                    ${overrideType === 5 && html`<option value="5">${lang === 'ru' ? 'Выключатель (устарело)' : 'Switch (legacy)'}</option>`}
+                    ${overrideType === 6 && html`<option value="6">${lang === 'ru' ? 'Кнопка (устарело)' : 'Button (legacy)'}</option>`}
+                  </select>
+                `}
+              </div>
+              <p class="text-xs text-slate-500 mt-2">
+                ${lockedByRole
+                  ? (lang === 'ru' ? 'Тип задан при обучении. Действия настраиваются на странице Switch pin / Button pin.' : 'The type was set during learning. Actions are configured on the Switch pin / Button pin page.')
+                  : (lang === 'ru' ? 'Обычно ничего менять не нужно: устройство само сообщает, что оно умеет. Меняйте, только если оно определилось неверно (например, лампа показана как розетка).' : 'Usually no change is needed: the device reports its own functions. Change it only if it was detected wrongly (for example, a lamp shown as a socket).')}
+              </p>
             </div>
 
             ${isMultiDp ? html`

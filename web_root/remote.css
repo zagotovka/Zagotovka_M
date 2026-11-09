@@ -156,25 +156,23 @@ html[data-theme="dark"] .rem-wrap {
 .rem-exit {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
   border-radius: 12px;
   color: var(--rem-text);
   background: transparent;
-  border: 1px solid var(--rem-panel-border);
+  border: none;
   text-decoration: none;
-  font-size: 13px;
-  transition: border-color 0.15s, color 0.15s;
+  transition: color 0.15s;
 }
-.rem-exit:hover { border-color: var(--rem-on); color: var(--rem-on-text); }
+.rem-exit:hover { color: var(--rem-on-text); }
 .rem-logo { display: flex; align-items: center; justify-content: center; min-width: 0; }
 .rem-logo .zl { width: clamp(96px, 32vw, 150px); }
 .rem-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 .rem-theme { display: flex; align-items: center; flex: none; }
 .rem-theme .theme-toggle { position: static; top: auto; right: auto; }
 .rem-theme .theme-toggle__btn { width: 40px; height: 40px; }
-.rem-exit-label { display: none; }
-@media (min-width: 640px) { .rem-exit-label { display: inline; } }
 
 /* ── Баннер отсутствия связи ── */
 .rem-banner {

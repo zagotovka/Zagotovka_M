@@ -63,7 +63,7 @@ const HELP_CONTENT = {
             <p class="mb-2">Открывает окно управления выбранным устройством. IEEE Address и Info здесь не меняются: их задают на странице <b>Select pin(s)</b>.</p>
             <h3 class="text-lg font-bold text-black mb-2">Что есть в окне</h3>
             <ul class="list-disc ml-6 mt-1">
-              <li><b>Тип устройства</b> - выбор типа: Автоматически, Розетка (On/Off), Диммер, Лампа (яркость), Лампа (яркость + цвет), Выключатель (Switch), Кнопка (Button), PIR (датчик движения). Изменение сохраняется сразу. При значении Автоматически тип определяется по функциям, которые устройство сообщило при опросе.</li>
+              <li><b>Тип устройства</b> - по умолчанию выбрано «Автоматически»: устройство само сообщает, что оно умеет, и менять ничего не нужно. Вручную можно выбрать: Розетка (On/Off), Лампа (яркость), Лампа (яркость + цвет), PIR (датчик движения). Изменение сохраняется сразу. Для кнопок и выключателей тип задаётся в окне «Обучение».</li>
               <li><b>Power</b> - отправляет устройству команду включить или выключить.</li>
               <li><b>Brightness</b> - ползунок яркости (для диммеров и ламп).</li>
               <li><b>Color</b> - выбор цвета (для цветных ламп).</li>
@@ -192,7 +192,7 @@ const HELP_CONTENT = {
             <p class="mb-2">Opens the control window of the selected device. IEEE Address and Info are not changed here: they are set on the <b>Select pin(s)</b> page.</p>
             <h3 class="text-lg font-bold text-black mb-2">What the window contains</h3>
             <ul class="list-disc ml-6 mt-1">
-              <li><b>Device Type</b> - type selection: Auto-detect, Socket (On/Off), Dimmer, Lamp (brightness), Lamp (brightness + color), Switch, Button, PIR (motion sensor). A change is saved at once. With Auto-detect the type is taken from the functions the device reported during the scan.</li>
+              <li><b>Device Type</b> - Automatic is selected by default: the device reports its own functions, so no change is needed. You can choose manually: Socket (On/Off), Lamp (brightness), Lamp (brightness + color), PIR (motion sensor). A change is saved at once. For buttons and switches the type is set in the Learning window.</li>
               <li><b>Power</b> - sends the on or off command to the device.</li>
               <li><b>Brightness</b> - brightness slider (for dimmers and lamps).</li>
               <li><b>Color</b> - color picker (for color lamps).</li>
