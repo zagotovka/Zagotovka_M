@@ -755,7 +755,7 @@ export function TabZigbee({}) {
       .then(() => {
         /* Сбрасываем тип устройства до определения зонда */
         setDevices(prev => prev.map(d =>
-          d.id === device.id ? { ...d, clusters: [6], zbee_device_type: 'socket' } : d
+          d.id === device.id ? { ...d, zbee_device_type: 'socket' } : d
         ));
       })
       .catch(err => console.error('Error triggering rescan:', err));

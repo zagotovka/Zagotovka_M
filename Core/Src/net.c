@@ -17,6 +17,31 @@
 #include "dtcm_alloc.h"
 #include "net_limits.h"  /* единый бюджет соединений + пороги heap */
 
+/* ── Remote Control: вид Zigbee-актуатора с учётом ручного типа (override) ──
+ * override: 0=авто, 1=розетка, 2/3=лампа (яркость), 4=лампа (яркость+цвет).
+ * Логика совпадает с zbee_slot_type() и cmd_zigbee_exec(). */
+static const char *zbee_remote_kind(const ZigbeeVirtualPin *z) {
+    if (z->zbee_role == ZBEE_ROLE_SWITCH) return "sw";
+    if (z->device_type_override == 1)     return "rly";
+    bool clr = (z->cluster_flags & ZBEE_CL_COLOR) ||
+               z->device_type_override == 4;
+    bool dim = (z->cluster_flags & ZBEE_CL_DIMMER) ||
+               z->device_type_override == 2 ||
+               z->device_type_override == 3 ||
+               z->device_type_override == 4;
+    return clr ? "clr" : dim ? "dim" : "rly";
+}
+
+/* Яркость в процентах 0..100 из «сырого» значения устройства.
+ * Если диапазон не обучен (0..0) — стандарт Zigbee Level Control 1..254. */
+static int zbee_remote_pct(const ZigbeeVirtualPin *z) {
+    int lo = z->dimmer_min, hi = z->dimmer_max;
+    if (lo == 0 && hi == 0) { lo = 1; hi = 254; }
+    if (hi <= lo) return 0;
+    int pct = ((int)z->dvalue - lo) * 100 / (hi - lo);
+    return pct < 0 ? 0 : (pct > 100 ? 100 : pct);
+}
+
 struct user {
   const char *name, *pass;
   char access_token[33];  // генерируется при логине, не константа
@@ -1231,17 +1256,14 @@ static void handle_remote_state(struct mg_connection *c,
                             "\"on\":%d}",
                             id, esc_label, esc_label, (int)z->onoff);
         } else { /* ── actuators / switches ── */
-            const char *kind = (z->zbee_role == ZBEE_ROLE_SWITCH) ? "sw"
-                             : (z->cluster_flags & ZBEE_CL_COLOR)  ? "clr"
-                             : (z->cluster_flags & ZBEE_CL_DIMMER) ? "dim"
-                                                                   : "rly";
+            const char *kind = zbee_remote_kind(z);
             pos = rem_sec_open(pos, "zb", &o_zb, &any);
             pos = rem_item_sep(pos, o_zb, &f_zb);
             pos += snprintf(g_body + pos, G_BODY_SIZE - pos,
                             "{\"id\":%d,\"n\":\"%s\",\"k\":\"%s\","
                             "\"on\":%d,\"st\":%d,\"v\":%d,\"c\":\"#%06lX\"}",
                             id, esc_label, kind,
-                            (int)z->onoff, (int)z->state, z->dvalue,
+                            (int)z->onoff, (int)z->state, zbee_remote_pct(z),
                             (unsigned long)(z->color_hex & 0xFFFFFF));
         }
     }

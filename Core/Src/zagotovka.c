@@ -4805,6 +4805,7 @@ int cmd_zigbee_exec(int id, int on, int v, long color) {
                       zp->device_type_override == 4;
     if (!has_dimmer) return 400;
     int lo = zp->dimmer_min, hi = zp->dimmer_max;
+    if (lo == 0 && hi == 0) { lo = 1; hi = 254; }  /* диапазон не обучен: стандарт ZCL */
     if (hi > lo) {                     /* проценты -> шкала устройства */
       if (v < 0) v = 0;
       if (v > 100) v = 100;

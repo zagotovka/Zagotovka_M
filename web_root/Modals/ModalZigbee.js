@@ -49,13 +49,22 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, onTouche
     const val = parseInt(e.target.value, 10);
     setOverrideType(val);
     touch();
+    /* Фиксируем тип в самом объекте device: последующие onUpdate (яркость/цвет)
+       берут его оттуда и раньше затирали выбранный тип старым значением. */
+    const prevOverride = device.override;
+    device.override = val;
     fetch('/api/zigbee/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: device.id, override: val })
-    }).then(() => {
+    }).then((r) => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
         onUpdate({ ...device, override: val });
-    }).catch(err => console.error('Error saving override:', err));
+    }).catch(err => {
+        console.error('Error saving override:', err);
+        device.override = prevOverride;
+        setOverrideType(prevOverride === 2 ? 3 : prevOverride);
+    });
   };
 
   /* Маршрут и подписи для кнопки перехода (Switch pin vs Button pin) */
