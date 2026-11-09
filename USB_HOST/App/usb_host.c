@@ -95,31 +95,27 @@ void MX_USB_HOST_Init(void)
 static void USBH_UserProcess  (USBH_HandleTypeDef *phost, uint8_t id)
 {
   /* USER CODE BEGIN CALL_BACK_1 */
+  /* ТОЛЬКО Appli_state — никакого printf/osDelay/f_mount здесь.
+   * Монтирование/размонтирование выполняет ConfigTask: f_mount из этого
+   * колбэка (контекст потока USBH) гонится с файловыми операциями
+   * StartConfigTask (FatFS не защищает f_mount объёмным локом — ffconf.h).
+   * printf отсюда же портит ITCM до заглушки __smakebuf_r в syscalls.c.
+   * USB_ST_OK ставится позже — после успешного монтирования и пробы
+   * файлов конфигурации, а не после HOST_USER_CLASS_ACTIVE. */
 	switch (id) {
 	case HOST_USER_SELECT_CONFIGURATION:
 		break;
 
-	case HOST_USER_DISCONNECTION:
-		Appli_state = APPLICATION_DISCONNECT;
-		printf("------APPLICATION_DISCONNECT-----! \r\n");
-		f_mount(NULL, (const TCHAR*) "", 1);
-
+	case HOST_USER_CONNECTION:
+		Appli_state = APPLICATION_START;
 		break;
 
 	case HOST_USER_CLASS_ACTIVE:
 		Appli_state = APPLICATION_READY;
-		printf("------HOST_USER_CLASS_ACTIVE-----! \r\n");
 		break;
 
-	case HOST_USER_CONNECTION:
-		Appli_state = APPLICATION_START;
-		printf("------HOST_USER_CONNECTION-------! \r\n");
-		osDelay(1000);
-		if (f_mount(&USBHFatFS, (const TCHAR*) USBHPath, 0) == FR_OK) {
-			printf("f_mount OK  \r\n");
-		} else {
-			printf("f_mount ERROR!  \r\n");
-		}
+	case HOST_USER_DISCONNECTION:
+		Appli_state = APPLICATION_DISCONNECT;
 		break;
 
 	default:

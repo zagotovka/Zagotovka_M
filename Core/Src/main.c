@@ -288,6 +288,11 @@ extern bool g_log_filter_from_file;  // Флаг: log_filter_mask был в sett
 
 extern ApplicationTypeDef Appli_state;
 
+/* Колбэк программного таймера индикации USB на LD3: тик 100 мс,
+ * таймер создаётся в MX (секция RTOS_TIMERS), т.к. CubeMX-таймеров
+ * в проекте нет. Реализация периода — usb_led_tick_100ms (zagotovka.c). */
+static void usb_led_timer_cb(void *arg) { (void)arg; usb_led_tick_100ms(); }
+
 /* Глобальные переменные мониторинга пиков и ошибок */
 volatile uint32_t malloc_fail_count = 0;
 static uint32_t mqtt_tx_peak = 0;
@@ -1189,7 +1194,10 @@ int main(void)
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
+  /* Индикация USB-состояния на LD3: программный таймер 100 мс.
+   * cb гасит светодиод сам, когда PB14 занят пользователем или USB в норме. */
+  osTimerId_t usb_led_timer = osTimerNew(usb_led_timer_cb, osTimerPeriodic, NULL, NULL);
+  if (usb_led_timer != NULL) osTimerStart(usb_led_timer, 100);
   /* USER CODE END RTOS_TIMERS */
 
   /* Create the queue(s) */
@@ -1820,6 +1828,34 @@ static uint32_t itcm_check_words(uint32_t *first_idx, uint32_t *exp_word, uint32
   }
   return errors;
 }
+
+/* ═══ USB: проба файлов конфигурации (есть / нет / диск врёт) ═══
+ * Решение "читать или создавать" принимаем ТОЛЬКО по FR_NO_FILE:
+ * любая ошибка чтения (FR_DISK_ERR/FR_NOT_READY и т.п.) на медленной
+ * флешке не должна уводить в путь "создаём дефолты" с FA_CREATE_ALWAYS. */
+typedef enum { INI_PRESENT, INI_MISSING, INI_ERROR } ini_probe_t;
+
+static ini_probe_t ini_probe(const char *name) {
+  FILINFO fi;
+  for (int i = 0; i < 3; i++) {
+    FRESULT r = f_stat(name, &fi);
+    if (r == FR_OK)      return INI_PRESENT;
+    if (r == FR_NO_FILE) return INI_MISSING;
+    osDelay(200); /* транзиентный сбой: повторить */
+  }
+  return INI_ERROR;
+}
+
+static bool usb_probe_all(void) {
+  static const char *const n[] = {
+    "settings.ini", "cron.ini", "pins.ini", "cond.ini",
+    "pintopin.ini", "onewire.ini", "pid.ini", "zigbee.ini"
+  };
+  for (unsigned i = 0; i < sizeof(n) / sizeof(n[0]); i++)
+    if (ini_probe(n[i]) == INI_ERROR) return false;
+  return true;
+}
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartConfigTask */
@@ -1837,13 +1873,45 @@ void StartConfigTask(void *argument)
   /* Infinite loop */
   int usbflag = 1;
   FILINFO finfo;
+  uint32_t t_boot = HAL_GetTick();
+  bool degraded = false;  /* деградировали: флешки не было при старте либо FSERR */
+  bool mounted = false;   /* том смонтирован и проверен (только этой задачей) */
+  uint8_t mount_fail = 0;
+#define USB_BOOT_WAIT_MS 10000u /* окно ожидания флешки при старте */
   for (;;) {
 	    switch (Appli_state) {
 	    case APPLICATION_READY:
-	      if (usbflag == 1) {
+	      if (!mounted) {
+	        /* Пауза из прежнего osDelay в колбэке CONNECTION: за 1 с
+	         * очередь USB (диск) успевает стабилизироваться после подключения. */
 	        osDelay(1000);
-	        printf("APPLICATION_READY! \r\n");
-
+	        if (Appli_state != APPLICATION_READY) break; /* флешку успели вынуть */
+	        if (f_mount(&USBHFatFS, (const TCHAR*) USBHPath, 1) != FR_OK ||
+	            (usbflag == 1 && !usb_probe_all())) {
+	          f_mount(NULL, (const TCHAR*) USBHPath, 0);
+	          /* Пока пробовали файлы, очередь могла накопить несохранённое */
+	          while (xQueueReceive(usbQueueHandle, &usbnum, 0) == pdTRUE)
+	            usb_unsaved_add(usbnum);
+	          if (++mount_fail >= 3 && !degraded) {
+	            degraded = true;
+	            usb_state_set(USB_ST_FSERR);
+	            if (usbflag == 1) SetSettingsRamDefaults(); /* RAM-дефолты веба */
+	            xTaskNotifyGive(WebServerTaskHandle);
+	          }
+	          osDelay(2000); /* следующая попытка через ~3 с */
+	          break;
+	        }
+	        mount_fail = 0;
+	        if (degraded && usbflag == 1) {
+	          /* Деградировали при старте, накопитель появился: путь загрузки
+	           * рассчитан на один проход — самый безопасный вариант ребут. */
+	          osDelay(1000);
+	          NVIC_SystemReset();
+	        }
+	        degraded = false;
+	        mounted = true;
+	        usb_state_set(USB_ST_OK);
+	        if (usbflag == 1) {
 	        // Каждый .ini-файл загружается НЕЗАВИСИМО от наличия остальных:
 	        // если файл найден на флешке — читаем его (Get*Config), если файла
 	        // нет — создаём его с настройками по умолчанию (Set*Config /
@@ -1935,14 +2003,29 @@ void StartConfigTask(void *argument)
 	        xTaskNotifyGive(my_DgnTaskHandle);  // И ВКЛЮЧАЕМ ЗАДАЧУ DgnTask
 
 	        usbflag = 0;
+	      } else if (g_usb_unsaved_mask) {
+	        /* Возврат флешки после LOSS: доигрываем накопленные сохранения */
+	        for (uint8_t k = 1; k <= 9; k++)
+	          if (g_usb_unsaved_mask & (1u << k)) {
+	            uint8_t u = k;
+	            xQueueSend(usbQueueHandle, &u, 0);
+	          }
+	        usb_unsaved_clear();
 	      }
-	      // Функция для чтения целых чисел из очереди
-	      if (xQueueReceive(usbQueueHandle, &usbnum, portMAX_DELAY) == pdTRUE) {
+      } /* if (!mounted) */
+	      // Функция для чтения целых чисел из очереди (с таймаутом, чтобы
+	      // заметить смену Appli_state, даже если очередь молчит)
+	      if (xQueueReceive(usbQueueHandle, &usbnum, pdMS_TO_TICKS(200)) == pdTRUE) {
 	        {
 	          uint32_t cur_usb = uxQueueMessagesWaiting(usbQueueHandle) + 1;
 	          if (cur_usb > usb_peak) {
 	            usb_peak = cur_usb;
 	          }
+	        }
+	        if (Appli_state != APPLICATION_READY) {
+	          /* накопитель пропал, пока ждали — не пишем, запоминаем */
+	          usb_unsaved_add(usbnum);
+	          break;
 	        }
 	        switch (usbnum) {
 	        case 1:
@@ -1953,6 +2036,9 @@ case 2:
           /* Конфигурация сохранена: счётчики использования условий и пул
            * выражений на странице Global Settings изменились. */
           mark_slice_dirty(&g_ver_settings);
+          /* Может смениться язык (lang): он отдаётся в /api/state/common
+           * для USB-баннера — инвалидируем и ETag common. */
+          mark_slice_dirty(&g_ver_common);
           break;
 	        case 3:
 	          SetCronConfig(); // Сохранение конфигурации cron в "cron.ini"
@@ -1984,7 +2070,24 @@ case 2:
 	      }
 	      break;
 	    default:
-	      // printf("Wrong data! \r\n");
+	      /* Накопитель недоступен. Все файловые операции идут из этой
+	       * задачи, поэтому размонтирование отсюда безопасно (раньше
+	       * f_mount выполнялось из колбэка USBH и гонилось с записью). */
+	      if (mounted) {
+	        mounted = false;
+	        f_mount(NULL, (const TCHAR*) USBHPath, 0);
+	        if (g_usb_state == USB_ST_OK) usb_state_set(USB_ST_LOST);
+	      } else if (g_usb_state == USB_ST_FSERR) {
+	        usb_state_set(USB_ST_ABSENT); /* FSERR-накопитель вынули */
+	      }
+	      /* Ответы на сохранение, пришедшие без накопителя: в маску */
+	      while (xQueueReceive(usbQueueHandle, &usbnum, 0) == pdTRUE)
+	        usb_unsaved_add(usbnum);
+	      if (usbflag == 1 && !degraded && (HAL_GetTick() - t_boot) > USB_BOOT_WAIT_MS) {
+	        degraded = true;                 /* состояние остаётся USB_ST_ABSENT */
+	        SetSettingsRamDefaults();        /* веб стартует с RAM по умолчанию */
+	        xTaskNotifyGive(WebServerTaskHandle);
+	      }
 	      break;
 	    }
 	    osDelay(1);

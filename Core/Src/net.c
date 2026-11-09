@@ -196,6 +196,32 @@ static bool require_post_json(struct mg_connection *c, struct mg_http_message *h
   return true;
 }
 
+/* Деградированный режим USB (g_usb_state USB_ST_ABSENT/USB_ST_FSERR):
+ * конфигурация с накопителя не загружена (или накопитель не читается),
+ * поэтому мутирующие POST-эндпойнты отвечают 503 (см. план USB P1).
+ * Read-only запросы и служебные POST (login/logout/device/reset) работают:
+ * без них не показать баннер и не перезагрузить устройство. */
+static bool usb_degraded_post_blocked(struct mg_http_message *hm) {
+  if (g_usb_state == USB_ST_OK || g_usb_state == USB_ST_LOST)
+    return false; /* норма и LOSS: изменения живут в RAM */
+  if (mg_strcasecmp(hm->method, mg_str("POST")) != 0)
+    return false; /* GET-эндпойнты не трогаем */
+  /* Исключения: служебные посты + read-only POST /api/logs/get (Logger) */
+  if (mg_match(hm->uri, mg_str("/api/login"), NULL)) return false;
+  if (mg_match(hm->uri, mg_str("/api/logout"), NULL)) return false;
+  if (mg_match(hm->uri, mg_str("/api/device/reset"), NULL)) return false;
+  if (mg_match(hm->uri, mg_str("/api/logs/get"), NULL)) return false;
+  /* OTA — запись ТОЛЬКО во внутреннюю flash (mg_flash_*), файловая система
+   * не используется: без флешки в банк B (upload) и A/B (commit,
+   * switch-bank, rollback) прошиваться можно и должно (см. план USB P1). */
+  if (mg_match(hm->uri, mg_str("/api/firmware/upload"), NULL)) return false;
+  if (mg_match(hm->uri, mg_str("/api/firmware/commit"), NULL)) return false;
+  if (mg_match(hm->uri, mg_str("/api/firmware/switch-bank"), NULL)) return false;
+  if (mg_match(hm->uri, mg_str("/api/firmware/rollback"), NULL)) return false;
+  if (mg_match(hm->uri, mg_str("/api/firmware/status"), NULL)) return false;
+  return true;
+}
+
 void handle_login(struct mg_connection *c, struct user *u) {
   char rem_buf[40];
   mg_snprintf(rem_buf, sizeof(rem_buf), "%M", mg_print_ip_port, &c->rem);
@@ -1672,9 +1698,16 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 		struct user *u = authenticate(hm);
 		MG_DEBUG(("%lu Auth: user=%p", c->id, (void*) u));
 
+		/* Деградированный USB-режим: мутирующие POST — 503 (после авторизации) */
+		if (u != NULL && usb_degraded_post_blocked(hm)) {
+			mg_http_reply(c, 503, "Connection: close\r\n", "{\"error\":\"usb\"}");
+			c->is_resp = 0;
+			return;
+		}
+
 		struct mg_str uri = hm->uri;
 		bool keep_alive = false;
-
+	
 		// Обработка корневого пути (/)
 		if (uri.len == 1 && strncmp(uri.buf, "/", uri.len) == 0) {
 			MG_DEBUG(("%lu Serving root /", c->id));
@@ -3848,7 +3881,7 @@ close_ds18b20:
  * попадает на закрывающийся сокет) реализована на фронтенде
  * через pauseAll() перед аплоадом и защиту OTA-owner в MG_EV_ACCEPT. */
 static void handle_common(struct mg_connection *c) {
-    char b[400];
+    char b[448];
     char tbuf[256];
     char extra[192];
     parse_stm32time(tbuf, sizeof(tbuf), &SetSettings);
@@ -3860,9 +3893,17 @@ static void handle_common(struct mg_connection *c) {
         "Cache-Control: no-cache\r\n"
         "ETag: \"%lu\"\r\n",
         (unsigned long)g_ver_common);
+    /* Состояние USB для веб-баннера (UsbBanner):
+     * usb 0 = нет при старте, 1 = норма, 2 = вынут после старта, 3 = FSERR;
+     * usb_unsaved = есть несохранённые конфиги (см. usb_unsaved_mask).
+     * lang — выбранный язык (Global Settings): баннер при обрыве USB в работе
+     * пишется на нём; при старте без флешки веб сам показывает оба языка. */
     snprintf(b, sizeof(b),
-        "{\"uptime\":%lu,\"heap\":%lu,\"ip\":\"%s\",\"gsm\":\"%s\",\"time\":%s,\"fw\":\"%s\"}",
-        uptime, heap, "0.0.0.0", "ok", tbuf, FW_VERSION);
+        "{\"uptime\":%lu,\"heap\":%lu,\"ip\":\"%s\",\"gsm\":\"%s\",\"time\":%s,\"fw\":\"%s\","
+        "\"usb\":%u,\"usb_unsaved\":%u,\"lang\":\"%s\"}",
+        uptime, heap, "0.0.0.0", "ok", tbuf, FW_VERSION,
+        (unsigned)g_usb_state, (unsigned)(g_usb_unsaved_mask != 0),
+        SetSettings.lang);
     mg_http_reply(c, 200, extra, "%s", b);
 }
 

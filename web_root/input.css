@@ -1,3 +1,17 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ═══ USB banner: бегущая строка о состоянии USB-накопителя ═══
+ * Используется в web_root/main.js (UsbBanner). Красная полоса снизу экрана,
+ * текст медленно прокручивается справа налево. */
+@keyframes usb-marquee {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(-100%); }
+}
+.usb-marquee {
+  display: inline-block;
+  white-space: nowrap;
+  animation: usb-marquee 18s linear infinite;
+  padding-right: 2rem;
+}

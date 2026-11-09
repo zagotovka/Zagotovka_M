@@ -300,6 +300,79 @@ void mark_slice_dirty_from_isr(volatile uint32_t *ver) {
     taskEXIT_CRITICAL_FROM_ISR(uxSaved);
 }
 
+/* ─── USB-накопитель: состояние, накопитель несохранённых записей, LD3 ─── */
+
+volatile uint8_t  g_usb_state = USB_ST_ABSENT;
+volatile uint16_t g_usb_unsaved_mask = 0;
+
+void usb_state_set(usb_state_t st) {
+  if (g_usb_state == (uint8_t)st) return;
+  g_usb_state = (uint8_t)st;
+  /* /api/state/common отвечает 304 по ETag — без этого поле usb не дойдёт */
+  mark_slice_dirty(&g_ver_common);
+}
+
+void usb_unsaved_add(uint8_t n) {
+  if (n < 1 || n > 9) return; /* usbnum 1..9, см. switch в StartConfigTask */
+  taskENTER_CRITICAL();
+  uint16_t old = g_usb_unsaved_mask;
+  g_usb_unsaved_mask |= (uint16_t)(1u << n);
+  taskEXIT_CRITICAL();
+  if (old == 0) mark_slice_dirty(&g_ver_common); /* появилось несохранённое */
+}
+
+void usb_unsaved_clear(void) {
+  taskENTER_CRITICAL();
+  uint16_t old = g_usb_unsaved_mask;
+  g_usb_unsaved_mask = 0;
+  taskEXIT_CRITICAL();
+  if (old) mark_slice_dirty(&g_ver_common);
+}
+
+/* Красный LD3 (PB14). Сначала пин проверяется на занятость пользователем:
+ * если PB14 в pins.ini получит режим не-None (topin != 0), светодиод не
+ * трогаем вовсе — индикация остаётся только в веб-баннере. Проверку
+ * выполняем лениво каждые 20 тиков (2 с); PinsConf меняет ConfigTask,
+ * поэтому гонок с этой задачей нет.
+ * Нефатальные паттерны (фатальные обработчики — Error_Handler/NMI/
+ * stackoverflow/gsm — используют LD1/LD2/LD3 иначе):
+ *   ABSENT/FSERR — две короткие вспышки раз в 2.0 с,
+ *   LOST         — частое мигание 5 Гц,
+ *   OK           — светодиод погашен. */
+void usb_led_tick_100ms(void) {
+  static uint8_t ph = 0;      /* фаза паттерна 0..19 (2.0 с) */
+  static uint8_t chk = 0;     /* счётчик перепроверки занятости PB14 */
+  static uint8_t allowed = 1; /* PB14 в режиме None? */
+  GPIO_PinState on = GPIO_PIN_RESET;
+
+  if (++chk >= 20) {
+    chk = 0;
+    int idx = PinIdxFromId(18); /* PB14 = LD3 [Red] 18, db.c */
+    uint8_t a = (idx >= 0 && idx < NUMPIN && PinsConf[idx].topin == 0) ? 1 : 0;
+    if (allowed && !a)
+      HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET); /* погасить */
+    allowed = a;
+  }
+  if (!allowed) { ph = 0; return; }
+
+  ph = (uint8_t)((ph + 1) % 20);
+  switch (g_usb_state) {
+  case USB_ST_ABSENT:
+  case USB_ST_FSERR:
+    on = (ph == 0 || ph == 2) ? GPIO_PIN_SET : GPIO_PIN_RESET;
+    break;
+  case USB_ST_LOST:
+    on = (ph % 2 == 0) ? GPIO_PIN_SET : GPIO_PIN_RESET;
+    break;
+  case USB_ST_OK:
+  default: /* норма: светодиод не используется */
+    HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
+    ph = 0;
+    return;
+  }
+  HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, on);
+}
+
 /* Случайный salt в старших битах g_ver_*: ETag меняется между загрузками,
  * иначе браузер с закешированным ETag "1" после перезагрузки получает 304
  * и показывает устаревшую страницу. Вызывается после MX_RNG_Init(). */

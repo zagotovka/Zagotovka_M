@@ -100,6 +100,38 @@ const NavLink = ({ title, href, ids }) =>
 const DelLink = ({ title, href, ids, onclicks }) =>
   html`<a href="${href}" class="" id="${ids}" onclick="${onclicks}">${title}<///>`;
 
+/* ═══ USB banner ═══
+ * Красная бегущая строка о состоянии USB-накопителя. Поля usb и lang приходят
+ * в /api/state/common (net.c handle_common): usb 0 — не было при старте
+ * (деградация), 2 — вынут после старта, 3 — подключён, но не читается (нет
+ * FAT / сбой). Норма — usb 1 или undefined: не рисуем ничего.
+ * Языки:
+ *   usb === 0 — настройки не загружены, язык гарантированно дефолтный,
+ *     поэтому предупреждение показываем сразу на двух языках: строка на
+ *     русском, строка на английском;
+ *   usb === 2/3 — обрыв в работе: текст на языке из Global Settings (lang). */
+const UsbBanner = ({ usb, lang }) => {
+  if (usb === undefined || usb === 1) return '';
+  const isRu = lang !== 'en';
+  const lines =
+    usb === 0
+      ? [/* Нет флешки при старте: показываем оба языка сразу */
+         'USB-накопитель не обнаружен при старте. Настройки не загружены, сохранение отключено. Вставьте флешку.',
+         'No USB drive detected at startup. Settings were not loaded, saving is disabled. Insert a flash drive.']
+      : usb === 2
+        ? [isRu
+           ? 'USB-накопитель отключён. Данные не сохраняются на флешку. При выключении питания несохранённые данные будут потеряны!'
+           : 'USB drive disconnected. Data is not saved to the drive. Unsaved settings will be lost on power-off!']
+        : [isRu
+           ? 'USB-накопитель подключён, но не читается (нет FAT-раздела или сбой чтения). Настройки не загружены и не будут перезаписаны. Проверьте или переформатируйте флешку.'
+           : 'USB drive connected but not readable (no FAT partition or a read failure). Settings were not loaded and will not be overwritten. Check or reformat the drive.'];
+  return html`<div role="alert"
+      class="fixed bottom-0 left-0 right-0 z-[70] bg-red-700 text-white font-bold overflow-hidden py-2 shadow-lg">
+      ${lines.map((t, i) =>
+        html`<div class="mb-1 last:mb-0" key=${i}><span class="usb-marquee">${t}</span></div>`)}
+    </div>`;
+};
+
 function Header({ logout, user, setShowSidebar, showSidebar, sessionExpired }) {
   const [now, setNow] = useState(new Date());
   const commonData = useContext(StateContext);
@@ -702,9 +734,13 @@ const App = function ({ }) {
 
   // «Чистый пульт»: на #remote скрываем Sidebar и Header (у пульта своя шапка)
   const isRemote = url === '/remote';
+  /* USB-баннер активен? (usb: 0 — нет при старте, 2 — вынут, 3 — FSERR) */
+  const usbAlarm = commonData && commonData.usb !== undefined && commonData.usb !== 1;
+  /* usb===0: баннер двухстрочный (RU+EN) — отступ контейнера больше */
+  const usbAlarmTall = usbAlarm && commonData.usb === 0;
 
   return html`<${StateContext.Provider} value=${commonData}>
-   <div class="min-h-screen" id="mains">
+   <div class="${usbAlarm ? (usbAlarmTall ? 'min-h-screen pb-24' : 'min-h-screen pb-12') : 'min-h-screen'}" id="mains">
     ${!isRemote && html`<${Sidebar} url=${url} show=${showSidebar} />`}
     ${showSidebar && !isRemote && html`<div class="fixed inset-0 z-[55] bg-black/30 lg:hidden" onclick=${() => setShowSidebar(false)}></div>`}
     ${!isRemote && html`<${Header}
@@ -739,6 +775,8 @@ const App = function ({ }) {
         <${TabRemote} path="remote" />
       <//>
     <//>
+    <${UsbBanner} usb=${commonData ? commonData.usb : undefined}
+        lang=${commonData ? commonData.lang : undefined} />
    <//>
   <//>`;
 };

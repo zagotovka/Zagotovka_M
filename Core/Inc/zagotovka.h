@@ -459,6 +459,26 @@ extern volatile uint32_t g_ver_settings;
 /* Флаги "строку Cron нужно разобрать заново" (читает и сбрасывает CronTask) */
 extern volatile uint8_t g_cron_dirty[NUMTASK];
 
+/* ─── USB-накопитель: состояние и несохранённые конфиги ───
+ * Пишет состояние ТОЛЬКО ConfigTask (usb_state_set), читают веб (net.c),
+ * светодиод ( usb_led_tick_100ms, из программного таймера 100 мс) и
+ * StartConfigTask. Изменение состояния инвалидирует ETag /api/state/common,
+ * чтобы веб-баннер дёрнулся сквозь 304. */
+typedef enum {
+  USB_ST_ABSENT = 0, /* нет при старте / нет в данный момент */
+  USB_ST_OK    = 1,  /* норма: смонтирован, конфигурация загружена */
+  USB_ST_LOST  = 2,  /* вынут после старта: RAM жив, копим несохранённое */
+  USB_ST_FSERR = 3   /* подключён, но не читается (нет FAT / сбой чтения) */
+} usb_state_t;
+
+extern volatile uint8_t  g_usb_state;
+extern volatile uint16_t g_usb_unsaved_mask; /* бит n = usbnum n ждёт записи на флешку */
+
+void usb_state_set(usb_state_t st);
+void usb_unsaved_add(uint8_t usbnum);
+void usb_unsaved_clear(void);
+void usb_led_tick_100ms(void);
+
 /* ─── Mark slice dirty ─── */
 void mark_slice_dirty(volatile uint32_t *ver);
 void mark_slice_dirty_from_isr(volatile uint32_t *ver);

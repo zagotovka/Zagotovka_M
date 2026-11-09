@@ -461,6 +461,26 @@ void SetSettingsConfig() {
 }
 // Первый запуск если "settings.ini" не существует, создаем его и записываем
 // данные.
+/* Значения по умолчанию ТОЛЬКО в RAM (без обращения к диску). Вызывается
+ * из деградированного режима (флешка отсутствует при старте / FSERR),
+ * что бы веб-сервер и сеть имели рабочие логин, язык, время и сеть.
+ * StartSettingsConfig() завершает запись файла этим же вызовом. */
+void SetSettingsRamDefaults(void) {
+  strcpy(SetSettings.lang, LANG);
+  strcpy(SetSettings.adm_name, ADM_NAME);
+  strcpy(SetSettings.adm_pswd, ADM_PASS);
+  SetSettings.timezone = TIMEZONE;
+  SetSettings.check_ip = CHECK_IP;
+  SetSettings.check_mqtt = CHECK_MQTT;
+  SetSettings.mqtt_prt = MQTT_PRT;
+  SetSettings.check_mqtt_srv = CHECK_MQTT_SRV;
+  SetSettings.mqtt_srv_prt = MQTT_SRV_PRT;
+  SetSettings.mqtt_srv_maxcli = MQTT_SRV_MAXCLI;
+  strcpy(SetSettings.mqtt_srv_usr, MQTT_SRV_USR);
+  strcpy(SetSettings.mqtt_srv_pswd, MQTT_SRV_PSWD);
+  SetSettings.usehttps = CHECK_USEHTTPS;
+}
+
 void StartSettingsConfig() {
   UINT bytesWritten;
   char buffer[JSON_BUF_SIZE];
@@ -563,32 +583,7 @@ void StartSettingsConfig() {
   f_close(&USBHFile);
 
   // Copy default values to SetSettings structure
-  strcpy(SetSettings.lang, LANG);
-  strcpy(SetSettings.adm_name, ADM_NAME);
-  strcpy(SetSettings.adm_pswd, ADM_PASS);
-  SetSettings.timezone = TIMEZONE;
-  SetSettings.check_ip = CHECK_IP;
-  SetSettings.check_mqtt = CHECK_MQTT;
-  //    SetSettings.ip_addr0 = IP_ADDR0;
-  //    SetSettings.ip_addr1 = IP_ADDR1;
-  //    SetSettings.ip_addr2 = IP_ADDR2;
-  //    SetSettings.ip_addr3 = IP_ADDR3;
-  //    SetSettings.sb_mask0 = SB_MASK0;
-  //    SetSettings.sb_mask1 = SB_MASK1;
-  //    SetSettings.sb_mask2 = SB_MASK2;
-  //    SetSettings.sb_mask3 = SB_MASK3;
-  //    SetSettings.gateway0 = GATEWAY0;
-  //    SetSettings.gateway1 = GATEWAY1;
-  //    SetSettings.gateway2 = GATEWAY2;
-  //    SetSettings.gateway3 = GATEWAY3;
-  SetSettings.mqtt_prt = MQTT_PRT;
-  SetSettings.check_mqtt_srv = CHECK_MQTT_SRV;
-  SetSettings.mqtt_srv_prt = MQTT_SRV_PRT;
-  SetSettings.mqtt_srv_maxcli = MQTT_SRV_MAXCLI;
-  strcpy(SetSettings.mqtt_srv_usr, MQTT_SRV_USR);
-  strcpy(SetSettings.mqtt_srv_pswd, MQTT_SRV_PSWD);
-  SetSettings.usehttps = CHECK_USEHTTPS;
-  //    SetSettings.mqtt_qos = MQTT_QOS;
+  SetSettingsRamDefaults();
 }
 // Если "settings.ini" существует, открываем его...
 void GetSettingsConfig() {

@@ -13,6 +13,8 @@
 
 void SetSettingsConfig(void);
 void StartSettingsConfig(void);
+/* Значения по умолчанию в RAM (без записи файла) — деградированный режим USB */
+void SetSettingsRamDefaults(void);
 void GetSettingsConfig(void);
 void GetCronConfig(void);
 void SetCronConfig(void);
