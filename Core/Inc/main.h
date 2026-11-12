@@ -148,7 +148,7 @@ typedef struct {
 /* Входящее MQTT-сообщение для отложенной обработки
    (вынесено из контекста mg_mgr_poll → основной цикл WebServerTask) */
 typedef struct {
-    char topic[64];
+    char topic[96];      /* длинные config-топики Home Assistant (раньше 64) */
     char payload[256];
 } MqttRxMsg_t;
 typedef struct {

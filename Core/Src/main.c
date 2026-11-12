@@ -48,6 +48,7 @@
 #include "usart_ring.h"
 #include "dtcm_alloc.h"
 #include "mqtt_server.h"
+#include "ha_discovery.h"
 #include "slzb_watchdog.h"
 #include "cond_eval.h" /* Дополнительные условия срабатывания действий */
 
@@ -151,13 +152,6 @@ const osThreadAttr_t ConfigTask_attributes = {
   .name = "ConfigTask",
   .stack_size = 768 * 4,
   .priority = (osPriority_t) osPriorityNormal,
-};
-/* Definitions for WebServerTask */
-osThreadId_t WebServerTaskHandle;
-const osThreadAttr_t WebServerTask_attributes = {
-  .name = "WebServerTask",
-  .stack_size = 4608 * 4,
-  .priority = (osPriority_t) osPriorityAboveNormal,
 };
 /* Definitions for OutputTask */
 osThreadId_t OutputTaskHandle;
@@ -311,6 +305,12 @@ static uint32_t mg_conn_tls = 0;
 static uint32_t mg_conn_mqtt = 0;
 static uint32_t mg_conn_mqttsrv = 0; // клиенты встроенного MQTT-брокера
 static uint32_t mg_conn_other = 0;
+
+/* OTHER без клиентов встроенного брокера: HTTP, DNS, NTP и т.п. */
+static inline unsigned long mg_conn_other_pure(void) {
+  return (mg_conn_other > mg_conn_mqttsrv) ? (mg_conn_other - mg_conn_mqttsrv) : 0;
+}
+
 static unsigned long s_other_ids[8] = {0};
 static uint32_t s_other_cnt = 0;
 static uint32_t mg_poll_gap_peak = 0;
@@ -320,6 +320,13 @@ volatile uint32_t mg_poll_gap_over_50ms_cnt = 0;
 volatile uint32_t req_total = 0;
 volatile uint32_t req_encoder = 0;
 volatile uint32_t req_api = 0;
+
+osThreadId_t WebServerTaskHandle;
+const osThreadAttr_t WebServerTask_attributes = {
+  .name = "WebServerTask",
+  .stack_size = 4608 * 4,
+  .priority = (osPriority_t) osPriorityAboveNormal,
+};
 
 /* USER CODE END PV */
 
@@ -334,7 +341,6 @@ static void MX_TIM1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_CRC_Init(void);
 void StartConfigTask(void *argument);
-void StartWebServerTask(void *argument);
 void StartOutputTask(void *argument);
 void StartCronTask(void *argument);
 void StartInputTask(void *argument);
@@ -349,7 +355,7 @@ void StartDgnTask(void *argument);
 void StartLoggerTask(void *argument);
 
 /* USER CODE BEGIN PFP */
-
+void StartWebServerTask(void *argument);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -437,6 +443,9 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic,
   char full_topic[128]; // Буфер для полного топика
   snprintf(full_topic, sizeof(full_topic), "%s%s", get_mqtt_topic(), topic);
 
+  /* События кнопок и охраны дублируются как триггеры Home Assistant в <tx>/ev */
+  ha_observe(conn, topic, msg);
+
   /* Локальный MQTT-сервер: fan-out независимо от состояния внешнего брокера */
   mqtt_server_publish(full_topic, msg);
 
@@ -477,6 +486,20 @@ void send_mqtt_message(struct mg_connection *conn, const char *topic,
 
   // printf("[MQTT] %lu PUBLISHED %s -> %.*s\r\n", conn->id, msg, (int)pub_opts.topic.len,
   //         pub_opts.topic.buf);
+}
+/* Публикация в произвольный топик. Локальный брокер: fan-out (retain там не хранится
+ * для больших payload, при подписке HA конфиги публикуются заново). Внешний: retain как задан. */
+void send_mqtt_raw(struct mg_connection *conn, const char *full_topic, const char *msg, bool retain) {
+  struct mg_mqtt_opts o;
+  mqtt_server_publish(full_topic, msg);
+  if (!check_mqtt_connection(conn)) return;
+  if (conn->send.len > 4096) return;
+  memset(&o, 0, sizeof(o));
+  o.topic = mg_str(full_topic);
+  o.message = mg_str(msg);
+  o.qos = s_qos;
+  o.retain = retain;
+  mg_mqtt_pub(conn, &o);
 }
 /*********************** End M ******************************/
 
@@ -1225,9 +1248,6 @@ int main(void)
   /* creation of ConfigTask */
   ConfigTaskHandle = osThreadNew(StartConfigTask, NULL, &ConfigTask_attributes);
 
-  /* creation of WebServerTask */
-  WebServerTaskHandle = osThreadNew(StartWebServerTask, NULL, &WebServerTask_attributes);
-
   /* creation of OutputTask */
   OutputTaskHandle = osThreadNew(StartOutputTask, NULL, &OutputTask_attributes);
 
@@ -1267,6 +1287,22 @@ int main(void)
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
 
+  /* creation of WebServerTask */
+  {
+    /* Стек и TCB WebServerTask (18 КБ) — в DTCM, а не в куче FreeRTOS.
+     * Если пула не хватит — штатный путь через кучу. */
+    static osThreadAttr_t web_attr;
+    web_attr = WebServerTask_attributes;
+    void *w_stk = dtcm_malloc(WebServerTask_attributes.stack_size);
+    void *w_tcb = dtcm_malloc(sizeof(StaticTask_t));
+    if (w_stk != NULL && w_tcb != NULL) {
+      web_attr.stack_mem = w_stk;
+      web_attr.stack_size = WebServerTask_attributes.stack_size;
+      web_attr.cb_mem = w_tcb;
+      web_attr.cb_size = sizeof(StaticTask_t);
+    }
+    WebServerTaskHandle = osThreadNew(StartWebServerTask, NULL, &web_attr);
+  }
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -1802,8 +1838,6 @@ void parse_string(char *str, time_t cronetime_olds, int cronindex, int pause) {
   }
 }
 
-
-/* USER CODE END Header_StartDgnTask */
 /* ═══ ITCM runtime integrity check ═══
  * Сравнивает ITCM-код с загрузочным образом во Flash (тот же принцип, что
  * проверка 17a при старте). Ловит порчу ITCM в рантайме wild-записями,
@@ -1854,6 +1888,471 @@ static bool usb_probe_all(void) {
   for (unsigned i = 0; i < sizeof(n) / sizeof(n[0]); i++)
     if (ini_probe(n[i]) == INI_ERROR) return false;
   return true;
+}
+
+/* Вынесена из StartWebServerTask — GCC nested functions используют трамплины
+ * на стеке, что вызывает HardFault на Cortex-M7 (XN-protected SRAM). */
+static void static_or_dynamic_ip(struct mg_tcpip_if *mif,
+                                 struct dbSettings *config) {
+  if (config->check_ip == 1) { // DHCP
+    MG_INFO(("2 - Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+             mif->mac[0], mif->mac[1], mif->mac[2], mif->mac[3], mif->mac[4],
+             mif->mac[5]));
+  } else { // Статический IP
+    mif->ip = mg_htonl(MG_U32(config->ip_addr0, config->ip_addr1,
+                              config->ip_addr2, config->ip_addr3));
+    mif->mask = mg_htonl(MG_U32(config->sb_mask0, config->sb_mask1,
+                                config->sb_mask2, config->sb_mask3));
+    mif->gw = mg_htonl(MG_U32(config->gateway0, config->gateway1,
+                                config->gateway2, config->gateway3));
+  }
+}
+
+void StartWebServerTask(void *argument)
+{
+  /* USER CODE BEGIN StartWebServerTask */
+  ulTaskNotifyTake(0, portMAX_DELAY);
+  mg_log_set(MG_LL_ERROR); // Установи уровень логирования 'MG_LL_INFO' для отладки.
+  if (!quick_network_check()) { // Проверка подключен LAN провод или нет.
+    printf("Network link down - Web server not started");
+    vTaskDelete(NULL);
+    return;
+  } else {
+    onlineFlg = 1;
+  }
+
+  /* Инициализация настроек HTTPS — независимо от usehttps: при usehttps=0
+   * во Flash иначе никогда не появится валидная запись, геттеры https_get_*
+   * вечно будут возвращать false, а поля настроек в UI останутся пустыми.
+   * При usehttps=0 ошибка записи не фатальна — HTTP работает и без TLS. */
+  if (!initialize_https_settings()) {
+    printf("initialize_https_settings failed\r\n");
+    if (SetSettings.usehttps == 1) {
+      Error_Handler();
+    }
+  }
+  /* Обновляем кэш настроек: mysett_cache_reload() в StartConfigTask мог
+   * отработать до появления валидной записи во Flash и закэшировать
+   * пустые поля. */
+  mysett_cache_reload();
+
+  // Инициализация TLS параметров
+  struct mg_tcpip_if mif = {.mac = GENERATE_LOCALLY_ADMINISTERED_MAC(),
+                            .ip = 0,
+                            .mask = 0,
+                            .gw = 0,
+                            .driver = &mg_tcpip_driver_stm32f,
+                            .driver_data = NULL};
+
+  snprintf(g_mac_addr, sizeof(g_mac_addr), "%02X:%02X:%02X:%02X:%02X:%02X",
+           mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]);
+
+  MG_INFO(("Initial Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+           mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4],
+           mif.mac[5]));
+
+  struct mg_mgr *mgr =
+      (struct mg_mgr *)dtcm_malloc(sizeof(struct mg_mgr)); // Одноразовый при загрузке, живёт весь runtime
+  mg_mgr_init(mgr);                                   // Инициализируем менеджер
+
+  // Настройка MQTT
+  char mqtt_url[70];
+  if (SetSettings.check_mqtt && SetSettings.mqtt_hst[0] != '\0') {
+    int result = snprintf(mqtt_url, sizeof(mqtt_url), "mqtt://%s:%d",
+                          SetSettings.mqtt_hst, SetSettings.mqtt_prt);
+    if (result < 0 || result >= sizeof(mqtt_url)) {
+      printf("Error: MQTT URL truncated or formatting error\n");
+    } else {
+      set_mqtt_url(mqtt_url);
+      MG_INFO(("MQTT URL set: %s", mqtt_url)); // Добавляем лог для проверки
+    }
+  } else {
+    MG_INFO(("MQTT is disabled in settings"));
+  }
+  set_mqtt_topic(SetSettings.txmqttop); // Zagotovka
+
+  //    // UUID перед генерацией MAC-адреса
+  //    MG_INFO(("UUID before MAC generation:
+  //    %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X\r\n",
+  //             UUID[0], UUID[1], UUID[2], UUID[3], UUID[4], UUID[5],
+  //             UUID[6], UUID[7], UUID[8], UUID[9], UUID[10], UUID[11]));
+
+  // Initialise Mongoose network stack
+  struct mg_tcpip_driver_stm32f_data driver_data = {.mdc_cr = 4};
+  mif.driver_data = &driver_data;
+  MG_INFO(("MAC before static_or_dynamic_ip: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+           mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4],
+           mif.mac[5]));
+
+  static_or_dynamic_ip(&mif, &SetSettings);
+
+  mg_tcpip_init(mgr, &mif);
+
+  MG_INFO(("MAC: %M. Waiting for IP...", mg_print_mac, mif.mac));
+  LOG_MQTT("[BOOT] t=%lu waiting for IP...\r\n", (unsigned long)HAL_GetTick());
+  while (mif.state != MG_TCPIP_STATE_READY) {
+    mg_mgr_poll(mgr, 0);
+  }
+  LOG_MQTT("[BOOT] t=%lu IP ready\r\n", (unsigned long)HAL_GetTick());
+
+  {
+    uint8_t *ip_bytes = (uint8_t *)&mif.ip;
+    snprintf(g_ip_addr, sizeof(g_ip_addr), "%d.%d.%d.%d", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
+    snprintf(g_mac_addr, sizeof(g_mac_addr), "%02X:%02X:%02X:%02X:%02X:%02X", mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]);
+  }
+
+  /* Встроенный MQTT-брокер (только если включён в настройках;
+     таблица клиентов выделяется в DTCM один раз) */
+  if (SetSettings.check_mqtt_srv) {
+    mqtt_server_init(mgr, (uint16_t)SetSettings.mqtt_srv_prt);
+    LOG_MQTT("[BOOT] t=%lu mqtt_server_init() done, broker on port %d\r\n",
+             (unsigned long)HAL_GetTick(), SetSettings.mqtt_srv_prt);
+
+    /* Watchdog автовосстановления шлюза SLZB-06p7U: если шлюз не подключился
+     * к брокеру за SLZB_WD_WAIT_MS — перезагружаем его HTTP-запросом.
+     * IP берётся из настроек (Settings → MQTT Server → "SLZB IP");
+     * пустая строка = watchdog выключен. */
+    slzb_watchdog_init(SetSettings.slzb_host);
+  }
+
+  /* HA MQTT Discovery: включается настройкой check_ha_disc, работает и без
+   * встроенного брокера (через внешний MQTT-клиент). */
+  ha_discovery_init();
+
+  LOG_MQTT("[BOOT] t=%lu calling web_init()\r\n", (unsigned long)HAL_GetTick());
+  web_init(mgr);
+  LOG_MQTT("[BOOT] t=%lu web_init() done\r\n", (unsigned long)HAL_GetTick());
+
+  MqttMessage_t rxMsg = {0};
+  BaseType_t status;
+  char mqtt_topic[100];
+  char mqtt_payload[300];
+
+  static uint32_t lsens_tk = 0;  // Батч-публикация сенсоров: 5000мс
+  /* ── Диагностика: задержка между вызовами mg_mgr_poll ── */
+  static uint32_t s_poll_warn_tk = 0;
+  static uint32_t s_last_poll_tk = 0;
+  /* Infinite loop */
+  for (;;) {
+    /* Измеряем интервал между poll-вызовами */
+    uint32_t now_poll = HAL_GetTick();
+    uint32_t poll_gap = now_poll - s_last_poll_tk;
+    if (s_last_poll_tk != 0) {
+      if (poll_gap > mg_poll_gap_peak) {
+        mg_poll_gap_peak = poll_gap;
+      }
+      if (poll_gap > 50) {  /* >50ms = starvation */
+        mg_poll_gap_over_50ms_cnt++; // Увеличиваем счетчик
+        if (now_poll - s_poll_warn_tk > 30000) {     /* не спамим чаще 1р/30с */
+          s_poll_warn_tk = now_poll;
+          printf("[NET] WARN: mg_mgr_poll gap=%lums (starvation! total cnt: %lu)\r\n",
+                 (unsigned long)poll_gap, (unsigned long)mg_poll_gap_over_50ms_cnt);
+        }
+      }
+    }
+    s_last_poll_tk = now_poll;
+
+    uint32_t t_poll = HAL_GetTick();
+    mg_mgr_poll(mgr, 0); // Было 10
+    t_poll = HAL_GetTick() - t_poll;
+
+    /* Встроенный MQTT-брокер: keepalive-таймауты клиентов (сама проверяет флаг) */
+    mqtt_server_poll();
+    ha_discovery_poll(s_conn);
+    /* Watchdog SLZB-06p7U: автовосстановление связи с шлюзом (сама проверяет,
+       что брокер запущен и host задан) */
+    slzb_watchdog_poll(mgr);
+    /* Статический пик времени выполнения mg_mgr_poll */
+    {
+      static uint32_t s_poll_exec_peak = 0;
+      static uint32_t s_poll_warn_exec_tk = 0;
+      if (t_poll > s_poll_exec_peak) {
+        s_poll_exec_peak = t_poll;
+      }
+      if (t_poll > 10) { /* >10ms в одном poll - аномалия */
+        if (now_poll - s_poll_warn_exec_tk > 30000) {
+          s_poll_warn_exec_tk = now_poll;
+          printf("[NET] WARN: mg_mgr_poll exec=%lums (peak=%lu, gap=%lu)\r\n",
+                 (unsigned long)t_poll, (unsigned long)s_poll_exec_peak,
+                 (unsigned long)poll_gap);
+        }
+      }
+    }
+
+    /* Диагностика пика соединений Mongoose */
+    {
+      uint32_t active_conns = 0;
+      uint32_t n_listeners = 0, n_tls = 0, n_mqtt = 0, n_other = 0;
+      unsigned long cur_ids[8] = {0};
+      for (struct mg_connection *c = mgr->conns; c != NULL; c = c->next) {
+        active_conns++;
+        if (c->is_listening)      n_listeners++;
+        else if (c->is_tls)       n_tls++;
+        else if (c == s_conn)     n_mqtt++;
+        else {
+          if (n_other < 8) cur_ids[n_other] = c->id;
+          n_other++;
+        }
+      }
+      /* OTHER детали — при изменении состава (id набора) */
+      bool changed = (n_other != s_other_cnt);
+      if (!changed) {
+        for (uint32_t i = 0; i < n_other && i < 8; i++) {
+          if (cur_ids[i] != s_other_ids[i]) { changed = true; break; }
+        }
+      }
+      static uint32_t s_diag_tk = 0;   /* время последней печати [DIAG] */
+
+      if (changed && (now_poll - s_diag_tk) > 10000) {   /* не чаще раза в 10 с */
+        s_diag_tk = now_poll;
+        for (struct mg_connection *c = mgr->conns; c != NULL; c = c->next) {
+          if (!c->is_listening && !c->is_tls && c != s_conn) {
+            char rem_buf[32];
+            mg_snprintf(rem_buf, sizeof(rem_buf), "%M", mg_print_ip_port, &c->rem);
+            printf("[DIAG] OTHER conn id=%lu rem=%s client=%d\r\n",
+                   c->id, rem_buf, c->is_client);
+          }
+        }
+        memcpy(s_other_ids, cur_ids, sizeof(s_other_ids));
+        s_other_cnt = n_other;
+      }
+      mg_conn_cur = active_conns;
+      mg_conn_listeners = n_listeners;
+      mg_conn_tls = n_tls;
+      mg_conn_mqtt = n_mqtt;
+      mg_conn_other = n_other;
+      mg_conn_mqttsrv = mqtt_server_client_count();
+      if (active_conns > mg_conn_peak) {
+        mg_conn_peak = active_conns;
+      }
+    }
+
+    /* Обработка входящих MQTT-команд (вынесена из fn_mqtt callback,
+       чтобы не блокировать mg_mgr_poll) */
+    {
+        uint32_t cur_rx = uxQueueMessagesWaiting(mqttRxQueueHandle);
+        if (cur_rx > mqtt_rx_peak) {
+            mqtt_rx_peak = cur_rx;
+        }
+        MqttRxMsg_t rx;
+        while (xQueueReceive(mqttRxQueueHandle, &rx, 0) == pdPASS) {
+            mqtt_message_handler(rx.topic, rx.payload);
+        }
+    }
+
+    /* Обработка исходящих Zigbee-команд */
+    {
+        ZbeeCmdMsg_t zcmd;
+        {
+            uint32_t cur_zbee = uxQueueMessagesWaiting(zbeeCmdQueueHandle);
+            if (cur_zbee > zbee_cmd_peak) {
+                zbee_cmd_peak = cur_zbee;
+            }
+        }
+        while (xQueueReceive(zbeeCmdQueueHandle, &zcmd, 0) == pdPASS) {
+            /* Локальный MQTT-сервер: публикация команд независимо от внешнего брокера */
+            mqtt_server_publish(zcmd.topic, zcmd.payload);
+            if (s_conn != NULL && mqtt_connected_reported) {
+                struct mg_mqtt_opts pub_opts;
+                memset(&pub_opts, 0, sizeof(pub_opts));
+                pub_opts.topic = mg_str(zcmd.topic);
+                pub_opts.message = mg_str(zcmd.payload);
+                pub_opts.qos = s_qos;
+                pub_opts.retain = false;
+                mg_mqtt_pub(s_conn, &pub_opts);
+                LOG_Z2M("zbee: MQTT PUB topic='%s'\r\n", zcmd.topic);
+            } else {
+                LOG_Z2M("zbee: MQTT DROP s_conn=%p connected=%d\r\n",
+                       (void*)s_conn, mqtt_connected_reported);
+            }
+        }
+    }
+
+    /* Explicit drain: rapidly clear the queue if disconnected to avoid buildup.
+     * НЕ дренажим, если работает локальный MQTT-сервер (check_mqtt_srv=1) —
+     * в этом случае у сообщений есть получатель (mqtt_server_publish) даже
+     * без внешнего брокера. Дренаж нужен только когда единственный потребитель —
+     * внешний клиент, и он не подключён. */
+    if (!SetSettings.check_mqtt_srv &&
+        (s_conn == NULL || s_conn->is_closing || !mqtt_connected_reported)) {
+      MqttMessage_t drain;
+      while (xQueueReceive(mqttQueueHandle, &drain, 0) == pdPASS) {
+        /* Drop silently */
+      }
+    }
+
+    // Получаем данные из очереди (не блокируем поток Mongoose)
+    memset(&rxMsg, 0, sizeof(MqttMessage_t));
+    {
+      uint32_t cur_tx = uxQueueMessagesWaiting(mqttQueueHandle);
+      if (cur_tx > mqtt_tx_peak) {
+        mqtt_tx_peak = cur_tx;
+      }
+    }
+    status = xQueueReceive(mqttQueueHandle, &rxMsg, 0);
+    if (status == pdPASS) {
+			// printf("[MQTT_Q] cmd=%d dev=%d state=%d\r\n", rxMsg.command,rxMsg.deviceId, rxMsg.state);
+      /* Защита от повреждённых сообщений в очереди */
+      /* cmd 11 (ZIGBEE SECURITY) несёт индекс слота ZigbeeConf, а не id пина.
+       * cmd 3/4/5 валидны и для Zigbee-кнопок (deviceId = логический 90..289). */
+      bool zbee_btn_ev = (IsZigbeePin(rxMsg.deviceId) &&
+                          (rxMsg.command == 3 || rxMsg.command == 4 || rxMsg.command == 5));
+      bool phys_dev = (rxMsg.deviceId < NUMPIN);
+      if (!phys_dev && rxMsg.command != 1 && rxMsg.command != 11 && !zbee_btn_ev) {
+        printf("MQTT queue: invalid deviceId=%d, cmd=%d — skipped\r\n", rxMsg.deviceId, rxMsg.command);
+      } else {
+      switch (rxMsg.command) {
+      case 1: // DEVICE
+        if (rxMsg.deviceId < NUMPIN &&
+            SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          strcpy(mqtt_topic, "/device/");
+          snprintf(mqtt_payload, sizeof(mqtt_payload), "DEVICE(s)/ACTION=%s", PinsConf[rxMsg.deviceId].sclick);
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 2: // Switch
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/switch/");
+          snprintf(mqtt_payload, sizeof(mqtt_payload), "ID:%d=%s",
+                   rxMsg.deviceId < NUMPIN ? rxMsg.deviceId + 1 : rxMsg.deviceId,
+                   rxMsg.state ? "ON" : "OFF");
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 3: // BUTTON LONG_PRESS
+      case 4: // BUTTON SINGLE_CLICK
+      case 5: // BUTTON DOUBLE_CLICK
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/button/");
+          if (IsZigbeePin(rxMsg.deviceId)) {
+            /* Zigbee-кнопка: действия в пуле, а не в PinsConf (иначе OOB) */
+            int zbi = ZbeeIdx(rxMsg.deviceId);
+            const char *zact = (rxMsg.command == 3) ? zbee_action_lpress(zbi)
+                             : (rxMsg.command == 4) ? zbee_action_sclick(zbi)
+                             : zbee_action_dclick(zbi);
+            const char *zname = (rxMsg.command == 3) ? "LONG_PRESS"
+                              : (rxMsg.command == 4) ? "SINGLE_CLICK" : "DOUBLE_CLICK";
+            snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/%s/%s",
+                     rxMsg.deviceId, zname, zact);
+          } else {
+            switch (rxMsg.command) {
+            case 3: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s", rxMsg.deviceId + 1, PinsConf[rxMsg.deviceId].lpress); break;
+            case 4: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId + 1, PinsConf[rxMsg.deviceId].sclick); break;
+            case 5: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId + 1, PinsConf[rxMsg.deviceId].dclick); break;
+            }
+          }
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 6: // SECURITY
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
+          snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId + 1, PinsConf[rxMsg.deviceId].sclick, PinsConf[rxMsg.deviceId].info);
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 11: // ZIGBEE SECURITY (deviceId = индекс слота ZigbeeConf)
+        if (rxMsg.deviceId < NUMZBEE &&
+            SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
+          snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s",
+                   ZbeeIdFromIdx(rxMsg.deviceId), zbee_action_sclick(rxMsg.deviceId),
+                   ZigbeeConf[rxMsg.deviceId].zbee_label);
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      case 7: // TIMER — заменён на send_mqtt_timer_batch()
+      case 9: // PWM_TIMER — заменён на send_mqtt_timer_batch()
+        break; // no-op: батч обрабатывает всё
+      case 8: // OnOff
+        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
+          memset(mqtt_topic, 0, sizeof(mqtt_topic));
+          memset(mqtt_payload, 0, sizeof(mqtt_payload));
+          snprintf(mqtt_topic, sizeof(mqtt_topic), "/onoff/");
+          int written = snprintf(mqtt_payload, sizeof(mqtt_payload),
+                                 "ID=%d/OnOff=%s/%s",
+                                 rxMsg.deviceId + 1,
+                                 PinsConf[rxMsg.deviceId].onoff ? "ON" : "OFF",
+                                 PinsConf[rxMsg.deviceId].info);
+          if (written < 0 || (size_t)written >= sizeof(mqtt_payload)) {
+            printf("[MQTT] payload truncated for deviceId=%d, skipping\r\n",
+                   rxMsg.deviceId);
+            break;
+          }
+          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
+        } else if (SetSettings.check_mqtt == 1) {
+          printf("Error: MQTT settings not configured\r\n");
+        }
+        break;
+      default:
+        printf("mqttnum = %d \r\n", mqttnum);
+        break;
+      }
+      } /* end of deviceId bounds guard */
+    }
+    // Батч-публикация всех сенсоров (DS18B20 + DHT22 + PWM) одним JSON-пакетом
+    // раз в 5 секунд. Гистерезис применяется внутри publish_sensor_batch().
+    // Для Home Assistant / Node-RED обновление раз в 5с более чем достаточно.
+    {
+          uint32_t now = HAL_GetTick();
+
+          if (now - lsens_tk >= 5000) {
+	  lsens_tk = now;
+            /* Публикуем и при выключенном внешнем брокере — если локальный
+               MQTT-сервер включён (publish_sensor_batch сам разрулит conn==NULL) */
+            if (SetSettings.check_mqtt_srv ||
+                (s_conn != NULL && mqtt_connected_reported && !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining)) {
+              publish_sensor_batch(s_conn);
+            }
+          }
+        }
+
+    /* Батч-публикация таймеров раз в 1 секунду (только при изменениях) */
+    {
+          static uint32_t ltim_tk = 0;
+          uint32_t now = HAL_GetTick();
+          if (now - ltim_tk >= 1000) {
+              ltim_tk = now;
+              /* Публикуем и при выключенном внешнем брокере — если локальный
+                 MQTT-сервер включён (send_mqtt_timer_batch сам разрулит conn==NULL) */
+              if (SetSettings.check_mqtt_srv ||
+                  (s_conn != NULL && mqtt_connected_reported &&
+                   !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining)) {
+                  send_mqtt_timer_batch(s_conn);
+              }
+          }
+    }
+
+    /* Проверка таймаутов зондов возможностей zigbee-устройств */
+    zbee_probe_check_timeout();
+    zbee_learn_check_timeout();
+
+
+
+    osDelay(1); /* Yield CPU to RTOS, preventing 100% CPU loop starvation */
+  }
+  mg_mgr_free(mgr);
+  /* USER CODE END StartWebServerTask */
 }
 
 /* USER CODE END 4 */
@@ -2093,471 +2592,6 @@ case 2:
 	    osDelay(1);
 	  }
   /* USER CODE END 5 */
-}
-
-/* USER CODE BEGIN Header_StartWebServerTask */
-/**
- * @brief Function implementing the WebServerTask thread.
- * @param argument: Not used
- * @retval None
- */
-/* Вынесена из StartWebServerTask — GCC nested functions используют трамплины
- * на стеке, что вызывает HardFault на Cortex-M7 (XN-protected SRAM). */
-static void static_or_dynamic_ip(struct mg_tcpip_if *mif,
-                                 struct dbSettings *config) {
-  if (config->check_ip == 1) { // DHCP
-    MG_INFO(("2 - Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
-             mif->mac[0], mif->mac[1], mif->mac[2], mif->mac[3], mif->mac[4],
-             mif->mac[5]));
-  } else { // Статический IP
-    mif->ip = mg_htonl(MG_U32(config->ip_addr0, config->ip_addr1,
-                              config->ip_addr2, config->ip_addr3));
-    mif->mask = mg_htonl(MG_U32(config->sb_mask0, config->sb_mask1,
-                                config->sb_mask2, config->sb_mask3));
-    mif->gw = mg_htonl(MG_U32(config->gateway0, config->gateway1,
-                                config->gateway2, config->gateway3));
-  }
-}
-/* USER CODE END Header_StartWebServerTask */
-void StartWebServerTask(void *argument)
-{
-  /* USER CODE BEGIN StartWebServerTask */
-  ulTaskNotifyTake(0, portMAX_DELAY);
-  mg_log_set(MG_LL_ERROR); // Установи уровень логирования 'MG_LL_INFO' для отладки.
-  if (!quick_network_check()) { // Проверка подключен LAN провод или нет.
-    printf("Network link down - Web server not started");
-    vTaskDelete(NULL);
-    return;
-  } else {
-    onlineFlg = 1;
-  }
-
-  /* Инициализация настроек HTTPS — независимо от usehttps: при usehttps=0
-   * во Flash иначе никогда не появится валидная запись, геттеры https_get_*
-   * вечно будут возвращать false, а поля настроек в UI останутся пустыми.
-   * При usehttps=0 ошибка записи не фатальна — HTTP работает и без TLS. */
-  if (!initialize_https_settings()) {
-    printf("initialize_https_settings failed\r\n");
-    if (SetSettings.usehttps == 1) {
-      Error_Handler();
-    }
-  }
-  /* Обновляем кэш настроек: mysett_cache_reload() в StartConfigTask мог
-   * отработать до появления валидной записи во Flash и закэшировать
-   * пустые поля. */
-  mysett_cache_reload();
-
-  // Инициализация TLS параметров
-  struct mg_tcpip_if mif = {.mac = GENERATE_LOCALLY_ADMINISTERED_MAC(),
-                            .ip = 0,
-                            .mask = 0,
-                            .gw = 0,
-                            .driver = &mg_tcpip_driver_stm32f,
-                            .driver_data = NULL};
-
-  snprintf(g_mac_addr, sizeof(g_mac_addr), "%02X:%02X:%02X:%02X:%02X:%02X",
-           mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]);
-
-  MG_INFO(("Initial Generated MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
-           mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4],
-           mif.mac[5]));
-
-  struct mg_mgr *mgr =
-      (struct mg_mgr *)dtcm_malloc(sizeof(struct mg_mgr)); // Одноразовый при загрузке, живёт весь runtime
-  mg_mgr_init(mgr);                                   // Инициализируем менеджер
-
-  // Настройка MQTT
-  char mqtt_url[70];
-  if (SetSettings.check_mqtt && SetSettings.mqtt_hst[0] != '\0') {
-    int result = snprintf(mqtt_url, sizeof(mqtt_url), "mqtt://%s:%d",
-                          SetSettings.mqtt_hst, SetSettings.mqtt_prt);
-    if (result < 0 || result >= sizeof(mqtt_url)) {
-      printf("Error: MQTT URL truncated or formatting error\n");
-    } else {
-      set_mqtt_url(mqtt_url);
-      MG_INFO(("MQTT URL set: %s", mqtt_url)); // Добавляем лог для проверки
-    }
-  } else {
-    MG_INFO(("MQTT is disabled in settings"));
-  }
-  set_mqtt_topic(SetSettings.txmqttop); // Zagotovka
-
-  //    // UUID перед генерацией MAC-адреса
-  //    MG_INFO(("UUID before MAC generation:
-  //    %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X\r\n",
-  //             UUID[0], UUID[1], UUID[2], UUID[3], UUID[4], UUID[5],
-  //             UUID[6], UUID[7], UUID[8], UUID[9], UUID[10], UUID[11]));
-
-  // Initialise Mongoose network stack
-  struct mg_tcpip_driver_stm32f_data driver_data = {.mdc_cr = 4};
-  mif.driver_data = &driver_data;
-  MG_INFO(("MAC before static_or_dynamic_ip: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
-           mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4],
-           mif.mac[5]));
-
-  static_or_dynamic_ip(&mif, &SetSettings);
-
-  mg_tcpip_init(mgr, &mif);
-
-  MG_INFO(("MAC: %M. Waiting for IP...", mg_print_mac, mif.mac));
-  LOG_MQTT("[BOOT] t=%lu waiting for IP...\r\n", (unsigned long)HAL_GetTick());
-  while (mif.state != MG_TCPIP_STATE_READY) {
-    mg_mgr_poll(mgr, 0);
-  }
-  LOG_MQTT("[BOOT] t=%lu IP ready\r\n", (unsigned long)HAL_GetTick());
-
-  {
-    uint8_t *ip_bytes = (uint8_t *)&mif.ip;
-    snprintf(g_ip_addr, sizeof(g_ip_addr), "%d.%d.%d.%d", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
-    snprintf(g_mac_addr, sizeof(g_mac_addr), "%02X:%02X:%02X:%02X:%02X:%02X", mif.mac[0], mif.mac[1], mif.mac[2], mif.mac[3], mif.mac[4], mif.mac[5]);
-  }
-
-  /* Встроенный MQTT-брокер (только если включён в настройках;
-     таблица клиентов выделяется в DTCM один раз) */
-  if (SetSettings.check_mqtt_srv) {
-    mqtt_server_init(mgr, (uint16_t)SetSettings.mqtt_srv_prt);
-    LOG_MQTT("[BOOT] t=%lu mqtt_server_init() done, broker on port %d\r\n",
-             (unsigned long)HAL_GetTick(), SetSettings.mqtt_srv_prt);
-
-    /* Watchdog автовосстановления шлюза SLZB-06p7U: если шлюз не подключился
-     * к брокеру за SLZB_WD_WAIT_MS — перезагружаем его HTTP-запросом.
-     * IP берётся из настроек (Settings → MQTT Server → "SLZB IP");
-     * пустая строка = watchdog выключен. */
-    slzb_watchdog_init(SetSettings.slzb_host);
-  }
-
-  LOG_MQTT("[BOOT] t=%lu calling web_init()\r\n", (unsigned long)HAL_GetTick());
-  web_init(mgr);
-  LOG_MQTT("[BOOT] t=%lu web_init() done\r\n", (unsigned long)HAL_GetTick());
-
-  MqttMessage_t rxMsg = {0};
-  BaseType_t status;
-  char mqtt_topic[100];
-  char mqtt_payload[300];
-
-  static uint32_t lsens_tk = 0;  // Батч-публикация сенсоров: 5000мс
-  /* ── Диагностика: задержка между вызовами mg_mgr_poll ── */
-  static uint32_t s_poll_warn_tk = 0;
-  static uint32_t s_last_poll_tk = 0;
-  /* Infinite loop */
-  for (;;) {
-    /* Измеряем интервал между poll-вызовами */
-    uint32_t now_poll = HAL_GetTick();
-    uint32_t poll_gap = now_poll - s_last_poll_tk;
-    if (s_last_poll_tk != 0) {
-      if (poll_gap > mg_poll_gap_peak) {
-        mg_poll_gap_peak = poll_gap;
-      }
-      if (poll_gap > 50) {  /* >50ms = starvation */
-        mg_poll_gap_over_50ms_cnt++; // Увеличиваем счетчик
-        if (now_poll - s_poll_warn_tk > 30000) {     /* не спамим чаще 1р/30с */
-          s_poll_warn_tk = now_poll;
-          printf("[NET] WARN: mg_mgr_poll gap=%lums (starvation! total cnt: %lu)\r\n",
-                 (unsigned long)poll_gap, (unsigned long)mg_poll_gap_over_50ms_cnt);
-        }
-      }
-    }
-    s_last_poll_tk = now_poll;
-
-    uint32_t t_poll = HAL_GetTick();
-    mg_mgr_poll(mgr, 0); // Было 10
-    t_poll = HAL_GetTick() - t_poll;
-
-    /* Встроенный MQTT-брокер: keepalive-таймауты клиентов (сама проверяет флаг) */
-    mqtt_server_poll();
-    /* Watchdog SLZB-06p7U: автовосстановление связи с шлюзом (сама проверяет,
-       что брокер запущен и host задан) */
-    slzb_watchdog_poll(mgr);
-    /* Статический пик времени выполнения mg_mgr_poll */
-    {
-      static uint32_t s_poll_exec_peak = 0;
-      static uint32_t s_poll_warn_exec_tk = 0;
-      if (t_poll > s_poll_exec_peak) {
-        s_poll_exec_peak = t_poll;
-      }
-      if (t_poll > 10) { /* >10ms в одном poll - аномалия */
-        if (now_poll - s_poll_warn_exec_tk > 30000) {
-          s_poll_warn_exec_tk = now_poll;
-          printf("[NET] WARN: mg_mgr_poll exec=%lums (peak=%lu, gap=%lu)\r\n",
-                 (unsigned long)t_poll, (unsigned long)s_poll_exec_peak,
-                 (unsigned long)poll_gap);
-        }
-      }
-    }
-
-    /* Диагностика пика соединений Mongoose */
-    {
-      uint32_t active_conns = 0;
-      uint32_t n_listeners = 0, n_tls = 0, n_mqtt = 0, n_other = 0;
-      unsigned long cur_ids[8] = {0};
-      for (struct mg_connection *c = mgr->conns; c != NULL; c = c->next) {
-        active_conns++;
-        if (c->is_listening)      n_listeners++;
-        else if (c->is_tls)       n_tls++;
-        else if (c == s_conn)     n_mqtt++;
-        else {
-          if (n_other < 8) cur_ids[n_other] = c->id;
-          n_other++;
-        }
-      }
-      /* OTHER детали — при изменении состава (id набора) */
-      bool changed = (n_other != s_other_cnt);
-      if (!changed) {
-        for (uint32_t i = 0; i < n_other && i < 8; i++) {
-          if (cur_ids[i] != s_other_ids[i]) { changed = true; break; }
-        }
-      }
-      static uint32_t s_diag_tk = 0;   /* время последней печати [DIAG] */
-
-      if (changed && (now_poll - s_diag_tk) > 10000) {   /* не чаще раза в 10 с */
-        s_diag_tk = now_poll;
-        for (struct mg_connection *c = mgr->conns; c != NULL; c = c->next) {
-          if (!c->is_listening && !c->is_tls && c != s_conn) {
-            char rem_buf[32];
-            mg_snprintf(rem_buf, sizeof(rem_buf), "%M", mg_print_ip_port, &c->rem);
-            printf("[DIAG] OTHER conn id=%lu rem=%s client=%d\r\n",
-                   c->id, rem_buf, c->is_client);
-          }
-        }
-        memcpy(s_other_ids, cur_ids, sizeof(s_other_ids));
-        s_other_cnt = n_other;
-      }
-      mg_conn_cur = active_conns;
-      mg_conn_listeners = n_listeners;
-      mg_conn_tls = n_tls;
-      mg_conn_mqtt = n_mqtt;
-      mg_conn_other = n_other;
-      mg_conn_mqttsrv = mqtt_server_client_count();
-      if (active_conns > mg_conn_peak) {
-        mg_conn_peak = active_conns;
-      }
-    }
-
-    /* Обработка входящих MQTT-команд (вынесена из fn_mqtt callback,
-       чтобы не блокировать mg_mgr_poll) */
-    {
-        uint32_t cur_rx = uxQueueMessagesWaiting(mqttRxQueueHandle);
-        if (cur_rx > mqtt_rx_peak) {
-            mqtt_rx_peak = cur_rx;
-        }
-        MqttRxMsg_t rx;
-        while (xQueueReceive(mqttRxQueueHandle, &rx, 0) == pdPASS) {
-            mqtt_message_handler(rx.topic, rx.payload);
-        }
-    }
-
-    /* Обработка исходящих Zigbee-команд */
-    {
-        ZbeeCmdMsg_t zcmd;
-        {
-            uint32_t cur_zbee = uxQueueMessagesWaiting(zbeeCmdQueueHandle);
-            if (cur_zbee > zbee_cmd_peak) {
-                zbee_cmd_peak = cur_zbee;
-            }
-        }
-        while (xQueueReceive(zbeeCmdQueueHandle, &zcmd, 0) == pdPASS) {
-            /* Локальный MQTT-сервер: публикация команд независимо от внешнего брокера */
-            mqtt_server_publish(zcmd.topic, zcmd.payload);
-            if (s_conn != NULL && mqtt_connected_reported) {
-                struct mg_mqtt_opts pub_opts;
-                memset(&pub_opts, 0, sizeof(pub_opts));
-                pub_opts.topic = mg_str(zcmd.topic);
-                pub_opts.message = mg_str(zcmd.payload);
-                pub_opts.qos = s_qos;
-                pub_opts.retain = false;
-                mg_mqtt_pub(s_conn, &pub_opts);
-                LOG_Z2M("zbee: MQTT PUB topic='%s'\r\n", zcmd.topic);
-            } else {
-                LOG_Z2M("zbee: MQTT DROP s_conn=%p connected=%d\r\n",
-                       (void*)s_conn, mqtt_connected_reported);
-            }
-        }
-    }
-
-    /* Explicit drain: rapidly clear the queue if disconnected to avoid buildup.
-     * НЕ дренажим, если работает локальный MQTT-сервер (check_mqtt_srv=1) —
-     * в этом случае у сообщений есть получатель (mqtt_server_publish) даже
-     * без внешнего брокера. Дренаж нужен только когда единственный потребитель —
-     * внешний клиент, и он не подключён. */
-    if (!SetSettings.check_mqtt_srv &&
-        (s_conn == NULL || s_conn->is_closing || !mqtt_connected_reported)) {
-      MqttMessage_t drain;
-      while (xQueueReceive(mqttQueueHandle, &drain, 0) == pdPASS) {
-        /* Drop silently */
-      }
-    }
-
-    // Получаем данные из очереди (не блокируем поток Mongoose)
-    memset(&rxMsg, 0, sizeof(MqttMessage_t));
-    {
-      uint32_t cur_tx = uxQueueMessagesWaiting(mqttQueueHandle);
-      if (cur_tx > mqtt_tx_peak) {
-        mqtt_tx_peak = cur_tx;
-      }
-    }
-    status = xQueueReceive(mqttQueueHandle, &rxMsg, 0);
-    if (status == pdPASS) {
-			// printf("[MQTT_Q] cmd=%d dev=%d state=%d\r\n", rxMsg.command,rxMsg.deviceId, rxMsg.state);
-      /* Защита от повреждённых сообщений в очереди */
-      /* cmd 11 (ZIGBEE SECURITY) несёт индекс слота ZigbeeConf, а не id пина.
-       * cmd 3/4/5 валидны и для Zigbee-кнопок (deviceId = логический 90..289). */
-      bool zbee_btn_ev = (IsZigbeePin(rxMsg.deviceId) &&
-                          (rxMsg.command == 3 || rxMsg.command == 4 || rxMsg.command == 5));
-      bool phys_dev = (rxMsg.deviceId < NUMPIN);
-      if (!phys_dev && rxMsg.command != 1 && rxMsg.command != 11 && !zbee_btn_ev) {
-        printf("MQTT queue: invalid deviceId=%d, cmd=%d — skipped\r\n", rxMsg.deviceId, rxMsg.command);
-      } else {
-      switch (rxMsg.command) {
-      case 1: // DEVICE
-        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
-          memset(mqtt_topic, 0, sizeof(mqtt_topic));
-          memset(mqtt_payload, 0, sizeof(mqtt_payload));
-          strcpy(mqtt_topic, "/device/");
-          snprintf(mqtt_payload, sizeof(mqtt_payload), "DEVICE(s)/ACTION=%s", PinsConf[1].sclick);
-          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
-      case 2: // Switch
-        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
-          memset(mqtt_topic, 0, sizeof(mqtt_topic));
-          memset(mqtt_payload, 0, sizeof(mqtt_payload));
-          snprintf(mqtt_topic, sizeof(mqtt_topic), "/switch/");
-          snprintf(mqtt_payload, sizeof(mqtt_payload), "ID:%d=%s",
-                   rxMsg.deviceId < NUMPIN ? rxMsg.deviceId + 1 : rxMsg.deviceId,
-                   rxMsg.state ? "ON" : "OFF");
-          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
-      case 3: // BUTTON LONG_PRESS
-      case 4: // BUTTON SINGLE_CLICK
-      case 5: // BUTTON DOUBLE_CLICK
-        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
-          memset(mqtt_topic, 0, sizeof(mqtt_topic));
-          memset(mqtt_payload, 0, sizeof(mqtt_payload));
-          snprintf(mqtt_topic, sizeof(mqtt_topic), "/button/");
-          if (IsZigbeePin(rxMsg.deviceId)) {
-            /* Zigbee-кнопка: действия в пуле, а не в PinsConf (иначе OOB) */
-            int zbi = ZbeeIdx(rxMsg.deviceId);
-            const char *zact = (rxMsg.command == 3) ? zbee_action_lpress(zbi)
-                             : (rxMsg.command == 4) ? zbee_action_sclick(zbi)
-                             : zbee_action_dclick(zbi);
-            const char *zname = (rxMsg.command == 3) ? "LONG_PRESS"
-                              : (rxMsg.command == 4) ? "SINGLE_CLICK" : "DOUBLE_CLICK";
-            snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/%s/%s",
-                     rxMsg.deviceId, zname, zact);
-          } else {
-            switch (rxMsg.command) {
-            case 3: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/LONG_PRESS/%s", rxMsg.deviceId + 1, PinsConf[rxMsg.deviceId].lpress); break;
-            case 4: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/SINGLE_CLICK/%s", rxMsg.deviceId + 1, PinsConf[rxMsg.deviceId].sclick); break;
-            case 5: snprintf(mqtt_payload, sizeof(mqtt_payload), "ID=%d/DOUBLE_CLICK/%s", rxMsg.deviceId + 1, PinsConf[rxMsg.deviceId].dclick); break;
-            }
-          }
-          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
-      case 6: // SECURITY
-        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
-          memset(mqtt_topic, 0, sizeof(mqtt_topic));
-          memset(mqtt_payload, 0, sizeof(mqtt_payload));
-          snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
-          snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s", rxMsg.deviceId + 1, PinsConf[rxMsg.deviceId].sclick, PinsConf[rxMsg.deviceId].info);
-          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
-      case 11: // ZIGBEE SECURITY (deviceId = индекс слота ZigbeeConf)
-        if (rxMsg.deviceId < NUMZBEE &&
-            SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
-          memset(mqtt_topic, 0, sizeof(mqtt_topic));
-          memset(mqtt_payload, 0, sizeof(mqtt_payload));
-          snprintf(mqtt_topic, sizeof(mqtt_topic), "/security/");
-          snprintf(mqtt_payload, sizeof(mqtt_payload), "SECURITY/ID=%d/ACTION=%s/%s",
-                   ZbeeIdFromIdx(rxMsg.deviceId), zbee_action_sclick(rxMsg.deviceId),
-                   ZigbeeConf[rxMsg.deviceId].zbee_label);
-          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
-      case 7: // TIMER — заменён на send_mqtt_timer_batch()
-      case 9: // PWM_TIMER — заменён на send_mqtt_timer_batch()
-        break; // no-op: батч обрабатывает всё
-      case 8: // OnOff
-        if (SetSettings.txmqttop[0] != '\0' && (SetSettings.check_mqtt == 1 || SetSettings.check_mqtt_srv == 1)) {
-          memset(mqtt_topic, 0, sizeof(mqtt_topic));
-          memset(mqtt_payload, 0, sizeof(mqtt_payload));
-          snprintf(mqtt_topic, sizeof(mqtt_topic), "/onoff/");
-          int written = snprintf(mqtt_payload, sizeof(mqtt_payload),
-                                 "ID=%d/OnOff=%s/%s",
-                                 rxMsg.deviceId + 1,
-                                 PinsConf[rxMsg.deviceId].onoff ? "ON" : "OFF",
-                                 PinsConf[rxMsg.deviceId].info);
-          if (written < 0 || (size_t)written >= sizeof(mqtt_payload)) {
-            printf("[MQTT] payload truncated for deviceId=%d, skipping\r\n",
-                   rxMsg.deviceId);
-            break;
-          }
-          send_mqtt_message(s_conn, mqtt_topic, mqtt_payload);
-        } else if (SetSettings.check_mqtt == 1) {
-          printf("Error: MQTT settings not configured\r\n");
-        }
-        break;
-      default:
-        printf("mqttnum = %d \r\n", mqttnum);
-        break;
-      }
-      } /* end of deviceId bounds guard */
-    }
-    // Батч-публикация всех сенсоров (DS18B20 + DHT22 + PWM) одним JSON-пакетом
-    // раз в 5 секунд. Гистерезис применяется внутри publish_sensor_batch().
-    // Для Home Assistant / Node-RED обновление раз в 5с более чем достаточно.
-    {
-          uint32_t now = HAL_GetTick();
-
-          if (now - lsens_tk >= 5000) {
-	  lsens_tk = now;
-            /* Публикуем и при выключенном внешнем брокере — если локальный
-               MQTT-сервер включён (publish_sensor_batch сам разрулит conn==NULL) */
-            if (SetSettings.check_mqtt_srv ||
-                (s_conn != NULL && mqtt_connected_reported && !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining)) {
-              publish_sensor_batch(s_conn);
-            }
-          }
-        }
-
-    /* Батч-публикация таймеров раз в 1 секунду (только при изменениях) */
-    {
-          static uint32_t ltim_tk = 0;
-          uint32_t now = HAL_GetTick();
-          if (now - ltim_tk >= 1000) {
-              ltim_tk = now;
-              /* Публикуем и при выключенном внешнем брокере — если локальный
-                 MQTT-сервер включён (send_mqtt_timer_batch сам разрулит conn==NULL) */
-              if (SetSettings.check_mqtt_srv ||
-                  (s_conn != NULL && mqtt_connected_reported &&
-                   !s_conn->is_connecting && !s_conn->is_closing && !s_conn->is_draining)) {
-                  send_mqtt_timer_batch(s_conn);
-              }
-          }
-    }
-
-    /* Проверка таймаутов зондов возможностей zigbee-устройств */
-    zbee_probe_check_timeout();
-    zbee_learn_check_timeout();
-
-
-
-    osDelay(1); /* Yield CPU to RTOS, preventing 100% CPU loop starvation */
-  }
-  mg_mgr_free(mgr);
-  /* USER CODE END StartWebServerTask */
 }
 
 /* USER CODE BEGIN Header_StartOutputTask */
@@ -4051,6 +4085,7 @@ static void heap_diagnostic(void)
     static uint32_t last_usb_peak = 0;
     static uint32_t last_zbee_cmd_peak = 0;
     static uint32_t last_mg_conn_peak = 0;
+    static uint32_t last_mg_conn_mqttsrv = 0;
     static uint32_t last_mg_poll_gap_peak = 0;
     static uint32_t last_mg_poll_gap_over_50ms_cnt = 0;
     static uint32_t last_req_total = 0;
@@ -4076,6 +4111,7 @@ static void heap_diagnostic(void)
         usb_peak != last_usb_peak ||
         zbee_cmd_peak != last_zbee_cmd_peak ||
         mg_conn_peak != last_mg_conn_peak ||
+        mg_conn_mqttsrv != last_mg_conn_mqttsrv ||
         mg_poll_gap_peak != last_mg_poll_gap_peak ||
         mg_poll_gap_over_50ms_cnt != last_mg_poll_gap_over_50ms_cnt ||
         req_total != last_req_total ||
@@ -4116,6 +4152,14 @@ static void heap_diagnostic(void)
                (unsigned)dtcm_alloc_get_free());
         printf("[SYSTEM] DTCM alloc fails:   %u\r\n",
                (unsigned)dtcm_alloc_get_fail_count());
+        {
+            int fl = 0; size_t fs = 0;
+            const char *ff = dtcm_alloc_get_last_fail(&fl, &fs);
+            extern volatile uint32_t s_sbrk_peak_used, s_sbrk_fail_cnt;
+            if (ff) printf("[SYSTEM] DTCM last fail: %s:%d need=%u B\r\n", ff, fl, (unsigned)fs);
+            printf("[SYSTEM] newlib heap peak: %lu B, sbrk fails: %lu\r\n",
+                   (unsigned long)s_sbrk_peak_used, (unsigned long)s_sbrk_fail_cnt);
+        }
 
         size_t itcm_used  = (size_t)(_eitcm - _sitcm);
         size_t itcm_total = 16 * 1024;
@@ -4130,10 +4174,10 @@ static void heap_diagnostic(void)
         printf("Output queue peak:  %lu / 64\r\n", output_peak);
         printf("USB queue peak:     %lu / 16\r\n", usb_peak);
         printf("Zbee cmd peak:      %lu / 64\r\n", zbee_cmd_peak);
-        printf("Mongoose conns peak: %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu MQTTSRV=%lu]\r\n",
-               mg_conn_peak, mg_conn_cur,
-               mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other,
-               (unsigned long)mg_conn_mqttsrv);
+        printf("Mongoose conns peak: %lu (cur=%lu)\r\n", mg_conn_peak, mg_conn_cur);
+        printf("  Listeners=%lu  Broker clients=%lu  Ext MQTT client=%lu  TLS=%lu  Other(HTTP/DNS/NTP)=%lu\r\n",
+               mg_conn_listeners, (unsigned long)mg_conn_mqttsrv, mg_conn_mqtt,
+               mg_conn_tls, mg_conn_other_pure());
         printf("Mongoose gap peak:   %lu ms (starvation cnt: %lu)\r\n", mg_poll_gap_peak, (unsigned long)mg_poll_gap_over_50ms_cnt);
         printf("HTTP(s) Requests:   Total=%lu, API=%lu, Encoder=%lu\r\n",
                (unsigned long)req_total, (unsigned long)req_api, (unsigned long)req_encoder);
@@ -4150,6 +4194,7 @@ static void heap_diagnostic(void)
         last_usb_peak = usb_peak;
         last_zbee_cmd_peak = zbee_cmd_peak;
         last_mg_conn_peak = mg_conn_peak;
+        last_mg_conn_mqttsrv = mg_conn_mqttsrv;
         last_mg_poll_gap_peak = mg_poll_gap_peak;
         last_mg_poll_gap_over_50ms_cnt = mg_poll_gap_over_50ms_cnt;
         last_req_total = req_total;
@@ -4303,10 +4348,10 @@ void StartDgnTask(void *argument)
 			printf("USB peak:      %lu / 16\r\n", usb_peak);
 
 			printf("\r\n""=== MONGOOSE PEAKS ===\r\n");
-			printf("Conns peak:    %lu (cur=%lu) [L=%lu TLS=%lu MQTT=%lu OTHER=%lu MQTTSRV=%lu]\r\n",
-			       mg_conn_peak, mg_conn_cur,
-			       mg_conn_listeners, mg_conn_tls, mg_conn_mqtt, mg_conn_other,
-			       (unsigned long)mg_conn_mqttsrv);
+			printf("Conns peak:    %lu (cur=%lu)\r\n", mg_conn_peak, mg_conn_cur);
+			printf("  Listeners=%lu  Broker clients=%lu  Ext MQTT client=%lu  TLS=%lu  Other(HTTP/DNS/NTP)=%lu\r\n",
+			       mg_conn_listeners, (unsigned long)mg_conn_mqttsrv, mg_conn_mqtt,
+			       mg_conn_tls, mg_conn_other_pure());
 			printf("Poll gap peak: %lu ms (starvation cnt: %lu)\r\n", mg_poll_gap_peak, (unsigned long)mg_poll_gap_over_50ms_cnt);
 			printf("Net SYN drops: %lu (RST after accept: %lu)\r\n",
 			       (unsigned long)g_net_syn_drops, (unsigned long)g_net_rejects);

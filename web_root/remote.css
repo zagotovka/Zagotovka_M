@@ -630,6 +630,52 @@ html[data-theme="dark"] .rem-wrap {
   padding: 0;
 }
 
+/* ═══════════════════ Свой цвет (панель выбора) ═══════════════════ */
+.rem-cc-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 14px 0 5px; border-radius: 999px;
+  border: 1px solid var(--rem-panel-border); background: transparent;
+  color: var(--rem-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.rem-cc-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.rem-cc-btn[aria-expanded="true"] { border-color: var(--rem-accent); }
+.rem-cc-dot {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+.rem-cc-panel {
+  flex: 0 0 100%; box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0;
+  display: flex; flex-direction: column; gap: 14px;
+  margin-top: 6px; padding: 14px 18px; border-radius: 16px;
+  border: 1px solid var(--rem-panel-border); background: var(--rem-card-bg);
+}
+.rem-cc-sv { position: relative; height: 150px; border-radius: 12px; touch-action: none; cursor: crosshair; }
+.rem-cc-hue {
+  position: relative; height: 24px; border-radius: 12px; touch-action: none; cursor: pointer;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+.rem-cc-knob {
+  position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+  border-radius: 50%; border: 3px solid #fff; pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.rem-cc-row { display: flex; align-items: center; gap: 8px; }
+.rem-cc-prev { flex: none; width: 44px; height: 44px; border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2); }
+.rem-cc-hex {
+    flex: 1; min-width: 0; height: 44px; padding: 0 10px; border-radius: 10px;
+  border: 1px solid var(--rem-panel-border); background: transparent; color: var(--rem-text);
+  font: 14px/1 ui-monospace, Menlo, Consolas, monospace; text-transform: uppercase;
+}
+.rem-cc-ok {
+  flex: none; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  background: var(--rem-on); color: var(--rem-on-ink);
+  box-shadow: 0 4px 12px -4px var(--rem-glow);
+}
+.rem-cc-ok:active { transform: scale(0.94); }
+/* свайп от края внутри страницы не должен листать историю браузера */
+html:has(.rem-wrap), body:has(.rem-wrap) { overscroll-behavior-x: none; }
 /* ═══════════════════════════ Термостаты ═════════════════════════════════════ */
 .rem-pd-row {
   display: flex;

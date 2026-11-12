@@ -343,6 +343,7 @@ const TabSecurity = () => {
           </table>
           </div>
           <p class="text-slate-700">Если поле Action пустое или None, событие срабатывания по MQTT не отправляется, а SMS уходит как обычно. Условие в Action событие MQTT не блокирует. Для отправки в разделе MQTT должен быть указан 'TX topic'.</p>
+          <p class="text-slate-700 mt-2">При включённом HA Discovery каждый охранный датчик (PIR, геркон) даёт в Home Assistant триггер устройства <b>triggered</b>. События идут через общий топик Swarm/ev. Триггер срабатывает только тогда, когда в поле Action что-то записано. Состояние "открыто/закрыто" не передаётся, только событие срабатывания.</p>
         </section>
         <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">${condHelpTitle(true)}</h2>
@@ -706,6 +707,7 @@ const TabSecurity = () => {
           </table>
           </div>
           <p class="text-slate-700">If the Action field is empty or None, the trigger event is not sent by MQTT, while the SMS goes out as usual. A condition in Action does not block the MQTT event. To send anything, the 'TX topic' must be set in the MQTT section.</p>
+          <p class="text-slate-700 mt-2">With HA Discovery on, every security sensor (PIR, reed switch) creates a <b>triggered</b> device trigger in Home Assistant. Events go through the shared Swarm/ev topic. The trigger fires only when the Action field is not empty. The open/closed state is not sent, only the trigger event.</p>
         </section>
         <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
           <h2 class="text-xl font-bold text-black">${condHelpTitle(false)}</h2>

@@ -15,6 +15,7 @@
 #include <stdarg.h>   // va_list for ota_log_direct()
 #include "cond_eval.h" /* текст условия связи для /api/state/encoder */
 #include "dtcm_alloc.h"
+#include "ha_discovery.h"
 #include "net_limits.h"  /* единый бюджет соединений + пороги heap */
 
 /* ── Remote Control: вид Zigbee-актуатора с учётом ручного типа (override) ──
@@ -36,8 +37,7 @@ static const char *zbee_remote_kind(const ZigbeeVirtualPin *z) {
  * Если диапазон не обучен (0..0) — стандарт Zigbee Level Control 1..254. */
 static int zbee_remote_pct(const ZigbeeVirtualPin *z) {
     int lo = z->dimmer_min, hi = z->dimmer_max;
-    if (lo == 0 && hi == 0) { lo = 1; hi = 254; }
-    if (hi <= lo) return 0;
+    if (hi <= lo) { lo = 1; hi = 254; }  /* не обучен или некорректен: стандарт ZCL 1..254 */
     int pct = ((int)z->dvalue - lo) * 100 / (hi - lo);
     return pct < 0 ? 0 : (pct > 100 ? 100 : pct);
 }
@@ -2393,6 +2393,25 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     MG_INFO(("%lu PUBLISHED %.*s -> %.*s", c->id, (int) data.len, data.buf, (int) pubt.len, pubt.buf));
     mqtt_publish_logfilter_status();
 
+    if (SetSettings.check_ha_disc) {
+      char ha_st[48];
+      struct mg_mqtt_opts ha_o;
+      snprintf(ha_st, sizeof(ha_st), "%s/status", get_mqtt_topic());
+      memset(&ha_o, 0, sizeof(ha_o));
+      ha_o.topic = mg_str(ha_st);
+      ha_o.message = mg_str("online");
+      ha_o.qos = s_qos;
+      ha_o.retain = true;
+      mg_mqtt_pub(c, &ha_o);
+      snprintf(ha_st, sizeof(ha_st), "%s/status",
+               SetSettings.ha_prefix[0] ? SetSettings.ha_prefix : "homeassistant");
+      memset(&ha_o, 0, sizeof(ha_o));
+      ha_o.topic = mg_str(ha_st);
+      ha_o.qos = s_qos;
+      mg_mqtt_sub(c, &ha_o);
+      ha_discovery_request();
+    }
+
     /* КРИТИЧНО: использовать фиксированные ZBEE_ATTR_*, а не zbee_attribute!
        После зонда cluster_flags установлен, но zbee_attribute может быть 0
        (по умолчанию) — тогда подписка уйдёт не на тот атрибут. */
@@ -2718,6 +2737,7 @@ void timer_fn_mqtt(void *arg) {
   snprintf(url, sizeof(url), "mqtt://%s:%d", SetSettings.mqtt_hst, SetSettings.mqtt_prt);
 
   struct mg_mqtt_opts opts;
+  char ha_will[48];
   memset(&opts, 0, sizeof(opts));
   opts.clean = true;
   opts.qos = s_qos;
@@ -2725,6 +2745,13 @@ void timer_fn_mqtt(void *arg) {
   opts.version = 4;
   opts.keepalive = MQTT_CLIENT_KEEPALIVE_S;  /* было 60; см. комментарий у #define */
   opts.message = mg_str("bye");
+  if (SetSettings.check_ha_disc) {
+    /* Доступность для Home Assistant: will уходит в <tx>/status с retain */
+    snprintf(ha_will, sizeof(ha_will), "%s/status", get_mqtt_topic());
+    opts.topic = mg_str(ha_will);
+    opts.message = mg_str("offline");
+    opts.retain = true;
+  }
 
   if (SetSettings.mqtt_clt[0] != '\0')
     opts.client_id = mg_str(SetSettings.mqtt_clt);
@@ -4083,7 +4110,9 @@ void web_init(struct mg_mgr *mgr) {
 
     // Allocate shared JSON buffer: DTCM pool, fallback to FreeRTOS heap
     if (g_body == NULL) {
-        g_body = (char *)dtcm_malloc(G_BODY_SIZE);
+        _Static_assert(G_BODY_SIZE <= DTCM_BUF_G_BODY, "G_BODY_SIZE > DTCM_BUF_G_BODY");
+        g_body = (char *)dtcm_g_body;                       /* зарезервирован первым */
+        if (g_body == NULL) g_body = (char *)dtcm_malloc(G_BODY_SIZE);
         if (g_body == NULL) {
             /* DTCM-пул исчерпан — HTTP-сервер всё равно должен подняться */
             g_body = (char *)pvPortMalloc(G_BODY_SIZE);

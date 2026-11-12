@@ -7,6 +7,17 @@ extern uint8_t _edtcm_pool[];
 
 static uint8_t  *dtcm_next       = NULL;
 static uint32_t  dtcm_fail_count = 0;
+static uint8_t     dtcm_trace     = 0;
+static const char *dtcm_fail_file = NULL;
+static int         dtcm_fail_line = 0;
+static size_t      dtcm_fail_size = 0;
+uint8_t           *dtcm_g_body    = NULL;
+
+static const char *dtcm_bn(const char *f)
+{
+    const char *p = strrchr(f, '/');
+    return p ? p + 1 : f;
+}
 
 /* DTCM buffers — существующие */
 uint8_t *dtcm_zbee_body     = NULL;
@@ -55,6 +66,7 @@ __attribute__((section(".itcm"))) void dtcm_alloc_init(void)
     dtcm_fail_count = 0;
 
     /* Выделяем все DTCM buffers одним блоком при старте */
+    dtcm_g_body = dtcm_malloc(DTCM_BUF_G_BODY);
     dtcm_zbee_body     = dtcm_malloc(DTCM_BUF_ZBEE_BODY);
     dtcm_zbee_raw      = dtcm_malloc(DTCM_BUF_ZBEE_RAW);
     dtcm_sensor_batch  = dtcm_malloc(DTCM_BUF_SENSOR_BATCH);
@@ -115,24 +127,41 @@ __attribute__((section(".itcm"))) void dtcm_alloc_init(void)
                (unsigned)dtcm_alloc_get_used(), (unsigned)dtcm_alloc_get_free());
         while (1) { __asm volatile("bkpt #0"); }  /* Останавливаем систему! */
     }
+    dtcm_trace = 1;   /* дальше печатаем каждое выделение: кто, сколько, что осталось */
 }
 
-__attribute__((section(".itcm"))) void *dtcm_malloc(size_t size)
+void *dtcm_malloc_dbg(size_t size, const char *file, int line)
 {
+    size_t req = size;
     size = (size + 7) & ~(size_t)7; // выравнивание по 8 байт
 
     if (dtcm_next == NULL || dtcm_next + size > _edtcm_pool) {
         dtcm_fail_count++;
+        dtcm_fail_file = dtcm_bn(file);
+        dtcm_fail_line = line;
+        dtcm_fail_size = req;
+        printf("[DTCM] FAIL #%u: need=%u free=%u at %s:%d\r\n",
+               (unsigned)dtcm_fail_count, (unsigned)req,
+               (unsigned)dtcm_alloc_get_free(), dtcm_fail_file, line);
         return NULL;
     }
 
     void *p = dtcm_next;
     dtcm_next += size;
-    /* Пул лежит в .dtcm_pool (NOLOAD) — стартап его не обнуляет, а буферы
-     * https-настроек читаются как C-строки до первой записи во Flash.
-     * Выдаём только обнулённую память. */
-    memset(p, 0, size);
+    memset(p, 0, size);   /* пул NOLOAD — отдаём только обнулённую память */
+    if (dtcm_trace) {
+        printf("[DTCM] +%u B, used=%u free=%u at %s:%d\r\n",
+               (unsigned)req, (unsigned)dtcm_alloc_get_used(),
+               (unsigned)dtcm_alloc_get_free(), dtcm_bn(file), line);
+    }
     return p;
+}
+
+const char *dtcm_alloc_get_last_fail(int *line, size_t *size)
+{
+    if (line) *line = dtcm_fail_line;
+    if (size) *size = dtcm_fail_size;
+    return dtcm_fail_file;
 }
 
 __attribute__((section(".itcm"))) size_t dtcm_alloc_get_used(void)

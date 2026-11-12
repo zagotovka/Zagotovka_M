@@ -855,14 +855,14 @@ export function TabZigbee({}) {
                           <tr class="hover:bg-slate-200/80 transition-colors bg-white/80 ${hasMultiDp ? 'cursor-pointer' : ''}"
                               onClick=${hasMultiDp ? () => toggleGroup(head.zbee_ieee) : undefined}>
                             <td class="px-6 py-2 text-sm text-slate-800" style="position:relative">
-                              ${hasMultiDp ? html`<span style="position:absolute;left:60px" class="text-slate-500">${isExpanded ? '▼' : '▶'}</span>` : ''}${head.display_id || head.id}
+                              ${head.display_id || head.id}
                             </td>
                             <td class="px-6 py-2 text-sm text-slate-800 font-mono">
                               ${head.zbee_ieee || '—'}${hasMultiDp ? html`<span class="text-xs text-slate-400 font-sans ml-1.5">(EP${head.ep || 1})</span>` : ''}
                             </td>
                             <td class="px-6 py-2 text-sm text-slate-700">
                               ${hasMultiDp
-                                ? html`Multi <span class="text-xs text-slate-400">×${group.length}</span>`
+                               ? html`<span class="inline-block w-4 text-slate-500" aria-hidden="true">${isExpanded ? '▼' : '▶'}</span>Multi <span class="text-xs text-slate-400">×${group.length}</span>`
                                 : getDeviceTypeLabel(typeLabel)}
                             </td>
                             <td class="px-6 py-2 text-sm text-slate-600">${head.zbee_label || ''}</td>

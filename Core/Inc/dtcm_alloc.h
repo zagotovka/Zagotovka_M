@@ -11,12 +11,14 @@
 extern uint8_t _sdtcm_pool[];
 
 void   dtcm_alloc_init(void);
-void  *dtcm_malloc(size_t size);
+void  *dtcm_malloc_dbg(size_t size, const char *file, int line);
+#define dtcm_malloc(sz) dtcm_malloc_dbg((sz), __FILE__, __LINE__)
 
 size_t dtcm_alloc_get_used(void);
 size_t dtcm_alloc_get_free(void);
 size_t dtcm_alloc_get_total(void);
 uint32_t dtcm_alloc_get_fail_count(void);
+const char *dtcm_alloc_get_last_fail(int *line, size_t *size);
 
 /* DTCM buffers — выделяются один раз в dtcm_alloc_init() */
 
@@ -52,6 +54,9 @@ uint32_t dtcm_alloc_get_fail_count(void);
 /* usart_ring.c */
 #define DTCM_BUF_DBG_RX          64
 
+/* net.c: общий JSON-буфер, резервируется ПЕРВЫМ (должен быть >= G_BODY_SIZE из net.h) */
+#define DTCM_BUF_G_BODY        32768
+
 extern uint8_t *dtcm_zbee_body;
 extern uint8_t *dtcm_zbee_raw;
 extern uint8_t *dtcm_sensor_batch;
@@ -72,6 +77,7 @@ extern uint8_t *dtcm_cache_tls_ca;
 extern uint8_t *dtcm_cache_domain;
 extern uint8_t *dtcm_cache_tg_token;
 extern uint8_t *dtcm_dbg_rx;
+extern uint8_t *dtcm_g_body;
 
 /* ── BSS → DTCM: безопасные переносы ── */
 /* main.c */

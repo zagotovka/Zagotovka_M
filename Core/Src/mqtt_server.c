@@ -17,6 +17,7 @@
 #include "mqtt_server.h"
 #include "dtcm_alloc.h"
 #include "db.h"
+#include "ha_discovery.h"
 #include "logger.h"     /* LOG_MQTT + g_log_filter_mask (фильтр Global Settings) */
 #include "main.h"        /* MqttRxMsg_t + mqttRxQueueHandle (Этап 3.3) */
 #include "cmsis_os2.h"   /* osMessageQueueId_t */
@@ -79,6 +80,8 @@ typedef struct {
     uint8_t  num_subs;
     uint8_t  authenticated;       // CONNACK(0x00) отправлен
     uint8_t  is_slzb;             // клиент подписался на <rxzbtop>/system_control/ (фингерпринт SLZB-06p7U)
+    char     cid[24];             // client-id из CONNECT (для вытеснения дубликатов)
+    uint8_t  ha_cfg;              // клиент подписан на <prefix>/.../config (Home Assistant)
     uint32_t last_activity_ms;    // любой входящий трафик (MG_EV_READ)
 } MqttSrvClient_t;
 
@@ -182,11 +185,16 @@ static uint8_t srv_filter_rc(const char *topic, size_t len) {
 }
 
 /* ---------- Слоты ---------- */
-static int srv_slot_alloc(struct mg_connection *c) {
+static uint8_t srv_client_limit(void) {
   uint8_t limit = SetSettings.mqtt_srv_maxcli;
   if (limit == 0 || limit > MQTT_SRV_MAX_CLIENTS_HARDCAP) {
     limit = MQTT_SRV_MAX_CLIENTS_HARDCAP;
   }
+  return limit;
+}
+
+static int srv_slot_alloc(struct mg_connection *c) {
+  uint8_t limit = srv_client_limit();
   if (s_cli_count >= limit) return -1;
   for (int i = 0; i < MQTT_SRV_MAX_CLIENTS_HARDCAP; i++) {
     if (s_cli[i].conn == NULL) return i;
@@ -479,6 +487,24 @@ static void srv_handle_connect(struct mg_connection *c,
     s_stat_rejected++;
     c->is_closing = 1; return;
   }
+  /* MQTT 3.1.1 [MQTT-3.1.4-2]: клиент с тем же client-id уже подключён -
+   * старое соединение закрываем, иначе дубликаты копятся до keepalive-таймаута. */
+  if (cid[0] != '\0') {
+    for (int k = 0; k < MQTT_SRV_MAX_CLIENTS_HARDCAP; k++) {
+      MqttSrvClient_t *o = &s_cli[k];
+      if (o == cl || o->conn == NULL || !o->authenticated) continue;
+      if (o->conn->is_closing) continue;
+      if (strncmp(o->cid, cid, sizeof(o->cid) - 1) != 0) continue;
+      SRV_LOG("[server] duplicate client-id '%s': old slot %d closed (new peer=%s)\r\n",
+              cid, k, peer);
+      o->authenticated = 0;
+      o->is_slzb = 0;
+      o->ha_cfg = 0;
+      o->conn->is_closing = 1;
+    }
+    strncpy(cl->cid, cid, sizeof(cl->cid) - 1);
+    cl->cid[sizeof(cl->cid) - 1] = '\0';
+  }
   cl->authenticated = 1;
   srv_send_connack(c, 0x00);
   s_stat_accepted++;
@@ -487,6 +513,14 @@ static void srv_handle_connect(struct mg_connection *c,
 }
 
 /* ---------- SUBSCRIBE / UNSUBSCRIBE ---------- */
+/* Фильтр подписки на конфиги Home Assistant: <prefix>/.../config.
+ * Такие фильтры НЕ занимают слоты подписок (HA шлёт ~70 таких фильтров) —
+ * вместо слота ставится флаг ha_cfg на клиенте. */
+static bool srv_is_ha_cfg_filter(const char *f, size_t len) {
+  return ha_discovery_filter_hit(f, len) && len > 7 &&
+         memcmp(f + len - 7, "/config", 7) == 0;
+}
+
 static void srv_handle_subscribe(struct mg_connection *c,
                                  const struct mg_mqtt_message *mm) {
   MqttSrvClient_t *cl = srv_client(c);
@@ -522,6 +556,14 @@ static void srv_handle_subscribe(struct mg_connection *c,
     off += 2 + tlen + 1;                            // topic + qos
 
     rc = srv_filter_rc(topic, tlen);
+    /* Конфиг-фильтры HA (<prefix>/.../config): принимаем без слота.
+     * Первый такой фильтр даёт повторную выдачу конфигов (конфиги в брокере
+     * не хранятся), последующие — просто подтверждаются 0x00. */
+    if (rc == 0x00 && srv_is_ha_cfg_filter(topic, tlen)) {
+      if (!cl->ha_cfg) { cl->ha_cfg = 1; ha_discovery_request(); }
+      codes[nsubs++] = 0x00;
+      continue;
+    }
     if (rc == 0x00) {
       /* Повторная подписка на тот же фильтр: не дублируем слот и принимаем
        * ЕЩЁ И при заполненном лимите (дубликат не занимает новый слот, как
@@ -545,6 +587,8 @@ static void srv_handle_subscribe(struct mg_connection *c,
         cl->subs[cl->num_subs][tlen] = '\0';
         if (nreplay < sizeof(replay_idx)) replay_idx[nreplay++] = cl->num_subs;
         cl->num_subs++;
+        /* Home Assistant подписался на <prefix>/#: конфиги в брокере не хранятся, шлём заново */
+        if (ha_discovery_filter_hit(cl->subs[cl->num_subs - 1], tlen)) ha_discovery_request();
         SRV_LOG("[server] sub '%.*s' (%d/%d)\r\n", (int) tlen, topic,
                cl->num_subs, MQTT_SRV_MAX_SUBS_PER_CLIENT);
 
@@ -698,8 +742,16 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
         if (slot < 0) {
           char peer[48];
           mg_snprintf(peer, sizeof(peer), "%M", mg_print_ip_port, &c->rem);
-          SRV_LOG("[server] REFUSED: client limit (%d) reached, peer=%s\r\n",
-                 MQTT_SRV_MAX_CLIENTS_HARDCAP, peer);
+          SRV_LOG("[server] REFUSED: client limit (%d, hardcap %d) reached, peer=%s\r\n",
+                  srv_client_limit(), MQTT_SRV_MAX_CLIENTS_HARDCAP, peer);
+          for (int k = 0; k < MQTT_SRV_MAX_CLIENTS_HARDCAP; k++) {
+            char p[32];
+            if (s_cli[k].conn == NULL) continue;
+            mg_snprintf(p, sizeof(p), "%M", mg_print_ip_port, &s_cli[k].conn->rem);
+            SRV_LOG("[server]   slot %d: %s auth=%d slzb=%d subs=%d idle=%lus\r\n",
+                    k, p, s_cli[k].authenticated, s_cli[k].is_slzb, s_cli[k].num_subs,
+                    (unsigned long) ((mg_millis() - s_cli[k].last_activity_ms) / 1000));
+          }
           c->is_closing = 1;
           return;
         }
@@ -709,7 +761,8 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
         s_cli[slot].num_subs = 0;
         s_cli[slot].keepalive_s = 0;
         s_cli[slot].authenticated = 0;
-        s_cli[slot].is_slzb = 0;
+        s_cli[slot].cid[0] = '\0';
+        s_cli[slot].ha_cfg = 0;
         s_cli[slot].last_activity_ms = mg_millis();
         s_cli_count++;
       }
@@ -797,6 +850,8 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
           s_cli[idx].num_subs = 0;
           s_cli[idx].authenticated = 0;
           s_cli[idx].is_slzb = 0;
+          s_cli[idx].cid[0] = '\0';
+          s_cli[idx].ha_cfg = 0;
           s_cli_count--;
         }
       }
@@ -961,7 +1016,8 @@ void mqtt_server_publish(const char *topic, const char *payload) {
     if (cl->conn->is_closing || cl->conn->is_draining) continue;
     /* Backpressure: клиент не забирает данные — не копим send-буфер */
     if (cl->conn->send.len > MQTT_SRV_SEND_LIMIT) continue;
-    if (!srv_match_any(cl, topic)) continue;
+    if (!srv_match_any(cl, topic) &&
+        !(cl->ha_cfg && ha_discovery_is_cfg_topic(topic))) continue;
     memset(&o, 0, sizeof(o));
     o.topic = t;
     o.message = m;
@@ -976,6 +1032,16 @@ uint8_t mqtt_server_clients_cached(void)        { return s_pub_clients; }
 
 uint8_t mqtt_server_client_count(void) {
   return s_cli_count;
+}
+
+uint32_t mqtt_server_max_sendlen(void) {
+  uint32_t m = 0;
+  if (!s_running || s_cli == NULL) return 0;
+  for (int i = 0; i < MQTT_SRV_MAX_CLIENTS_HARDCAP; i++) {
+    if (s_cli[i].conn != NULL && s_cli[i].authenticated && s_cli[i].conn->send.len > m)
+      m = (uint32_t) s_cli[i].conn->send.len;
+  }
+  return m;
 }
 
 uint8_t mqtt_server_slzb_connected(void) {

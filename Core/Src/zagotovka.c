@@ -23,6 +23,7 @@
 #include <strings.h>  /* strncasecmp */
 #include "dtcm_alloc.h"
 #include "mqtt_server.h"
+#include "ha_discovery.h"
 #include "cond_eval.h" /* Дополнительные условия срабатывания действий */
 /*********************** Moon *****************************/
 #include "net.h"
@@ -3212,6 +3213,9 @@ static void emit_mqtt_server(struct mg_connection *c,
   mg_http_write_chunk(c, buf, (size_t)len);
   emit_escaped_blob(c, "mqtt_srv_usr",  s->mqtt_srv_usr,  sizeof(s->mqtt_srv_usr), buf, 512);
   emit_escaped_blob(c, "mqtt_srv_pswd", s->mqtt_srv_pswd, sizeof(s->mqtt_srv_pswd), buf, 512);
+  len = snprintf(buf, 512, "\"check_ha_disc\":%d,", s->check_ha_disc);
+  mg_http_write_chunk(c, buf, (size_t)len);
+  emit_escaped_blob(c, "ha_prefix",     s->ha_prefix,     sizeof(s->ha_prefix), buf, 512);
   emit_escaped_blob(c, "slzb_host",     s->slzb_host,     sizeof(s->slzb_host), buf, 512);
 }
 
@@ -3811,6 +3815,10 @@ void gen_mysett_json(const struct dbSettings *settings, char *buffer,
   offset +=
       snprintf(buffer + offset, buffer_size - offset,
                "\"mqtt_hst\": \"%s\",\n", settings->mqtt_hst);
+  offset += snprintf(buffer + offset, buffer_size - offset,
+                     "\"check_ha_disc\": %d,\n", settings->check_ha_disc);
+  offset += snprintf(buffer + offset, buffer_size - offset,
+                     "\"ha_prefix\": \"%s\",\n", settings->ha_prefix);
 
   // IP настройки
   offset += snprintf(buffer + offset, buffer_size - offset,
@@ -4463,6 +4471,10 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
   { char *_v = json_get_str_allow_empty(body, "$.mqtt_srv_pswd");
     if (_v) { strncpy(settings->mqtt_srv_pswd, _v, sizeof(settings->mqtt_srv_pswd) - 1);
     settings->mqtt_srv_pswd[sizeof(settings->mqtt_srv_pswd) - 1] = '\0'; mg_free(_v); } }
+  settings->check_ha_disc = (short)mg_json_get_long(body, "$.check_ha_disc", settings->check_ha_disc);
+  { char *_v = json_get_str_allow_empty(body, "$.ha_prefix");
+    if (_v) { strncpy(settings->ha_prefix, _v, sizeof(settings->ha_prefix) - 1);
+    settings->ha_prefix[sizeof(settings->ha_prefix) - 1] = '\0'; mg_free(_v); } }
   /* slzb_host — IP шлюза SLZB-06p7U для watchdog'а. Опционально: пустая
    * строка = watchdog выключен. Значение валидируем СЕРВЕРНО (строгий IPv4):
    * невалидное значение молча игнорируется (остаётся старое) — мусор не
@@ -4846,7 +4858,7 @@ int cmd_zigbee_exec(int id, int on, int v, long color) {
   int zbi = ZbeeIdx(id);
   ZigbeeVirtualPin *zp = &ZigbeeConf[zbi];
   if (zp->zbee_ieee[0] == '\0') return 400;
-  if (zp->onoff == 0 && on >= 0) return 403; /* master off */
+  if (zp->onoff == 0 && (on >= 0 || v >= 0 || color >= 0)) return 403; /* master off */
   int st = 200;
 
   if (on >= 0) {
@@ -4878,7 +4890,7 @@ int cmd_zigbee_exec(int id, int on, int v, long color) {
                       zp->device_type_override == 4;
     if (!has_dimmer) return 400;
     int lo = zp->dimmer_min, hi = zp->dimmer_max;
-    if (lo == 0 && hi == 0) { lo = 1; hi = 254; }  /* диапазон не обучен: стандарт ZCL */
+    if (hi <= lo) { lo = 1; hi = 254; }  /* не обучен или некорректен: стандарт ZCL */
     if (hi > lo) {                     /* проценты -> шкала устройства */
       if (v < 0) v = 0;
       if (v > 100) v = 100;
@@ -6090,7 +6102,7 @@ static bool zbee_probe_active_for(const char *ieee, uint8_t ep) {
                                               90 сек, а не 60: фоновые вкладки Chrome
                                               тормозят таймеры до 1 опроса/мин, 60 сек
                                               — ровно впритык, будут ложные завершения */
-#define ZBEE_LEARN_MAX_OBS      16
+#define ZBEE_LEARN_MAX_OBS      24
 
 /* Причина завершения сессии (end_reason в /api/zigbee/learn/status) */
 #define ZBEE_END_NONE       0
@@ -7338,10 +7350,11 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
     int has_pir = 0;
     int pir_changed = 0;
 
-    char trigger_payloads[16][32];
-    char trigger_names[16][30];
-    char trigger_click_types[16][8];
-    int trigger_switch_value[16] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    char trigger_payloads[ZBEE_LEARN_MAX_OBS][32];
+    char trigger_names[ZBEE_LEARN_MAX_OBS][30];
+    char trigger_click_types[ZBEE_LEARN_MAX_OBS][8];
+    int trigger_switch_value[ZBEE_LEARN_MAX_OBS];
+    for (int tsv = 0; tsv < ZBEE_LEARN_MAX_OBS; tsv++) trigger_switch_value[tsv] = -1;
     int  trigger_count = 0;
 
     /* Для мульти-EP: собираем EP labels во временный массив */
@@ -7417,7 +7430,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
         } else if (strcmp(role_str, "button") == 0) {
             has_trigger = 1;
             char *tp = mg_json_get_str(json, path_tp);
-            if (tp && trigger_count < 16) {
+            if (tp && trigger_count < ZBEE_LEARN_MAX_OBS) {
                 strncpy(trigger_payloads[trigger_count], tp, 31);
                 trigger_payloads[trigger_count][31] = '\0';
                 trigger_names[trigger_count][0] = '\0';
@@ -7442,7 +7455,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
         } else if (strcmp(role_str, "switch") == 0) {
             has_switch = 1;
             char *tp = mg_json_get_str(json, path_tp);
-            if (tp && trigger_count < 16) {
+            if (tp && trigger_count < ZBEE_LEARN_MAX_OBS) {
                 strncpy(trigger_payloads[trigger_count], tp, 31);
                 trigger_payloads[trigger_count][31] = '\0';
                 trigger_names[trigger_count][0] = '\0';
@@ -7590,7 +7603,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
 
         if (is_passthrough) {
             if (has_switch) {
-                int used[16] = {0};
+                int used[ZBEE_LEARN_MAX_OBS] = {0};
                 int gang_num = 0;
                 int is_first = 1;
 
@@ -8220,6 +8233,7 @@ void SendZigbeeEPCommand(const char *zbee_ieee, uint8_t endpoint,
 }
 
 void mqtt_message_handler(const char *topic, const char *payload) {
+  if (ha_discovery_handle_rx(topic, payload)) return;
   const char *zbtop = get_rxzbtop();
   size_t zbtop_len = strlen(zbtop);
   if (strncmp(topic, zbtop, zbtop_len) == 0 &&
@@ -8324,6 +8338,22 @@ void mqtt_message_handler(const char *topic, const char *payload) {
   }
 
   printf("[MQTT] Parsed command: %s, id: %d\r\n", command, id);
+  if (strcmp(command, "button") == 0 && IsZigbeePin(id)) {
+    int zbi = ZbeeIdx(id), ev = -1;
+    const char *ct = strrchr(command_start, '/');
+    if (ct != NULL) {
+      ct++;
+      if (strcmp(ct, "single_click") == 0) ev = 0;
+      else if (strcmp(ct, "double_click") == 0) ev = 1;
+      else if (strcmp(ct, "long_press") == 0) ev = 2;
+    }
+    if (ev >= 0 && ZigbeeConf[zbi].zbee_role == ZBEE_ROLE_TRIGGER) {
+      vbtn_execute(zbi, ev);
+    } else {
+      printf("[MQTT] Zigbee button id=%d: invalid click type or role\r\n", id);
+    }
+    return;
+  }
   if (id < 1 || id > NUMPIN) {
     printf("[MQTT] Invalid ID: %d\r\n", id);
     return;

@@ -773,7 +773,7 @@ export function Login({ loginFn, logoIcon, title, tipText }) {
               type="password"
               autocomplete="current-password"
               required
-              class="w-full bg-white/60 backdrop-blur-sm border border-white/50 rounded-xl px-4 py-2.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400/50 focus:border-teal-400/50 transition-all shadow-inner disabled:cursor-not-allowed disabled:opacity-50"
+              class="login-input w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400/50 focus:border-teal-400 transition-all shadow-inner disabled:cursor-not-allowed disabled:opacity-50"
               oninput=${(ev) => setPass(ev.target.value)}
               value=${pass}
               onkeydown=${(ev) => ev.key === 'Enter' && onsubmit(ev)}

@@ -213,6 +213,9 @@ const T = {
     secMain: 'Охрана (основной выключатель)',
     color: 'Цвет',
     colorPick: 'свой цвет',
+    colorCustom: 'Свой цвет',
+    colorApply: 'Применить',
+    colorCancel: 'Отмена',
     setpoint: 'Уставка',
     current: 'Текущая',
     t: 'Т',
@@ -258,6 +261,9 @@ const T = {
     secMain: 'Security (main switch)',
     color: 'Colour',
     colorPick: 'custom',
+    colorCustom: 'Custom color',
+    colorApply: 'Apply',
+    colorCancel: 'Cancel',
     setpoint: 'Setpoint',
     current: 'Current',
     t: 'T',
@@ -370,7 +376,7 @@ const LockBtn = ({ locked, pulse, labels, onUnlock, onLock }) => {
  * Тап по дорожке значение не меняет, вертикальный жест над дорожкой
  * прокручивает страницу (touch-action: pan-y). Бегунок двигается
  * относительно точки касания, отправка команды - при отпускании. */
-const RemSlider = ({ value, disabled, locked, onBlocked, onCommit }) => {
+const RemSlider = ({ value, disabled, locked, onBlocked, onCommit, tint }) => {
   const [v, setV] = useState(value);
   const [drag, setDrag] = useState(false);
   const trackRef = useRef(null);
@@ -423,6 +429,7 @@ const RemSlider = ({ value, disabled, locked, onBlocked, onCommit }) => {
       <div
         ref=${trackRef}
         class=${'rem-slider' + (disabled ? ' is-disabled' : '') + (drag ? ' is-drag' : '')}
+        style=${tint ? '--rem-on:' + tint + ';--rem-on-2:color-mix(in srgb,' + tint + ' 72%,#fff)' : undefined}
       >
         <div class="rem-slider-track"></div>
         <div
@@ -455,8 +462,105 @@ const toRgbInt = (c) => {
   return (c >>> 0) & 0xffffff;
 };
 
+/* ── HSV <-> 0xRRGGBB ── */
+const hsvToInt = (h, s, v) => {
+  const f = (n) => {
+    const k = (n + h / 60) % 6;
+    return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
+  };
+  return (Math.round(f(5) * 255) << 16) | (Math.round(f(3) * 255) << 8) | Math.round(f(1) * 255);
+};
+const intToHsv = (c) => {
+  const r = ((c >> 16) & 255) / 255, g = ((c >> 8) & 255) / 255, b = (c & 255) / 255;
+  const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+  let h = 0;
+  if (d) {
+    if (mx === r) h = ((g - b) / d) % 6;
+    else if (mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return { h, s: mx ? d / mx : 0, v: mx };
+};
+const intToHex = (c) => '#' + ('000000' + (c & 0xffffff).toString(16).toUpperCase()).slice(-6);
+
+/* ── Свой цвет: раскрывающаяся панель (квадрат S/V + полоса оттенка + HEX) ──
+ * Вместо системного <input type="color">: на Android он показывает окно
+ * с пресетами и кнопкой Custom, то есть выбор в два шага. */
+const CustomColor = ({ color, disabled, locked, onBlocked, onApply, onPreview, labels }) => {
+  const [open, setOpen] = useState(false);
+  const [hsv, setHsv] = useState(() => intToHsv(toRgbInt(color)));
+  const [hexText, setHexText] = useState(null); // не null, пока пользователь печатает HEX
+  const svRef = useRef(null);
+  const hueRef = useRef(null);
+  const cur = hsvToInt(hsv.h, hsv.s, hsv.v);
+  const clamp01 = (n) => Math.max(0, Math.min(1, n));
+
+  const toggle = () => {
+    if (disabled) return;
+    if (locked) { onBlocked(); return; }
+    if (!open) setHsv(intToHsv(toRgbInt(color))); // стартуем с текущего цвета лампы
+    setHexText(null);
+    setOpen(!open);
+  };
+  const svSet = (e) => {
+    const r = svRef.current.getBoundingClientRect();
+    setHsv((p) => ({ ...p, s: clamp01((e.clientX - r.left) / r.width), v: 1 - clamp01((e.clientY - r.top) / r.height) }));
+    setHexText(null);
+  };
+  const hueSet = (e) => {
+    const r = hueRef.current.getBoundingClientRect();
+    setHsv((p) => ({ ...p, h: clamp01((e.clientX - r.left) / r.width) * 359.99 }));
+    setHexText(null);
+  };
+  const drag = (fn) => ({
+    onPointerDown: (e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ } fn(e); },
+    onPointerMove: (e) => { if (e.currentTarget.hasPointerCapture && e.currentTarget.hasPointerCapture(e.pointerId)) fn(e); }
+  });
+  const onHex = (e) => {
+    const t = e.target.value;
+    setHexText(t);
+    const m = /^#?([0-9a-fA-F]{6})$/.exec(t.trim());
+    if (m) setHsv(intToHsv(parseInt(m[1], 16)));
+  };
+  const apply = () => { onApply(cur); setOpen(false); };
+
+  /* Предпросмотр: пока панель открыта, ползунок яркости окрашен в выбираемый цвет.
+     Закрыли без галочки — onPreview(null), ползунок возвращается к цвету лампы. */
+  useEffect(() => {
+    if (onPreview) onPreview(open ? intToHex(cur) : null);
+  }, [open, cur]);
+  useEffect(() => () => { if (onPreview) onPreview(null); }, []);
+
+  return html`
+    <button type="button" class="rem-cc-btn" disabled=${disabled}
+      aria-expanded=${open} onClick=${toggle}>
+      <span class="rem-cc-dot"></span>${labels.pick}
+    </button>
+    ${open ? html`
+      <div class="rem-cc-panel">
+        <div ref=${svRef} class="rem-cc-sv"
+          style=${'background:linear-gradient(to top,#000,rgba(0,0,0,0)),linear-gradient(to right,#fff,hsl(' + Math.round(hsv.h) + ',100%,50%))'}
+          ...${drag(svSet)}>
+          <span class="rem-cc-knob" style=${'left:' + hsv.s * 100 + '%;top:' + (1 - hsv.v) * 100 + '%;background:' + intToHex(cur)}></span>
+        </div>
+        <div ref=${hueRef} class="rem-cc-hue" ...${drag(hueSet)}>
+          <span class="rem-cc-knob" style=${'left:' + (hsv.h / 359.99) * 100 + '%;top:50%;background:hsl(' + Math.round(hsv.h) + ',100%,50%)'}></span>
+        </div>
+        <div class="rem-cc-row">
+          <span class="rem-cc-prev" style=${'background:' + intToHex(cur)}></span>
+          <input class="rem-cc-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off"
+            value=${hexText !== null ? hexText : intToHex(cur)} onInput=${onHex}
+            onBlur=${() => setHexText(null)} />
+          <button type="button" class="rem-cc-ok" aria-label=${labels.apply} title=${labels.apply} onClick=${apply}>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+          </button>
+        </div>
+      </div>` : null}`;
+};
 /* ── Цветовая панель: пресеты-градиенты + системный выбор цвета ── */
-const ColorPanel = ({ color, disabled, locked, onBlocked, onPick, pickLabel }) => {
+const ColorPanel = ({ color, disabled, locked, onBlocked, onPick, onPreview, labels }) => {
   const hex = '#' + ('000000' + toRgbInt(color).toString(16).toUpperCase()).slice(-6);
   return html`
     <div class="rem-colors">
@@ -470,19 +574,17 @@ const ColorPanel = ({ color, disabled, locked, onBlocked, onPick, pickLabel }) =
           onClick=${() => onPick(parseInt(c.slice(1), 16))}
         ></button>`
   )}
-      <label class="rem-swatch rem-swatch-pick" data-tip=${pickLabel}>
-        <input
-          type="color"
-          value=${hex.toLowerCase()}
-          disabled=${disabled}
-          onClick=${(e) => { if (locked) { e.preventDefault(); onBlocked(); } }}
-          onInput=${(e) => onPick(parseInt(e.target.value.slice(1), 16))}
-        />
-        <span>${hex}</span>
-      </label>
+      <${CustomColor}
+        color=${color}
+        disabled=${disabled}
+        locked=${locked}
+        onBlocked=${onBlocked}
+        onApply=${onPick}
+        onPreview=${onPreview}
+        labels=${labels}
+      />
     </div>`;
 };
-
 export function TabRemote({ }) {
   const [data, setData] = useState(null); // последний ответ сервера
   const [secs, setSecs] = useState(EMPTY_SECS);
@@ -502,6 +604,9 @@ export function TabRemote({ }) {
   const [locked, setLocked] = useState(true);   // при входе управление заблокировано
   const [hint, setHint] = useState(false);
   const [pulse, setPulse] = useState(0); // счётчик касаний: смена значения перезапускает анимацию замка
+  const [preview, setPrev] = useState({}); // id лампы -> цвет, выбираемый в данный момент
+  const setPreview = (id, c) =>
+    setPrev((p) => ((p[id] || null) === (c || null) ? p : { ...p, [id]: c || null }));
   const [fs, setFs] = useState(!!fsElement());
   const idleRef = useRef(0);
   const hintRef = useRef(0);
@@ -669,9 +774,10 @@ export function TabRemote({ }) {
     if (busyRef.current) return;
     const q = queueRef.current;
     if (q.size === 0) return;
-    const key = q.keys().next().value;
-    const job = q.get(key);
-    q.delete(key);
+    const qk = q.keys().next().value;
+    const job = q.get(qk);
+    q.delete(qk);
+    const key = job.skey || qk; // ключ статуса карточки ('zb:90'), а не ключ очереди
     busyRef.current = true;
     postJson('/api/remote/cmd', job.body)
       .then((r) => {
@@ -686,6 +792,11 @@ export function TabRemote({ }) {
           }, 2000);
         } else {
           const code = r ? r.status : 0;
+          if ((code === 429 || code === 503) && !job.retried) {
+            job.retried = true;                 // один повтор, значение не откатываем
+            if (!q.has(qk)) q.set(qk, job);     // если уже есть более новая команда — повтор не нужен
+            return;                             // finally запустит pump через CMD_MIN_INTERVAL_MS
+          }
           if (code === 401) { expiredRef.current = true; setExpired(true); }
           setStatuses((s) => ({ ...s, [key]: code || 'net' }));
           if (job.revert) job.revert(); // откат оптимистичного значения
@@ -710,7 +821,12 @@ export function TabRemote({ }) {
     const revert = () => patchItem(section, id, prevFields, {});
     patchItem(section, id, fields, {});
     setStatuses((s) => ({ ...s, [key]: 'wait' }));
-    queueRef.current.set(key, { body, revert }); // перезапись = последнее побеждает
+    /* Ключ очереди — по полю: включение, яркость и цвет одной лампы не затирают друг друга.
+       Ключ статуса (key) остаётся прежним: 'zb:90'. */
+    const qkey = body.t === 'zb'
+      ? key + ':' + (body.on !== undefined ? 'on' : body.v !== undefined ? 'v' : 'c')
+      : key;
+    queueRef.current.set(qkey, { body, revert, skey: key }); // перезапись = последнее побеждает
     pump();
   };
 
@@ -864,6 +980,8 @@ export function TabRemote({ }) {
   const zbCard = (it) => {
     const key = 'zb:' + it.id;
     const dis = !it.on;
+    /* Цвет заливки ползунка: выбираемый сейчас, иначе текущий цвет лампы */
+    const tint = it.k === 'clr' ? (preview[it.id] || intToHex(toRgbInt(it.c || 0xffffff))) : null;
     return html`
       <div class="rem-card">
         <div class="rem-card-head">
@@ -884,6 +1002,7 @@ export function TabRemote({ }) {
             locked=${locked}
             onBlocked=${flashBlocked}
             onCommit=${(v) => setZbDim(it, v)}
+            tint=${tint}
           />` : null}
         ${it.k === 'clr' ? html`
           <${ColorPanel}
@@ -892,7 +1011,8 @@ export function TabRemote({ }) {
             locked=${locked}
             onBlocked=${flashBlocked}
             onPick=${(c) => !dis && setZbColor(it, c)}
-            pickLabel=${L.colorPick}
+            onPreview=${(c) => setPreview(it.id, c)}
+            labels=${{ pick: L.colorCustom, apply: L.colorApply, cancel: L.colorCancel }}
           />` : null}
       </div>`;
   };

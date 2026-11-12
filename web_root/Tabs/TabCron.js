@@ -690,8 +690,8 @@ get ru() { return html`
 </thead>
 <tbody>
 <tr>
-<td class="border px-4 py-2 whitespace-nowrap font-semibold">Swarm/timer/</td>
-<td class="border px-4 py-2">Данная страница отслеживает изменения таймеров и автоматически отправляет каждое изменение по MQTT на топик: Swarm/timer/. Где "Swarm" это Ваш 'TX topic'.</td>
+<td class="border px-4 py-2 whitespace-nowrap font-semibold">Swarm/timers/</td>
+<td class="border px-4 py-2">Данная страница отслеживает изменения таймеров и автоматически отправляет каждое изменение по MQTT на топик: Swarm/timers/. Где "Swarm" это Ваш 'TX topic'.</td>
 </tr>
 </tbody>
 </table>
@@ -1142,8 +1142,8 @@ Each schedule is a separate timer row.
 </thead>
 <tbody>
 <tr>
-<td class="border px-4 py-2 whitespace-nowrap font-semibold">Swarm/timer/</td>
-<td class="border px-4 py-2">This page tracks changes of timers and automatically sends each change via MQTT to the topic: Swarm/timer/. Where "Swarm" is your 'TX topic'.</td>
+<td class="border px-4 py-2 whitespace-nowrap font-semibold">Swarm/timers/</td>
+<td class="border px-4 py-2">This page tracks changes of timers and automatically sends each change via MQTT to the topic: Swarm/timers/. Where "Swarm" is your 'TX topic'.</td>
 </tr>
 </tbody>
 </table>

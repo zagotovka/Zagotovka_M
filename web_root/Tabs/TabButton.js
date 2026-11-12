@@ -546,6 +546,10 @@ http://192.168.1.24:8000/api/Zerg/button?id=30&long_press
 </tbody>
 </table>
 </div>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Home Assistant</h3>
+<p class="mb-2">При включённом HA Discovery каждая физическая кнопка даёт в Home Assistant три триггера устройства: короткое, двойное и долгое нажатие. Их можно выбрать при создании автоматизации (устройство Zagotovka, триггер button_short_press, button_double_press или button_long_press). Все кнопки используют один общий топик <b>Swarm/ev</b> (без retain), поэтому их количество не ограничено подписками. Кнопки Zigbee обнаруживает Zigbee2MQTT.</p>
+</div>
 </section>
 <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">
 <h2 class="text-xl font-bold text-black">Поля действий: SINGLE CLICK, DOUBLE CLICK, LONG PRESS</h2>
@@ -908,6 +912,10 @@ Every button change is sent to this topic automatically. Swarm is your 'TX topic
 </tr>
 </tbody>
 </table>
+</div>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Home Assistant</h3>
+<p class="mb-2">With HA Discovery on, every physical button creates three device triggers in Home Assistant: short, double and long press. Pick them when creating an automation (device Zagotovka, trigger button_short_press, button_double_press or button_long_press). All buttons share one common topic <b>Swarm/ev</b> (not retained), so their number is not limited by subscriptions. Zigbee buttons are discovered by Zigbee2MQTT.</p>
 </div>
 </section>
 <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4">

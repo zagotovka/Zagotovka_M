@@ -450,30 +450,31 @@ void NMI_Handler(void)
 /**
   * @brief This function handles Hard fault interrupt.
   */
-/* naked + прямой branch: LR (EXC_RETURN) не затирается BL-ом из C-обёртки.
- * Раньше fault_handler_asm() читал уже испорченный LR (адрес возврата внутри
- * HardFault_Handler), из-за чего в дамп печатался неверный EXC_RETURN
- * (например 0x08120E8F) и мог ошибочно выбираться MSP вместо PSP. */
-__attribute__((naked))
 void HardFault_Handler(void)
 {
-  __asm volatile (
-    "b fault_handler_asm \n"
-  );
+  /* USER CODE BEGIN HardFault_IRQn 0 */
+
+  /* USER CODE END HardFault_IRQn 0 */
+  while (1)
+  {
+    /* USER CODE BEGIN W1_HardFault_IRQn 0 */
+    /* USER CODE END W1_HardFault_IRQn 0 */
+  }
 }
 
 /**
   * @brief This function handles Memory management fault.
   */
-/* naked + прямой branch: LR (EXC_RETURN) не затирается BL-ом из C-обёртки
- * (как у HardFault_Handler). Дамп (PC + MMFAR) затем NVIC_SystemReset()
- * внутри fault_report() — вместо вечного while(1). */
-__attribute__((naked))
 void MemManage_Handler(void)
 {
-  __asm volatile (
-    "b memmanage_handler_asm \n"
-  );
+  /* USER CODE BEGIN MemoryManagement_IRQn 0 */
+
+  /* USER CODE END MemoryManagement_IRQn 0 */
+  while (1)
+  {
+    /* USER CODE BEGIN W1_MemoryManagement_IRQn 0 */
+    /* USER CODE END W1_MemoryManagement_IRQn 0 */
+  }
 }
 
 /**

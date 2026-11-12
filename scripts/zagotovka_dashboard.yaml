@@ -1,0 +1,171 @@
+# ===========================================================================
+#  Zagotovka-M: готовый дашборд для Home Assistant (вариант с auto-entities)
+#
+#  Требуется карточка auto-entities (ставится через HACS).
+#  Дашборд ничего не перечисляет вручную: прошивка выдает сущностям
+#  заранее известные entity_id (префикс zagotovka_), а фильтры ниже
+#  собирают их сами. Новые кнопки, датчики и выключатели появляются сами.
+#
+#  Имена сущностей, которые выдает прошивка:
+#    switch.zagotovka_sw<ID>        выключатель (ID пина)
+#    number.zagotovka_pwm<ID>       ШИМ (light./fan. при другом HA_PWM_TYPE)
+#    sensor.zagotovka_t<СЕРИЙНИК>   DS18B20 (серийник строчными буквами)
+#    sensor.zagotovka_dht<ID>_t     DHT22 температура   (_h - влажность)
+#    button.zagotovka_bt<ID>_s      нажать "click"      (_d double, _l long)
+#    event.zagotovka_bt<ID>         последнее нажатие кнопки
+#    event.zagotovka_sec<ID>        срабатывание охраны
+#  ID кнопок Zigbee начинаются сразу после последнего физического пина.
+#
+#  Как установить:
+#    Настройки -> Дашборды -> Добавить дашборд -> Новый дашборд с нуля.
+#    Откройте его, карандаш -> меню (три точки) -> "Сырой редактор
+#    конфигурации" и вставьте весь файл.
+#
+#  Важно: уже созданные сущности сохраняют свои старые entity_id. Чтобы
+#  получить новые, удалите устройства Zagotovka в Home Assistant, прошивка
+#  создаст их заново. Если у вас несколько контроллеров Zagotovka, Home
+#  Assistant добавит к дублирующимся id суффикс _2, _3.
+# ===========================================================================
+title: Zagotovka
+views:
+
+  # -------------------------------------------------------------------------
+  #  Вкладка 1: Управление и датчики (самое нужное сверху)
+  # -------------------------------------------------------------------------
+  - title: Управление
+    path: control
+    icon: mdi:home-automation
+    type: sections
+    max_columns: 3
+    sections:
+
+      - type: grid
+        cards:
+          - type: markdown
+            content: >-
+              **Добро пожаловать в Zagotovka.**
+              Здесь выключатели, яркость и датчики. Нажатия кнопок
+              (одиночное, двойное, долгое) находятся на вкладке **Кнопки**.
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Свет и выключатели
+            icon: mdi:light-switch
+          - type: custom:auto-entities
+            show_empty: false
+            card:
+              type: entities
+              show_header_toggle: false
+              state_color: true
+            filter:
+              include:
+                - entity_id: "switch.zagotovka_*"
+                - entity_id: "light.zagotovka_*"
+                - entity_id: "fan.zagotovka_*"
+            sort:
+              method: friendly_name
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Яркость и мощность (ШИМ)
+            icon: mdi:tune-variant
+          - type: custom:auto-entities
+            show_empty: false
+            card:
+              type: entities
+              show_header_toggle: false
+            filter:
+              include:
+                - entity_id: "number.zagotovka_pwm*"
+            sort:
+              method: friendly_name
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Датчики
+            icon: mdi:thermometer
+          - type: custom:auto-entities
+            show_empty: false
+            card:
+              type: entities
+              show_header_toggle: false
+            filter:
+              include:
+                - entity_id: "sensor.zagotovka_*"
+            sort:
+              method: friendly_name
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Охрана
+            icon: mdi:shield-home
+          - type: custom:auto-entities
+            show_empty: false
+            card:
+              type: entities
+              show_header_toggle: false
+            filter:
+              include:
+                - entity_id: "event.zagotovka_sec*"
+            sort:
+              method: friendly_name
+
+  # -------------------------------------------------------------------------
+  #  Вкладка 2: Кнопки. Одна строка = одна кнопка:
+  #  "click", "double click", "long press". Нажатие на плитку нажимает кнопку.
+  # -------------------------------------------------------------------------
+  - title: Кнопки
+    path: buttons
+    icon: mdi:gesture-tap-button
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Кнопки
+            icon: mdi:gesture-tap-button
+          - type: markdown
+            content: >-
+              Каждая строка - одна кнопка проекта. Слева направо:
+              одиночное нажатие, двойное, долгое. Нажмите на плитку, и
+              выполнятся действия, которые вы настроили для этой кнопки
+              в веб-интерфейсе Zagotovka.
+          - type: custom:auto-entities
+            show_empty: false
+            card_param: cards
+            card:
+              type: grid
+              columns: 3
+              square: false
+            filter:
+              include:
+                - entity_id: "button.zagotovka_bt*"
+                  options:
+                    type: tile
+                    hide_state: true
+                    tap_action:
+                      action: toggle
+            sort:
+              method: friendly_name
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Последние нажатия
+            icon: mdi:history
+          - type: custom:auto-entities
+            show_empty: false
+            card:
+              type: entities
+              show_header_toggle: false
+            filter:
+              include:
+                - entity_id: "event.zagotovka_bt*"
+            sort:
+              method: last_changed
+              reverse: true

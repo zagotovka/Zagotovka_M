@@ -27,6 +27,12 @@
 #include <stdio.h>
 #include <string.h>
 #include "fw_meta.h"
+
+/* Барьеры после MPU_Config — гарантируют, что MPU активна до кеша.
+ * Макрос раскрывается внутри MPU_Config() (определена в этом же файле),
+ * поэтому барьеры выполняются сразу после HAL_MPU_Enable и до SCB_EnableICache().
+ * Лежит в USER CODE, CubeMX его не трогает. */
+#define HAL_MPU_Enable(x) do { HAL_MPU_Enable(x); __DSB(); __ISB(); } while (0)
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/

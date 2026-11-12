@@ -162,12 +162,14 @@ export const enlangsettings = [
   'Date - Date for offline mode in dd.mm.yy format. Used when there is no access to the NTP server. Example: 15.03.25', // 24
   'Time - Time for offline mode in hh:mm:ss format. Used when there is no access to the NTP server. Example: 14:30:00', // 25
   'RX Z2M topic - Zigbee2MQTT topic prefix. Default: zigbee2mqtt. The device subscribes to {prefix}/data/... and publishes commands to {prefix}/cmd/.... Example: zigbee2mqtt', // 26
-  'MQTT Server - Experimental built-in MQTT broker. Limitations: maximum 6 clients, QoS 0 only, no retained messages, LWT or TLS. Do not mix it with the MQTT client on the same port. Settings changes require a device reboot.', // 27
+  'MQTT Server - Experimental built-in MQTT broker. Limitations: maximum 6 clients, QoS 0 only, no retained messages, LWT or TLS. Do not mix it with the MQTT client on the same port. Settings changes require a device reboot. For Home Assistant Discovery the controller republishes configs on every subscription instead of storing them.', // 27
   'Port - Built-in MQTT server port. Default: 1884. Must not match the web interface port (8000/8443), otherwise the server will not start.', // 28
   'Max clients - Maximum number of simultaneously connected broker clients (1-6). The firmware clamps this value regardless of user input.', // 29
   'User - Username for connecting to the built-in broker. Leave empty if authentication is not required.', // 30
   'Password - Password for connecting to the built-in broker. Leave empty if authentication is not required.', // 31
-  'SLZB IP - IP address of the SLZB-06p7U gateway for the auto-recovery watchdog. If the gateway does not connect to the broker within 40 seconds, the device will reboot it via its web API (no more than once per minute). IPv4 only, example: 192.168.1.115. Empty = watchdog disabled.' // 32
+  'SLZB IP - IP address of the SLZB-06p7U gateway for the auto-recovery watchdog. If the gateway does not connect to the broker within 40 seconds, the device will reboot it via its web API (no more than once per minute). IPv4 only, example: 192.168.1.115. Empty = watchdog disabled.', // 32
+  'HA Discovery - Publishes Home Assistant MQTT Discovery configs (switches, PWM lights, DS18B20/DHT22 sensors, button and security triggers). Requires MQTT client or built-in server and a TX topic. Takes effect after reboot.', // 33
+  'HA prefix - Discovery prefix, default: homeassistant. Must match the Discovery prefix in the Home Assistant MQTT integration.' // 34
 ];
 
 export const enlangsettingsmap = {

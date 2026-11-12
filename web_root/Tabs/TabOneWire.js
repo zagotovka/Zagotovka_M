@@ -292,6 +292,10 @@ const HELP_CONTENT = {
 <li>Датчики пина с выключенным ползунком On/Off в пакет не попадают.</li>
 </ul>
 </div>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Home Assistant</h3>
+<p class="mb-2">При включённом HA Discovery каждый датчик становится сущностью <b>sensor</b>: DS18B20 даёт температуру, DHT22 даёт температуру и влажность. Показания публикуются одним пакетом на тип датчика: <b>Swarm/ha/ds</b> (ключ - серийный номер, например <code>${'{"28B63A75D0013C7B":26.4}'}</code>) и <b>Swarm/ha/dht</b> (ключи t и h с ID пина, например <code>${'{"t46":20.6,"h46":46}'}</code>), с retain. Пакет уходит только при изменении показаний, общий пакет <b>Swarm/sensors/</b> остаётся без изменений. Датчик, который убран из проекта, исчезает из Home Assistant сам (DS18B20 при встроенном брокере удаляется вручную).</p>
+</div>
 </section>
 <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
 <h2 class="text-xl font-bold text-black">${condHelpTitle(true)}</h2>
@@ -616,6 +620,10 @@ const HELP_CONTENT = {
 <li>Only changed values are included: temperature by 0.2 degrees or more, humidity by 1 percent or more, PWM by 2 or more.</li>
 <li>Sensors of a pin whose On/Off slider is off are not included in the packet.</li>
 </ul>
+</div>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Home Assistant</h3>
+<p class="mb-2">With HA Discovery on, every sensor becomes a <b>sensor</b> entity: DS18B20 gives temperature, DHT22 gives temperature and humidity. Readings are published in one packet per sensor type: <b>Swarm/ha/ds</b> (key is the serial number, for example <code>${'{"28B63A75D0013C7B":26.4}'}</code>) and <b>Swarm/ha/dht</b> (keys t and h with the pin ID, for example <code>${'{"t46":20.6,"h46":46}'}</code>), retained. A packet is sent only when readings change; the common <b>Swarm/sensors/</b> packet stays unchanged. A sensor removed from the project disappears from Home Assistant by itself (with the built-in broker a DS18B20 is deleted by hand).</p>
 </div>
 </section>
 <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">

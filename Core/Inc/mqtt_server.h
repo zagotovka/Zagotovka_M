@@ -8,6 +8,8 @@
  *  - wildcard: '+' (целый уровень), '#' (в конце) и точное совпадение;
  *  - PUBLISH от любого клиента пересылается всем подходящим подписчикам;
  *  - retained: MQTT_SRV_RETAIN_SLOTS последних сообщений (topic/payload ограничены);
+ *  - HA Discovery: конфиги не хранятся (retained ограничены 128 Б), модуль ha_discovery.c
+ *    публикует их заново, когда клиент подписывается на <prefix>/#;
  *  - MQTT 3.1.1 клиенты (v5 CONNECT отклоняется с rc 0x01);
  *  - таблица клиентов в DTCM (bump-allocator), .bss не расходуется.
  *
@@ -21,8 +23,10 @@
 
 /* Жёсткий лимит слотов — таблица фикс. размера в DTCM, никакого heap-фрагментирования */
 #define MQTT_SRV_MAX_CLIENTS_HARDCAP 6
-/* Подписок на клиента: 8 * 64 байт = 512 B на слот */
-#define MQTT_SRV_MAX_SUBS_PER_CLIENT 8
+/* Подписок на клиента: 24 * 64 байт = 1536 B на слот (запас для подписок Home
+ * Assistant и чужих интеграций; фильтры <prefix>/.../config слоты не занимают —
+ * они обслуживаются флагом ha_cfg на клиенте) */
+#define MQTT_SRV_MAX_SUBS_PER_CLIENT 24
 #define MQTT_SRV_TOPIC_LEN           64
 /* Backpressure: не паблишим клиенту, чей send-буфер больше этого (байт) */
 #define MQTT_SRV_SEND_LIMIT          4096
@@ -50,6 +54,11 @@ void mqtt_server_publish(const char *topic, const char *payload);
 
 /* Текущее число занятых клиентских слотов (для диагностики/UI) */
 uint8_t mqtt_server_client_count(void);
+
+/* Максимальный send-буфер среди подключённых аутентифицированных клиентов
+ * (0, если сервер не запущен). Backpressure для ha_discovery_poll:
+ * конфиги Discovery не публикуются, пока буферы не разгрузятся. */
+uint32_t mqtt_server_max_sendlen(void);
 
 /* true (1), если среди подключённых и аутентифицированных клиентов есть
  * подписавшийся на <rxzbtop>/system_control/ — это фингерпринт шлюза

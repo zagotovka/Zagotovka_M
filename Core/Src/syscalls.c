@@ -58,17 +58,17 @@ char **environ = __env;
  */
 unsigned long s_sbrk_called = 0; // s_sbrk_called = 18 после часа работы системы!
 unsigned long s_sbrk_last_incr = 0;
+volatile uint32_t s_sbrk_peak_used = 0;
+volatile uint32_t s_sbrk_fail_cnt  = 0;
 
 void *_sbrk(ptrdiff_t incr) {
   extern uint8_t _end;
-  extern uint8_t _estack;
-  extern uint32_t _Min_Stack_Size;
 
   s_sbrk_called++;
   s_sbrk_last_incr = (unsigned long)incr;
 
-  const uint32_t stack_limit = (uint32_t)&_estack - (uint32_t)&_Min_Stack_Size;
-  const uint8_t *max_heap = (uint8_t *)stack_limit;
+  extern uint32_t _Min_Heap_Size;
+  const uint8_t *max_heap = &_end + (uint32_t)&_Min_Heap_Size;
   static uint8_t *__sbrk_heap_end = NULL;
   uint8_t *prev_heap_end;
 
@@ -81,12 +81,14 @@ void *_sbrk(ptrdiff_t incr) {
 
   if (__sbrk_heap_end + incr > max_heap) {
     __set_PRIMASK(primask);
+    s_sbrk_fail_cnt++;
     errno = ENOMEM;
     return (void *)-1;
   }
 
   prev_heap_end = __sbrk_heap_end;
   __sbrk_heap_end += incr;
+  s_sbrk_peak_used = (uint32_t)(__sbrk_heap_end - &_end);
 
   __set_PRIMASK(primask);
   return (void *)prev_heap_end;

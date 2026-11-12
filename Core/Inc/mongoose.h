@@ -1305,8 +1305,11 @@ void mg_log_set_fn(mg_pfn_t fn, void *param);
 
 #define MG_ERROR(args) MG_LOG(MG_LL_ERROR, args)
 #define MG_INFO(args) MG_LOG(MG_LL_INFO, args)
-#define MG_DEBUG(args) MG_LOG(MG_LL_DEBUG, args)
-#define MG_VERBOSE(args) MG_LOG(MG_LL_VERBOSE, args)
+// Вариант A: DEBUG/VERBOSE выброшены из кода, чтобы освободить место в прошивке.
+// Строки-аргументы сохраняются в исходнике и проверяются компилятором на типы,
+// но в бинарник не попадают (exe-ветка IF(0) выбрасывается оптимизатором).
+#define MG_DEBUG(args) do { if (0) mg_log args; } while (0)
+#define MG_VERBOSE(args) do { if (0) mg_log args; } while (0)
 
 
 

@@ -677,16 +677,12 @@ export function FirmwareUpdate({ }) {
   };
 
   const AlertComponent = ({ type, message }) => {
-    const bgColor =
-      type === 'red'
-        ? 'bg-red-100 border-red-500 text-red-700'
-        : type === 'yellow'
-          ? 'bg-yellow-100 border-yellow-500 text-yellow-700'
-          : 'bg-green-100 border-green-500 text-green-700';
+    const variant =
+      type === 'red' ? 'fw-alert--red' : type === 'yellow' ? 'fw-alert--yellow' : 'fw-alert--green';
 
     return html`
       <div
-        class=${`fixed top-0 left-0 right-0 z-50 border-b-4 p-3 sm:p-4 break-words ${bgColor}`}
+        class=${`fw-alert fixed top-0 left-0 right-0 z-50 border-b-4 p-3 sm:p-4 break-words ${variant}`}
         role="alert"
       >
         <p class="font-bold text-center">${message}</p>

@@ -83,6 +83,9 @@ void    SetLastState(void);
 #define MQTT_SRV_USR  "Yahsalta"    // дефолтный логин встроенного MQTT-брокера
 #define MQTT_SRV_PSWD "Zagotovka"   // дефолтный пароль встроенного MQTT-брокера
 #define SLZB_HOST     ""            // IP шлюза SLZB-06p7U для watchdog'а; пусто = watchdog выключен
+// Home Assistant MQTT Discovery
+#define CHECK_HA_DISC 0             // по умолчанию ВЫКЛ
+#define HA_PREFIX     "homeassistant"
 //void writedatatofile(const char* json_input);
 
 #endif /* INC_SETINGS_H_ */

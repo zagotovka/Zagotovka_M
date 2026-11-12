@@ -64,7 +64,17 @@ html[data-theme="dark"] .bg-yellow-50 { background-color: rgba(234,179,8,.12); }
 html[data-theme="dark"] .bg-yellow-100 { background-color: rgba(234,179,8,.20); }
 html[data-theme="dark"] .hover\:bg-yellow-100:hover { background-color: rgba(234,179,8,.28); }
 html[data-theme="dark"] .bg-green-50 { background-color: rgba(34,197,94,.12); }
-html[data-theme="dark"] .bg-green-100 { background-color: rgba(34,197,94,.20); }
+
+/* Плашка результата на странице Firmware Update: непрозрачный фон (шапка не просвечивает) и
+   контрастный текст в обеих темах */
+.fw-alert { box-shadow: 0 6px 18px rgba(0, 0, 0, .22); }
+.fw-alert p { font-size: 1rem; line-height: 1.35; }
+.fw-alert--green  { background-color: #d1fae5; border-color: #16a34a; color: #14532d; }
+.fw-alert--red    { background-color: #fee2e2; border-color: #dc2626; color: #7f1d1d; }
+.fw-alert--yellow { background-color: #fef9c3; border-color: #ca8a04; color: #713f12; }
+html[data-theme="dark"] .fw-alert--green  { background-color: #0f3d27; border-color: #22c55e; color: #dcfce7; }
+html[data-theme="dark"] .fw-alert--red    { background-color: #4a1616; border-color: #ef4444; color: #fee2e2; }
+html[data-theme="dark"] .fw-alert--yellow { background-color: #403308; border-color: #eab308; color: #fef9c3; }
 html[data-theme="dark"] .hover\:bg-green-100:hover { background-color: rgba(34,197,94,.28); }
 html[data-theme="dark"] .bg-emerald-50 { background-color: rgba(16,185,129,.12); }
 html[data-theme="dark"] .bg-emerald-100 { background-color: rgba(16,185,129,.20); }
@@ -318,8 +328,13 @@ html[data-theme="dark"] input:disabled, html[data-theme="dark"] select:disabled,
   background-color: rgba(15, 23, 42, .40) !important; color: #94a3b8 !important;
 }
 html[data-theme="dark"] option { background-color: #0f172a; color: #e2e8f0; }
-html[data-theme="dark"] input:-webkit-autofill {
-  -webkit-text-fill-color: #e2e8f0; box-shadow: 0 0 0 1000px #0f172a inset;
+
+/* Логин: автозаполнение браузера не меняет цвет поля (светлая тема) */
+html:not([data-theme="dark"]) .login-input:-webkit-autofill,
+html:not([data-theme="dark"]) .login-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #1e293b;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+  transition: background-color 9999s ease-in-out 0s;
 }
 
 

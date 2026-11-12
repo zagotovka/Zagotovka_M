@@ -149,6 +149,8 @@ const SETTINGS_TIP_IDX = {
   'User (srv)':      30,
   'Password (srv)':  31,
   'SLZB IP':         32,
+  'HA Discovery':    33,
+  'HA prefix':       34,
   'HTTPS domain':    15,
   'Private Key':     16,
   'Public Key':      17,
@@ -777,6 +779,39 @@ function SunCondHelp({ isRu }) {
   `;
 }
 
+// Справка по Home Assistant MQTT Discovery (блок под таблицей HA Discovery).
+function HaDiscoveryHelp({ isRu }) {
+  return isRu ? html`
+    <div class="space-y-3 text-slate-700">
+      <h2 class="text-xl font-bold text-black">Home Assistant: автообнаружение</h2>
+      <p>Контроллер сам публикует описание своих сущностей, и Home Assistant добавляет их без ручной настройки: переключатели (switch), PWM-выходы (light с яркостью), датчики DS18B20 и DHT22 (температура, влажность), триггеры кнопок и охранных датчиков.</p>
+      <ul class="list-disc pl-6 space-y-1">
+        <li>Нужен включённый MQTT Client или MQTT Server и заполненный TX topic (он же имя устройства в Home Assistant).</li>
+        <li>В Home Assistant добавьте интеграцию MQTT и укажите тот же брокер. Для встроенного брокера: адрес контроллера, порт и логин из блока MQTT Server.</li>
+        <li><b>Prefix</b> должен совпадать с Discovery prefix интеграции MQTT (по умолчанию homeassistant).</li>
+        <li>Включение и смена prefix вступают в силу после перезагрузки. Добавление, переименование и удаление устройств доходят до Home Assistant сами за несколько секунд, удалённые устройства исчезают из Home Assistant.</li>
+        <li>У каждого контроллера должен быть свой TX topic, иначе сущности совпадут.</li>
+        <li>Zigbee-устройства добавляет сам Zigbee2MQTT, контроллер их не дублирует.</li>
+        <li>Со встроенным брокером конфиги не хранятся: контроллер публикует их заново каждый раз, когда Home Assistant подключается и подписывается. Удалённый датчик DS18B20 в этом режиме придётся удалить в Home Assistant вручную, остальные устройства удаляются сами. Для десятков устройств лучше внешний брокер.</li>
+      </ul>
+    </div>
+  ` : html`
+    <div class="space-y-3 text-slate-700">
+      <h2 class="text-xl font-bold text-black">Home Assistant: auto-discovery</h2>
+      <p>The controller publishes descriptions of its entities by itself, and Home Assistant adds them without manual setup: switches, PWM outputs (light with brightness), DS18B20 and DHT22 sensors (temperature, humidity), button and security triggers.</p>
+      <ul class="list-disc pl-6 space-y-1">
+        <li>MQTT Client or MQTT Server must be on and the TX topic filled in (it is also the device name in Home Assistant).</li>
+        <li>Add the MQTT integration in Home Assistant and point it at the same broker. For the built-in broker: the controller address, port and login from the MQTT Server block.</li>
+        <li><b>Prefix</b> must match the Discovery prefix of the MQTT integration (default homeassistant).</li>
+        <li>Enabling it and changing the prefix take effect after a reboot. Adding, renaming and removing devices reaches Home Assistant by itself within seconds, and removed devices disappear from Home Assistant.</li>
+        <li>Each controller needs its own TX topic, otherwise entities collide.</li>
+        <li>Zigbee devices are added by Zigbee2MQTT itself, the controller does not duplicate them.</li>
+        <li>With the built-in broker configs are not stored: the controller republishes them every time Home Assistant connects and subscribes. A removed DS18B20 sensor must be deleted in Home Assistant by hand in this mode; other devices are removed automatically. For dozens of devices an external broker is better.</li>
+      </ul>
+    </div>
+  `;
+}
+
 // Справка по встроенному MQTT-брокеру (блок под таблицей MQTT Server).
 // Тексты сверены с Core/Inc/mqtt_server.h и Core/Src/mqtt_server.c.
 function MqttServerHelp({ isRu }) {
@@ -1268,6 +1303,7 @@ function Settings({ }) {
     jsonData.check_ip   = jsonData.check_ip   ? 1 : 0;
     jsonData.check_mqtt = jsonData.check_mqtt ? 1 : 0;
     jsonData.check_mqtt_srv = jsonData.check_mqtt_srv ? 1 : 0;
+    jsonData.check_ha_disc = jsonData.check_ha_disc ? 1 : 0;
     jsonData.usehttps   = jsonData.usehttps   ? 1 : 0;
 
     // Служебные поля ответа прошивке не нужны. Библиотека условий общая с другими
@@ -1341,7 +1377,7 @@ function Settings({ }) {
     let processedValue = value;
     if (['lon_de', 'lat_de', 'timezone', 'mqtt_prt', 'mqtt_srv_prt', 'mqtt_srv_maxcli'].includes(key)) {
       processedValue = value === '' || value === null ? 0 : Number(value);
-    } else if (['onsunrise', 'onsunset', 'check_ip', 'check_mqtt', 'check_mqtt_srv', 'usehttps'].includes(key)) {
+    } else if (['onsunrise', 'onsunset', 'check_ip', 'check_mqtt', 'check_mqtt_srv', 'check_ha_disc', 'usehttps'].includes(key)) {
       processedValue = value ? 1 : 0;
     }
     setSettings(prev => ({ ...prev, [key]: processedValue }));
@@ -1438,7 +1474,7 @@ function Settings({ }) {
   useEffect(() => {
     if (!isLoading && !mqttSectionInit.current) {
       mqttSectionInit.current = true;
-      setMqttSectionOpen(!!(settings.check_mqtt || settings.check_mqtt_srv));
+      setMqttSectionOpen(!!(settings.check_mqtt || settings.check_mqtt_srv || settings.check_ha_disc));
     }
   }, [isLoading]);
 
@@ -1730,6 +1766,43 @@ function Settings({ }) {
                     </tbody>
                   ` : html`<tbody></tbody>`}
                 </table>
+              </div>
+
+              <!-- ---- Home Assistant Discovery ---- -->
+              <div class="w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm">
+                <table class="w-full table-fixed text-left border-collapse">
+                  <thead>
+                    <tr class="bg-teal-600/10 border-b border-teal-600/20">
+                      <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3 cursor-help" colspan="2" data-tip=${gt('HA Discovery')}>
+                        <div class="flex items-center gap-3">
+                          <span>HA Discovery</span>
+                          <${MyPolzunok} value=${settings.check_ha_disc} onChange=${(v) => handleChange('check_ha_disc', v)} />
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  ${settings.check_ha_disc ? html`
+                    <tbody>
+                      <${FieldRow} label="Prefix" tip=${gt('HA prefix')} index=${0}>
+                        <${pageSetting}
+                          value=${settings.ha_prefix}
+                          setfn=${(v) => handleChange('ha_prefix', v)}
+                          name="ha_prefix"
+                          type="text"
+                          maxlength=${23}
+                          placeholder="homeassistant"
+                          class=${`w-full px-3 py-2 bg-white/50 border ${errors.ha_prefix ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                          error=${errors.ha_prefix}
+                        />
+                      <//>
+                    </tbody>
+                  ` : html`<tbody></tbody>`}
+                </table>
+                ${settings.check_ha_disc ? html`
+                  <div class="px-6 py-5 border-t border-teal-500/20">
+                    <${HaDiscoveryHelp} isRu=${(settings.lang || 'ru') === 'ru'} />
+                  </div>
+                ` : ''}
               </div>
 
               <!-- ---- MQTT Server (экспериментальный встроенный брокер) ---- -->

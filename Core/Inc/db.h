@@ -284,6 +284,9 @@ struct dbSettings {	// Cтруктура для setting
 	char  mqtt_srv_usr[32];    // опционально: логин для подключения к серверу
 	char  mqtt_srv_pswd[32];   // опционально: пароль
 	char  slzb_host[16];       // IP шлюза SLZB-06p7U для watchdog'а автовосстановления (пусто = выключен), строго IPv4: "192.168.1.115"
+	// Home Assistant MQTT Discovery
+	short check_ha_disc;       // 1 = публиковать конфиги сущностей для Home Assistant
+	char  ha_prefix[24];       // discovery prefix, по умолчанию "homeassistant"
 	// Настройки IP адреса
 	short check_ip;	// check DHCP on/off
 	short ip_addr0;	// IP адрес

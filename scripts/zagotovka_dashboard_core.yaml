@@ -1,0 +1,148 @@
+# ===========================================================================
+#  Zagotovka-M: дашборд на стандартных карточках Home Assistant
+#  (без HACS и сторонних дополнений)
+#
+#  Стандартные карточки не умеют подбирать сущности сами, поэтому список
+#  нужно один раз отредактировать под свой проект. Благодаря тому, что
+#  прошивка выдает заранее известные entity_id, это просто: ID в именах
+#  равны ID пинов из веб-интерфейса Zagotovka (колонка ID в таблицах).
+#
+#  Шаблон имен:
+#    switch.zagotovka_sw<ID>        выключатель
+#    number.zagotovka_pwm<ID>       ШИМ
+#    sensor.zagotovka_t<СЕРИЙНИК>   DS18B20 (16 hex, строчными буквами)
+#    sensor.zagotovka_dht<ID>_t     DHT22 температура (_h - влажность)
+#    button.zagotovka_bt<ID>_s      click   (_d double, _l long)
+#    event.zagotovka_bt<ID>         последнее нажатие кнопки
+#    event.zagotovka_sec<ID>        охрана
+#
+#  Все ID ниже - ПРИМЕРЫ. Замените их на свои, лишние строки удалите.
+#  Список реальных id: Настройки -> Устройства и службы -> Объекты,
+#  в поиске введите "zagotovka".
+#
+#  Как установить: Настройки -> Дашборды -> Добавить дашборд -> Новый
+#  дашборд с нуля. Откройте его, карандаш -> меню (три точки) ->
+#  "Сырой редактор конфигурации" и вставьте весь файл.
+# ===========================================================================
+title: Zagotovka
+views:
+
+  - title: Управление
+    path: control
+    icon: mdi:home-automation
+    type: sections
+    max_columns: 3
+    sections:
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Свет и выключатели
+            icon: mdi:light-switch
+          - type: entities
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - switch.zagotovka_sw3       # ПРИМЕР: пин ID 3
+              - switch.zagotovka_sw4       # ПРИМЕР: пин ID 4
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Яркость и мощность (ШИМ)
+            icon: mdi:tune-variant
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - number.zagotovka_pwm1      # ПРИМЕР: ШИМ ID 1
+              - number.zagotovka_pwm24     # ПРИМЕР: ШИМ ID 24
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Датчики
+            icon: mdi:thermometer
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - sensor.zagotovka_t28ff000000000001   # ПРИМЕР: серийник DS18B20
+              - sensor.zagotovka_dht5_t              # ПРИМЕР: DHT22 ID 5
+              - sensor.zagotovka_dht5_h
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Охрана
+            icon: mdi:shield-home
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - event.zagotovka_sec10      # ПРИМЕР: пин охраны ID 10
+
+  - title: Кнопки
+    path: buttons
+    icon: mdi:gesture-tap-button
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Кнопки
+            icon: mdi:gesture-tap-button
+          # Одна кнопка = три плитки. Скопируйте блок для каждой кнопки.
+          - type: grid
+            columns: 3
+            square: false
+            cards:
+              - type: tile              # ПРИМЕР: кнопка ID 6, click
+                entity: button.zagotovka_bt6_s
+                name: Test click
+                hide_state: true
+                tap_action:
+                  action: toggle
+              - type: tile              # double click
+                entity: button.zagotovka_bt6_d
+                name: Test double click
+                hide_state: true
+                tap_action:
+                  action: toggle
+              - type: tile              # long press
+                entity: button.zagotovka_bt6_l
+                name: Test long press
+                hide_state: true
+                tap_action:
+                  action: toggle
+          - type: grid
+            columns: 3
+            square: false
+            cards:
+              - type: tile              # ПРИМЕР: кнопка ID 31
+                entity: button.zagotovka_bt31_s
+                name: Test2 click
+                hide_state: true
+                tap_action:
+                  action: toggle
+              - type: tile
+                entity: button.zagotovka_bt31_d
+                name: Test2 double click
+                hide_state: true
+                tap_action:
+                  action: toggle
+              - type: tile
+                entity: button.zagotovka_bt31_l
+                name: Test2 long press
+                hide_state: true
+                tap_action:
+                  action: toggle
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Последние нажатия
+            icon: mdi:history
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - event.zagotovka_bt6        # ПРИМЕР
+              - event.zagotovka_bt31       # ПРИМЕР

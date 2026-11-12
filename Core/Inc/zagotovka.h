@@ -158,6 +158,8 @@ void set_mqtt_topic(const char* topic);
 
 //void send_mqtt_message(struct mg_connection *conn, const char *topic, const char *msg);
 void send_mqtt_message(struct mg_connection *conn, const char *topic, const char *msg);
+/* Публикация в произвольный топик (без TX topic) с флагом retain: для HA Discovery и состояний */
+void send_mqtt_raw(struct mg_connection *conn, const char *full_topic, const char *msg, bool retain);
 
 typedef struct {
     OneWire_t OneWire;

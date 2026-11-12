@@ -647,6 +647,10 @@ http://192.168.1.24:8000/api/Zerg/switch?id=27&state=0
 </tbody>
 </table>
 </div>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Home Assistant</h3>
+<p class="mb-2">При включённом HA Discovery (Settings) каждый выключатель появляется в Home Assistant как <b>switch</b> автоматически. Состояния всех выключателей публикуются одним пакетом в топик <b>Swarm/ha/sw</b> (формат <code>${'{"27":1,"28":0}'}</code>, с retain), команды Home Assistant отправляет в 'RX topic' в формате, описанном выше. Если выключатель удалить из проекта, он исчезнет и из Home Assistant.</p>
+</div>
 </section>
 <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">
 <h2 class="text-xl font-bold text-black">${condHelpTitle(true)}</h2>
@@ -964,6 +968,10 @@ Every switch change is sent to this topic automatically. Swarm is your 'TX topic
 </tr>
 </tbody>
 </table>
+</div>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Home Assistant</h3>
+<p class="mb-2">With HA Discovery on (Settings) every switch shows up in Home Assistant as a <b>switch</b> automatically. The states of all switches are published in one packet to <b>Swarm/ha/sw</b> (format <code>${'{"27":1,"28":0}'}</code>, retained); Home Assistant sends commands to the 'RX topic' in the format described above. If a switch is removed from the project, it disappears from Home Assistant too.</p>
 </div>
 </section>
 <section class="rounded-2xl border-2 bg-amber-50 border-amber-300 p-5 space-y-4">

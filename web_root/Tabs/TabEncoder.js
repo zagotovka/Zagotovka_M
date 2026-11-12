@@ -575,6 +575,10 @@ http://192.168.1.24:8000/api/Zerg/pwm?id=4&dvalue=25
 <li><b>pid</b> — PWM-выход : (значение Duty 0–100%)</li>
 </ul>
 </div>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Home Assistant</h3>
+<p class="mb-2">При включённом HA Discovery каждый PWM-выход появляется в Home Assistant как <b>number</b> (ползунок 0-100), это подходит и для лампы, и для мотора. Значения всех PWM публикуются одним пакетом в <b>Swarm/ha/pwm</b>, значение отправляется командой <b>pwm/id=N/dvalue=X</b> в 'RX topic'. Чтобы PWM отображался как <b>light</b> или <b>fan</b>, при сборке прошивки задайте HA_PWM_TYPE (1 или 2).</p>
+</div>
 </div>
 </section>
 <section class="rounded-2xl border-2 bg-teal-50 border-teal-300 p-5 space-y-4"><h2 class="text-xl font-bold text-black">Строки таблицы и поля настройки</h2>
@@ -986,6 +990,10 @@ This command will set the dimmer to 25% for the PWM-pin with ID=7. Where "Zerg" 
 <li><b>hid</b> — DHT22 sensor : (array [Tvalue — temperature, Hvalue — humidity])</li>
 <li><b>pid</b> — PWM output : (Duty value 0–100%)</li>
 </ul>
+</div>
+<div>
+<h3 class="text-lg font-bold text-black mb-2">Home Assistant</h3>
+<p class="mb-2">With HA Discovery on, every PWM output appears in Home Assistant as a <b>number</b> (slider 0-100), which suits both a lamp and a motor. Values of all PWM outputs are published in one packet to <b>Swarm/ha/pwm</b>; the value is sent as the <b>pwm/id=N/dvalue=X</b> command to the 'RX topic'. To show PWM as a <b>light</b> or a <b>fan</b>, set HA_PWM_TYPE (1 or 2) when building the firmware.</p>
 </div>
 </div>
 </section>
