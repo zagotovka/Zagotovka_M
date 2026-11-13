@@ -26,8 +26,8 @@
 /* Подписок на клиента: 24 * 64 байт = 1536 B на слот (запас для подписок Home
  * Assistant и чужих интеграций; фильтры <prefix>/.../config слоты не занимают —
  * они обслуживаются флагом ha_cfg на клиенте) */
-#define MQTT_SRV_MAX_SUBS_PER_CLIENT 24
-#define MQTT_SRV_TOPIC_LEN           64
+#define MQTT_SRV_MAX_SUBS_PER_CLIENT 32 // т.e 8 слотов по 40 байт на 6 клиентов,
+#define MQTT_SRV_TOPIC_LEN           40
 /* Backpressure: не паблишим клиенту, чей send-буфер больше этого (байт) */
 #define MQTT_SRV_SEND_LIMIT          4096
 /* Retained-хранилище (DTCM): слотов * (topic + payload + 2 байта) */

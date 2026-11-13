@@ -66,7 +66,7 @@ extern struct dbSettings SetSettings;
 #endif
 
 #define MQTT_SRV_HEARTBEAT_MS 30000u   /* heartbeat не чаще раза в 30с */
-
+#define SRV_SUB_PKT_MAX       64u      /* максимум фильтров в одном SUBSCRIBE */
 /* ---- Флаги CONNECT-пакета (MQTT 3.1.1) — продублированы локально,
  *      т.к. MQTT_HAS_* объявлены внутри mongoose.c ---- */
 #define SRV_FLAG_USERNAME 0x80
@@ -526,9 +526,9 @@ static void srv_handle_subscribe(struct mg_connection *c,
   MqttSrvClient_t *cl = srv_client(c);
   const uint8_t *d = (const uint8_t *) mm->dgram.buf;
   size_t len = mm->dgram.len, off;
-  uint8_t codes[16];                                // максимум топиков в пакете
+  uint8_t codes[SRV_SUB_PKT_MAX];                   // коды SUBACK, по одному на фильтр
   uint8_t nsubs = 0;
-  uint8_t replay_idx[16];                           // индексы фильтров для retained-replay
+  uint8_t replay_idx[SRV_SUB_PKT_MAX];              // индексы фильтров для retained-replay
   uint8_t nreplay = 0;
 
   if (cl == NULL) return;
@@ -547,7 +547,7 @@ static void srv_handle_subscribe(struct mg_connection *c,
   off += 2;                                         /* FIX: пропустить 2B Packet Identifier */
 
   /* payload: [2B tlen][topic][1B qos]* — до конца пакета */
-  while (off + 3 <= len && nsubs < 16) {
+    while (off + 3 <= len && nsubs < SRV_SUB_PKT_MAX) {
     uint16_t tlen = srv_be16(d + off);
     const char *topic = (const char *) d + off + 2;
     uint8_t rc = 0x00;
@@ -636,11 +636,13 @@ static void srv_handle_subscribe(struct mg_connection *c,
    * Это ровно та точка, которая объясняет "accepted → closed (0 subs)"
    * без строки "client sent DISCONNECT" в логе: клиент прислал SUBSCRIBE,
    * который не распарсился (либо кривой топик, либо >16 фильтров разом). */
-  if (nsubs == 0 || off < len) {
-    SRV_LOG("[server] reject: malformed SUBSCRIBE payload (nsubs=%u, off=%u, len=%u)\r\n",
-            (unsigned) nsubs, (unsigned) off, (unsigned) len);
-    c->is_closing = 1; return;
-  }
+    if (nsubs == 0 || off < len) {
+      s_stat_rejected++;   /* теперь отказ виден в строке heartbeat */
+      SRV_LOG("[server] reject: bad SUBSCRIBE (nsubs=%u, off=%u, len=%u, max=%u)\r\n",
+              (unsigned) nsubs, (unsigned) off, (unsigned) len,
+              (unsigned) SRV_SUB_PKT_MAX);
+      c->is_closing = 1; return;
+    }
   srv_send_suback(c, mm->id, codes, nsubs);
   /* Retained-сообщения уходят строго ПОСЛЕ SUBACK */
   for (uint8_t r = 0; r < nreplay; r++) {

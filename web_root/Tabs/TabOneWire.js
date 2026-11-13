@@ -124,7 +124,7 @@ function initGlobalTooltip() {
 // Action helpers
 // ---------------------------------------------------------------------------
 const _stateLabel = (s) => s === '1' ? 'ON' : s === '0' ? 'OFF' : s === '2' ? 'TG' : (s ?? '?');
-const _stateColor = (s) => s === '1' ? '#16a34a' : s === '0' ? '#dc2626' : s === '2' ? '#d97706' : '#64748b';
+const _stateColor = (s) => s === '1' ? 'var(--ow-on)' : s === '0' ? 'var(--ow-off)' : s === '2' ? 'var(--ow-tg)' : 'var(--ow-unk)';
 const _parseAction = (str) => {
   if (!str) return [];
   return str.split(',').map(p => {
@@ -140,24 +140,36 @@ const _parseAction = (str) => {
   const st = document.createElement('style');
   st.id = 'ow-badge-style';
   st.textContent = `
-    .ow-b { display:inline-flex; align-items:center; gap:4px; border:1.5px solid;
-            border-radius:10px; padding:3px 10px; font-size:12px; font-weight:600;
+    :root { --ow-on:#15803d; --ow-off:#b91c1c; --ow-tg:#b45309; --ow-unk:#475569; }
+    [data-theme="dark"] { --ow-on:#4ade80; --ow-off:#f87171; --ow-tg:#fbbf24; --ow-unk:#94a3b8; }
+
+    .ow-b { display:inline-flex; align-items:center; gap:7px; border:1.5px solid;
+            border-radius:10px; padding:3px 11px; font-size:13px; font-weight:600;
             white-space:nowrap; line-height:1.6; }
-    .ow-b-up { background:#fff7ed; border-color:#fdba74; }
+    .ow-b-up { background:#fef2f2; border-color:#fca5a5; }
     .ow-b-lo { background:#eff6ff; border-color:#93c5fd; }
-    .ow-b-up .ow-l { color:#9a3412; margin-right:2px; }
-    .ow-b-lo .ow-l { color:#1e3a5f; margin-right:2px; }
-    .ow-b .ow-d  { color:#94a3b8; font-weight:400; }
-    .ow-b .ow-p  { color:#334155; font-weight:700; }
+    .ow-b .ow-l { font-weight:800; font-variant-numeric:tabular-nums; }
+    .ow-b-up .ow-l { color:#b91c1c; }
+    .ow-b-lo .ow-l { color:#1d4ed8; }
+    .ow-b .ow-s  { width:1px; align-self:stretch; margin:3px 0; background:currentColor; opacity:.28; }
+    .ow-b-up .ow-s { color:#b91c1c; }
+    .ow-b-lo .ow-s { color:#1d4ed8; }
+    .ow-b .ow-d  { color:#64748b; font-weight:500; }
+    .ow-b .ow-p  { color:#0f172a; font-weight:700; }
     .ow-b .ow-br { color:#475569; }
 
-    [data-theme="dark"] .ow-b-up { background:rgba(251,146,60,0.14) !important; border-color:rgba(251,146,60,0.60) !important; }
-    [data-theme="dark"] .ow-b-lo { background:rgba(96,165,250,0.14) !important; border-color:rgba(96,165,250,0.60) !important; }
-    [data-theme="dark"] .ow-b-up .ow-l { color:#fdba74 !important; }
-    [data-theme="dark"] .ow-b-lo .ow-l { color:#93c5fd !important; }
+    .ow-room { display:inline-block; border:1px solid #fde68a; background:#fffbeb; color:#92400e;
+               border-radius:8px; padding:2px 10px; font-size:13px; font-weight:600;
+               white-space:nowrap; }
+
+    [data-theme="dark"] .ow-b-up { background:rgba(248,113,113,0.12) !important; border-color:rgba(248,113,113,0.55) !important; }
+    [data-theme="dark"] .ow-b-lo { background:rgba(96,165,250,0.12) !important; border-color:rgba(96,165,250,0.55) !important; }
+    [data-theme="dark"] .ow-b-up .ow-l, [data-theme="dark"] .ow-b-up .ow-s { color:#fca5a5 !important; }
+    [data-theme="dark"] .ow-b-lo .ow-l, [data-theme="dark"] .ow-b-lo .ow-s { color:#93c5fd !important; }
     [data-theme="dark"] .ow-b .ow-d  { color:#94a3b8 !important; }
     [data-theme="dark"] .ow-b .ow-p  { color:#f1f5f9 !important; }
     [data-theme="dark"] .ow-b .ow-br { color:#cbd5e1 !important; }
+    [data-theme="dark"] .ow-room { background:rgba(251,191,36,0.10) !important; border-color:rgba(251,191,36,0.35) !important; color:#fde68a !important; }
   `;
   document.head.appendChild(st);
 })();
@@ -167,7 +179,8 @@ const ActionBadge = ({ isUpper, isHumid, value, unit, str }) => {
   const arrow = (isHumid ? 'H ' : '') + (isUpper ? '↑' : '↓');
   return html`
     <span class="ow-b ${isUpper ? 'ow-b-up' : 'ow-b-lo'}">
-      <span class="ow-l">${arrow} ${value ?? '—'}${unit}:</span>
+      <span class="ow-l">${arrow} ${value ?? '—'}${unit}</span>
+      <span class="ow-s"></span>
       ${parts.length === 0
         ? html`<span class="ow-d">[—]</span>`
         : html`
@@ -1193,7 +1206,7 @@ const TabOneWire = () => {
             <span class="text-slate-300">|</span>
             <${ActionBadge} isUpper=${true} value=${s.ut} unit="°C" str=${s.action_ut} />
             <${ActionBadge} isUpper=${false} value=${s.lt} unit="°C" str=${s.action_lt} />
-            ${s.info ? html`<span class="text-slate-300">|</span><span class="font-semibold text-sm text-amber-600" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:2px 10px;white-space:nowrap;">${s.info}</span>` : ''}
+            ${s.info ? html`<span class="text-slate-300">|</span><span class="ow-room">${s.info}</span>` : ''}
             <a href="#" class="ml-auto text-blue-600 font-semibold text-sm uppercase px-3 py-1 bg-white/70 rounded-lg" onclick=${(e) => {
               e.preventDefault();
               setSelectedSensor({ ...s, oneWireId: d.id, sensorType, pins: d.pins || d.pin });
