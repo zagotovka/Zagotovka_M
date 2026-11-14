@@ -2665,11 +2665,14 @@ void StartOutputTask(void *argument)
                                   8, ZBEE_ATTR_DIMMER, valbuf);
               }
               if (flags & ZBEE_CL_COLOR) {
-                char valbuf[8];
-                snprintf(valbuf, sizeof(valbuf), "%d", ZigbeeConf[zbi].dvalue);
+                char valbuf[12];
+                /* SLZB-OS: цвет принимается на 0300/0007 в формате #RRGGBB
+                 * (тот же формат, что в веб-обработчике цвета) */
+                snprintf(valbuf, sizeof(valbuf), "#%06X",
+                         (unsigned) (ZigbeeConf[zbi].color_hex & 0xFFFFFF));
                 SendZigbeeCommand(ZigbeeConf[zbi].zbee_ieee,
                                   ZigbeeConf[zbi].zbee_endpoint,
-                                  768, ZBEE_ATTR_COLOR, valbuf);
+                                  768, 0x0007, valbuf);
               }
             }
           }

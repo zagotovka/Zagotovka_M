@@ -8285,11 +8285,31 @@ static int zbee_send_cmd_status(const char *zbee_ieee, uint8_t endpoint,
     }
 
     char set_topic[80];
-    if (cluster == 0x0006 || cluster == 0x0008) {
-        // zHub built-in handlers: topic without attribute
+    if (cluster == 0x0006) {
+        /* SLZB-OS после обновления: ZCL-команда указывается в топике
+         * (0000 = Off, 0001 = On). Payload ON/OFF остаётся прежним. */
+        if (strcmp(json_cmd, "OFF") == 0) {
+            snprintf(set_topic, sizeof(set_topic),
+                     "%s/cmd/%s/%d/%04X/%04X",
+                     get_rxzbtop(), zbee_ieee, endpoint, cluster,
+                     (unsigned) 0x0000);
+        } else if (strcmp(json_cmd, "ON") == 0) {
+            snprintf(set_topic, sizeof(set_topic),
+                     "%s/cmd/%s/%d/%04X/%04X",
+                     get_rxzbtop(), zbee_ieee, endpoint, cluster,
+                     (unsigned) 0x0001);
+        } else {
+            /* прочие payload - прежний формат без суффикса */
+            snprintf(set_topic, sizeof(set_topic),
+                     "%s/cmd/%s/%d/%04X",
+                     get_rxzbtop(), zbee_ieee, endpoint, cluster);
+        }
+    } else if (cluster == 0x0008) {
+        /* SLZB-OS: яркость - команда 0000, payload 1..254 */
         snprintf(set_topic, sizeof(set_topic),
-                 "%s/cmd/%s/%d/%04X",
-                 get_rxzbtop(), zbee_ieee, endpoint, cluster);
+                 "%s/cmd/%s/%d/%04X/%04X",
+                 get_rxzbtop(), zbee_ieee, endpoint, cluster,
+                 (unsigned) 0x0000);
     } else {
         snprintf(set_topic, sizeof(set_topic),
                  "%s/cmd/%s/%d/%04X/%04X",
