@@ -1008,6 +1008,8 @@ void mqtt_server_publish(const char *topic, const char *payload) {
   if (!s_running || s_cli == NULL) return;
   tlen = strlen(topic);
   if (tlen == 0 || tlen > 127) return;              // топики >127 не публикуем
+  /* Диагностика доставки команд шлюзу: /cmd/-топики редки, лог не спамит */
+  int is_cmd = (strstr(topic, "/cmd/") != NULL);
   s_stat_tx_msgs++;   /* дешёвый инкремент, НЕ printf — вызывается на каждое сообщение */
 
   t = mg_str(topic);
@@ -1017,7 +1019,12 @@ void mqtt_server_publish(const char *topic, const char *payload) {
     if (cl->conn == NULL || !cl->authenticated) continue;
     if (cl->conn->is_closing || cl->conn->is_draining) continue;
     /* Backpressure: клиент не забирает данные — не копим send-буфер */
-    if (cl->conn->send.len > MQTT_SRV_SEND_LIMIT) continue;
+    if (cl->conn->send.len > MQTT_SRV_SEND_LIMIT) {
+      if (is_cmd) {
+        SRV_LOG("[server] cmd SKIP s=%d b=%u\r\n", i, (unsigned) cl->conn->send.len);
+      }
+      continue;
+    }
     if (!srv_match_any(cl, topic) &&
         !(cl->ha_cfg && ha_discovery_is_cfg_topic(topic))) continue;
     memset(&o, 0, sizeof(o));
@@ -1026,6 +1033,9 @@ void mqtt_server_publish(const char *topic, const char *payload) {
     o.qos = 0;
     o.retain = false;
     mg_mqtt_pub(cl->conn, &o);
+    if (is_cmd) {
+      SRV_LOG("[server] cmd PUB '%s' z=%d\r\n", topic, (int) cl->is_slzb);
+    }
   }
 }
 

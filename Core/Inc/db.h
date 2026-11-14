@@ -446,6 +446,15 @@ void zbee_vbtn_mqtt_event(int slot, const char *payload);
 void zbee_vbtn_auto_detect(int slot, const char *first_payload);
 void vbtn_execute(int slot, int event_type);
 
+/* ── Нормализация payload триггеров шлюза (таблица алиасов, zagotovka.c) ──
+ * zbee_payload_find_alias: ищет ПОЛНОЕ имя алиаса внутри произвольного
+ * payload (JSON-обёртка, сырой /data/-топик) и возвращает короткое имя,
+ * либо NULL. */
+const char *zbee_payload_find_alias(const char *payload);
+/* Миграция сохранённых payload-строк zigbee.ini под текущую таблицу
+ * алиасов (вызывается после загрузки конфига). */
+void zbee_alias_migrate_stored(void);
+
 /* Функции конфигурации zigbee.ini */
 void GetZigbeeConfig(void);
 void SetZigbeeConfig(void);

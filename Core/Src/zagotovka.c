@@ -4864,6 +4864,7 @@ int cmd_zigbee_exec(int id, int on, int v, long color) {
   if (on >= 0) {
     int onoff_cmd = on ? 1 : 0;
     if (zp->zbee_role == ZBEE_ROLE_SWITCH) {
+      LOG_Z2M("zbee: SET s=%d id=%d SWITCH cascade\r\n", zbi, id);
       zp->state = (uint8_t)onoff_cmd;
       mark_slice_dirty(&g_ver_zigbee);
       processPins((uint16_t)ZbeeIdFromIdx(zbi), (uint8_t)onoff_cmd);
@@ -6472,13 +6473,14 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
             if (ZigbeeConf[i].ep != (uint16_t)attr) continue;
         } else {
             if (ZigbeeConf[i].zbee_endpoint != (uint8_t)ep) {
-                if (cluster == ZBEE_CLUSTER_OCCUPANCY &&
-                    ZigbeeConf[i].zbee_endpoint == 0) {
-                    /* Слот PIR с неинициализированным endpoint (0 — наследие
-                     * старой прошивки/обучения): реальный EP берём из топика и
-                     * сохраняем в zigbee.ini, чтобы авто-фикс не повторялся */
+                if (ZigbeeConf[i].zbee_endpoint == 0 && ep >= 1) {
+                    /* Слот с неинициализированным endpoint (0 — наследие
+                     * старой прошивки/обучения): реальный EP берём из любого
+                     * data-репорта устройства и сохраняем в zigbee.ini.
+                     * Ранее фиксировали только PIR; обобщено на любые
+                     * устройства (напр. розетка с ep=0 не управлялась) */
                     ZigbeeConf[i].zbee_endpoint = (uint8_t)ep;
-                    LOG_Z2M("zbee: PIR slot=%d endpoint 0 -> %d (auto-fix)\r\n", i, ep);
+                    LOG_Z2M("zbee: EPFIX slot=%d ep 0 -> %d\r\n", i, ep);
                     extern osMessageQueueId_t usbQueueHandle;
                     uint32_t usbnum = 7; /* zigbee.ini */
                     if (usbQueueHandle) xQueueSend(usbQueueHandle, &usbnum, 0);
@@ -6788,8 +6790,92 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
     }
 }
 
+/* Короткие имена для триггеров шлюза: pt_single/pt_double/pt_long вмещают 11 символов */
+/*Короткие имена подобраны так, чтобы ни одно не было подстрокой другого,              */
+/* иначе подстрочное сопоставление снова даст ложные срабатывания.                     */
+/* Эту проверку нужно повторять, когда добавляете новые имена.                         */
+/* Контракт: таблица применяется к КАЖДОМУ входу триггеров (см. ниже                   */
+/* zbee_trigger_alias / zbee_payload_find_alias), хранимые в конфиге значения —        */
+/* только короткие имена. Payload, не перечисленный здесь, проходит как есть.          */
+static const struct { const char *full; const char *shrt; } k_zbee_trigger_alias[] = {
+    { "brightness_step_up",           "bri_up"   },
+    { "brightness_step_down",         "bri_down" },
+    { "color_temperature_step_up",    "ct_up"    },
+    { "color_temperature_step_down",  "ct_down"  },
+    { "color_temperature_move",       "ct_move"  },
+    { "brightness_move_to_level",     "bri_set"  },
+    { "move_to_hue_and_saturation",   "rgb"      },
+};
+
+static const char *zbee_trigger_alias(const char *payload) {
+    if (!payload) return payload;
+    for (size_t i = 0; i < sizeof(k_zbee_trigger_alias) / sizeof(k_zbee_trigger_alias[0]); i++) {
+        if (strcmp(payload, k_zbee_trigger_alias[i].full) == 0) {
+            return k_zbee_trigger_alias[i].shrt;
+        }
+    }
+    return payload;
+}
+
+/* Поиск полного имени алиаса ВНУТРИ произвольного payload (JSON-обёртка,
+ * сырые /data/-топики, лишние символы). Возвращает короткое имя или NULL.
+ * Нужно для матчеров, которые сравнивают сохранённое короткое имя с
+ * не-нормализованным payload (см. match_payload_word в zbee_vbtn.c). */
+const char *zbee_payload_find_alias(const char *payload) {
+    if (!payload) return NULL;
+    for (size_t i = 0; i < sizeof(k_zbee_trigger_alias) / sizeof(k_zbee_trigger_alias[0]); i++) {
+        if (strstr(payload, k_zbee_trigger_alias[i].full) != NULL) {
+            return k_zbee_trigger_alias[i].shrt;
+        }
+    }
+    return NULL;
+}
+
+/* Миграция сохранённых payload-строк (zigbee.ini) под текущую таблицу алиасов.
+ * Конфиги, обученные ДО введения алиасов, хранят полные имена шлюза
+ * (напр. "brightness_step_up") и на рантайме не совпадают с нормализованным
+ * payload. Точное совпадение заменяем на короткое имя и сохраняем конфиг.
+ * Усечённые значения (первые 11 символов длинного имени) надёжно не
+ * мигрируют — такие слоты нужно переобучить. */
+void zbee_alias_migrate_stored(void) {
+    bool any = false;
+    for (int i = 0; i < NUMZBEE; i++) {
+        if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
+        char *fields[5] = {
+            ZigbeeConf[i].pt_single,
+            ZigbeeConf[i].pt_double,
+            ZigbeeConf[i].pt_long,
+            ZigbeeConf[i].switch_payload_on,
+            ZigbeeConf[i].switch_payload_off,
+        };
+        const size_t caps[5] = {
+            sizeof(ZigbeeConf[i].pt_single),
+            sizeof(ZigbeeConf[i].pt_double),
+            sizeof(ZigbeeConf[i].pt_long),
+            sizeof(ZigbeeConf[i].switch_payload_on),
+            sizeof(ZigbeeConf[i].switch_payload_off),
+        };
+        for (int k = 0; k < 5; k++) {
+            char *f = fields[k];
+            if (f[0] == '\0') continue;
+            const char *s = zbee_trigger_alias(f);
+            if (strcmp(s, f) == 0) continue;
+            printf("[ZIGBEE] alias migrate slot=%d '%s' -> '%s'\r\n", i, f, s);
+            strncpy(f, s, caps[k] - 1);
+            f[caps[k] - 1] = '\0';
+            any = true;
+        }
+    }
+    if (any) {
+        extern osMessageQueueId_t usbQueueHandle;
+        uint32_t usbnum = 7; /* zigbee.ini */
+        if (usbQueueHandle) xQueueSend(usbQueueHandle, &usbnum, 0);
+    }
+}
+
 static void mqtt_zigbee_trigger_handler(const char *topic, const char *payload) {
-    const char prefix[] = "/trigger/";
+    payload = zbee_trigger_alias(payload);
+	const char prefix[] = "/trigger/";
     const char *pfx = strstr(topic, prefix);
     if (!pfx) return;
     pfx += strlen(prefix);
@@ -6846,15 +6932,39 @@ static void mqtt_zigbee_trigger_handler(const char *topic, const char *payload) 
                 if (matched) {
                     ZigbeeConf[i].state = new_state;
                     processPins(ZbeeIdFromIdx(i), new_state);
-                    LOG_Z2M("zbee: SWITCH %s ieee=%s slot=%d id=%d payload=%s\r\n",
-                            new_state ? "ON" : "OFF", ieee, i, ZbeeIdFromIdx(i), payload);
+                    LOG_Z2M("zbee: SWITCH %s id=%d p=%s\r\n",
+                            new_state ? "ON" : "OFF", ZbeeIdFromIdx(i), payload);
                 }
+            } else {
+                /* RAW-режим (payload on/off от настенного выключателя):
+                 * прямое управление состоянием вместо мёртвой зоны.
+                 * click_state_from_payload трактует on/press/1 как 1,
+                 * off/release/0 как 0 — та же семантика, что у vbtn RAW. */
+                int lv;
+                if (strcmp(payload, "on") == 0 || strcmp(payload, "press") == 0 ||
+                    strcmp(payload, "1") == 0) {
+                    lv = 1;
+                } else if (strcmp(payload, "off") == 0 ||
+                           strcmp(payload, "release") == 0 ||
+                           strcmp(payload, "0") == 0) {
+                    lv = 0;
+                } else {
+                    lv = -1;
+                }
+                if (lv >= 0) {
+                    uint8_t ns = (uint8_t)lv;
+                    ZigbeeConf[i].state = ns;
+                    processPins(ZbeeIdFromIdx(i), ns);
+                    LOG_Z2M("zbee: SWITCH %s RAW id=%d\r\n", ns ? "ON" : "OFF",
+                            ZbeeIdFromIdx(i));
+                }
+                /* прочие RAW-payload (не on/off/press/release) — игнор */
             }
         } else {
             /* Normal mode: delegate to virtual button handler */
             zbee_vbtn_mqtt_event(i, payload);
-            LOG_Z2M("zbee: TRIGGER ieee=%s slot=%d payload=%s\r\n",
-                    ieee, i, payload);
+            LOG_Z2M("zbee: TRIGGER ieee=%s id=%d p=%s\r\n",
+                    ieee, ZbeeIdFromIdx(i), payload);
         }
         /* НЕ break — проверяем все слоты с этим IEEE для PASSTHROUGH */
     }
@@ -7660,11 +7770,14 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                     ZigbeeConf[target_zbi].topin = 11;
                     strncpy(ZigbeeConf[target_zbi].pt_single, trigger_payloads[on_idx],
                             sizeof(ZigbeeConf[target_zbi].pt_single) - 1);
+                    ZigbeeConf[target_zbi].pt_single[sizeof(ZigbeeConf[target_zbi].pt_single) - 1] = '\0';
                     strncpy(ZigbeeConf[target_zbi].switch_payload_on, trigger_payloads[on_idx],
                             sizeof(ZigbeeConf[target_zbi].switch_payload_on) - 1);
+                    ZigbeeConf[target_zbi].switch_payload_on[sizeof(ZigbeeConf[target_zbi].switch_payload_on) - 1] = '\0';
                     if (off_idx >= 0) {
                         strncpy(ZigbeeConf[target_zbi].switch_payload_off, trigger_payloads[off_idx],
                                 sizeof(ZigbeeConf[target_zbi].switch_payload_off) - 1);
+                        ZigbeeConf[target_zbi].switch_payload_off[sizeof(ZigbeeConf[target_zbi].switch_payload_off) - 1] = '\0';
                     } else {
                         ZigbeeConf[target_zbi].switch_payload_off[0] = '\0';
                     }
@@ -7705,8 +7818,11 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                         ZigbeeConf[zbi].ep = 1;
                         ZigbeeConf[zbi].topin = 11;
                         strncpy(ZigbeeConf[zbi].pt_single, trigger_payloads[0], sizeof(ZigbeeConf[zbi].pt_single) - 1);
+                        ZigbeeConf[zbi].pt_single[sizeof(ZigbeeConf[zbi].pt_single) - 1] = '\0';
                         strncpy(ZigbeeConf[zbi].switch_payload_on, trigger_payloads[0], sizeof(ZigbeeConf[zbi].switch_payload_on) - 1);
+                        ZigbeeConf[zbi].switch_payload_on[sizeof(ZigbeeConf[zbi].switch_payload_on) - 1] = '\0';
                         strncpy(ZigbeeConf[zbi].switch_payload_off, trigger_payloads[1], sizeof(ZigbeeConf[zbi].switch_payload_off) - 1);
+                        ZigbeeConf[zbi].switch_payload_off[sizeof(ZigbeeConf[zbi].switch_payload_off) - 1] = '\0';
                         if (trigger_names[0][0]) {
                             strncpy(ZigbeeConf[zbi].zbee_label, trigger_names[0], sizeof(ZigbeeConf[zbi].zbee_label) - 1);
                         } else {
@@ -8238,6 +8354,8 @@ void mqtt_message_handler(const char *topic, const char *payload) {
   size_t zbtop_len = strlen(zbtop);
   if (strncmp(topic, zbtop, zbtop_len) == 0 &&
       topic[zbtop_len] == '/') {
+    /* Диагностика: реальный формат трафика шлюза (в т.ч. state-репорты) */
+    LOG_Z2M("zbee: RX '%s' '%s'\r\n", topic, payload);
     if (strncmp(topic + zbtop_len + 1, "trigger/", 8) == 0) {
       mqtt_zigbee_trigger_handler(topic, payload);
       return;
@@ -8464,6 +8582,9 @@ struct action_exec_ctx {
   const char *press_type;
 };
 
+/* Шаг PWM по кнопке: "ID.1:1" = +PWM_BTN_STEP, "ID.2:1" = -PWM_BTN_STEP (только для PWM-пина) */
+#define PWM_BTN_STEP 10
+
 static void action_exec_one(int id, int sub_idx, int action, void *vctx) {
   const char *press_type = ((struct action_exec_ctx *)vctx)->press_type;
 
@@ -8536,6 +8657,12 @@ static void action_exec_one(int id, int sub_idx, int action, void *vctx) {
         if (id < 1 || id > NUMPIN)
           break;
         int pin_idx = id - 1;
+        if (PinsConf[pin_idx].topin == 5 && (sub_idx == 1 || sub_idx == 2)) {
+          int step = (sub_idx == 1) ? PWM_BTN_STEP : -PWM_BTN_STEP;
+          /* cmd_pwm_exec ограничивает результат диапазоном 0..100 */
+          cmd_pwm_exec(id, (int)PinsConf[pin_idx].dvalue + step);
+          break;
+        }
 
         if (PinsConf[pin_idx].topin == 3) {
           /* Если рубильник (Master Enable) отключен, игнорируем любые команды!
@@ -12826,12 +12953,18 @@ void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm) 
 
   /* Отправляем MQTT-команду только если мастер-включён */
   if (ZigbeeConf[zbee_idx].zbee_ieee[0] != '\0' && ZigbeeConf[zbee_idx].onoff) {
+    LOG_Z2M("zbee: CMD s=%d role=%d ep=%d en=%d fl=%04X on=%d tr='%s'\r\n",
+            zbee_idx, ZigbeeConf[zbee_idx].zbee_role,
+            ZigbeeConf[zbee_idx].ep_onoff, ZigbeeConf[zbee_idx].onoff,
+            (unsigned)ZigbeeConf[zbee_idx].cluster_flags, onoff_cmd,
+            trigger_str ? trigger_str : "-");
     if (trigger_str && trigger_str[0]) {
       /* Триггер: отправляем payload на trigger topic */
       extern struct mg_connection * volatile s_conn;
       if (s_conn && !s_conn->is_closing) {
         char topic[128];
-        snprintf(topic, sizeof(topic), "zigbee2mqtt/trigger/%s", ZigbeeConf[zbee_idx].zbee_ieee);
+        snprintf(topic, sizeof(topic), "%s/trigger/%s",
+                 get_rxzbtop(), ZigbeeConf[zbee_idx].zbee_ieee);
         struct mg_str pubt = mg_str(topic);
         struct mg_str data = mg_str(trigger_str);
         struct mg_mqtt_opts pub_opts;
@@ -12843,8 +12976,16 @@ void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm) 
         mg_mqtt_pub(s_conn, &pub_opts);
         LOG_Z2M("zbee: TRIGGER cmd %s -> %s\r\n", trigger_str, topic);
       }
+    } else if (ZigbeeConf[zbee_idx].zbee_role == ZBEE_ROLE_SWITCH) {
+      /* Слот-выключатель не исполнитель: каскад на привязанные выходы.
+       * Та же семантика, что и в cmd_zigbee_exec для role==SWITCH. */
+      ZigbeeConf[zbee_idx].state = (uint8_t)(onoff_cmd ? 1 : 0);
+      processPins(id, ZigbeeConf[zbee_idx].state);
+      LOG_Z2M("zbee: CMD s=%d SWITCH cascade=%d\r\n",
+              zbee_idx, ZigbeeConf[zbee_idx].state);
     } else if (ZigbeeConf[zbee_idx].zbee_role == ZBEE_ROLE_TRIGGER) {
       /* Кнопка: выполняем sclick */
+      LOG_Z2M("zbee: CMD s=%d TRIGGER sclick\r\n", zbee_idx);
       vbtn_execute(zbee_idx, 0);
     } else if (ZigbeeConf[zbee_idx].ep_onoff > 0) {
       /* multi-EP команда */
@@ -12857,6 +12998,8 @@ void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm) 
       SendZigbeeCommand(ZigbeeConf[zbee_idx].zbee_ieee, ZigbeeConf[zbee_idx].zbee_endpoint,
                         6, ZBEE_ATTR_ONOFF, cmd);
     }
+  } else {
+    LOG_Z2M("zbee: CMD DROP s=%d on=%d\r\n", zbee_idx, onoff_cmd);
   }
 
   mg_free(trigger_str);

@@ -126,6 +126,11 @@ static int match_payload_word(const char *payload, const char *target_word, int 
     /* 1. Прямое полное совпадение */
     if (strcmp(payload, target_word) == 0) return 1;
 
+    /* 2b. Payload содержит полное имя алиаса (JSON-обёртка, сырой /data/-топик):
+     * нормализуем payload и сравниваем с сохранённым коротким именем */
+    const char *aliased = zbee_payload_find_alias(payload);
+    if (aliased != NULL && strcmp(aliased, target_word) == 0) return 1;
+
     /* 2. Подстрока (слово внутри JSON/строки) */
     if (strstr(payload, target_word) != NULL) return 1;
 

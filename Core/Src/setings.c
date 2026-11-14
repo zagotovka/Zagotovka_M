@@ -3280,6 +3280,9 @@ void GetZigbeeConfig(void) {
     printf("[MIGRATE] zigbee.ini IDs shifted to v%d\r\n", CONFIG_ID_VERSION);
   if(my_DgnTaskHandle) xTaskNotifyGive(my_DgnTaskHandle);
   printf("[ZIGBEE] Loaded %d slots from zigbee.ini\r\n", idx);
+  /* Сохранённые payload-строки приводим к текущей таблице алиасов
+   * (конфиги, обученные до введения алиасов, хранят полные имена) */
+  zbee_alias_migrate_stored();
 }
 
 void SetZigbeeConfig(void) {

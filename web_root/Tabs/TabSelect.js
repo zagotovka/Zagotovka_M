@@ -1007,7 +1007,7 @@ function TabSelect({ }) {
               </div>
             </div>
 
-            <div class="flex justify-between items-center mb-4 mt-2">
+            <div class="flex justify-between items-center mb-4 mt-2 sticky bottom-4 z-30">
               <div class="flex justify-end flex-1">
                 <button
                   type="submit"

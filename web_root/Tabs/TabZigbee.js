@@ -763,8 +763,8 @@ export function TabZigbee({}) {
 
   const getDeviceTypeLabel = (deviceType) => {
     switch (deviceType) {
-      case 'lamp': return 'Лампа (яркость + цвет)';
-      case 'dimmer': return 'Лампа (яркость)';
+      case 'lamp': return 'Lamp (color)';
+      case 'dimmer': return 'Dimmer';
       case 'trigger': return 'Button';
       case 'switch': return 'Switch';
       case 'pir': return 'PIR';

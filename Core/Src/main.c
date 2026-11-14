@@ -2161,10 +2161,9 @@ void StartWebServerTask(void *argument)
                 pub_opts.retain = false;
                 mg_mqtt_pub(s_conn, &pub_opts);
                 LOG_Z2M("zbee: MQTT PUB topic='%s'\r\n", zcmd.topic);
-            } else {
-                LOG_Z2M("zbee: MQTT DROP s_conn=%p connected=%d\r\n",
-                       (void*)s_conn, mqtt_connected_reported);
             }
+            /* Внешний брокер не подключён — НЕ дроп: локальная публикация
+             * (mqtt_server_publish выше) всегда доставляет команды шлюзу. */
         }
     }
 
@@ -2419,6 +2418,11 @@ void StartConfigTask(void *argument)
 	        if (f_stat("settings.ini", &finfo) == FR_OK) {
 	          GetSettingsConfig(); // "settings.ini" существует — читаем его
 	          mysett_cache_reload();
+	          /* Категория Z2M (бит 10) добавлена позже старой маски 0x3FF:
+	           * в конфигах, сохранённых старой прошивкой, этого бита нет, и
+	           * вся zbee-диагностика (LOG_Z2M) молча пропадает из лога.
+	           * Включаем принудительно. */
+	          SetSettings.log_filter_mask |= LOG_MASK_Z2M;
 	          g_log_filter_mask = g_log_filter_from_file ? SetSettings.log_filter_mask : LOG_MASK_ALL;
 	        } else {
 	          StartSettingsConfig(); // "settings.ini" не существует — создаём с настройками по умолчанию
