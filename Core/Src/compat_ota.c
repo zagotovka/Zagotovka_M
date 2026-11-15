@@ -16,9 +16,9 @@
  *   если сама прошивка была залита и работает корректно.
  *
  *   Сейчас флаг хранится в поле ota_state структуры HTTPSsettings, которая
- *   пишется во Flash-сектор 11 (ZERG_FLASH, 0x081C0000) через уже имеющийся
- *   в zagotovka.c механизм: magic + CRC + ротация по 94 слотам (wear
- *   leveling). Это настоящая энергонезависимая память — значение переживает
+ *   пишется во Flash-сектор 23 Bank 2 (ZERG_FLASH, 0x081E0000) через уже
+ *   имеющийся в zagotovka.c механизм: magic + CRC + ротация по 46 слотам
+ *   (wear leveling). Это настоящая энергонезависимая память — значение переживает
  *   и программный ресет, и полное отключение питания без батарейки/VBAT.
  *   Запись происходит только при mg_ota_mark_pending()/mg_ota_commit(), т.е.
  *   пару раз за цикл обновления прошивки, так что ресурс Flash не проблема.
@@ -235,7 +235,7 @@ bool mg_ota_commit(void) {
 }
 
 /* Валидность образа по начальному MSP: обязан указывать в SRAM (0x200xxxxx).
- * Адреса банков: Bank A = 0x08040000, Bank B = 0x08100000 (как в bootloader).
+ * Адреса банков: Bank A = 0x08020000, Bank B = 0x08100000 (как в bootloader).
  * Критерий СОЗНАТЕЛЬНО идентичен app_image_valid() в Bootloader/main.c:
  * и bootloader, и mg_ota_switch_bank(), и API /api/firmware/status должны
  * давать ОДИН И ТОТ ЖЕ ответ на вопрос "можно ли загрузиться из этого банка".
@@ -245,7 +245,7 @@ bool mg_ota_commit(void) {
  * (Bank A на чистом МК — сразу после bootloader'а), валиден, хотя версии
  * в метаданных у него нет и не будет. */
 bool mg_ota_bank_image_valid(uint8_t bank) {
-    uint32_t addr = bank ? 0x08100000u : 0x08040000u;
+    uint32_t addr = bank ? 0x08100000u : 0x08020000u;
     uint32_t msp  = *(volatile uint32_t *)addr;
     if ((msp & 0xFFF00000u) != 0x20000000u) return false;
 
@@ -262,10 +262,10 @@ bool mg_ota_bank_image_valid(uint8_t bank) {
     return true;
 }
 
-#define OTA_BANK_CAPACITY 0x000C0000u   /* 768 КБ, как BANK_CAPACITY в bootloader */
+#define OTA_BANK_CAPACITY 0x000E0000u   /* 896 КБ, как BANK_CAPACITY в bootloader */
 
 static uint32_t ota_bank_base(uint8_t bank) {
-    return bank ? 0x08100000u : 0x08040000u;
+    return bank ? 0x08100000u : 0x08020000u;
 }
 
 /* true, если запись о банке не соответствует его содержимому. */
@@ -372,47 +372,3 @@ bool mg_ota_rollback(void) {
     return ok;
 }
 
-/* ---- Flash stubs -------------------------------------------------------- */
-void *mg_flash_start(void) {
-    return (void *) 0x08040000;  /* Active firmware start (Sector 5) */
-}
-
-size_t mg_flash_size(void) {
-    return 1536 * 1024;  /* 1536 KB: Sectors 5-10 (active + staging) */
-}
-
-size_t mg_flash_sector_size(void) {
-    return 256 * 1024;  /* 256 KB (largest sector on STM32F767) */
-}
-
-size_t mg_flash_write_align(void) {
-    return 32;  /* STM32F7 flash write granularity */
-}
-
-int mg_flash_bank(void) {
-    return 1;  /* Single bank mode by default */
-}
-
-bool mg_flash_write(void *addr, const void *buf, size_t len) {
-    (void) addr; (void) buf; (void) len;
-    return false;  /* Stub — not implemented */
-}
-
-bool mg_flash_erase(void *sector) {
-    (void) sector;
-    return false;  /* Stub — not implemented */
-}
-
-bool mg_flash_swap_bank(void) {
-    return false;  /* Stub — not implemented */
-}
-
-bool mg_flash_load(void *sector, uint32_t key, void *buf, size_t len) {
-    (void) sector; (void) key; (void) buf; (void) len;
-    return false;
-}
-
-bool mg_flash_save(void *sector, uint32_t key, const void *buf, size_t len) {
-    (void) sector; (void) key; (void) buf; (void) len;
-    return false;
-}

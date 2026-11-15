@@ -143,10 +143,6 @@ const urlMappings = {
     file: 'json/device_reset.json',
     contentType: 'application/json'
   },
-  '/api/device/eraselast': {
-    file: 'json/device_eraselast.json',
-    contentType: 'application/json'
-  },
   '/api/connection/del': {
     file: 'json/connections.json',
     contentType: 'application/json'

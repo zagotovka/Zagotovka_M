@@ -8,7 +8,7 @@
 
 #ifndef FW_LINK_BASE
 #error "FW_LINK_BASE не задан. Должен совпадать с ORIGIN(FLASH) из " \
-       "linker script этой конфигурации (0x08040000 для Bank_A, " \
+       "linker script этой конфигурации (0x08020000 для Bank_A, " \
        "0x08100000 для Bank_B)."
 #endif
 

@@ -73,7 +73,7 @@ typedef struct __attribute__((packed)) {
     uint8_t connection_mode;
     uint8_t ota_state;       // 0=нет данных, 1=пробная загрузка, 2=запрошен ручной откат,
                              // 3=подтверждено, 4=автоматический откат (см. fw_meta.h)
-    uint8_t version;         // Номер версии настроек (0-94)
+    uint8_t version;         // Номер версии настроек (0-255, кольцо из 46 слотов)
     uint8_t ota_active_bank; // 0=Bank A (по умолчанию), 1=Bank B
     uint8_t ota_pending;     // 1=есть незавершённое обновление
     uint8_t ota_boot_retries; // счётчик перезапусков для OTA
@@ -405,17 +405,12 @@ void handle_debug(struct mg_connection *c, struct mg_http_message *hm);
 void handle_stats_get(struct mg_connection *c);
 void handle_events_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_logs_get(struct mg_connection *c, struct mg_http_message *hm);
-void handle_settings_get(struct mg_connection *c);
-void handle_settings_set(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_upload(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_commit(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_rollback(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_switch_bank(struct mg_connection *c, struct mg_http_message *hm);
 void handle_firmware_status(struct mg_connection *c);
 void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm);
-#ifdef ENABLE_ERASE_LAST_SECTOR
-void handle_device_eraselast(struct mg_connection *c, struct mg_http_message *hm);
-#endif
 void handle_select_get(struct mg_connection *c, long offset, long limit);
 void handle_pintopin_get(struct mg_connection *c);
 void handle_select_set(struct mg_connection *c, struct mg_http_message *hm);

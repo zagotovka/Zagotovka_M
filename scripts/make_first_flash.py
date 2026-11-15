@@ -3,7 +3,7 @@
 Build ONE file for the first flashing of a Zagotovka_M device and program it
 into the chip:
 
-    [ bootloader, padded with 0xFF up to 0x08040000 ] + [ application, Bank A ]
+    [ bootloader, padded with 0xFF up to 0x08020000 ] + [ application, Bank A ]
 
 The result goes to 0x08000000.
 
@@ -70,10 +70,10 @@ BANK_A_BUILD = ROOT / "Bank_A" / "Zagotovka_Bank_A.bin"
 
 # ---- flash layout ----------------------------------------------------------
 FLASH_BASE = 0x08000000
-BOOT_SIZE = 0x00040000          # 256 KB reserved for the bootloader
-BANK_A_ADDR = FLASH_BASE + BOOT_SIZE      # 0x08040000
+BOOT_SIZE = 0x00020000          # 128 KB reserved for the bootloader
+BANK_A_ADDR = FLASH_BASE + BOOT_SIZE      # 0x08020000
 BANK_B_ADDR = 0x08100000
-BANK_CAPACITY = 0x000C0000      # 768 KB, same as BANK_CAPACITY in the bootloader
+BANK_CAPACITY = 0x000E0000      # 896 KB, same as BANK_CAPACITY in the bootloader
 SRAM_BASE = 0x20000000
 SRAM_END = 0x20080000
 
@@ -161,7 +161,7 @@ def check_boot(image):
 
 def check_bank_a(image):
     if len(image) > BANK_CAPACITY:
-        sys.exit("ERROR: application is %d bytes, more than the 768 KB (%d) of a bank"
+        sys.exit("ERROR: application is %d bytes, more than the 896 KB (%d) of a bank"
                  % (len(image), BANK_CAPACITY))
     msp, reset = vectors(image)
     if msp is None:

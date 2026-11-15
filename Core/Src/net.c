@@ -47,17 +47,6 @@ struct user {
   char access_token[33];  // генерируется при логине, не константа
 };
 
-// Settings
-struct settings {
-  bool log_enabled;
-  int log_level;
-  long brightness;
-  char *device_name;
-};
-
-static const char default_name[] = "My Device";
-static struct settings s_settings = {true, 1, 57, NULL};
-
 const char *s_json_header =
     "Content-Type: application/json\r\n"
     "Cache-Control: no-cache\r\n";
@@ -457,43 +446,6 @@ void handle_logs_get(struct mg_connection *c, struct mg_http_message *hm) {
                 MG_ESC("lang"), mg_print_esc, 0, lang);
 }
 
-void handle_settings_set(struct mg_connection *c, struct mg_http_message *hm) {
-  if (!require_post_json(c, hm)) return;
-  struct mg_str body = hm->body;
-  struct settings settings;
-  char *s = mg_json_get_str(body, "$.device_name");
-  bool ok = true;
-  memset(&settings, 0, sizeof(settings));
-  mg_json_get_bool(body, "$.log_enabled", &settings.log_enabled);
-  settings.log_level = mg_json_get_long(body, "$.log_level", 0);
-  settings.brightness = mg_json_get_long(body, "$.brightness", 0);
-  if (s && strlen(s) < MAX_DEVICE_NAME) {
-    settings.device_name = s;
-  } else {
-    mg_free(s);
-    settings.device_name = (char *)default_name;  // fallback на sentinel
-  }
-  /* Освобождаем старый device_name через mg_free()  -  парный к mg_calloc()
-     внутри mg_json_get_str(). Корректно при любом MG_ARCH. */
-  if (s_settings.device_name != NULL && s_settings.device_name != default_name) {
-    mg_free(s_settings.device_name);
-  }
-  s_settings = settings; // Save to the device flash
-  mg_http_reply(c, 200, s_json_header,
-                "{%m:%s,%m:%m}",                          //
-                MG_ESC("status"), ok ? "true" : "false",  //
-                MG_ESC("message"), MG_ESC(ok ? "Success" : "Failed"));
-}
-
-void handle_settings_get(struct mg_connection *c) {
-  mg_http_reply(c, 200, s_json_header, "{%m:%s,%m:%hhu,%m:%hhu,%m:%m}\n",  //
-                MG_ESC("log_enabled"),
-                s_settings.log_enabled ? "true" : "false",    //
-                MG_ESC("log_level"), s_settings.log_level,    //
-                MG_ESC("brightness"), s_settings.brightness,  //
-                MG_ESC("device_name"), MG_ESC(s_settings.device_name));
-}
-
 /* ---- OTA upload session tracking (app layer, independent of the
  * mongoose-internal s_size flag) -------------------------------------------
  * last_ofs/s_ota_written track how many bytes we have ACTUALLY flashed so
@@ -797,16 +749,6 @@ void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm) {
   mg_timer_add(c->mgr, 500, 0, (void (*)(void *)) mg_device_reset, NULL);
 }
 
-#ifdef ENABLE_ERASE_LAST_SECTOR
-void handle_device_eraselast(struct mg_connection *c, struct mg_http_message *hm) {
-  if (!require_post_json(c, hm)) return;
-  size_t ss = mg_flash_sector_size(), size = mg_flash_size();
-  char *base = (char *) mg_flash_start(), *last = base + size - ss;
-  if (mg_flash_bank() == 2) last -= size / 2;
-  mg_flash_erase(last);
-  mg_http_reply(c, 200, s_json_header, "true\n");
-}
-#endif
 // Типы соединений (CONN_TYPE_*) и лимиты — см. net_limits.h
 
 // Rate limiter для /api/login: блокировка на 30 сек после 5 неудачных попыток
@@ -1979,12 +1921,6 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 				MG_INFO(("%lu Processing /api/logs/get", c->id));
 				handle_logs_get(c, hm);
 				keep_alive = true;
-			} else if (mg_match(hm->uri, mg_str("/api/settings/get"), NULL)) {
-				MG_INFO(("%lu Processing /api/settings/get", c->id));
-				handle_settings_get(c);
-			} else if (mg_match(hm->uri, mg_str("/api/settings/set"), NULL)) {
-				MG_INFO(("%lu Processing /api/settings/set", c->id));
-				handle_settings_set(c, hm);
 			} else if (mg_match(hm->uri, mg_str("/api/firmware/upload"), NULL)) {
 				MG_INFO(("%lu Processing /api/firmware/upload", c->id));
 				handle_firmware_upload(c, hm);
@@ -2010,11 +1946,6 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/device/reset"), NULL)) {
 				MG_INFO(("%lu Processing /api/device/reset", c->id));
 				handle_device_reset(c, hm);
-			#ifdef ENABLE_ERASE_LAST_SECTOR
-			} else if (mg_match(hm->uri, mg_str("/api/device/eraselast"), NULL)) {
-				MG_INFO(("%lu Processing /api/device/eraselast", c->id));
-				handle_device_eraselast(c, hm);
-#endif
 			} else if (mg_match(hm->uri, mg_str("/api/select/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/select/set", c->id));
 				handle_select_set(c, hm);
@@ -4105,9 +4036,6 @@ close_json:
 //  mg_timer_add(mgr, 1000, MG_TIMER_REPEAT | MG_TIMER_RUN_NOW, timer_fn_mqtt, mgr);
 //}
 void web_init(struct mg_mgr *mgr) {
-    // Инициализация настроек устройства
-    s_settings.device_name = (char *)default_name;
-
     // Allocate shared JSON buffer: DTCM pool, fallback to FreeRTOS heap
     if (g_body == NULL) {
         _Static_assert(G_BODY_SIZE <= DTCM_BUF_G_BODY, "G_BODY_SIZE > DTCM_BUF_G_BODY");

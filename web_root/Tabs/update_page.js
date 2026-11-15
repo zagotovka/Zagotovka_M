@@ -1,4 +1,5 @@
 
+
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
 import { h, useState, useEffect, useRef, html } from '../bundle.js';
@@ -530,15 +531,8 @@ export function FirmwareUpdate({ }) {
     return onreboot(ev);
   };
 
-  // Опасная операция: стирает последний сектор флеш (в этой раскладке там хранятся
-  // настройки). Кнопка скрыта, а на устройстве маршрут включается только сборкой с
-  // ENABLE_ERASE_LAST_SECTOR и принимает только POST с JSON.
-  const onerase = (ev) =>
-    fetch('api/device/eraselast', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
-    }).then(refresh);
+  // Опасная операция (стирание сектора флеш) удалена: API /api/device/eraselast
+  // больше не существует ни в прошивке, ни в dev-сервере.
 
   const onupload = async function (file) {
     if (uploadingRef.current) {
@@ -861,13 +855,6 @@ export function FirmwareUpdate({ }) {
               disabled=${uploading}
             />
 
-            <${Button}
-              title=${language === 'ru' ? 'Стереть последний сектор' : 'Erase last sector'}
-              onclick=${onerase}
-              icon=${Icons.doc}
-              cls="w-full hidden"
-            />
-
             <div class="mt-auto pt-4 border-t border-slate-300/60 flex flex-col gap-3">
               <div class="text-xs font-bold uppercase tracking-wide text-amber-700/80">
                 ${language === 'ru' ? 'Перезагрузка' : 'Reboot'}
@@ -907,3 +894,5 @@ export function FirmwareUpdate({ }) {
     </div>
   `;
 }
+
+

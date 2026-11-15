@@ -90,10 +90,10 @@
  * CMSIS), и mg_ota_begin/write/end остаются объявленными, но не
  * реализованными нигде — net.c, вызывающий их напрямую, не слинкуется.
  *
- * ВАЖНО: в mg_ota_begin() flash->start = 0x08040000, size = 0x180000 (1536 КБ).
- * Это даёт active = Sectors 5-7 [0x08040000..0x080FFFFF],
- * staging = Sectors 8-10 [0x08100000..0x081BFFFF].
- * Sector 11 (ZERG_FLASH, 0x081C0000) зарезервирован под настройки.
+ * ВАЖНО: в mg_ota_begin() flash->start = 0x08000000, size = 0x200000 (2 МБ).
+ * Это даёт active = Bank A = Sectors 5-11 [0x08020000..0x080FFFFF],
+ * staging = Bank B = Sectors 12-22 [0x08100000..0x081DFFFF].
+ * Sector 23 (ZERG_FLASH, 0x081E0000, 128 КБ) зарезервирован под настройки.
  */
 #define MG_OTA MG_OTA_STM32F
 

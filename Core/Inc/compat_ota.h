@@ -84,7 +84,7 @@ bool mg_ota_switch_bank(void);
  * Дополнительно (отличие от bootloader): банк с меткой OTA_BANK_VERSION_PARTIAL
  * в версии считается НЕвалидным, даже если MSP выглядит нормально: после
  * первого же записанного чанка MSP уже "правильный", а образ ещё неполный.
- * bank: 0 = Bank A (0x08040000), 1 = Bank B (0x08100000). */
+ * bank: 0 = Bank A (0x08020000), 1 = Bank B (0x08100000). */
 bool mg_ota_bank_image_valid(uint8_t bank);
 
 /* Сверяет записи о версии/размере/CRC обоих банков с реальным содержимым flash.
@@ -93,19 +93,6 @@ bool mg_ota_bank_image_valid(uint8_t bank);
  * Не трогает настройки во время пробной загрузки OTA (ota_pending == 1).
  * Возвращает true, если настройки были изменены и успешно записаны. */
 bool mg_ota_sync_bank_records(void);
-/* ---- Flash stubs -------------------------------------------------------- */
-void  *mg_flash_start(void);
-size_t mg_flash_size(void);
-size_t mg_flash_sector_size(void);
-size_t mg_flash_write_align(void);
-int    mg_flash_bank(void);
-
-bool mg_flash_write(void *addr, const void *buf, size_t len);
-bool mg_flash_erase(void *sector);
-bool mg_flash_swap_bank(void);
-
-bool mg_flash_load(void *sector, uint32_t key, void *buf, size_t len);
-bool mg_flash_save(void *sector, uint32_t key, const void *buf, size_t len);
 
 #ifdef __cplusplus
 }

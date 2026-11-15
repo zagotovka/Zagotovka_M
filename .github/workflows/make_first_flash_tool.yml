@@ -87,11 +87,11 @@ jobs:
           set -e
           dest=repo/Proshivka/First_flash
           find "$dest" -type f -name 'make_first_flash-*.zip' -delete
-          mkdir -p "$dest/Windows" "$dest/Linux" "$dest/MAC/Mac_Intel" "$dest/MAC/Mac_M1_M2_M3_M4_Apple"
+          mkdir -p "$dest/Windows" "$dest/Linux" "$dest/MAC/Mac_Intel" "$dest/MAC/Mac_Apple_Silicon"
           cp dist/make_first_flash-x86_64-pc-windows-msvc.zip   "$dest/Windows/"
           cp dist/make_first_flash-x86_64-unknown-linux-gnu.zip "$dest/Linux/"
           cp dist/make_first_flash-x86_64-apple-darwin.zip      "$dest/MAC/Mac_Intel/"
-          cp dist/make_first_flash-aarch64-apple-darwin.zip     "$dest/MAC/Mac_M1_M2_M3_M4_Apple/"
+          cp dist/make_first_flash-aarch64-apple-darwin.zip     "$dest/MAC/Mac_Apple_Silicon/"
           cd repo
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

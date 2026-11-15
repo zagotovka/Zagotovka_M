@@ -3384,8 +3384,8 @@ cleanup:
  *    непрерывных изменениях (fade, энкодер) не реже раза в 30 с. Изменение
  *    не теряется: флаг остаётся, пока состояние не записано.
  *  - Перед плановым reset (mg_device_reset) состояние дописывается принудительно.
- *  - Zerg_Flash (сектор 11) НЕ используется: он целиком занят 94 слотами
- *    HTTPSsettings и разделён с загрузчиком.
+ *  - Zerg_Flash (0x081E0000, сектор 23 Bank 2) НЕ используется для этого:
+ *    он целиком занят 46 слотами HTTPSsettings и разделён с загрузчиком.
  */
 extern osMessageQueueId_t outputQueueHandle;
 extern volatile bool mqtt_connected_reported;

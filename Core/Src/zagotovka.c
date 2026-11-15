@@ -3954,42 +3954,41 @@ void gen_mysett_json(const struct dbSettings *settings, char *buffer,
 }
 
 /******************** Zerg section ****************************/
-#define SETTINGS_VERSION_COUNT 94 // Максимальное количество копий в 11 секторе
+#define SETTINGS_VERSION_COUNT 46 // Максимальное количество копий в области настроек (128 КБ)
 #define SETTINGS_SIZE sizeof(HTTPSsettings)
 #define SETTINGS_ALIGNED_SIZE                                                  \
   ((SETTINGS_SIZE + 3) / 4 * 4) // Размер с выравниванием до 4 байт
 #define GET_SETTINGS_ADDR(index)                                               \
-  (FLASH_SECTOR_11_START_ADDR + (index) * SETTINGS_ALIGNED_SIZE)
+  (SETTINGS_AREA_ADDR + (index) * SETTINGS_ALIGNED_SIZE)
 
 #define SETTINGS_MAGIC_VALUE                                                   \
   0xA5B6C7D8 // Магическое значение для проверки валидности
-#define FLASH_SECTOR_11_START_ADDR 0x081C0000 // Для однобанкового режима
-#define FLASH_SECTOR_11_SIZE (256 * 1024)     // Размер сектора 256 КБ
+/* Область настроек: 0x081E0000..0x081FFFFF (128 КБ) = сектор 23 Bank 2.
+ * Single Bank не поддерживается: загрузчик останавливается при nDBANK=1. */
+#define SETTINGS_AREA_ADDR 0x081E0000
+#define SETTINGS_AREA_SIZE (128 * 1024)       // Размер области 128 КБ
 
 // Статический указатель на область флеш-памяти с настройками
 static const HTTPSsettings *const flash_settings
     __attribute__((section(".zagotovka_section"))) =
-        (HTTPSsettings *)FLASH_SECTOR_11_START_ADDR;
+        (HTTPSsettings *)SETTINGS_AREA_ADDR;
 static const HTTPSsettings *const flash_settings_backup
     __attribute__((section(".zagotovka_section"))) =
-        (HTTPSsettings *)(FLASH_SECTOR_11_START_ADDR + BACKUP_OFFSET);
+        (HTTPSsettings *)(SETTINGS_AREA_ADDR + BACKUP_OFFSET);
 
 // Проверка, что размер структуры не превышает половину сектора (для двух
 // копий)
-STATIC_ASSERT(sizeof(HTTPSsettings) * 2 <= FLASH_SECTOR_11_SIZE,
+STATIC_ASSERT(sizeof(HTTPSsettings) * 2 <= SETTINGS_AREA_SIZE,
               structure_size_exceeds_flash_sector);
 
 /*
- * Область настроек 0x081C0000 .. 0x081FFFFF (256 КБ):
- *  - Single Bank: сектор 11 (FLASH_SECTOR_11), 256 КБ;
- *  - Dual Bank  : Bank 2, секторы 22 (0x081C0000) и 23 (0x081E0000),
- *                 по 128 КБ — стирать нужно ОБА.
- * Сектора 19 и 20 (0x08160000 .. 0x0819FFFF) в Dual Bank относятся к образу
- * Bank B — стирать их нельзя.
- * Все SETTINGS_VERSION_COUNT слотов обязаны помещаться в 256 КБ.
+ * Область настроек 0x081E0000 .. 0x081FFFFF (128 КБ) = сектор 23 Bank 2.
+ * Сектор 22 (0x081C0000..0x081DFFFF) — это хвост образа Bank B,
+ * стирать его нельзя.
+ * Все SETTINGS_VERSION_COUNT слотов обязаны помещаться в 128 КБ.
  */
 STATIC_ASSERT((SETTINGS_VERSION_COUNT * ((sizeof(HTTPSsettings) + 3) / 4 * 4)) <=
-                  FLASH_SECTOR_11_SIZE,
+                  SETTINGS_AREA_SIZE,
               settings_slots_exceed_area);
 
 /* Режим банков Flash: бит nDBANK регистра OPTCR (0 = Dual Bank). */
@@ -3999,7 +3998,7 @@ static bool settings_flash_is_dual_bank(void) {
 
 /* Проверка, что вся область слотов настроек стёрта (все слова 0xFFFFFFFF). */
 static bool settings_area_is_erased(void) {
-  const volatile uint32_t *p = (const volatile uint32_t *)FLASH_SECTOR_11_START_ADDR;
+  const volatile uint32_t *p = (const volatile uint32_t *)SETTINGS_AREA_ADDR;
   const size_t words = (SETTINGS_VERSION_COUNT * SETTINGS_ALIGNED_SIZE) / 4;
   for (size_t i = 0; i < words; i++) {
     if (p[i] != 0xFFFFFFFFu) {
@@ -4243,7 +4242,7 @@ static bool write_settings_to_flash_locked(const HTTPSsettings *settings) {
   // Находим позицию текущих настроек и следующую позицию
   int current_index = -1;
   if (current) {
-    current_index = ((uint32_t)current - FLASH_SECTOR_11_START_ADDR) /
+    current_index = ((uint32_t)current - SETTINGS_AREA_ADDR) /
                     SETTINGS_ALIGNED_SIZE;
   }
 
@@ -4273,11 +4272,12 @@ static bool write_settings_to_flash_locked(const HTTPSsettings *settings) {
     EraseInitStruct.TypeErase = FLASH_TYPEERASE_SECTORS;
     EraseInitStruct.VoltageRange = FLASH_VOLTAGE_RANGE_3;
     if (settings_flash_is_dual_bank()) {
-      // Dual Bank: Bank 2, секторы 22 (0x081C0000) и 23 (0x081E0000)
-      EraseInitStruct.Sector = FLASH_SECTOR_22;
-      EraseInitStruct.NbSectors = 2;
+      // Dual Bank: сектор 23 Bank 2 (0x081E0000, 128 КБ)
+      EraseInitStruct.Sector = FLASH_SECTOR_23;
+      EraseInitStruct.NbSectors = 1;
     } else {
-      // Single Bank: сектор 11 (0x081C0000, 256 КБ)
+      // Single Bank: сектор 11 (0x081C0000, 256 КБ) — область настроек
+      // лежит внутри него. Загрузчик в этом режиме не запускает приложение.
       EraseInitStruct.Sector = FLASH_SECTOR_11;
       EraseInitStruct.NbSectors = 1;
     }
@@ -4299,7 +4299,7 @@ static bool write_settings_to_flash_locked(const HTTPSsettings *settings) {
     }
 
     // После стирания следующий адрес всегда в начале области
-    next_addr = FLASH_SECTOR_11_START_ADDR;
+    next_addr = SETTINGS_AREA_ADDR;
   }
 
   // Записываем новую копию настроек
@@ -7267,22 +7267,26 @@ static ZbeeLearnOldLabel s_learn_old_labels[ZBEE_LEARN_OLD_MAX];
 static int               s_learn_old_count = 0;
 static char              s_learn_head_label[30];
 
+/* Case-insensitive сравнение 16-символьного padded IEEE слота с искомым */
+static int learn_ieee_match(const char *slot_ieee, const char *want) {
+    for (int k = 0; k < 16; k++) {
+        char a = slot_ieee[k];
+        char b = want[k];
+        if (a >= 'A' && a <= 'F') a += 32;
+        if (b >= 'A' && b <= 'F') b += 32;
+        if (a == '\0') a = '0';
+        if (b == '\0') b = '0';
+        if (a != b) return 0;
+    }
+    return 1;
+}
+
 static void learn_snapshot_labels(const char *ieee_padded, int head_idx) {
     s_learn_old_count = 0;
     s_learn_head_label[0] = '\0';
     for (int i = 0; i < NUMZBEE; i++) {
         if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
-        int match = 1;
-        for (int k = 0; k < 16; k++) {
-            char a = ZigbeeConf[i].zbee_ieee[k];
-            char b = ieee_padded[k];
-            if (a >= 'A' && a <= 'F') a += 32;
-            if (b >= 'A' && b <= 'F') b += 32;
-            if (a == '\0') a = '0';
-            if (b == '\0') b = '0';
-            if (a != b) { match = 0; break; }
-        }
-        if (!match) continue;
+        if (!learn_ieee_match(ZigbeeConf[i].zbee_ieee, ieee_padded)) continue;
         if (i == head_idx) {
             strncpy(s_learn_head_label, ZigbeeConf[i].zbee_label,
                     sizeof(s_learn_head_label) - 1);
@@ -7311,6 +7315,35 @@ static const char *learn_old_label(uint16_t ep) {
         if (s_learn_old_labels[j].ep == ep) return s_learn_old_labels[j].label;
     }
     return NULL;
+}
+
+/* Инициализировать действия слота значениями по умолчанию ("None").
+ * Пустая строка в vbtn_execute() тоже пропускается, но "None" единообразно
+ * показывается в UI (ModalButton) и в RAW-ветке обучения. */
+static void zbee_action_init_none(uint8_t idx) {
+    if (idx >= NUMACTIONPOOL) return;
+    if (!ZigbeeActionPoolArr[idx].sclick[0])
+        strncpy(ZigbeeActionPoolArr[idx].sclick, "None",
+                sizeof(ZigbeeActionPoolArr[idx].sclick) - 1);
+    if (!ZigbeeActionPoolArr[idx].dclick[0])
+        strncpy(ZigbeeActionPoolArr[idx].dclick, "None",
+                sizeof(ZigbeeActionPoolArr[idx].dclick) - 1);
+    if (!ZigbeeActionPoolArr[idx].lpress[0])
+        strncpy(ZigbeeActionPoolArr[idx].lpress, "None",
+                sizeof(ZigbeeActionPoolArr[idx].lpress) - 1);
+}
+
+/* Новый суб-слот того же устройства: очистка + наследование IEEE/endpoint.
+ * onoff наследует вызывающий код: в SWITCH суб-слоты остаются выключенными
+ * (memset), в BUTTON — включаются вместе с головным слотом. */
+static void zbee_learn_init_subslot(int nz, int src) {
+    memset(&ZigbeeConf[nz], 0, sizeof(ZigbeeConf[nz]));
+    ZigbeeConf[nz].action_pool_idx = ACTION_POOL_IDX_NONE;
+    strncpy(ZigbeeConf[nz].zbee_ieee, ZigbeeConf[src].zbee_ieee,
+            sizeof(ZigbeeConf[nz].zbee_ieee) - 1);
+    ZigbeeConf[nz].zbee_ieee[16] = '\0';
+    ZigbeeConf[nz].zbee_endpoint = ZigbeeConf[src].zbee_endpoint;
+    ZigbeeConf[nz].topin = 11;
 }
 
 void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *hm) {
@@ -7347,46 +7380,19 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
         learn_ieee_lower[k] = c;
     }
     
-    /* Case-insensitive поиск по всему массиву */
-    int zbi = -1;
+    /* Case-insensitive поиск по всему массиву: предпочитаем слот с ep == 0
+     * (головной), иначе первый попавшийся */
+    int zbi = -1, zbi_any = -1;
     for (int i = 0; i < NUMZBEE; i++) {
         if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
-        int match = 1;
-        for (int k = 0; k < 16; k++) {
-            char a = ZigbeeConf[i].zbee_ieee[k];
-            char b = learn_ieee_lower[k];
-            if (a >= 'A' && a <= 'F') a += 32;
-            if (b >= 'A' && b <= 'F') b += 32;
-            if (a == '\0') a = '0';
-            if (b == '\0') b = '0';
-            if (a != b) { match = 0; break; }
-        }
-        if (match) {
-            if (ZigbeeConf[i].ep == 0 && zbi == -1) {
-                zbi = i;
-            }
+        if (!learn_ieee_match(ZigbeeConf[i].zbee_ieee, learn_ieee_lower)) continue;
+        if (zbi_any < 0) zbi_any = i;
+        if (ZigbeeConf[i].ep == 0) {
+            zbi = i;
+            break;
         }
     }
-    /* Если головной не найден — берём первый попавшийся */
-    if (zbi == -1) {
-        for (int i = 0; i < NUMZBEE; i++) {
-            if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
-            int match = 1;
-            for (int k = 0; k < 16; k++) {
-                char a = ZigbeeConf[i].zbee_ieee[k];
-                char b = learn_ieee_lower[k];
-                if (a >= 'A' && a <= 'F') a += 32;
-                if (b >= 'A' && b <= 'F') b += 32;
-                if (a == '\0') a = '0';
-                if (b == '\0') b = '0';
-                if (a != b) { match = 0; break; }
-            }
-            if (match) {
-                zbi = i;
-                break;
-            }
-        }
-    }
+    if (zbi < 0) zbi = zbi_any;
     if (zbi < 0) {
         zbi = alloc_zbee_slot();
         if (zbi < 0) {
@@ -7428,28 +7434,17 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
     for (int i = 0; i < NUMZBEE; i++) {
         if (i == zbi) continue;
         if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
-        int match = 1;
-        for (int k = 0; k < 16; k++) {
-            char a = ZigbeeConf[i].zbee_ieee[k];
-            char b = learn_ieee_lower[k];
-            if (a >= 'A' && a <= 'F') a += 32;
-            if (b >= 'A' && b <= 'F') b += 32;
-            if (a == '\0') a = '0';
-            if (b == '\0') b = '0';
-            if (a != b) { match = 0; break; }
+        if (!learn_ieee_match(ZigbeeConf[i].zbee_ieee, learn_ieee_lower)) continue;
+        /* Тот же паттерн: освобождаем старую запись пула и явно сбрасываем
+         * action_pool_idx в ACTION_POOL_IDX_NONE, чтобы этот "сиротский"
+         * слот не унаследовал/не расшарил чужой ZigbeeActionPoolArr[0]
+         * при следующем alloc_zbee_slot(). */
+        if (ZigbeeConf[i].action_pool_idx < NUMACTIONPOOL) {
+            zbee_action_free(ZigbeeConf[i].action_pool_idx);
         }
-		if (match) {
-			/* Тот же паттерн: освобождаем старую запись пула и явно сбрасываем
-			 * action_pool_idx в ACTION_POOL_IDX_NONE, чтобы этот "сиротский"
-			 * слот не унаследовал/не расшарил чужой ZigbeeActionPoolArr[0]
-			 * при следующем alloc_zbee_slot(). */
-			if (ZigbeeConf[i].action_pool_idx < NUMACTIONPOOL) {
-				zbee_action_free(ZigbeeConf[i].action_pool_idx);
-			}
-			memset(&ZigbeeConf[i], 0, sizeof(ZigbeeVirtualPin));
-			ZigbeeConf[i].action_pool_idx = ACTION_POOL_IDX_NONE;
-		}
-	}
+        memset(&ZigbeeConf[i], 0, sizeof(ZigbeeVirtualPin));
+        ZigbeeConf[i].action_pool_idx = ACTION_POOL_IDX_NONE;
+    }
 
     /* ── Шаг 1: Парсим все labels ── */
     uint8_t normal_flags = 0;
@@ -7755,19 +7750,13 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                         continue;
                     }
                     if (target_zbi != zbi) {
-                        memset(&ZigbeeConf[target_zbi], 0, sizeof(ZigbeeConf[target_zbi]));
-                        ZigbeeConf[target_zbi].action_pool_idx = ACTION_POOL_IDX_NONE;
-                        strncpy(ZigbeeConf[target_zbi].zbee_ieee, ZigbeeConf[zbi].zbee_ieee,
-                                sizeof(ZigbeeConf[target_zbi].zbee_ieee) - 1);
-                        ZigbeeConf[target_zbi].zbee_ieee[16] = '\0';
-                        ZigbeeConf[target_zbi].zbee_endpoint = ZigbeeConf[zbi].zbee_endpoint;
+                        zbee_learn_init_subslot(target_zbi, zbi);
                     }
 
                     gang_num++;
                     ZigbeeConf[target_zbi].vbtn_mode = VBTN_MODE_PASSTHROUGH;
                     ZigbeeConf[target_zbi].zbee_role = ZBEE_ROLE_SWITCH;
                     ZigbeeConf[target_zbi].ep = gang_num;
-                    ZigbeeConf[target_zbi].topin = 11;
                     strncpy(ZigbeeConf[target_zbi].pt_single, trigger_payloads[on_idx],
                             sizeof(ZigbeeConf[target_zbi].pt_single) - 1);
                     ZigbeeConf[target_zbi].pt_single[sizeof(ZigbeeConf[target_zbi].pt_single) - 1] = '\0';
@@ -7844,15 +7833,9 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                             }
 
                             if (k > 0) {
-                                memset(&ZigbeeConf[target_zbi], 0, sizeof(ZigbeeConf[target_zbi]));
-                                ZigbeeConf[target_zbi].action_pool_idx = ACTION_POOL_IDX_NONE;
-                                strncpy(ZigbeeConf[target_zbi].zbee_ieee, ZigbeeConf[zbi].zbee_ieee,
-                                        sizeof(ZigbeeConf[target_zbi].zbee_ieee) - 1);
-                                ZigbeeConf[target_zbi].zbee_ieee[16] = '\0';
-                                ZigbeeConf[target_zbi].zbee_endpoint = ZigbeeConf[zbi].zbee_endpoint;
+                                zbee_learn_init_subslot(target_zbi, zbi);
                             }
                             ZigbeeConf[target_zbi].zbee_role = ZBEE_ROLE_SWITCH;
-                            ZigbeeConf[target_zbi].topin = 11;
                             ZigbeeConf[target_zbi].ep = k + 1;
                             ZigbeeConf[target_zbi].vbtn_mode = VBTN_MODE_PASSTHROUGH;
                             strncpy(ZigbeeConf[target_zbi].pt_single, trigger_payloads[k],
@@ -7862,11 +7845,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                             if (ZigbeeConf[target_zbi].action_pool_idx == ACTION_POOL_IDX_NONE) {
                                 ZigbeeConf[target_zbi].action_pool_idx = zbee_action_alloc();
                             }
-                            if (ZigbeeConf[target_zbi].action_pool_idx < NUMACTIONPOOL) {
-                                uint8_t tidx = ZigbeeConf[target_zbi].action_pool_idx;
-                                strncpy(ZigbeeActionPoolArr[tidx].sclick, "None",
-                                        sizeof(ZigbeeActionPoolArr[tidx].sclick) - 1);
-                            }
+                            zbee_action_init_none(ZigbeeConf[target_zbi].action_pool_idx);
 
                             /* Имя: введённое > прежнее имя слота > payload */
                             const char *nm = NULL;
@@ -7890,40 +7869,77 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                     }
                 }
             } else {
-                /* BUTTON: группируем по click_type в ОДНОМ слоте */
-                ZigbeeConf[zbi].vbtn_mode = VBTN_MODE_PASSTHROUGH;
-                ZigbeeConf[zbi].zbee_role = ZBEE_ROLE_TRIGGER;
+                /* BUTTON: один слот = один набор single/double/long.
+                 * Payloads с РАЗНЫМИ click_type группируются в одном слоте
+                 * (классический пульт: single/double/hold одной кнопки).
+                 * ПОВТОР click_type означает ДРУГУЮ физическую кнопку — для
+                 * неё выделяется отдельный слот (как в ветке SWITCH выше).
+                 * Раньше дубликат молча затирал предыдущий payload в одном
+                 * pt_single/pt_double/pt_long, и все кнопки, кроме последней,
+                 * переставали работать, а имя брали только из trigger_names[0]. */
+                int used_ct[3] = {0, 0, 0}; /* single, double, long текущего слота */
+                int cur = zbi;
+                int sub = 0;   /* создано суб-слотов */
 
                 for (int k = 0; k < trigger_count; k++) {
                     const char *ct = trigger_click_types[k];
-                    char *pt_dst = NULL;
-                    if (strcmp(ct, "double") == 0) {
-                        pt_dst = ZigbeeConf[zbi].pt_double;
-                    } else if (strcmp(ct, "long") == 0) {
-                        pt_dst = ZigbeeConf[zbi].pt_long;
-                    } else {
-                        pt_dst = ZigbeeConf[zbi].pt_single;
+                    int ci = (strcmp(ct, "double") == 0) ? 1 :
+                             (strcmp(ct, "long") == 0)   ? 2 : 0;
+
+                    if (used_ct[ci]) {
+                        /* Этот click_type в текущем слоте уже занят — новая кнопка */
+                        int nz = alloc_zbee_slot();
+                        if (nz < 0) {
+                            LOG_Z2M("zbee: LEARN BUTTON no free slot '%s'\r\n",
+                                    trigger_payloads[k]);
+                            continue;
+                        }
+                        zbee_learn_init_subslot(nz, zbi);
+                        /* Master Enable наследуем от головного слота: onoff == 0
+                         * полностью отключает vbtn_execute() для слота */
+                        ZigbeeConf[nz].onoff = ZigbeeConf[zbi].onoff;
+                        /* ep = номер gang-канала (головной слот получает ep=1 в
+                         * Шаге 4); ключ для learn_old_label() при переобучении */
+                        ZigbeeConf[nz].ep = (uint16_t)(2 + sub);
+                        sub++;
+                        cur = nz;
+                        memset(used_ct, 0, sizeof(used_ct));
                     }
-                    strncpy(pt_dst, trigger_payloads[k], 11);
-                    pt_dst[11] = '\0';
+                    used_ct[ci] = 1;
+
+                    ZigbeeConf[cur].vbtn_mode = VBTN_MODE_PASSTHROUGH;
+                    ZigbeeConf[cur].zbee_role = ZBEE_ROLE_TRIGGER;
+
+                    char *pt_dst = (ci == 1) ? ZigbeeConf[cur].pt_double :
+                                   (ci == 2) ? ZigbeeConf[cur].pt_long :
+                                               ZigbeeConf[cur].pt_single;
+                    strncpy(pt_dst, trigger_payloads[k],
+                            sizeof(ZigbeeConf[cur].pt_single) - 1);
+                    pt_dst[sizeof(ZigbeeConf[cur].pt_single) - 1] = '\0';
+
+                    if (ZigbeeConf[cur].action_pool_idx == ACTION_POOL_IDX_NONE) {
+                        ZigbeeConf[cur].action_pool_idx = zbee_action_alloc();
+                    }
+                    zbee_action_init_none(ZigbeeConf[cur].action_pool_idx);
+
+                    /* Имя: головной слот — от первого payload (как раньше);
+                     * суб-слот — введённое > прежнее имя по ep > payload */
+                    if (k == 0) {
+                        if (trigger_names[0][0]) {
+                            strncpy(ZigbeeConf[zbi].zbee_label, trigger_names[0],
+                                    sizeof(ZigbeeConf[zbi].zbee_label) - 1);
+                            ZigbeeConf[zbi].zbee_label[sizeof(ZigbeeConf[zbi].zbee_label) - 1] = '\0';
+                        }
+                    } else if (cur != zbi && !ZigbeeConf[cur].zbee_label[0]) {
+                        const char *nm = trigger_names[k][0] ? trigger_names[k] :
+                                         trigger_payloads[k];
+                        strncpy(ZigbeeConf[cur].zbee_label, nm,
+                                sizeof(ZigbeeConf[cur].zbee_label) - 1);
+                        ZigbeeConf[cur].zbee_label[sizeof(ZigbeeConf[cur].zbee_label) - 1] = '\0';
+                    }
 
                     LOG_Z2M("zbee: LEARN PASSTHROUGH BUTTON '%s' ct='%s' -> slot %d (id=%d)\r\n",
-                            trigger_payloads[k], ct, zbi, ZbeeIdFromIdx(zbi));
-                }
-
-                if (ZigbeeConf[zbi].action_pool_idx == ACTION_POOL_IDX_NONE) {
-                    ZigbeeConf[zbi].action_pool_idx = zbee_action_alloc();
-                }
-                if (ZigbeeConf[zbi].action_pool_idx < NUMACTIONPOOL) {
-                    uint8_t tidx = ZigbeeConf[zbi].action_pool_idx;
-                    strncpy(ZigbeeActionPoolArr[tidx].sclick, "None",
-                            sizeof(ZigbeeActionPoolArr[tidx].sclick) - 1);
-                }
-
-                if (trigger_names[0][0]) {
-                    strncpy(ZigbeeConf[zbi].zbee_label, trigger_names[0],
-                            sizeof(ZigbeeConf[zbi].zbee_label) - 1);
-                    ZigbeeConf[zbi].zbee_label[sizeof(ZigbeeConf[zbi].zbee_label) - 1] = '\0';
+                            trigger_payloads[k], ct, cur, ZbeeIdFromIdx(cur));
                 }
             }
         } else {
@@ -7948,12 +7964,7 @@ void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *
                             trigger_payloads[k], ct, zbi, ZbeeIdFromIdx(zbi));
                 }
 
-                if (ZigbeeActionPoolArr[aidx].dclick[0] == '\0')
-                    strncpy(ZigbeeActionPoolArr[aidx].dclick, "None", sizeof(ZigbeeActionPoolArr[aidx].dclick) - 1);
-                if (ZigbeeActionPoolArr[aidx].lpress[0] == '\0')
-                    strncpy(ZigbeeActionPoolArr[aidx].lpress, "None", sizeof(ZigbeeActionPoolArr[aidx].lpress) - 1);
-                if (ZigbeeActionPoolArr[aidx].sclick[0] == '\0')
-                    strncpy(ZigbeeActionPoolArr[aidx].sclick, "None", sizeof(ZigbeeActionPoolArr[aidx].sclick) - 1);
+                zbee_action_init_none(aidx);
             }
 
             /* Auto-detect RAW/PASSTHROUGH from first payload */

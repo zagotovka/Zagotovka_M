@@ -41,8 +41,8 @@
  * ВНИМАНИЕ (совместимость между поколениями прошивок):
  * Bank A и Bank B могут содержать РАЗНЫЕ версии прошивки сколько угодно
  * долго. Обе версии читают/пишут ОДНУ И ТУ ЖЕ структуру HTTPSsettings
- * в области настроек по адресу 0x081C0000 (256 КБ: сектор 11 в
- * однобанковом режиме, секторы 22 + 23 в двухбанковом режиме).
+ * в области настроек по адресу 0x081E0000 (128 КБ: сектор 23 Bank 2
+ * в двухбанковом режиме).
  * Если старый код (оставшийся в другом банке или в непереприошенном
  * bootloader) не знает о новых полях — он трактует эти байты как
  * соседние/padding и может затереть их при следующей записи.
@@ -81,22 +81,27 @@ typedef struct __attribute__((packed)) {
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define SETTINGS_MAGIC_VALUE 0xA5B6C7D8
-#define FLASH_SECTOR_11_START_ADDR 0x081C0000
-#define SETTINGS_VERSION_COUNT 94
+/* Область настроек: 0x081E0000..0x081FFFFF (128 КБ) = сектор 23 Bank 2.
+ * Single Bank не поддерживается (main() останавливается при nDBANK=1). */
+#define SETTINGS_AREA_ADDR 0x081E0000
+#define SETTINGS_VERSION_COUNT 46
 
 #define SETTINGS_ALIGNED_SIZE ((sizeof(HTTPSsettings) + 3) / 4 * 4)
-#define GET_SETTINGS_ADDR(index) (FLASH_SECTOR_11_START_ADDR + (index) * SETTINGS_ALIGNED_SIZE)
+#define GET_SETTINGS_ADDR(index) (SETTINGS_AREA_ADDR + (index) * SETTINGS_ALIGNED_SIZE)
 
-/* Общий размер области настроек во Flash: 256 КБ.
- *  - Single Bank: один сектор 11 (256 КБ).
- *  - Dual Bank  : два сектора по 128 КБ: 22 (0x081C0000) и 23 (0x081E0000). */
-#define SETTINGS_AREA_SIZE (256u * 1024u)
+/* Общий размер области настроек во Flash: 128 КБ (сектор 23 Bank 2). */
+#define SETTINGS_AREA_SIZE (128u * 1024u)
 
-/* Все 94 слота обязаны помещаться в область настроек. */
+/* Все 46 слотов обязаны помещаться в область настроек. */
 typedef char static_assertion_settings_slots_fit_area[
     ((SETTINGS_VERSION_COUNT * ((sizeof(HTTPSsettings) + 3) / 4 * 4)) <= SETTINGS_AREA_SIZE) ? 1 : -1];
 
-#define BANK_A_ADDR 0x08040000
+/* Раскладка Dual Bank (2 МБ, nDBANK=0):
+ *   0x08000000..0x0801FFFF — загрузчик (секторы 0–4, 128 КБ);
+ *   0x08020000..0x080FFFFF — Bank A (секторы 5–11, 896 КБ);
+ *   0x08100000..0x081DFFFF — Bank B (секторы 12–22, 896 КБ);
+ *   0x081E0000..0x081FFFFF — настройки (сектор 23, 128 КБ). */
+#define BANK_A_ADDR 0x08020000
 #define BANK_B_ADDR 0x08100000
 
 /* USER CODE END PD */
@@ -344,7 +349,7 @@ static uint32_t calculate_crc(const HTTPSsettings *settings)
  */
 static bool settings_area_is_erased(void)
 {
-    const volatile uint32_t *p = (const volatile uint32_t *)FLASH_SECTOR_11_START_ADDR;
+    const volatile uint32_t *p = (const volatile uint32_t *)SETTINGS_AREA_ADDR;
     const size_t words = (SETTINGS_VERSION_COUNT * SETTINGS_ALIGNED_SIZE) / 4;
     for (size_t i = 0; i < words; i++) {
         if (p[i] != 0xFFFFFFFFu) return false;
@@ -353,22 +358,20 @@ static bool settings_area_is_erased(void)
 }
 
 /*
- * Запись новой копии настроек в следующий слот (по кругу, 94 слота).
+ * Запись новой копии настроек в следующий слот (по кругу, 46 слотов).
  * Когда круг замыкается (следующий индекс 0), стирается ВСЯ область
  * настроек и запись идёт в слот 0.
  *
- * Область настроек 0x081C0000 .. 0x081FFFFF (256 КБ):
- *  - Single Bank: сектор 11 (FLASH_SECTOR_11), 256 КБ;
- *  - Dual Bank  : Bank 2, секторы 22 и 23 (FLASH_SECTOR_22, FLASH_SECTOR_23),
- *                 по 128 КБ каждый — стирать нужно ОБА.
- * Сектора 19 и 20 (0x08160000 .. 0x0819FFFF) в Dual Bank относятся к образу
- * Bank B — стирать их нельзя.
+ * Область настроек 0x081E0000 .. 0x081FFFFF (128 КБ) = сектор 23 Bank 2
+ * (FLASH_SECTOR_23 в Dual Bank). Сектор 22 (0x081C0000..0x081DFFFF) — это
+ * хвост образа Bank B, стирать его нельзя.
+ * Single Bank не поддерживается: main() останавливается при nDBANK=1.
  */
 static bool write_settings(const HTTPSsettings *data)
 {
   int cur_idx = -1;
   if (s_slot_addr != 0) {
-    cur_idx = (int)((s_slot_addr - FLASH_SECTOR_11_START_ADDR) / SETTINGS_ALIGNED_SIZE);
+    cur_idx = (int)((s_slot_addr - SETTINGS_AREA_ADDR) / SETTINGS_ALIGNED_SIZE);
   }
   int next_idx = (cur_idx + 1) % SETTINGS_VERSION_COUNT;
   uint32_t next_addr = GET_SETTINGS_ADDR(next_idx);
@@ -383,13 +386,8 @@ static bool write_settings(const HTTPSsettings *data)
     FLASH_EraseInitTypeDef erase = {0};
     erase.TypeErase    = FLASH_TYPEERASE_SECTORS;
     erase.VoltageRange = FLASH_VOLTAGE_RANGE_3;
-    if (flash_is_dual_bank()) {
-      erase.Sector    = FLASH_SECTOR_22;   /* 0x081C0000, 128 КБ */
-      erase.NbSectors = 2;                 /* + FLASH_SECTOR_23, 0x081E0000 */
-    } else {
-      erase.Sector    = FLASH_SECTOR_11;   /* 0x081C0000, 256 КБ */
-      erase.NbSectors = 1;
-    }
+    erase.Sector    = FLASH_SECTOR_23;   /* 0x081E0000, 128 КБ */
+    erase.NbSectors = 1;
     uint32_t err = 0;
     if (HAL_FLASHEx_Erase(&erase, &err) != HAL_OK) {
       HAL_FLASH_Lock();
@@ -401,7 +399,7 @@ static bool write_settings(const HTTPSsettings *data)
       log_msg("[BOOT] settings: area NOT erased after erase, abort\r\n");
       return false;
     }
-    next_addr = FLASH_SECTOR_11_START_ADDR;
+    next_addr = SETTINGS_AREA_ADDR;
   }
 
   const uint8_t *src = (const uint8_t *)data;

@@ -10251,11 +10251,11 @@ MG_IRAM void single_bank_swap(char *p1, char *p2, size_t size) {
 }
 
 /* Адреса/ёмкость банков приложения (совпадают с Bootloader):
- * Bank A = 0x08040000, Bank B = 0x08100000, под образ в банке 768 КБ
- * (до сектора настроек 0x081C0000). */
-#define ZAG_BANK_A_ADDR   0x08040000u
+ * Bank A = 0x08020000, Bank B = 0x08100000, под образ в банке 896 КБ
+ * (до сектора настроек 0x081E0000, сектор 23 Bank 2). */
+#define ZAG_BANK_A_ADDR   0x08020000u
 #define ZAG_BANK_B_ADDR   0x08100000u
-#define ZAG_BANK_CAPACITY 0x000C0000u   // 768K, реальная ёмкость банка
+#define ZAG_BANK_CAPACITY 0x000E0000u   // 896K, реальная ёмкость банка
 
 extern uint8_t mg_ota_get_active_bank(void); /* compat_ota.c: SCB->VTOR */
 

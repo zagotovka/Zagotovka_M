@@ -1,6 +1,6 @@
 //! make_first_flash - builds ONE file for the first flashing of a Zagotovka_M device
 //!
-//!     [ bootloader, padded with 0xFF up to 0x08040000 ] + [ application, Bank A ]
+//!     [ bootloader, padded with 0xFF up to 0x08020000 ] + [ application, Bank A ]
 //!
 //! and programs it at 0x08000000 through probe-rs. No STM32CubeProgrammer and no
 //! Python are needed: one executable for Windows, Linux and macOS.
@@ -36,10 +36,10 @@ type AResult<T> = anyhow::Result<T>;
 
 // ---- flash layout ----------------------------------------------------------
 const FLASH_BASE: u32 = 0x0800_0000;
-const BOOT_SIZE: usize = 0x0004_0000; // 256 KB reserved for the bootloader
-const BANK_A_ADDR: u32 = FLASH_BASE + BOOT_SIZE as u32; // 0x08040000
+const BOOT_SIZE: usize = 0x0002_0000; // 128 KB reserved for the bootloader
+const BANK_A_ADDR: u32 = FLASH_BASE + BOOT_SIZE as u32; // 0x08020000
 const BANK_B_ADDR: u32 = 0x0810_0000;
-const BANK_CAPACITY: u32 = 0x000C_0000; // 768 KB
+const BANK_CAPACITY: u32 = 0x000E_0000; // 896 KB
 const SRAM_BASE: u32 = 0x2000_0000;
 const SRAM_END: u32 = 0x2008_0000;
 
@@ -498,7 +498,7 @@ fn check_boot(img: &[u8]) -> Result<(), String> {
 fn check_bank_a(img: &[u8]) -> Result<(), String> {
     if img.len() > BANK_CAPACITY as usize {
         return Err(format!(
-            "ERROR: application is {} bytes, more than the 768 KB ({}) of a bank",
+            "ERROR: application is {} bytes, more than the 896 KB ({}) of a bank",
             img.len(),
             BANK_CAPACITY
         ));
