@@ -36,7 +36,7 @@ typedef struct {
   char     tx[32];
   char     rx[32];
   char     pfx[24];
-  uint32_t last_ms, last_state_ms, last_sig_ms, sig;
+  uint32_t last_ms, last_state_ms, last_sig_ms, last_online_ms, sig;
   uint32_t h[4];            /* хэши последних снимков: sw, pwm, ds, dht */
   uint16_t a, s;
   uint8_t  active, pass, phase, b, force;
@@ -77,10 +77,38 @@ static int zb_btn(int k) {
   return k >= 0 && k < NUMZBEE && ZigbeeConf[k].zbee_ieee[0] != '\0' &&
          ZigbeeConf[k].zbee_role == ZBEE_ROLE_TRIGGER && ZigbeeConf[k].onoff != 0;
 }
-
+/* Zigbee-слот является выключателем/реле/лампой (on-off), если занят, не PIR и имеет роль
+ * SWITCH или ACTUATOR (или MFR с обученным EP on/off) */
+static int zb_sw(int k) {
+  const ZigbeeVirtualPin *z;
+  if (k < 0 || k >= NUMZBEE) return 0;
+  z = &ZigbeeConf[k];
+  if (z->zbee_ieee[0] == '\0' || zbee_is_pir(z)) return 0;
+  return z->zbee_role == ZBEE_ROLE_SWITCH || z->zbee_role == ZBEE_ROLE_ACTUATOR ||
+         (z->zbee_role == ZBEE_ROLE_MFR && z->ep_onoff > 0);
+}
 /* id: физический пин 1..NUMPIN или Zigbee NUMPIN+1.. */
 static int btn_exists(int id) {
   return pin_is(id, 1) || (IsZigbeePin(id) && zb_btn(ZbeeIdx(id)));
+}
+/* Маска заданных действий кнопки: bit0 = 1 наж., bit1 = 2 наж., bit2 = долг. */
+static uint8_t btn_mask(int id) {
+  const char *a[3] = {NULL, NULL, NULL};
+  uint8_t m = 0;
+  if (IsZigbeePin(id)) {
+    int k = ZbeeIdx(id);
+    a[0] = zbee_action_sclick(k);
+    a[1] = zbee_action_dclick(k);
+    a[2] = zbee_action_lpress(k);
+  } else if (id >= 1 && id <= NUMPIN) {
+    a[0] = PinsConf[id - 1].sclick;
+    a[1] = PinsConf[id - 1].dclick;
+    a[2] = PinsConf[id - 1].lpress;
+  }
+  for (int i = 0; i < 3; i++) {
+    if (a[i] != NULL && a[i][0] != '\0' && strcmp(a[i], "None") != 0) m |= (uint8_t) (1u << i);
+  }
+  return m;
 }
 static void sn_str(char *out, const uint8_t *a) {
   snprintf(out, 17, "%02X%02X%02X%02X%02X%02X%02X%02X",
@@ -132,6 +160,7 @@ static uint32_t calc_sig(void) {
     h = fnv(h, &t, 1);
     h = fnv(h, &ib, 1);
     h = fnv(h, PinsConf[i].info, strnlen(PinsConf[i].info, 29));
+    if (t == 1) { uint8_t bm = btn_mask(i + 1); h = fnv(h, &bm, 1); }
   }
   for (int p = 0; p < MAX_DS18B20_P; p++) {
     uint8_t f[2] = {ds18b20[p].onoff, ds18b20[p].numsens};
@@ -150,6 +179,13 @@ static uint32_t calc_sig(void) {
   for (int k = 0; k < NUMZBEE; k++) {
     uint8_t kb = (uint8_t) k;
     if (!zb_btn(k)) continue;
+    h = fnv(h, &kb, 1);
+    h = fnv(h, ZigbeeConf[k].zbee_label, strnlen(ZigbeeConf[k].zbee_label, 29));
+    { uint8_t bm = btn_mask(ZbeeIdFromIdx(k)); h = fnv(h, &bm, 1); }
+  }
+  for (int k = 0; k < NUMZBEE; k++) {
+    uint8_t kb = (uint8_t) k;
+    if (!zb_sw(k)) continue;
     h = fnv(h, &kb, 1);
     h = fnv(h, ZigbeeConf[k].zbee_label, strnlen(ZigbeeConf[k].zbee_label, 29));
   }
@@ -277,7 +313,8 @@ static void send_cfg(struct mg_connection *c, const char *tp, int written) {
 static int obj_exists(const char *comp, const char *obj) {
   int id;
   if (strncmp(obj, "sw", 2) == 0 && sscanf(obj + 2, "%d", &id) == 1)
-    return strcmp(comp, "switch") == 0 && pin_is(id, 3);
+    return strcmp(comp, "switch") == 0 &&
+           (pin_is(id, 3) || (IsZigbeePin(id) && zb_sw(ZbeeIdx(id))));
   if (strncmp(obj, "pwm", 3) == 0 && sscanf(obj + 3, "%d", &id) == 1)
     return strcmp(comp, pwm_comp()) == 0 && pin_is(id, 5);
   if (obj[0] == 'b' && obj[1] == 't' && obj[2] >= '0' && obj[2] <= '9' && sscanf(obj + 2, "%d", &id) == 1) {
@@ -340,13 +377,30 @@ static void emit_btn(struct mg_connection *c, int id, const char *info, int b) {
     "\"dev\":{\"ids\":[\"%s_btn%d\"],\"name\":\"%s\",\"mf\":\"Zagotovka\","
     "\"mdl\":\"Button\",\"via_device\":\"%s\",\"sa\":\"Zagotovka Buttons\"}", N, id, nm, N);
   if (b == 0) {
+    char et[48];
+    uint8_t m = btn_mask(id);
+    int eo = 0;
     snprintf(tp, sizeof(tp), "%s/event/%s/bt%d/config", P, N, id);
+    if (m == 0) {   /* ни одного действия: событие не нужно */
+      pub(c, tp, "");
+      return;
+    }
+    et[0] = '\0';
+    if (m & 1) eo += snprintf(et + eo, sizeof(et) - (size_t) eo, "%s\"short\"",  eo ? "," : "");
+    if (m & 2) eo += snprintf(et + eo, sizeof(et) - (size_t) eo, "%s\"double\"", eo ? "," : "");
+    if (m & 4) eo += snprintf(et + eo, sizeof(et) - (size_t) eo, "%s\"long\"",   eo ? "," : "");
     w = snprintf(buf, HA_CFG_SZ,
       "{\"uniq_id\":\"%s_bt%d\",\"name\":\"event\",\"stat_t\":\"%s/ev/bt%d\","
-      "\"device_class\":\"button\",\"event_types\":[\"short\",\"double\",\"long\"],"
-      "\"avty_t\":\"%s/status\",%s}", N, id, T, id, T, dev);
+      "\"device_class\":\"button\",\"event_types\":[%s],"
+      "\"avty_t\":\"%s/status\",%s}", N, id, T, id, et, T, dev);
   } else if (b >= 1 && b <= 3) {
     int k = b - 1;
+    if (!(btn_mask(id) & (1u << k))) {   /* действие не задано: стираем сущность */
+      snprintf(tp, sizeof(tp), "%s/button/%s/bt%d_%c/config", P, N, id, sfx[k]);
+      pub(c, tp, "");
+      printf("[HA] btn %d: cleared '%c'\r\n", id, sfx[k]);
+      return;
+    }
     snprintf(tp, sizeof(tp), "%s/button/%s/bt%d_%c/config", P, N, id, sfx[k]);
     w = snprintf(buf, HA_CFG_SZ,
       "{\"uniq_id\":\"%s_bt%d_%c\",\"name\":\"%s\",\"cmd_t\":\"%s\","
@@ -432,7 +486,26 @@ static void emit_pin(struct mg_connection *c, int i, int b) {
   }
   send_cfg(c, tp, w);
 }
+/* Zigbee-выключатель как switch на основном устройстве. obj = sw<логический ID> */
+static void emit_zsw(struct mg_connection *c, int k) {
+  char tp[128], dev[192], nm[64], d[24];
+  char *buf = HA_CFG_BUF;
+  int id = ZbeeIdFromIdx(k), w;
+  const char *N = g->node, *T = g->tx, *R = g->rx, *P = g->pfx;
 
+  snprintf(d, sizeof(d), "Zigbee %d", id);
+  esc_name(nm, sizeof(nm), ZigbeeConf[k].zbee_label, d);
+  dev_block(dev, sizeof(dev));
+  snprintf(tp, sizeof(tp), "%s/switch/%s/sw%d/config", P, N, id);
+  w = snprintf(buf, HA_CFG_SZ,
+    "{\"uniq_id\":\"%s_sw%d\",\"name\":\"%s\",\"stat_t\":\"%s/ha/sw\","
+    "\"val_tpl\":\"{{ 'ON' if value_json['%d']|int else 'OFF' }}\","
+    "\"cmd_t\":\"%s\",\"pl_on\":\"%s/switch/id=%d/state=1\","
+    "\"pl_off\":\"%s/switch/id=%d/state=0\",\"stat_on\":\"ON\",\"stat_off\":\"OFF\","
+    "\"avty_t\":\"%s/status\",%s}",
+    N, id, nm, T, id, R, R, id, R, id, T, dev);
+  send_cfg(c, tp, w);
+}
 static void emit_ds(struct mg_connection *c, int pin, int s) {
   char tp[128], dev[192], sn[17], nm[64], d[28];
   char *buf = HA_CFG_BUF;
@@ -481,7 +554,13 @@ static int emit_clear(struct mg_connection *c, int idx) {
   const char *N = g->node, *P = g->pfx;
   int i = idx / HA_CLR_PIN, k = idx % HA_CLR_PIN, id = i + 1;
   uint8_t t;
-
+  if (idx >= NUMPIN * HA_CLR_PIN + NUMZBEE * 4) {   /* Zigbee-выключатели: 1 объект на слот */
+    int z = idx - NUMPIN * HA_CLR_PIN - NUMZBEE * 4;
+    if (zb_sw(z)) return 0;
+    snprintf(tp, sizeof(tp), "%s/switch/%s/sw%d/config", P, N, ZbeeIdFromIdx(z));
+    pub(c, tp, "");
+    return 1;
+  }
   if (idx >= NUMPIN * HA_CLR_PIN) {   /* Zigbee-кнопки: 4 объекта на слот */
     int z = (idx - NUMPIN * HA_CLR_PIN) / 4;
     k = (idx - NUMPIN * HA_CLR_PIN) % 4;
@@ -536,7 +615,7 @@ static void sweep_subscribe(struct mg_connection *c) {
 static int step(struct mg_connection *c) {
   HaCtx *x = g;
   if (x->pass == 1) {   /* очистка */
-      if (x->a < NUMPIN * HA_CLR_PIN + NUMZBEE * 4) return emit_clear(c, x->a++);
+      if (x->a < NUMPIN * HA_CLR_PIN + NUMZBEE * 5) return emit_clear(c, x->a++);
     /* DS18B20, которые были раньше, а сейчас пропали: стираем их конфиги */
     while (x->s < x->sn_n) {
       char sn[17], tp[128];
@@ -554,6 +633,7 @@ static int step(struct mg_connection *c) {
     sn_remember();      /* новые датчики запоминаем только после очистки старых */
     snprintf(tp, sizeof(tp), "%s/status", x->tx);
     pub(c, tp, "online");
+    printf("[HA] discovery done, online sent (broker=%s)\r\n", SetSettings.check_mqtt_srv ? "internal" : "external");
     if (c != NULL && mqtt_connected_reported) sweep_subscribe(c);
     x->active = 0;
     x->last_state_ms = 0;
@@ -582,10 +662,16 @@ static int step(struct mg_connection *c) {
     x->b++;
     return 1;
   case 3:   /* Zigbee-кнопки */
-    if (x->a >= NUMZBEE) { x->phase = 4; return 0; }
+	if (x->a >= NUMZBEE) { x->phase = 4; x->a = 0; x->b = 0; return 0; }
     if (!zb_btn((int) x->a) || x->b >= 4) { x->a++; x->b = 0; return 0; }
     emit_btn(c, ZbeeIdFromIdx((int) x->a), ZigbeeConf[x->a].zbee_label, x->b);
     x->b++;
+    return 1;
+  case 4:   /* Zigbee-выключатели */
+    if (x->a >= NUMZBEE) { x->phase = 5; return 0; }
+    if (!zb_sw((int) x->a)) { x->a++; return 0; }
+    emit_zsw(c, (int) x->a);
+    x->a++;
     return 1;
   default:
 	    x->pass = SetSettings.check_mqtt_srv ? 1 : 2;
@@ -607,6 +693,13 @@ static int snap(int grp) {
       if (PinsConf[i].topin != want) continue;
       v = (grp == 0) ? (PinsConf[i].on ? 1 : 0) : (int) PinsConf[i].dvalue;
       o += snprintf(b + o, HA_SNAP_SZ - o, "%s\"%d\":%d", n++ ? "," : "", i + 1, v);
+    }
+    if (grp == 0) {   /* Zigbee-выключатели: ключ = логический ID */
+      for (int k = 0; k < NUMZBEE && o < (int) HA_SNAP_SZ - 24; k++) {
+        if (!zb_sw(k)) continue;
+        o += snprintf(b + o, HA_SNAP_SZ - o, "%s\"%d\":%d", n++ ? "," : "",
+                      ZbeeIdFromIdx(k), ZigbeeConf[k].state ? 1 : 0);
+      }
     }
   } else if (grp == 2) {
     for (int p = 0; p < MAX_DS18B20_P; p++) {
@@ -668,6 +761,12 @@ void ha_discovery_poll(struct mg_connection *c) {
   if (now - x->last_state_ms >= HA_STATE_MS) {
     x->last_state_ms = now;
     states(c);
+  }
+  if (now - x->last_online_ms >= 30000u) {
+    char tp_on[48];
+    x->last_online_ms = now;
+    snprintf(tp_on, sizeof(tp_on), "%s/status", x->tx);
+    pub(c, tp_on, "online");
   }
   if (now - x->last_sig_ms >= HA_SIG_MS) {
     uint32_t sg;

@@ -8487,6 +8487,17 @@ void mqtt_message_handler(const char *topic, const char *payload) {
   }
 
   printf("[MQTT] Parsed command: %s, id: %d\r\n", command, id);
+  if (strcmp(command, "switch") == 0 && IsZigbeePin(id)) {
+    const char *sp = strstr(command_start, "state=");
+    int sv;
+    if (sp != NULL && sscanf(sp + 6, "%d", &sv) == 1 && (sv == 0 || sv == 1)) {
+      int st = cmd_zigbee_exec(id, sv, -1, -1);
+      printf("[MQTT] Zigbee switch id=%d set to %d (status %d)\r\n", id, sv, st);
+    } else {
+      printf("[MQTT] Zigbee switch id=%d: invalid state\r\n", id);
+    }
+    return;
+  }
   if (strcmp(command, "button") == 0 && IsZigbeePin(id)) {
     int zbi = ZbeeIdx(id), ev = -1;
     const char *ct = strrchr(command_start, '/');

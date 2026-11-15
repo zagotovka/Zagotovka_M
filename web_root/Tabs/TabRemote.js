@@ -488,7 +488,7 @@ const intToHex = (c) => '#' + ('000000' + (c & 0xffffff).toString(16).toUpperCas
 /* ── Свой цвет: раскрывающаяся панель (квадрат S/V + полоса оттенка + HEX) ──
  * Вместо системного <input type="color">: на Android он показывает окно
  * с пресетами и кнопкой Custom, то есть выбор в два шага. */
-const CustomColor = ({ color, disabled, locked, onBlocked, onApply, onPreview, labels }) => {
+const CustomColor = ({ color, disabled, locked, isCustom, onBlocked, onApply, onPreview, labels }) => {
   const [open, setOpen] = useState(false);
   const [hsv, setHsv] = useState(() => intToHsv(toRgbInt(color)));
   const [hexText, setHexText] = useState(null); // не null, пока пользователь печатает HEX
@@ -534,10 +534,13 @@ const CustomColor = ({ color, disabled, locked, onBlocked, onApply, onPreview, l
   useEffect(() => () => { if (onPreview) onPreview(null); }, []);
 
   return html`
-    <button type="button" class="rem-cc-btn" disabled=${disabled}
-      aria-expanded=${open} onClick=${toggle}>
-      <span class="rem-cc-dot"></span>${labels.pick}
-    </button>
+    <button type="button"
+      class=${'rem-swatch rem-swatch-custom' + (isCustom ? ' is-active' : '') + (open ? ' is-open' : '')}
+      disabled=${disabled}
+      aria-expanded=${open}
+      aria-label=${labels.pick}
+      data-tip=${labels.pick}
+      onClick=${toggle}></button>
     ${open ? html`
       <div class="rem-cc-panel">
         <div ref=${svRef} class="rem-cc-sv"
@@ -553,6 +556,10 @@ const CustomColor = ({ color, disabled, locked, onBlocked, onApply, onPreview, l
           <input class="rem-cc-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off"
             value=${hexText !== null ? hexText : intToHex(cur)} onInput=${onHex}
             onBlur=${() => setHexText(null)} />
+          <button type="button" class="rem-cc-cancel" aria-label=${labels.cancel} title=${labels.cancel}
+            onClick=${() => setOpen(false)}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
           <button type="button" class="rem-cc-ok" aria-label=${labels.apply} title=${labels.apply} onClick=${apply}>
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
           </button>
@@ -562,6 +569,7 @@ const CustomColor = ({ color, disabled, locked, onBlocked, onApply, onPreview, l
 /* ── Цветовая панель: пресеты-градиенты + системный выбор цвета ── */
 const ColorPanel = ({ color, disabled, locked, onBlocked, onPick, onPreview, labels }) => {
   const hex = '#' + ('000000' + toRgbInt(color).toString(16).toUpperCase()).slice(-6);
+  const isCustom = !COLOR_PRESETS.some((c) => c.toUpperCase() === hex);
   return html`
     <div class="rem-colors">
       ${COLOR_PRESETS.map(
@@ -579,6 +587,7 @@ const ColorPanel = ({ color, disabled, locked, onBlocked, onPick, onPreview, lab
         disabled=${disabled}
         locked=${locked}
         onBlocked=${onBlocked}
+        isCustom=${isCustom}
         onApply=${onPick}
         onPreview=${onPreview}
         labels=${labels}
@@ -915,7 +924,7 @@ export function TabRemote({ }) {
       : st === 'ok' ? L.ok
         : st === 'net' ? L.errNet
           : (L['err' + st] || (L.err + ' (' + st + ')'));
-    return html`<span class=${'rem-status' + (st === 'ok' ? ' is-ok' : st === 'wait' ? ' is-wait' : ' is-err')}>${text}</span>`;
+    return html`<span class=${'rem-status' + (st === 'ok' ? ' is-ok' : st === 'wait' ? ' is-wait' : ' is-err')} role="status">${st === 'wait' ? html`<svg class="rem-spin" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="20 20" stroke-linecap="round"/></svg>` : null}${text}</span>`;
   };
 
   const busy = (key) => statuses[key] === 'wait';
@@ -1019,6 +1028,11 @@ export function TabRemote({ }) {
 
   const pdCard = (it) => {
     const key = 'pd:' + it.id;
+    const curNum = Number(it.cu);
+    const spNum = Number(it.sp);
+    const pct = spNum > 0 && isFinite(curNum)
+      ? Math.max(0, Math.min(100, curNum / spNum * 100))
+      : 0;
     return html`
       <div class="rem-card">
         <div class="rem-card-head">
@@ -1026,7 +1040,14 @@ export function TabRemote({ }) {
           ${statusLine(key)}
         </div>
         <div class="rem-pd-row">
-          <span class="rem-pd-cur">${L.current}: <b>${it.cu}</b> °C</span>
+          <div class="rem-pd-visual" role="img" aria-label=${L.current + ': ' + it.cu + ' °C'}>
+            <svg viewBox="0 0 120 120" class="rem-pd-ring" aria-hidden="true">
+              <circle cx="60" cy="60" r="52" pathLength="100" class="rem-pd-ring-track"/>
+              <circle cx="60" cy="60" r="52" pathLength="100" class="rem-pd-ring-fill"
+                style=${'stroke-dasharray:' + pct.toFixed(1) + ' 100'}/>
+            </svg>
+            <div class="rem-pd-center"><b>${it.cu}</b><span>°C</span></div>
+          </div>
           <${ToggleBtn}
             on=${!!it.on}
             busy=${busy(key)}
@@ -1143,7 +1164,7 @@ export function TabRemote({ }) {
 
   return html`
     <div
-      class=${'rem-wrap' + (locked ? ' is-locked' : '')}
+      class=${'rem-wrap' + (locked ? ' is-locked' : '') + (expired ? ' is-expired' : '')}
       onPointerDown=${armIfOpen}
       onPointerUp=${armIfOpen}
     >
@@ -1155,6 +1176,7 @@ export function TabRemote({ }) {
           <${WordLogo} />
         </div>
         <div class="rem-actions">
+          ${!expired ? html`<span class=${'rem-link' + (offline ? ' is-lost' : '')} aria-hidden="true"></span>` : null}
           ${fsSupported() ? html`
             <button
               type="button"
@@ -1192,7 +1214,7 @@ export function TabRemote({ }) {
                   type="button"
                   class="rem-section-head"
                   aria-expanded=${open}
-                  aria-controls=${'rem-grid-' + s.k}
+                  aria-controls=${open ? 'rem-grid-' + s.k : undefined}
                   onClick=${() => toggleSec(s.k)}
                 >
                   <span class="rem-chevron" aria-hidden="true"></span>
