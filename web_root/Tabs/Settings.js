@@ -180,6 +180,215 @@ const getTip = (label, lang, rulangsettings, enlangsettings) => {
   return lines.join('<br>');
 };
 
+const ZB_MSG_RU = [
+  'Режим Zigbee2MQTT выключен',
+  'Нет связи с MQTT',
+  'Неверный IP-адрес или имя хоста MQTT-брокера',
+  'Неверный порт MQTT (соединение отклонено)',
+  'Неверный логин или пароль MQTT',
+  'Нет связи с MQTT: превышено время ожидания',
+  'Zigbee2MQTT не отвечает (нет сообщения bridge/state)',
+  'Zigbee2MQTT не видит координатор (bridge/state = offline)',
+  'Связь с Zigbee2MQTT в порядке',
+  'Ожидание ответа Zigbee2MQTT',
+];
+const ZB_MSG_EN = [
+  'Zigbee2MQTT mode is off',
+  'No connection to MQTT',
+  'Wrong IP address or host name of the MQTT broker',
+  'Wrong MQTT port (connection refused)',
+  'Wrong MQTT user name or password',
+  'No connection to MQTT: timeout',
+  'Zigbee2MQTT does not respond (no bridge/state message)',
+  'Zigbee2MQTT cannot see the coordinator (bridge/state = offline)',
+  'Zigbee2MQTT link is OK',
+  'Waiting for Zigbee2MQTT',
+];
+const HA_MSG_RU = ['Не проверялось', 'Home Assistant отвечает', 'Нет ответа от Home Assistant (проверьте IP и порт)', 'Проверка...'];
+const HA_MSG_EN = ['Not checked', 'Home Assistant responds', 'No response from Home Assistant (check IP and port)', 'Checking...'];
+
+
+const dnInfo = (isRu, dn) => (dn > 0)
+  ? { ok: true,  text: (isRu ? 'Имён устройств получено: ' : 'Device names received: ') + dn }
+  : { ok: false, text: isRu
+      ? 'Имена из Z2M не получены: включите homeassistant: enabled: true в Z2M и проверьте префикс discovery'
+      : 'No names from Z2M: enable homeassistant: enabled: true in Z2M and check the discovery prefix' };
+
+const ZigbeeLinkBox = ({ isRu, withHa }) => {
+  const [res, setRes] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = (ha) => fetch('/api/zigbee/link' + (ha ? '?ha=1' : ''), { cache: 'no-store' }).then((r) => r.json());
+  useEffect(() => { load(false).then(setRes).catch(() => {}); }, []);
+  const run = () => {
+    setBusy(true);
+    load(withHa)
+      .then((j) => {
+        setRes(j);
+        if (withHa) {
+          setTimeout(() => {
+            load(false).then(setRes).catch(() => {}).finally(() => setBusy(false));
+          }, 2500);
+        } else {
+          setBusy(false);
+        }
+      })
+      .catch(() => { setRes({ code: -1, ha: 0 }); setBusy(false); });
+  };
+  const msgs = isRu ? ZB_MSG_RU : ZB_MSG_EN;
+  const noAnswer = isRu ? 'Нет ответа от устройства' : 'No response from the device';
+  const text = res ? (res.code >= 0 && res.code < msgs.length ? msgs[res.code] : noAnswer) : '';
+  const ok = !!res && res.code === 8;
+  const dnRes = (!withHa && ok && res.dn != null) ? dnInfo(isRu, res.dn) : null;
+  const haMsgs = isRu ? HA_MSG_RU : HA_MSG_EN;
+  return html`
+    <div class="px-6 py-4 border-t border-teal-500/20 flex flex-wrap items-center gap-4">
+      <button type="button" disabled=${busy} onClick=${run}
+        class="px-4 py-2 rounded-lg bg-teal-600 text-white font-semibold shadow hover:bg-teal-700 disabled:opacity-50">
+        ${isRu ? 'Проверить соединение' : 'Check connection'}
+      </button>
+      ${!withHa ? html`<span class=${ok ? 'text-green-700 font-semibold' : 'text-red-700 font-semibold'}>${text}</span>` : ''}
+      ${dnRes ? html`<span class=${(dnRes.ok ? 'text-green-700' : 'text-amber-700') + ' font-semibold basis-full text-sm'}>${dnRes.text}</span>` : ''}
+      ${withHa && res && res.ha != null ? html`<span class="text-slate-700 font-semibold">${haMsgs[res.ha] || ''}</span>` : ''}
+    </div>
+  `;
+};
+
+const ZigbeeSettingsBlocks = ({ settings, handleChange, errors }) => {
+  const isRu = (settings.lang || 'ru') === 'ru';
+  const inputCls = (k) => `w-full px-3 py-2 bg-white/50 border ${errors[k] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-400`;
+  const row = (item, index) => html`
+    <${FieldRow} label=${item.label} tip=${''} index=${index}>
+      <${pageSetting}
+        value=${settings[item.key]}
+        setfn=${(v) => handleChange(item.key, v)}
+        type=${item.type}
+        maxlength=${item.maxlength}
+        placeholder=${item.placeholder || ''}
+        class=${inputCls(item.key)}
+        error=${errors[item.key]}
+      />
+    <//>
+  `;
+  const sel = (label, key, options, index) => html`
+    <${FieldRow} label=${label} tip=${''} index=${index}>
+      <select class=${inputCls(key)}
+        onChange=${(e) => handleChange(key, key === 'crd_type' ? Number(e.target.value) : e.target.value)}>
+        ${options.map((o) => html`<option value=${o[0]} selected=${String(settings[key] ?? '') === String(o[0])}>${o[1]}</option>`)}
+      </select>
+    <//>
+  `;
+  const head = (title, key, onToggle) => html`
+    <thead>
+      <tr class="bg-teal-600/10 border-b border-teal-600/20">
+        <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">
+          <div class="flex items-center gap-3">
+            <span>${title}</span>
+            <${MyPolzunok} value=${settings[key]} onChange=${onToggle} />
+          </div>
+        </th>
+        <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
+      </tr>
+    </thead>
+  `;
+  const boxCls = 'w-full overflow-auto rounded-2xl shadow-lg border border-white/50 bg-white/30 backdrop-blur-sm';
+
+  const z2mRows = [
+    { label: isRu ? 'IP / имя хоста' : 'IP / host', key: 'mqtt_hst', type: 'text', maxlength: 49, placeholder: '192.168.1.60' },
+    { label: isRu ? 'Порт MQTT' : 'MQTT port', key: 'mqtt_prt', type: 'number', placeholder: '1883' },
+    { label: isRu ? 'Пользователь' : 'User', key: 'mqtt_usr', type: 'text', maxlength: 31 },
+    { label: isRu ? 'Пароль' : 'Password', key: 'mqtt_pswd', type: 'password', maxlength: 31 },
+    { label: isRu ? 'Топик MQTT' : 'MQTT topic', key: 'rxzbtop', type: 'text', maxlength: 31, placeholder: 'zigbee2mqtt' },
+  ];
+
+  const crdIsNet = Number(settings.crd_type || 0) < 2;
+  const target = crdIsNet
+    ? `tcp://${settings.crd_host || 'HOST'}:${settings.crd_port || 6638}`
+    : (settings.crd_serial || '/dev/ttyUSB0');
+  const snippet =
+    `serial:\n  port: ${target}\n` +
+    (settings.crd_adapter ? `  adapter: ${settings.crd_adapter}\n` : '') +
+    `mqtt:\n  server: mqtt://${settings.mqtt_hst || 'HOST'}:${settings.mqtt_prt || 1883}\n` +
+    `  base_topic: ${settings.rxzbtop || 'zigbee2mqtt'}`;
+
+  return html`
+    <!-- ---- Zigbee2MQTT ---- -->
+    <div class=${boxCls}>
+      <table class="w-full table-fixed text-left border-collapse">
+        ${head('Zigbee2MQTT', 'zb_mode', (v) => { handleChange('zb_mode', v); if (v) handleChange('check_mqtt', 1); })}
+        ${settings.zb_mode ? html`<tbody>${z2mRows.map(row)}</tbody>` : html`<tbody></tbody>`}
+      </table>
+      ${settings.zb_mode ? html`
+        <${ZigbeeLinkBox} isRu=${isRu} withHa=${false} />
+        <div class="px-6 py-4 border-t border-teal-500/20 text-sm text-slate-600">
+          ${isRu
+            ? 'Связь с Z2M идёт по IEEE-адресу, переименование устройств в Z2M ничего не ломает. В Z2M должно быть включено homeassistant: enabled: true. Поле Name у слота - ваша пометка. Зелёный бейдж Z2M в Select pin: имя получено, красный: имя не пришло.'
+                        : 'The Z2M link uses the IEEE address, renaming devices in Z2M breaks nothing. homeassistant: enabled: true must be on in Z2M. The slot Name field is your label. Green Z2M badge on Select pin: name received, red: name not received.'}
+        </div>
+      ` : ''}
+    </div>
+
+    <!-- ---- Zigbee-координатор ---- -->
+    <div class=${boxCls}>
+      <table class="w-full table-fixed text-left border-collapse">
+        ${head(isRu ? 'Zigbee-координатор' : 'Zigbee coordinator', 'crd_en', (v) => handleChange('crd_en', v))}
+        ${settings.crd_en ? html`
+          <tbody>
+            ${sel(isRu ? 'Тип подключения' : 'Connection type', 'crd_type',
+                  [[0, 'Ethernet / TCP'], [1, 'Wi-Fi / TCP'], [2, 'USB'], [3, isRu ? 'Последовательный порт' : 'Serial port']], 0)}
+            ${crdIsNet
+              ? html`
+                  ${row({ label: isRu ? 'IP / имя хоста' : 'IP / host', key: 'crd_host', type: 'text', maxlength: 23, placeholder: '192.168.1.70' }, 1)}
+                  ${row({ label: isRu ? 'Порт' : 'Port', key: 'crd_port', type: 'number', placeholder: '6638' }, 2)}
+                `
+              : row({ label: isRu ? 'Путь к порту' : 'Serial path', key: 'crd_serial', type: 'text', maxlength: 19, placeholder: '/dev/ttyUSB0' }, 1)}
+            ${sel(isRu ? 'Тип адаптера' : 'Adapter', 'crd_adapter',
+                  [['', isRu ? 'Авто' : 'Auto'], ['zstack', 'zstack'], ['ember', 'ember'], ['deconz', 'deconz'], ['zigate', 'zigate'], ['zboss', 'zboss']], 3)}
+            ${crdIsNet && !settings.zb_mode ? html`
+              <${FieldRow} label=${isRu ? 'Watchdog SLZB (перезагрузка шлюза)' : 'SLZB watchdog (gateway reboot)'} tip=${''} index=${4}>
+                <${MyPolzunok} value=${settings.wd_en} onChange=${(v) => handleChange('wd_en', v)} />
+              <//>
+            ` : ''}
+          </tbody>
+        ` : html`<tbody></tbody>`}
+      </table>
+      ${settings.crd_en ? html`
+        <div class="px-6 py-4 border-t border-teal-500/20">
+          <div class="text-sm text-slate-600 mb-2">
+            ${isRu
+              ? 'С координатором работает сам Zigbee2MQTT, а не STM32. Фрагмент для configuration.yaml Zigbee2MQTT:'
+              : 'The coordinator is used by Zigbee2MQTT itself, not by the STM32. Snippet for the Zigbee2MQTT configuration.yaml:'}
+          </div>
+          <pre class="p-3 rounded-lg bg-white/60 text-sm text-slate-800 overflow-x-auto">${snippet}</pre>
+        </div>
+      ` : ''}
+    </div>
+
+    <!-- ---- Home Assistant (хост и порт для проверки) ---- -->
+    ${settings.check_ha_disc ? html`
+      <div class=${boxCls}>
+        <table class="w-full table-fixed text-left border-collapse">
+          <thead>
+            <tr class="bg-teal-600/10 border-b border-teal-600/20">
+              <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">Home Assistant</th>
+              <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${row({ label: isRu ? 'IP / имя хоста' : 'IP / host', key: 'ha_host', type: 'text', maxlength: 23, placeholder: '192.168.1.50' }, 0)}
+            ${row({ label: isRu ? 'Порт' : 'Port', key: 'ha_port', type: 'number', placeholder: '8123' }, 1)}
+          </tbody>
+        </table>
+        <${ZigbeeLinkBox} isRu=${isRu} withHa=${true} />
+        <div class="px-6 py-4 border-t border-teal-500/20 text-sm text-slate-600">
+          ${isRu
+            ? 'Токен и пароль не нужны: устройство передаёт данные в Home Assistant через MQTT discovery. Хост и порт используются только для проверки доступности.'
+            : 'No token or password is needed: the device talks to Home Assistant through MQTT discovery. Host and port are only used for the reachability check.'}
+        </div>
+      </div>
+    ` : ''}
+  `;
+};
+
 const FieldRow = ({ label, tipLabel, index, tip, children }) => {
   const bg = index % 2 === 0 ? 'bg-white/80' : 'bg-sky-200/40';
   return html`
@@ -1171,10 +1380,16 @@ function Settings({ }) {
       case 'mqtt_hst':
         if (value.length > 49) error = 'Слишком длинное имя хоста (не более 49 символов)';
         break;
-      case 'slzb_host':
-        // Опциональное поле: пусто = SLZB watchdog выключен (валидной считается и пустота).
-        if (value && value.trim() !== '' && !isValidIpInput(value)) {
-          error = 'Неверный формат IP-адреса (пример: 192.168.1.115)';
+      case 'crd_host':
+      case 'ha_host':
+        if (value && value.trim() !== '' && !/^[A-Za-z0-9._-]{1,23}$/.test(value)) {
+          error = 'Неверный IP-адрес или имя хоста';
+        }
+        break;
+      case 'crd_port':
+      case 'ha_port':
+        if (value !== '' && value !== null && !(Number(value) >= 1 && Number(value) <= 65535)) {
+          error = 'Порт: от 1 до 65535';
         }
         break;
       case 'sb_mask':
@@ -1295,7 +1510,7 @@ function Settings({ }) {
     } else {
       delete jsonData.offldt;
     }
-    ['lon_de', 'lat_de', 'timezone', 'mqtt_prt', 'mqtt_srv_prt', 'mqtt_srv_maxcli'].forEach((key) => {
+    ['lon_de', 'lat_de', 'timezone', 'mqtt_prt', 'mqtt_srv_prt', 'mqtt_srv_maxcli', 'crd_port', 'ha_port', 'crd_type'].forEach((key) => {
       if (jsonData[key] === null || jsonData[key] === '') jsonData[key] = 0;
     });
     jsonData.onsunrise = jsonData.onsunrise ? 1 : 0;
@@ -1304,6 +1519,9 @@ function Settings({ }) {
     jsonData.check_mqtt = jsonData.check_mqtt ? 1 : 0;
     jsonData.check_mqtt_srv = jsonData.check_mqtt_srv ? 1 : 0;
     jsonData.check_ha_disc = jsonData.check_ha_disc ? 1 : 0;
+    jsonData.zb_mode = jsonData.zb_mode ? 1 : 0;
+    jsonData.crd_en  = jsonData.crd_en  ? 1 : 0;
+    jsonData.wd_en   = jsonData.wd_en   ? 1 : 0;
     jsonData.usehttps   = jsonData.usehttps   ? 1 : 0;
 
     // Служебные поля ответа прошивке не нужны. Библиотека условий общая с другими
@@ -1349,10 +1567,9 @@ function Settings({ }) {
 
   const handleChange = (key, value) => {
     let error = null;
-    if (key === 'slzb_host') {
-      // Чистим мусор ДО записи в state: буквы/пробелы/лишние точки просто
-      // не попадут в поле, а не появятся с красной рамкой
-      value = sanitizeIpInput(value);
+    if (key === 'crd_host' || key === 'ha_host') {
+      // Допустимы IP и имя хоста: лишние символы не попадают в поле
+      value = String(value).replace(/[^A-Za-z0-9._-]/g, '');
       error = validateInput(key, value);
     } else if (key === 'sunrise_pins' || key === 'sunset_pins') {
       // Только цифры и символы формата: пробелы и буквы не попадут в поле
@@ -1375,9 +1592,9 @@ function Settings({ }) {
       return newErrors;
     });
     let processedValue = value;
-    if (['lon_de', 'lat_de', 'timezone', 'mqtt_prt', 'mqtt_srv_prt', 'mqtt_srv_maxcli'].includes(key)) {
+    if (['lon_de', 'lat_de', 'timezone', 'mqtt_prt', 'mqtt_srv_prt', 'mqtt_srv_maxcli', 'crd_port', 'ha_port', 'crd_type'].includes(key)) {
       processedValue = value === '' || value === null ? 0 : Number(value);
-    } else if (['onsunrise', 'onsunset', 'check_ip', 'check_mqtt', 'check_mqtt_srv', 'check_ha_disc', 'usehttps'].includes(key)) {
+    } else if (['onsunrise', 'onsunset', 'check_ip', 'check_mqtt', 'check_mqtt_srv', 'check_ha_disc', 'usehttps', 'zb_mode', 'crd_en', 'wd_en'].includes(key)) {
       processedValue = value ? 1 : 0;
     }
     setSettings(prev => ({ ...prev, [key]: processedValue }));
@@ -1474,7 +1691,7 @@ function Settings({ }) {
   useEffect(() => {
     if (!isLoading && !mqttSectionInit.current) {
       mqttSectionInit.current = true;
-      setMqttSectionOpen(!!(settings.check_mqtt || settings.check_mqtt_srv || settings.check_ha_disc));
+      setMqttSectionOpen(!!(settings.check_mqtt || settings.check_mqtt_srv || settings.check_ha_disc || settings.zb_mode));
     }
   }, [isLoading]);
 
@@ -1805,6 +2022,8 @@ function Settings({ }) {
                 ` : ''}
               </div>
 
+              <${ZigbeeSettingsBlocks} settings=${settings} handleChange=${handleChange} errors=${errors} />
+
               <!-- ---- MQTT Server (экспериментальный встроенный брокер) ---- -->
               <div class="w-full overflow-auto rounded-2xl shadow-lg border border-amber-400/60 bg-white/30 backdrop-blur-sm">
                 <table class="w-full table-fixed text-left border-collapse">
@@ -1825,8 +2044,7 @@ function Settings({ }) {
                     { label: 'Port',        key: 'mqtt_srv_prt',    type: 'number',   tipLabel: 'Port (srv)',     min: 1, max: 65535 },
                     { label: 'Max clients', key: 'mqtt_srv_maxcli', type: 'number',   tipLabel: 'Max clients',    min: 1, max: 6 },
                     { label: 'User',        key: 'mqtt_srv_usr',    type: 'text',     maxlength: 31, tipLabel: 'User (srv)' },
-                    { label: 'Password',    key: 'mqtt_srv_pswd',   type: 'password', maxlength: 31, tipLabel: 'Password (srv)' },
-                    { label: 'SLZB IP',     key: 'slzb_host',       type: 'text',     maxlength: 15, tipLabel: 'SLZB IP', placeholder: '192.168.1.115' }
+                    { label: 'Password',    key: 'mqtt_srv_pswd',   type: 'password', maxlength: 31, tipLabel: 'Password (srv)' }
                   ].map((item, index) => html`
                     <${FieldRow} label=${item.label} tip=${gt(item.tipLabel || item.label)} index=${index}>
                       <${pageSetting}

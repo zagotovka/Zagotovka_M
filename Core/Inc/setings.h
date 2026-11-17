@@ -82,7 +82,9 @@ void    SetLastState(void);
 #define MQTT_SRV_MAXCLI 4     // UI-лимит клиентов; прошивка clamp до MQTT_SRV_MAX_CLIENTS_HARDCAP
 #define MQTT_SRV_USR  "Yahsalta"    // дефолтный логин встроенного MQTT-брокера
 #define MQTT_SRV_PSWD "Zagotovka"   // дефолтный пароль встроенного MQTT-брокера
-#define SLZB_HOST     ""            // IP шлюза SLZB-06p7U для watchdog'а; пусто = watchdog выключен
+#define ZB_MODE       0             // 0 = Hub (сырой формат SLZB), 1 = Zigbee2MQTT
+#define CRD_PORT      6638          // порт сетевого координатора по умолчанию
+#define HA_PORT       8123          // порт Home Assistant по умолчанию
 // Home Assistant MQTT Discovery
 #define CHECK_HA_DISC 0             // по умолчанию ВЫКЛ
 #define HA_PREFIX     "homeassistant"

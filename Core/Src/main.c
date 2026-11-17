@@ -2012,7 +2012,11 @@ void StartWebServerTask(void *argument)
      * к брокеру за SLZB_WD_WAIT_MS — перезагружаем его HTTP-запросом.
      * IP берётся из настроек (Settings → MQTT Server → "SLZB IP");
      * пустая строка = watchdog выключен. */
-    slzb_watchdog_init(SetSettings.slzb_host);
+    if (SetSettings.wd_en && SetSettings.zb_mode == 0) {
+      slzb_watchdog_init(SetSettings.crd_host);
+    } else {
+      slzb_watchdog_init("");   /* по умолчанию выключен */
+    }
   }
 
   /* HA MQTT Discovery: включается настройкой check_ha_disc, работает и без

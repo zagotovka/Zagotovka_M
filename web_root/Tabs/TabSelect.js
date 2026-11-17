@@ -207,7 +207,19 @@ const ArraySelect = ({ d, selectedValues, isRowDisabled, handleRadioChange, hand
         : 'bg-sky-200/40'
     } hover:bg-slate-200/80 transition-colors">
     <td class="px-3 md:px-6 py-2 text-sm text-slate-800 whitespace-nowrap">${d.id}</td>
-    <td class="px-3 md:px-6 py-2 text-sm text-slate-800 font-medium whitespace-nowrap">${isZigbeePin ? 'Z2M' : d.pins}</td>
+    <td class="px-3 md:px-6 py-2 text-sm text-slate-800 font-medium whitespace-nowrap">
+      ${isZigbeePin && d.zm && d.zbee_ieee && d.zbee_ieee.length === 16
+        ? html`<span title=${d.z2m
+              ? (language === 'ru' ? 'Имя в Z2M: ' : 'Z2M name: ') + d.z2m + (language === 'ru'
+                  ? '\nСвязь по IEEE, переименование в Z2M ничего не ломает.\nСтатус на момент загрузки таблицы.'
+                  : '\nLinked by IEEE, renaming in Z2M breaks nothing.\nStatus as of table load.')
+              : (language === 'ru'
+                  ? 'Имя из Z2M не получено.\nВозможно: IEEE нет в Z2M или выключен homeassistant: enabled: true (см. Settings).\nЕсли у других слотов зелёный, проверьте IEEE.\nОбновите страницу, чтобы перепроверить.'
+                  : 'Name from Z2M not received.\nPossible: IEEE not in Z2M or homeassistant: enabled: true is off (see Settings).\nIf other slots are green, check the IEEE.\nReload the page to recheck.')}
+            class=${'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-white ' + (d.z2m ? 'bg-green-600' : 'bg-red-600')}>
+            Z2M</span>`
+        : (isZigbeePin ? 'Z2M' : d.pins)}
+    </td>
     <td class="px-2 py-2">
       <div class="flex flex-wrap items-center justify-center gap-x-1 gap-y-1">
         ${isPhysicalPin ? html`
@@ -244,7 +256,7 @@ const ArraySelect = ({ d, selectedValues, isRowDisabled, handleRadioChange, hand
               handleFieldChange(d.id, 'zbee_ieee', v);
             }}
             class="text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-teal-400 flex-1" />
-          <input type="text" placeholder="Info (e.g. Lamp Kuhnya)"
+          <input type="text" placeholder="Name: your label (e.g. Lamp Kuhnya)"
             maxlength="29"
             value=${selectedValues[`zbee_label_${d.id}`] || ''}
             onInput=${(e) => handleFieldChange(d.id, 'zbee_label', e.target.value)}

@@ -418,7 +418,16 @@ void SetSettingsConfig() {
   writeField(&USBHFile, buffer, "mqtt_srv_pswd", "\"%s\"", SetSettings.mqtt_srv_pswd);
   writeField(&USBHFile, buffer, "check_ha_disc", "%d", SetSettings.check_ha_disc);
   writeField(&USBHFile, buffer, "ha_prefix", "\"%s\"", SetSettings.ha_prefix);
-  writeField(&USBHFile, buffer, "slzb_host", "\"%s\"", SetSettings.slzb_host);
+  writeField(&USBHFile, buffer, "zb_mode", "%d", SetSettings.zb_mode);
+  writeField(&USBHFile, buffer, "crd_en", "%d", SetSettings.crd_en);
+  writeField(&USBHFile, buffer, "crd_type", "%d", SetSettings.crd_type);
+  writeField(&USBHFile, buffer, "wd_en", "%d", SetSettings.wd_en);
+  writeField(&USBHFile, buffer, "crd_port", "%d", SetSettings.crd_port);
+  writeField(&USBHFile, buffer, "ha_port", "%d", SetSettings.ha_port);
+  writeField(&USBHFile, buffer, "crd_host", "\"%s\"", SetSettings.crd_host);
+  writeField(&USBHFile, buffer, "crd_adapter", "\"%s\"", SetSettings.crd_adapter);
+  writeField(&USBHFile, buffer, "crd_serial", "\"%s\"", SetSettings.crd_serial);
+  writeField(&USBHFile, buffer, "ha_host", "\"%s\"", SetSettings.ha_host);
 
   writeField(&USBHFile, buffer, "check_ip", "%d", SetSettings.check_ip);
   writeField(&USBHFile, buffer, "ip_addr0", "%d", SetSettings.ip_addr0);
@@ -477,6 +486,9 @@ void SetSettingsRamDefaults(void) {
   SetSettings.mqtt_prt = MQTT_PRT;
   SetSettings.check_ha_disc = CHECK_HA_DISC;
   strcpy(SetSettings.ha_prefix, HA_PREFIX);
+  SetSettings.zb_mode = ZB_MODE;
+  SetSettings.crd_port = CRD_PORT;
+  SetSettings.ha_port = HA_PORT;
   SetSettings.check_mqtt_srv = CHECK_MQTT_SRV;
   SetSettings.mqtt_srv_prt = MQTT_SRV_PRT;
   SetSettings.mqtt_srv_maxcli = MQTT_SRV_MAXCLI;
@@ -548,7 +560,16 @@ void StartSettingsConfig() {
   writeField(&USBHFile, buffer, "mqtt_srv_pswd", "\"%s\"", MQTT_SRV_PSWD);
   writeField(&USBHFile, buffer, "check_ha_disc", "%d", CHECK_HA_DISC);
   writeField(&USBHFile, buffer, "ha_prefix", "\"%s\"", HA_PREFIX);
-  writeField(&USBHFile, buffer, "slzb_host", "\"%s\"", SLZB_HOST);
+  writeField(&USBHFile, buffer, "zb_mode", "%d", ZB_MODE);
+  writeField(&USBHFile, buffer, "crd_en", "%d", 0);
+  writeField(&USBHFile, buffer, "crd_type", "%d", 0);
+  writeField(&USBHFile, buffer, "wd_en", "%d", 0);
+  writeField(&USBHFile, buffer, "crd_port", "%d", CRD_PORT);
+  writeField(&USBHFile, buffer, "ha_port", "%d", HA_PORT);
+  writeField(&USBHFile, buffer, "crd_host", "\"\"");
+  writeField(&USBHFile, buffer, "crd_adapter", "\"\"");
+  writeField(&USBHFile, buffer, "crd_serial", "\"\"");
+  writeField(&USBHFile, buffer, "ha_host", "\"\"");
 
   // Write IP settings
   writeField(&USBHFile, buffer, "check_ip", "%d", CHECK_IP);
@@ -622,6 +643,9 @@ void GetSettingsConfig() {
   // Дефолты ДО парсинга: если ключ отсутствует в старом settings.ini — остаются дефолты
   SetSettings.check_ha_disc = CHECK_HA_DISC;
   strcpy(SetSettings.ha_prefix, HA_PREFIX);
+  SetSettings.zb_mode = ZB_MODE;
+  SetSettings.crd_port = CRD_PORT;
+  SetSettings.ha_port = HA_PORT;
   SetSettings.check_mqtt_srv = CHECK_MQTT_SRV;
   SetSettings.mqtt_srv_prt = MQTT_SRV_PRT;
   SetSettings.mqtt_srv_maxcli = MQTT_SRV_MAXCLI;
@@ -760,8 +784,14 @@ void GetSettingsConfig() {
       strncpy(SetSettings.ha_prefix, value, sizeof(SetSettings.ha_prefix) - 1);
     } else if (strcmp(key, "mqtt_srv_pswd") == 0) {
       strncpy(SetSettings.mqtt_srv_pswd, value, sizeof(SetSettings.mqtt_srv_pswd) - 1);
-    } else if (strcmp(key, "slzb_host") == 0) {
-      strncpy(SetSettings.slzb_host, value, sizeof(SetSettings.slzb_host) - 1);
+    } else if (strcmp(key, "crd_host") == 0 || strcmp(key, "slzb_host") == 0) {
+      strncpy(SetSettings.crd_host, value, sizeof(SetSettings.crd_host) - 1);
+    } else if (strcmp(key, "crd_adapter") == 0) {
+      strncpy(SetSettings.crd_adapter, value, sizeof(SetSettings.crd_adapter) - 1);
+    } else if (strcmp(key, "crd_serial") == 0) {
+      strncpy(SetSettings.crd_serial, value, sizeof(SetSettings.crd_serial) - 1);
+    } else if (strcmp(key, "ha_host") == 0) {
+      strncpy(SetSettings.ha_host, value, sizeof(SetSettings.ha_host) - 1);
     } else if (strcmp(key, "tel") == 0) {
       strncpy(SetSettings.tel, value, sizeof(SetSettings.tel) - 1);
       //			printf("Found key: %s, value: %s\r\n", key,
@@ -808,6 +838,18 @@ void GetSettingsConfig() {
       SetSettings.mqtt_srv_maxcli = (uint8_t)atoi(value);
     } else if (strcmp(key, "check_ha_disc") == 0) {
       SetSettings.check_ha_disc = (short)atoi(value);
+    } else if (strcmp(key, "zb_mode") == 0) {
+      SetSettings.zb_mode = (short)atoi(value);
+    } else if (strcmp(key, "crd_en") == 0) {
+      SetSettings.crd_en = (short)atoi(value);
+    } else if (strcmp(key, "crd_type") == 0) {
+      SetSettings.crd_type = (short)atoi(value);
+    } else if (strcmp(key, "wd_en") == 0) {
+      SetSettings.wd_en = (short)atoi(value);
+    } else if (strcmp(key, "crd_port") == 0) {
+      SetSettings.crd_port = atoi(value);
+    } else if (strcmp(key, "ha_port") == 0) {
+      SetSettings.ha_port = atoi(value);
     } else if (strcmp(key, "check_ip") == 0) {
       SetSettings.check_ip = atoi(value);
       //			printf("Found key: %s, value: %s\r\n", key,

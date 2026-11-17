@@ -283,7 +283,16 @@ struct dbSettings {	// Cтруктура для setting
 	uint8_t mqtt_srv_maxcli;   // лимит одновременных клиентов (clamp в прошивке: MQTT_SRV_MAX_CLIENTS_HARDCAP)
 	char  mqtt_srv_usr[32];    // опционально: логин для подключения к серверу
 	char  mqtt_srv_pswd[32];   // опционально: пароль
-	char  slzb_host[16];       // IP шлюза SLZB-06p7U для watchdog'а автовосстановления (пусто = выключен), строго IPv4: "192.168.1.115"
+	short zb_mode;             // 0 = Hub (сырой формат SLZB), 1 = Zigbee2MQTT
+	short crd_en;              // 1 = координатор описан в настройках (справочно, для сниппета Z2M)
+	short crd_type;            // 0 = Ethernet/TCP, 1 = Wi-Fi/TCP, 2 = USB, 3 = последовательный порт
+	short wd_en;               // 1 = разрешить watchdog перезагрузки SLZB (только режим Hub)
+	int   crd_port;            // TCP-порт координатора (например 6638)
+	int   ha_port;             // порт Home Assistant (например 8123)
+	char  crd_host[24];        // IP или имя хоста координатора
+	char  crd_adapter[10];     // zstack, ember, deconz, zigate, zboss; пусто = авто
+	char  crd_serial[20];      // /dev/ttyUSB0 или COM3 (только USB/serial)
+	char  ha_host[24];         // IP или имя хоста Home Assistant (проверка живости)
 	// Home Assistant MQTT Discovery
 	short check_ha_disc;       // 1 = публиковать конфиги сущностей для Home Assistant
 	char  ha_prefix[24];       // discovery prefix, по умолчанию "homeassistant"

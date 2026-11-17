@@ -18,12 +18,13 @@
 
 /* Host шлюза (снимок из SetSettings.slzb_host на момент старта, как и
  * креды брокера — изменение требует перезагрузки). Пусто = выключен. */
-static char s_slzb_host[16]             = {0};
+static char s_slzb_host[24]             = {0};
 static uint32_t s_disconnected_since_ms = 0;  /* 0 = SLZB подключён, таймер не идёт */
 static uint32_t s_last_trigger_ms       = 0;  /* момент последнего reboot-запроса */
 static uint32_t s_req_start_ms          = 0;  /* момент отправки запроса (таймаут) */
 static uint8_t  s_have_last_trigger     = 0;
 static uint8_t  s_trigger_pending       = 0;  /* HTTP-запрос сейчас в полёте */
+static uint8_t  s_tries                 = 0;  /* число перезагрузок подряд */
 static struct mg_connection *s_req_conn = NULL; /* коннект запроса (для таймаута) */
 
 /* ---------- HTTP-callback reboot-запроса ---------- */
@@ -97,6 +98,7 @@ static void slzb_watchdog_trigger(struct mg_mgr *mgr) {
   s_req_start_ms     = mg_millis();
   s_last_trigger_ms  = s_req_start_ms;
   s_have_last_trigger = 1;
+  s_tries++;
   /* Таймер ожидания сбрасываем вместе с таймером срабатывания — благодаря
    * этому 60с cooldown естественно доминирует над 40с ожидания, и
    * повторная попытка не может случиться раньше чем через минуту. */
@@ -124,6 +126,7 @@ void slzb_watchdog_poll(struct mg_mgr *mgr) {
 
   if (mqtt_server_slzb_connected()) {
     s_disconnected_since_ms = 0;        /* связь есть — таймер выключен */
+    s_tries = 0;
     return;
   }
 
@@ -137,6 +140,7 @@ void slzb_watchdog_poll(struct mg_mgr *mgr) {
   if (s_trigger_pending) return;                                 /* запрос в полёте */
   if (s_have_last_trigger &&
       (now - s_last_trigger_ms < SLZB_WD_COOLDOWN_MS)) return;   /* cooldown */
+  if (s_tries >= SLZB_WD_MAX_TRIES) return;                      /* лимит попыток исчерпан */
 
   slzb_watchdog_trigger(mgr);
 }

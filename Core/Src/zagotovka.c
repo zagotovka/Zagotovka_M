@@ -24,6 +24,7 @@
 #include "dtcm_alloc.h"
 #include "mqtt_server.h"
 #include "ha_discovery.h"
+#include "z2m_adapter.h"
 #include "cond_eval.h" /* Дополнительные условия срабатывания действий */
 /*********************** Moon *****************************/
 #include "net.h"
@@ -628,12 +629,14 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
     json_escape_str(esc_zbee_label, zb.zbee_label, sizeof(esc_zbee_label));
     char esc_zbee_ieee[64];
     json_escape_str(esc_zbee_ieee, zb.zbee_ieee, sizeof(esc_zbee_ieee));
+    char esc_z2m[64];
+    json_escape_str(esc_z2m, zb.info, sizeof(esc_z2m));
     
     mg_http_printf_chunk(c,
     "%s{\"id\":%ld,\"pins\":\"%s\",\"topin\":%d,"
     "\"zbee_ieee\":\"%s\",\"zbee_endpoint\":%d,"
     "\"clusters\":%s,\"zbee_attribute\":%d,"
-    "\"zbee_label\":\"%s\",\"role\":%d,\"ponr\":%d}",
+    "\"zbee_label\":\"%s\",\"role\":%d,\"ponr\":%d,\"zm\":%d,\"z2m\":\"%s\"}",
     (first ? "" : ","), (long)ZbeeIdFromIdx(i),
     zb.zbee_ieee[0] != '\0' ? esc_zbee_label : "",
     zb.topin,
@@ -641,7 +644,9 @@ void handle_select_get(struct mg_connection *c, long offset, long limit) {
     clbuf, zb.zbee_attribute,
     esc_zbee_label,
     zb.zbee_role,
-    (int)ponr_eff_zbee(i));
+    (int)ponr_eff_zbee(i),
+    z2m_enabled() ? 1 : 0,
+    z2m_enabled() ? esc_z2m : "");
     first = 0;
     emitted++;
   }
@@ -1307,6 +1312,10 @@ void parse_select_json(const char *json_string, struct dbPinsConf *PinsConf,
         /* Зонд запускаем ПОСЛЕ назначения всех полей */
         if (ieee_changed && ZigbeeConf[zbi].zbee_ieee[0] != '\0') {
             ZigbeeConf[zbi].cluster_flags = 0;
+            if (z2m_enabled()) {
+                ZigbeeConf[zbi].info[0] = '\0';   /* имя старого устройства не должно остаться */
+                z2m_request_resub();
+            }
             SendZigbeeReadProbe(ZigbeeConf[zbi].zbee_ieee, ZigbeeConf[zbi].zbee_endpoint);
         }
       }
@@ -3216,7 +3225,14 @@ static void emit_mqtt_server(struct mg_connection *c,
   len = snprintf(buf, 512, "\"check_ha_disc\":%d,", s->check_ha_disc);
   mg_http_write_chunk(c, buf, (size_t)len);
   emit_escaped_blob(c, "ha_prefix",     s->ha_prefix,     sizeof(s->ha_prefix), buf, 512);
-  emit_escaped_blob(c, "slzb_host",     s->slzb_host,     sizeof(s->slzb_host), buf, 512);
+  len = snprintf(buf, 512,
+      "\"zb_mode\":%d,\"crd_en\":%d,\"crd_type\":%d,\"crd_port\":%d,\"wd_en\":%d,\"ha_port\":%d,",
+      s->zb_mode, s->crd_en, s->crd_type, s->crd_port, s->wd_en, s->ha_port);
+  mg_http_write_chunk(c, buf, (size_t)len);
+  emit_escaped_blob(c, "crd_host",    s->crd_host,    sizeof(s->crd_host), buf, 512);
+  emit_escaped_blob(c, "crd_adapter", s->crd_adapter, sizeof(s->crd_adapter), buf, 512);
+  emit_escaped_blob(c, "crd_serial",  s->crd_serial,  sizeof(s->crd_serial), buf, 512);
+  emit_escaped_blob(c, "ha_host",     s->ha_host,     sizeof(s->ha_host), buf, 512);
 }
 
 __attribute__((section(".itcm"))) static void emit_ip(struct mg_connection *c,
@@ -4356,33 +4372,19 @@ bool is_c_like_format(const char *value) {
   return (strstr(value, "\\n") != NULL && strstr(value, "\"") != NULL);
 }
 
-/* Строгая проверка IPv4-адреса: ровно 4 октета по 1-3 цифры, значения 0-255,
- * разделители — только '.', посторонних символов быть не должно. Используется
- * для slzb_host (IP шлюза SLZB-06p7U): мусор в этом поле не должен попадать
- * в settings.ini и в watchdog независимо от фронтенда. */
-static bool settings_valid_ipv4(const char *s) {
-  int octets = 0;
-  const char *p;
-  if (s == NULL || *s == '\0') return false;
-  p = s;
-  while (*p != '\0') {
-    int val = 0, digits = 0;
-    if (*p < '0' || *p > '9') return false;      // не цифра — мусор
-    while (*p >= '0' && *p <= '9') {
-      val = val * 10 + (*p - '0');
-      if (++digits > 3) return false;            // октет длиннее 3 цифр
-      p++;
-    }
-    if (val > 255) return false;                 // октет > 255
-    octets++;
-    if (*p == '.') {
-      p++;
-      if (*p == '\0') return false;              // точка в конце
-    } else {
-      break;                                     // не точка — конец адреса
-    }
+/* Допустимые символы: латиница, цифры, '.', '-', '_' (и '/', ':' для пути). Пусто допустимо. */
+static bool settings_valid_token(const char *s, size_t maxlen, bool path) {
+  size_t n = 0;
+  if (s == NULL) return false;
+  for (; s[n] != '\0'; n++) {
+    char ch = s[n];
+    bool ok = (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z') ||
+              (ch >= 'A' && ch <= 'Z') || ch == '.' || ch == '-' || ch == '_' ||
+              (path && (ch == '/' || ch == ':'));
+    if (!ok) return false;
+    if (n + 1 >= maxlen) return false;
   }
-  return octets == 4 && *p == '\0';
+  return true;
 }
 
 void parse_mysett_json(char *json_string, struct dbSettings *settings) {
@@ -4475,20 +4477,57 @@ void parse_mysett_json(char *json_string, struct dbSettings *settings) {
   { char *_v = json_get_str_allow_empty(body, "$.ha_prefix");
     if (_v) { strncpy(settings->ha_prefix, _v, sizeof(settings->ha_prefix) - 1);
     settings->ha_prefix[sizeof(settings->ha_prefix) - 1] = '\0'; mg_free(_v); } }
-  /* slzb_host — IP шлюза SLZB-06p7U для watchdog'а. Опционально: пустая
-   * строка = watchdog выключен. Значение валидируем СЕРВЕРНО (строгий IPv4):
-   * невалидное значение молча игнорируется (остаётся старое) — мусор не
-   * должен попасть в settings.ini и в slzb_watchdog, даже если фронтенд
-   * проверку каким-то образом обошли. */
-  { char *_v = json_get_str_allow_empty(body, "$.slzb_host");
+  /* Zigbee: режим, координатор, Home Assistant. Невалидные значения молча
+   * игнорируются (остаётся старое), мусор не попадает в settings.ini. */
+  settings->zb_mode  = (short)mg_json_get_long(body, "$.zb_mode",  settings->zb_mode);
+  settings->crd_en   = (short)mg_json_get_long(body, "$.crd_en",   settings->crd_en);
+  settings->crd_type = (short)mg_json_get_long(body, "$.crd_type", settings->crd_type);
+  settings->wd_en    = (short)mg_json_get_long(body, "$.wd_en",    settings->wd_en);
+  if (settings->zb_mode < 0 || settings->zb_mode > 1) settings->zb_mode = 0;
+  if (settings->crd_type < 0 || settings->crd_type > 3) settings->crd_type = 0;
+  if (settings->crd_en != 0) settings->crd_en = 1;
+  if (settings->wd_en != 0) settings->wd_en = 1;
+  {
+    long v = mg_json_get_long(body, "$.crd_port", settings->crd_port);
+    settings->crd_port = (v >= 0 && v <= 65535) ? (int) v : 0;
+  }
+  {
+    long v = mg_json_get_long(body, "$.ha_port", settings->ha_port);
+    settings->ha_port = (v >= 0 && v <= 65535) ? (int) v : 0;
+  }
+  { char *_v = json_get_str_allow_empty(body, "$.crd_host");
     if (_v != NULL) {
-      if (_v[0] == '\0') {
-        settings->slzb_host[0] = '\0';           // очистка поля = watchdog off
-      } else if (settings_valid_ipv4(_v)) {
-        strncpy(settings->slzb_host, _v, sizeof(settings->slzb_host) - 1);
-        settings->slzb_host[sizeof(settings->slzb_host) - 1] = '\0';
+      if (settings_valid_token(_v, sizeof(settings->crd_host), false)) {
+        strncpy(settings->crd_host, _v, sizeof(settings->crd_host) - 1);
+        settings->crd_host[sizeof(settings->crd_host) - 1] = '\0';
       } else {
-        printf("[settings] WARN: slzb_host rejected (invalid IPv4): '%s'\r\n", _v);
+        printf("[settings] WARN: crd_host rejected: '%s'\r\n", _v);
+      }
+      mg_free(_v);
+    } }
+  { char *_v = json_get_str_allow_empty(body, "$.ha_host");
+    if (_v != NULL) {
+      if (settings_valid_token(_v, sizeof(settings->ha_host), false)) {
+        strncpy(settings->ha_host, _v, sizeof(settings->ha_host) - 1);
+        settings->ha_host[sizeof(settings->ha_host) - 1] = '\0';
+      } else {
+        printf("[settings] WARN: ha_host rejected: '%s'\r\n", _v);
+      }
+      mg_free(_v);
+    } }
+  { char *_v = json_get_str_allow_empty(body, "$.crd_adapter");
+    if (_v != NULL) {
+      if (settings_valid_token(_v, sizeof(settings->crd_adapter), false)) {
+        strncpy(settings->crd_adapter, _v, sizeof(settings->crd_adapter) - 1);
+        settings->crd_adapter[sizeof(settings->crd_adapter) - 1] = '\0';
+      }
+      mg_free(_v);
+    } }
+  { char *_v = json_get_str_allow_empty(body, "$.crd_serial");
+    if (_v != NULL) {
+      if (settings_valid_token(_v, sizeof(settings->crd_serial), true)) {
+        strncpy(settings->crd_serial, _v, sizeof(settings->crd_serial) - 1);
+        settings->crd_serial[sizeof(settings->crd_serial) - 1] = '\0';
       }
       mg_free(_v);
     } }
@@ -8295,6 +8334,10 @@ static int zbee_send_cmd_status(const char *zbee_ieee, uint8_t endpoint,
         return 429;
     }
 
+    if (z2m_enabled()) {
+        return z2m_send_cmd(zbee_idx, cluster, json_cmd);
+    }
+
     char set_topic[80];
     if (cluster == 0x0006) {
         /* SLZB-OS после обновления: ZCL-команда указывается в топике
@@ -8351,6 +8394,11 @@ static int zbee_send_ep_status(const char *zbee_ieee, uint8_t endpoint,
                                uint16_t dp, const char *val) {
     extern osMessageQueueId_t zbeeCmdQueueHandle;
 
+    if (z2m_enabled()) {
+        LOG_Z2M("zbee: EP/DP command is not supported in Z2M mode\r\n");
+        return 400;
+    }
+
     char set_topic[80];
     snprintf(set_topic, sizeof(set_topic),
              "%s/cmd/%s/%d/EF00/%04X",
@@ -8379,8 +8427,17 @@ void SendZigbeeEPCommand(const char *zbee_ieee, uint8_t endpoint,
     (void)zbee_send_ep_status(zbee_ieee, endpoint, dp, val);
 }
 
+void zbee_rx_inject(const char *topic, const char *payload) {
+    if (strstr(topic, "/trigger/") != NULL) {
+        mqtt_zigbee_trigger_handler(topic, payload);
+    } else {
+        mqtt_zigbee_handler(topic, payload);
+    }
+}
+
 void mqtt_message_handler(const char *topic, const char *payload) {
   if (ha_discovery_handle_rx(topic, payload)) return;
+  if (z2m_enabled() && z2m_handle_rx(topic, payload)) return;
   const char *zbtop = get_rxzbtop();
   size_t zbtop_len = strlen(zbtop);
   if (strncmp(topic, zbtop, zbtop_len) == 0 &&
@@ -12836,6 +12893,10 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
         if (ieee_changed && ZigbeeConf[id].zbee_ieee[0] != '\0') {
             /* Новый/изменённый IEEE — сбрасываем флаги и запускаем зонд */
             ZigbeeConf[id].cluster_flags = 0;
+            if (z2m_enabled()) {
+                ZigbeeConf[id].info[0] = '\0';
+                z2m_request_resub();
+            }
             SendZigbeeReadProbeAllEndpoints(ZigbeeConf[id].zbee_ieee);
         }
       }

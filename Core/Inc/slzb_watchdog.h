@@ -36,7 +36,9 @@
  * если не завис; 40с достаточно, чтобы не мешать штатному reconnect) */
 #define SLZB_WD_WAIT_MS           40000u
 /* Не чаще 1 раза в минуту (шлюзу нужно время подняться после reboot) */
-#define SLZB_WD_COOLDOWN_MS       60000u
+#define SLZB_WD_COOLDOWN_MS       300000u
+/* Максимум попыток перезагрузки подряд (сбрасывается, когда шлюз подключился) */
+#define SLZB_WD_MAX_TRIES         3u
 /* Таймаут ожидания ответа на HTTP-запрос reboot */
 #define SLZB_WD_HTTP_TIMEOUT_MS   10000u
 

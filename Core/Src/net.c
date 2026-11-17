@@ -16,6 +16,7 @@
 #include "cond_eval.h" /* текст условия связи для /api/state/encoder */
 #include "dtcm_alloc.h"
 #include "ha_discovery.h"
+#include "z2m_adapter.h"
 #include "net_limits.h"  /* единый бюджет соединений + пороги heap */
 
 /* ── Remote Control: вид Zigbee-актуатора с учётом ручного типа (override) ──
@@ -1952,6 +1953,12 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			} else if (mg_match(hm->uri, mg_str("/api/switch/set"), NULL)) {
 				MG_INFO(("%lu Processing /api/switch/set", c->id));
 				handle_switch_set(c, hm);
+			} else if (mg_match(hm->uri, mg_str("/api/zigbee/link"), NULL)) {
+				char zl[112];
+				if (mg_match(hm->query, mg_str("*ha=1*"), NULL)) z2m_ha_probe(c->mgr);
+				z2m_diag_json(zl, sizeof(zl));
+				mg_http_reply(c, 200, "Content-Type: application/json\r\nCache-Control: no-store\r\n",
+				              "%s", zl);
 			} else if (mg_match(hm->uri, mg_str("/api/zigbee/get"), NULL)) {
 				if (!check_etag_304(c, hm, &g_ver_zigbee)) {
 					char buf[32];
@@ -2272,6 +2279,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
   } else if (ev == MG_EV_ERROR) {
     // On error, log error message
     MG_ERROR(("%lu ERROR %s", c->id, (char *) ev_data));
+    z2m_on_mqtt_error((const char *) ev_data);
   } else if (ev == MG_EV_CONNECT) {
     // If target URL is SSL/TLS, command client connection to use TLS
     if (mg_url_is_ssl(get_mqtt_url())) {
@@ -2279,6 +2287,15 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
       //mg_tls_init(c, &opts);
     }
   } else if (ev == MG_EV_MQTT_OPEN) {// MQTT connect is successful
+	if (ev_data != NULL && *(uint8_t *) ev_data != 0) {
+	  /* Брокер отказал (CONNACK != 0): Mongoose сам закроет соединение.
+	   * Считать такое подключение успешным нельзя. */
+	  z2m_on_connack_error((int) *(uint8_t *) ev_data);
+	  printf("[MQTT] connection refused by broker, CONNACK code=%d\r\n",
+	         (int) *(uint8_t *) ev_data);
+	  return;
+	}
+	z2m_on_mqtt_open();
 	printf("[MQTT] connected to %s\r\n", get_mqtt_url());
 	mqtt_connected_reported = true;
 	s_mqtt_reconnect_reported = false; // Сброс: при следующем дисконнекте снова напечатает 1 раз
@@ -2308,7 +2325,9 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
 
     /* Подписка на zigbee2mqtt data если rxzbtop отличается от rxmqttop */
     const char *zbtop = get_rxzbtop();
-    if (strcmp(zbtop, s_sub_topic) != 0) {
+    if (z2m_enabled()) {
+      z2m_subscribe(c, s_qos);
+    } else if (strcmp(zbtop, s_sub_topic) != 0) {
       char zb_wildcard[64];
       snprintf(zb_wildcard, sizeof(zb_wildcard), "%s/#", zbtop);
       sub_opts.topic = mg_str(zb_wildcard);
@@ -2346,7 +2365,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     /* КРИТИЧНО: использовать фиксированные ZBEE_ATTR_*, а не zbee_attribute!
        После зонда cluster_flags установлен, но zbee_attribute может быть 0
        (по умолчанию) — тогда подписка уйдёт не на тот атрибут. */
-    for (int i = 0; i < NUMZBEE; i++) {
+    for (int i = 0; i < (z2m_enabled() ? 0 : NUMZBEE); i++) {
       if (ZigbeeConf[i].zbee_ieee[0] != '\0') {
         /* multi-EP слоты — подписка на конкретный EP */
         if (ZigbeeConf[i].ep_onoff > 0) {
@@ -2501,6 +2520,17 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
     s_mqtt_last_rx_ms = (uint32_t) mg_millis(); /* любой PUBLISH от брокера = брокер жив */
     // When we get echo response, print it
     struct mg_mqtt_message *mm = (struct mg_mqtt_message *) ev_data;
+    {
+      MqttRxMsg_t zrx;
+      int zr = z2m_rx_filter(mm, &zrx);
+      if (zr == 2) {
+        extern osMessageQueueId_t mqttRxQueueHandle;
+        if (xQueueSend(mqttRxQueueHandle, &zrx, 0) != pdPASS) {
+          printf("[MQTT] RX queue full, Z2M message dropped!\r\n");
+        }
+      }
+      if (zr != 0) return;
+    }
     printf("[MQTT] topic='%.*s' data='%.*s'\r\n",
                (int)mm->topic.len, mm->topic.buf,
                (int)mm->data.len, mm->data.buf);
@@ -2523,6 +2553,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
                                                    который отдельно нигде не разбирается */
   } else if (ev == MG_EV_CLOSE) {
     MG_INFO(("%lu CLOSED", c->id));
+    if (s_conn == c) z2m_on_mqtt_close();
     if (s_conn == c) {
       if (mqtt_connected_reported) {
         unsigned long alive_sec = (unsigned long)(mg_millis() - s_mqtt_alive_since) / 1000;
@@ -2609,9 +2640,10 @@ void timer_fn_mqtt(void *arg) {
       if (mqtt_connected_reported && !s_conn->is_closing && !s_conn->is_draining) {
         static uint64_t s_last_ping = 0;
         if (mg_millis() - s_last_ping >= MQTT_CLIENT_PING_MS) {
-          s_last_ping = mg_millis();
-          mg_mqtt_ping(s_conn);
-        }
+            s_last_ping = mg_millis();
+            mg_mqtt_ping(s_conn);
+          }
+          z2m_poll(s_conn, s_qos);
       }
       return;
     }
