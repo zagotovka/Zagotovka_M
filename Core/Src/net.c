@@ -2570,6 +2570,7 @@ static void fn_mqtt(struct mg_connection *c, int ev, void *ev_data, void *fn_dat
 //static void timer_fn_mqtt(void *arg) {
 void timer_fn_mqtt(void *arg) {
   struct mg_mgr *mgr = (struct mg_mgr *) arg;
+  z2m_ha_tick(mgr);   /* фоновая проверка Home Assistant для индикатора HA в шапке */
 
   static uint16_t s_mqtt_retry_cnt = 0;
   static uint64_t s_close_since = 0;
@@ -3871,7 +3872,8 @@ close_ds18b20:
  * попадает на закрывающийся сокет) реализована на фронтенде
  * через pauseAll() перед аплоадом и защиту OTA-owner в MG_EV_ACCEPT. */
 static void handle_common(struct mg_connection *c) {
-    char b[448];
+    char b[512];
+    char lk[64];
     char tbuf[256];
     char extra[192];
     parse_stm32time(tbuf, sizeof(tbuf), &SetSettings);
@@ -3888,12 +3890,13 @@ static void handle_common(struct mg_connection *c) {
      * usb_unsaved = есть несохранённые конфиги (см. usb_unsaved_mask).
      * lang — выбранный язык (Global Settings): баннер при обрыве USB в работе
      * пишется на нём; при старте без флешки веб сам показывает оба языка. */
+    z2m_link_json(lk, sizeof(lk));
     snprintf(b, sizeof(b),
         "{\"uptime\":%lu,\"heap\":%lu,\"ip\":\"%s\",\"gsm\":\"%s\",\"time\":%s,\"fw\":\"%s\","
-        "\"usb\":%u,\"usb_unsaved\":%u,\"lang\":\"%s\"}",
+        "\"usb\":%u,\"usb_unsaved\":%u,\"lang\":\"%s\",\"lk\":%s}",
         uptime, heap, "0.0.0.0", "ok", tbuf, FW_VERSION,
         (unsigned)g_usb_state, (unsigned)(g_usb_unsaved_mask != 0),
-        SetSettings.lang);
+        SetSettings.lang, lk);
     mg_http_reply(c, 200, extra, "%s", b);
 }
 

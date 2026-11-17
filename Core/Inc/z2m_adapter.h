@@ -60,4 +60,10 @@ void z2m_diag_json(char *buf, size_t n);
 /* Запуск проверки живости Home Assistant (GET /api/, ответ 401 = жив) */
 void z2m_ha_probe(struct mg_mgr *mgr);
 
+/* Фрагмент JSON для шапки веб-интерфейса: {"c":код_диагностики,"h":состояние_HA,"g":шлюз_Hub} */
+void z2m_link_json(char *buf, size_t n);
+
+/* Фоновая проверка Home Assistant. Вызывать раз в секунду из контекста Mongoose */
+void z2m_ha_tick(struct mg_mgr *mgr);
+
 #endif /* Z2M_ADAPTER_H */

@@ -189,7 +189,7 @@ const ZB_MSG_RU = [
   'Нет связи с MQTT: превышено время ожидания',
   'Zigbee2MQTT не отвечает (нет сообщения bridge/state)',
   'Zigbee2MQTT не видит координатор (bridge/state = offline)',
-  'Связь с Zigbee2MQTT в порядке',
+  'Связь с Zigbee2MQTT установлена',
   'Ожидание ответа Zigbee2MQTT',
 ];
 const ZB_MSG_EN = [
@@ -204,7 +204,7 @@ const ZB_MSG_EN = [
   'Zigbee2MQTT link is OK',
   'Waiting for Zigbee2MQTT',
 ];
-const HA_MSG_RU = ['Не проверялось', 'Home Assistant отвечает', 'Нет ответа от Home Assistant (проверьте IP и порт)', 'Проверка...'];
+const HA_MSG_RU = ['Не проверялось', 'Связь с Home Assistant установлена', 'Нет ответа от Home Assistant (проверьте IP и порт)', 'Проверка...'];
 const HA_MSG_EN = ['Not checked', 'Home Assistant responds', 'No response from Home Assistant (check IP and port)', 'Checking...'];
 
 

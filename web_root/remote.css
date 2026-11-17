@@ -945,22 +945,6 @@ html[data-theme="dark"] .rem-toast {
   }
 }
 
-/* ── Индикатор связи в топбаре ── */
-.rem-link {
-  flex: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--rem-on);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--rem-on) 22%, transparent),
-    0 0 12px var(--rem-glow);
-}
-.rem-link.is-lost {
-  background: var(--rem-wait);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rem-wait) 25%, transparent);
-}
-
 /* ── Сессия потеряна: тело страницы выключено ── */
 .rem-wrap.is-expired .rem-grid {
   pointer-events: none;

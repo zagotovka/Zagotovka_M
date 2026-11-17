@@ -26,6 +26,7 @@ import {
   UploadFileButton,
   textSection
 } from './components.js';
+import { LinkIndicators } from './LinkIndicators.js';
 import './Modal.css';
 import './background.css';
 import './theme.css';
@@ -203,6 +204,7 @@ function Header({ logout, user, setShowSidebar, showSidebar, sessionExpired }) {
         </div>
         <span class="md:hidden flex-1 text-center text-xs ${sessionExpired ? 'text-white' : 'text-slate-600'}">${stm32Time ? formatTime(stm32Time) : formatTime(now)}</span>
         <div class="flex items-center gap-x-4 lg:gap-x-6">
+          ${!sessionExpired && html`<${LinkIndicators} />`}
           <span class="hidden sm:inline text-sm ${sessionExpired ? 'text-red-100' : 'text-slate-400'}">logged in as: ${user}</span>
           <div
             class="hidden lg:block lg:h-4 lg:w-px lg:bg-slate-200/60"

@@ -31,6 +31,7 @@ import { registerPoll, unregisterPoll, isPollActive, lastPollActivity } from '..
 import { postJson } from '../safeFetch.js';
 import { ThemeToggle } from '../theme.js';
 import { WordLogo } from '../main.js';
+import { LinkIndicators } from '../LinkIndicators.js';
 import '../remote.css';
 
 // ---------------------------------------------------------------------------
@@ -1176,7 +1177,7 @@ export function TabRemote({ }) {
           <${WordLogo} />
         </div>
         <div class="rem-actions">
-          ${!expired ? html`<span class=${'rem-link' + (offline ? ' is-lost' : '')} aria-hidden="true"></span>` : null}
+          ${!expired ? html`<${LinkIndicators} tooltips=${false} offline=${offline} />` : null}
           ${fsSupported() ? html`
             <button
               type="button"

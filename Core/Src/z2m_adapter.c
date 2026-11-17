@@ -3,6 +3,7 @@
 #include "db.h"
 #include "main.h"
 #include "logger.h"
+#include "mqtt_server.h"
 #include "cmsis_os2.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,13 @@ static uint8_t  s_disc_cnt  = 0;   /* сколько discovery-конфигов 
 
 static uint8_t  s_ha_state  = 0;   /* 0 = не проверялся, 1 = отвечает, 2 = нет ответа, 3 = идёт проверка */
 static struct mg_connection *s_ha_conn = NULL;
+#define Z2M_HA_PERIOD_MS   15000u   /* период фоновой проверки HA */
+#define Z2M_HA_TIMEOUT_MS   5000u   /* HA не ответил за это время: связи нет */
+static uint32_t s_ha_start_ms = 0;
+static uint8_t  s_ha_info = 0;   /* 0 нет данных, 1 HTTP-ответ, 2 шлюз вернул 502/503/504, 3 порт открыт, но ответ не HTTP (вероятно HTTPS), 4 TCP не установлен, 5 таймаут */
+static uint16_t s_ha_http = 0;   /* последний HTTP-статус */
+static uint8_t  s_ha_tcp  = 0;   /* 1 = TCP-соединение установлено в текущей проверке */
+static uint8_t  s_ha_to   = 0;   /* 1 = соединение закрыто по таймауту */
 
 bool z2m_enabled(void) {
   return SetSettings.zb_mode == 1;
@@ -74,10 +82,30 @@ void z2m_diag_json(char *buf, size_t n) {
           (int) s_disc_cnt);
 }
 
+void z2m_link_json(char *buf, size_t n) {
+  /* g: шлюз в режиме Hub: 0 = неизвестно, 1 = подключён, 2 = нет связи */
+  int g = 0;
+  if (!z2m_enabled() && SetSettings.check_mqtt_srv && HAL_GetTick() > 60000u) {
+    g = mqtt_server_slzb_connected_cached() ? 1 : 2;
+  }
+  snprintf(buf, n, "{\"c\":%d,\"h\":%d,\"g\":%d,\"hi\":%d,\"hs\":%d}",
+           (int) z2m_diag_code(), (int) s_ha_state, g, (int) s_ha_info, (int) s_ha_http);
+}
+
 /* ---------- Проверка Home Assistant ---------- */
+
+static void ha_done(uint8_t st, uint8_t info, uint16_t http) {
+  if (s_ha_state != st || s_ha_info != info || s_ha_http != http) {
+    LOG_Z2M("ha: probe state=%d info=%d http=%d\r\n", (int) st, (int) info, (int) http);
+  }
+  s_ha_state = st;
+  s_ha_info  = info;
+  s_ha_http  = http;
+}
 
 static void ha_cb(struct mg_connection *c, int ev, void *ev_data) {
   if (ev == MG_EV_CONNECT) {
+    if (c == s_ha_conn) s_ha_tcp = 1;
     mg_printf(c,
               "GET /api/ HTTP/1.1\r\n"
               "Host: %s:%d\r\n"
@@ -87,27 +115,57 @@ static void ha_cb(struct mg_connection *c, int ev, void *ev_data) {
   } else if (ev == MG_EV_HTTP_MSG) {
     struct mg_http_message *hm = (struct mg_http_message *) ev_data;
     int st = mg_http_status(hm);
-    /* 401 без токена означает, что HA жив */
-    s_ha_state = (st == 200 || st == 401 || st == 403) ? 1 : 2;
-    s_ha_conn = NULL;
+    if (c == s_ha_conn) {
+      /* Любой HTTP-ответ = хост жив (401 без токена, 301, 404 за прокси и т.д.).
+       * Нет связи только если прокси сообщает, что HA за ним недоступен */
+      bool gw = (st == 502 || st == 503 || st == 504);
+      ha_done(gw ? 2 : 1, gw ? 2 : 1, (uint16_t) st);
+      s_ha_conn = NULL;
+    }
     c->is_closing = 1;
-  } else if (ev == MG_EV_ERROR) {
-    s_ha_state = 2;
-  } else if (ev == MG_EV_CLOSE) {
-    if (s_ha_state == 3) s_ha_state = 2;
-    s_ha_conn = NULL;
+  } else if (ev == MG_EV_ERROR || ev == MG_EV_CLOSE) {
+    /* Корректного HTTP-ответа не было (после ответа s_ha_conn уже NULL) */
+    if (c == s_ha_conn) {
+      if (s_ha_to)       ha_done(2, 5, 0);   /* молчит до таймаута */
+      else if (s_ha_tcp) ha_done(1, 3, 0);   /* порт принял TCP, ответ не HTTP: HTTPS */
+      else               ha_done(2, 4, 0);   /* TCP не установлен */
+      s_ha_conn = NULL;
+    }
   }
 }
 
-void z2m_ha_probe(struct mg_mgr *mgr) {
+/* keep_state = 1: фоновая проверка не сбрасывает известный результат в "идёт проверка",
+ * иначе индикатор мигал бы серым каждые 15 с */
+static void ha_probe_start(struct mg_mgr *mgr, bool keep_state) {
   char url[64];
   if (SetSettings.ha_host[0] == '\0') { s_ha_state = 0; return; }
   if (s_ha_conn != NULL) return;
   snprintf(url, sizeof(url), "http://%s:%d/", SetSettings.ha_host,
            SetSettings.ha_port > 0 ? SetSettings.ha_port : 8123);
-  s_ha_state = 3;
+  if (!keep_state || s_ha_state == 0) s_ha_state = 3;
+  s_ha_start_ms = (uint32_t) mg_millis();
+  s_ha_tcp = 0;
+  s_ha_to  = 0;
   s_ha_conn = mg_http_connect(mgr, url, ha_cb, NULL);
-  if (s_ha_conn == NULL) s_ha_state = 2;
+  if (s_ha_conn == NULL) ha_done(2, 4, 0);
+}
+
+void z2m_ha_probe(struct mg_mgr *mgr) {   /* кнопка "Проверить соединение" в Settings */
+  ha_probe_start(mgr, false);
+}
+
+void z2m_ha_tick(struct mg_mgr *mgr) {
+  static uint32_t s_next_ms = 0;
+  uint32_t now = (uint32_t) mg_millis();
+  if (SetSettings.ha_host[0] == '\0') { s_ha_state = 0; return; }
+  if (s_ha_conn != NULL) {
+    /* зависшее соединение: закрываем, MG_EV_CLOSE выставит состояние "нет связи" */
+    if (now - s_ha_start_ms > Z2M_HA_TIMEOUT_MS) { s_ha_to = 1; s_ha_conn->is_closing = 1; }
+    return;
+  }
+  if ((int32_t) (now - s_next_ms) < 0) return;
+  s_next_ms = now + Z2M_HA_PERIOD_MS;
+  ha_probe_start(mgr, true);
 }
 
 /* ---------- Подписки ---------- */
