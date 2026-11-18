@@ -1177,7 +1177,7 @@ export function TabRemote({ }) {
           <${WordLogo} />
         </div>
         <div class="rem-actions">
-          ${!expired ? html`<${LinkIndicators} tooltips=${false} offline=${offline} />` : null}
+          ${!expired ? html`<${LinkIndicators} offline=${offline} />` : null}
           ${fsSupported() ? html`
             <button
               type="button"

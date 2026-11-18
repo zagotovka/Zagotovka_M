@@ -57,7 +57,7 @@ int z2m_send_cmd(int slot, uint16_t cluster, const char *val);
 /* JSON состояния связи для GET /api/zigbee/link */
 void z2m_diag_json(char *buf, size_t n);
 
-/* Запуск проверки живости Home Assistant (GET /api/, ответ 401 = жив) */
+/* Запуск проверки живости Home Assistant (GET /manifest.json, любой HTTP-ответ = жив) */
 void z2m_ha_probe(struct mg_mgr *mgr);
 
 /* Фрагмент JSON для шапки веб-интерфейса: {"c":код_диагностики,"h":состояние_HA,"g":шлюз_Hub} */

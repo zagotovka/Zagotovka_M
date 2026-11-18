@@ -6837,6 +6837,17 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
 /* zbee_trigger_alias / zbee_payload_find_alias), хранимые в конфиге значения —        */
 /* только короткие имена. Payload, не перечисленный здесь, проходит как есть.          */
 static const struct { const char *full; const char *shrt; } k_zbee_trigger_alias[] = {
+    /* Более длинные имена должны идти ПЕРЕД теми, чьи полные имена
+     * являются их подстроками: zbee_payload_find_alias() ищет подстрокой,
+     * и "color_temperature_move"/"move_to_hue_and_saturation" иначе
+     * перехватят payload "_up"/"_down"/"_stop" и "enhanced_...". */
+    { "enhanced_move_to_hue_and_saturation", "enh_hs"    },
+    { "color_temperature_move_up",           "ct_mvup"   },
+    { "color_temperature_move_down",         "ct_mvdn"   },
+    { "color_temperature_move_stop",         "ct_mvstop" },
+    { "brightness_move_up",                  "bri_mvup"  },
+    { "brightness_move_down",                "bri_mvdn"  },
+    { "brightness_stop",                     "bri_stop"  },
     { "brightness_step_up",           "bri_up"   },
     { "brightness_step_down",         "bri_down" },
     { "color_temperature_step_up",    "ct_up"    },

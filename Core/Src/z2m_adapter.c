@@ -107,7 +107,7 @@ static void ha_cb(struct mg_connection *c, int ev, void *ev_data) {
   if (ev == MG_EV_CONNECT) {
     if (c == s_ha_conn) s_ha_tcp = 1;
     mg_printf(c,
-              "GET /api/ HTTP/1.1\r\n"
+    		  "GET /manifest.json HTTP/1.1\r\n"
               "Host: %s:%d\r\n"
               "Connection: close\r\n\r\n",
               SetSettings.ha_host,
@@ -351,7 +351,7 @@ int z2m_rx_filter(const struct mg_mqtt_message *mm, MqttRxMsg_t *out) {
   }
   off = mg_json_get(j, "$.action", &len);
   if (off >= 0 && len > 2 && j.buf[off] == '"') {
-    char act[28];
+    char act[40];
     int k = 0;
     for (int i = 1; i < len - 1 && k < (int) sizeof(act) - 1; i++) {
       char ch = j.buf[off + i];
@@ -401,7 +401,7 @@ bool z2m_handle_rx(const char *topic, const char *payload) {
   double d = 0;
   int s_val = 0, b_val = 0, t_val = 0, h_val = 0, o_val = 0;
   uint32_t c_val = 0;
-  char act[28] = {0};
+  char act[40] = {0};
   bool need_save = false;
 
   if (strncmp(topic, base, bl) != 0 || topic[bl] != '/') return false;
@@ -445,7 +445,7 @@ bool z2m_handle_rx(const char *topic, const char *payload) {
   {
     int len = 0;
     int off = mg_json_get(j, "$.a", &len);
-    has_a = (off >= 0 && len > 2 && len < (int) sizeof(act) + 1);
+    has_a = (off >= 0 && len > 2 && len < (int) sizeof(act) + 2);
     if (has_a) { memcpy(act, payload + off + 1, (size_t) (len - 2)); act[len - 2] = '\0'; }
   }
 

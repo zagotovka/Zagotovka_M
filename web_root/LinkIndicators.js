@@ -1,6 +1,7 @@
 // Индикаторы связи HA / Z2M / CD для шапки. Данные: commonData.lk из /api/state/common
 // lk.c - код диагностики Z2M (z2m_diag_t), lk.h - состояние HA, lk.g - шлюз в режиме Hub
-import { html, useState, useEffect, useContext } from './bundle.js';
+// Если на светлой теме подсветка слишком слабая или слишком сильная, меняются два числа в GLOW_CSS: 0.10 (фон) и 0.28 (ореол)
+import { html, useState, useEffect, useContext, useRef } from './bundle.js';
 import { StateContext } from './context.js';
 import { lastPollActivity } from './pollQueue.js';
 
@@ -62,6 +63,18 @@ const TXT = {
 const TXT_CLS = { ok: 'text-green-700', lost: 'text-red-700', unk: 'text-slate-500' };
 const BAR_CLS = { ok: 'bg-green-600', lost: 'bg-red-600', unk: 'bg-slate-400' };
 
+/* Подсветка только на десктопе, только в СВЕТЛОЙ теме и только для зелёного и красного.
+ * Серый (нет данных) без подсветки: «подсвечено» = связь известна, «не подсвечено» = нет данных.
+ * В тёмной теме буквы и так контрастны, подсветки нет.
+ * Подсветка - мягкое пятно ЗА буквами (фон + box-shadow), а не text-shadow:
+ * контуры самих букв остаются чёткими. Стили вставлены сюда, output.css пересобирать не нужно. */
+const GLOW_CSS = `
+html:not([data-theme="dark"]) .lk-glow { padding: 1px 5px; border-radius: 8px; }
+html:not([data-theme="dark"]) .lk-glow-ok   { background: rgba(22,163,74,0.10);  box-shadow: 0 0 7px 1px rgba(22,163,74,0.28); }
+html:not([data-theme="dark"]) .lk-glow-lost { background: rgba(220,38,38,0.10);  box-shadow: 0 0 7px 1px rgba(220,38,38,0.28); }
+`;
+const GLOW_CLS = { ok: 'lk-glow lk-glow-ok', lost: 'lk-glow lk-glow-lost', unk: '' };
+
 const mk = (st, status, why) => ({ st, status, why });
 
 function buildModel(lk, stale, t) {
@@ -107,12 +120,16 @@ function buildModel(lk, stale, t) {
 const tipText = (t, key, m) =>
   `${key} - ${t.names[key]}\n${t.status}: ${m.status}` + (m.why ? `\n${t.reason}: ${m.why}` : '');
 
-/* tooltips=false - страница пульта: подсказки и раскрытие по нажатию отключены.
+/* Десктоп: буквы HA/Z2M/CD; светлая тема - мягкая подсветка за зелёным/красным, серый и тёмная тема без неё.
+ * Мобильный: три вертикальные полоски без свечения (не путаются с «гамбургером» меню).
+ * tooltips=false - подсказки и раскрытие по нажатию отключены.
  * offline=true - браузер потерял связь с контроллером: все полоски серые. */
 export const LinkIndicators = ({ tooltips = true, offline = false }) => {
   const common = useContext(StateContext);
   const [, setTick] = useState(0);
   const [open, setOpen] = useState(false);
+  const [tipTop, setTipTop] = useState(64);
+  const barsRef = useRef(null);
 
   useEffect(() => {
     const id = setInterval(() => setTick((v) => v + 1), 2000);
@@ -131,20 +148,36 @@ export const LinkIndicators = ({ tooltips = true, offline = false }) => {
   const items = ['HA', 'Z2M', 'CD'].map((k) => ({ k, m: model[k], tip: tipText(t, k, model[k]) }));
   const ariaAll = items.map((i) => i.tip.replace(/\n/g, ', ')).join('; ');
 
+  /* Попап позиционируется от вьюпорта (fixed), а не от контейнера полосок:
+   * на Пульте справа от полосок есть ещё кнопки, и right-0 контейнера
+   * выталкивал бы попап за левый край узкого экрана. Верх берём из
+   * реального положения полосок (getBoundingClientRect - координаты вьюпорта). */
+  const toggleOpen = () => {
+    if (!open && barsRef.current) {
+      const r = barsRef.current.getBoundingClientRect();
+      setTipTop(Math.round(r.bottom + 6));
+    }
+    setOpen((v) => !v);
+  };
+
   return html`
     <div class="relative flex items-center" role="group" aria-label=${t.aria}>
+      <style>${GLOW_CSS}</style>
       <div class="hidden md:flex items-center gap-x-2 text-xs font-bold tracking-wide select-none">
         ${items.map((i) => html`
-          <span key=${i.k} class=${TXT_CLS[i.m.st]}
+          <span key=${i.k} class=${TXT_CLS[i.m.st] + ' ' + GLOW_CLS[i.m.st]}
             title=${tooltips ? i.tip : null} aria-label=${i.tip.replace(/\n/g, ', ')}>${i.k}</span>`)}
       </div>
-      <div class="md:hidden flex flex-col gap-y-0.5 p-1 select-none" aria-label=${ariaAll}
-        onclick=${tooltips ? () => setOpen((v) => !v) : null}>
-        ${items.map((i) => html`<span key=${i.k} class="block h-1 w-5 rounded-sm ${BAR_CLS[i.m.st]}"></span>`)}
+      <div ref=${barsRef} class="md:hidden flex flex-row items-center p-1 select-none" style=${{ gap: '3px' }} aria-label=${ariaAll}
+        onclick=${tooltips ? toggleOpen : null}>
+        ${items.map((i) => html`<span key=${i.k} class="block rounded-sm ${BAR_CLS[i.m.st]}" style=${{ width: '4px', height: '20px' }}></span>`)}
       </div>
       ${open && tooltips ? html`
-        <div class="md:hidden absolute right-0 top-full mt-2 z-[60] w-64 rounded-lg p-3 text-xs shadow-lg
-                    whitespace-pre-line bg-white text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+        <div class="md:hidden fixed right-2 z-[60] w-64 max-w-[calc(100vw-16px)] rounded-lg p-3 text-xs shadow-lg
+                    whitespace-pre-line border
+                    bg-[#1a2332] text-[#e8f4f8] border-[rgba(0,188,188,0.35)]
+                    dark:bg-[#e6eef4] dark:text-[#14202b] dark:border-[rgba(0,160,170,0.65)]"
+          style=${{ top: tipTop + 'px' }}
           onclick=${() => setOpen(false)}>
           ${items.map((i) => html`<div key=${i.k} class="mb-2 last:mb-0">${i.tip}</div>`)}
         </div>` : null}

@@ -253,8 +253,52 @@ const ZigbeeLinkBox = ({ isRu, withHa }) => {
   `;
 };
 
+// Кнопка "Справка / Help" в заголовке блока. Определена на уровне модуля (не внутри
+// Settings), чтобы её референс не менялся при ре-рендере и поля не теряли фокус.
+const HelpButton = ({ open, onToggle, isRu }) => html`
+  <button
+    type="button"
+    aria-expanded=${open ? 'true' : 'false'}
+    onClick=${(e) => { lockToggle(e); onToggle(); }}
+    class="shrink-0 px-5 py-1.5 rounded-full text-sm font-bold text-white shadow transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer bg-gradient-to-r from-teal-400 to-cyan-500 hover:from-teal-500 hover:to-cyan-600"
+  >
+    ${open ? (isRu ? 'Скрыть справку' : 'Hide help') : (isRu ? 'Справка' : 'Help')}
+  </button>
+`;
+
+// Справка по блоку Coordinates & Astronomy (панель скрыта, пока не нажата кнопка).
+function CoordinatesHelp({ isRu }) {
+  return isRu ? html`
+    <div class="space-y-3 text-slate-700">
+      <h2 class="text-xl font-bold text-black">Координаты и астрономия</h2>
+      <p>Устройство считает время восхода и заката по <b>Longitude</b> (долгота), <b>Latitude</b> (широта) и часовому поясу <b>Time zone UTC</b> из верхней части страницы. От этого зависят действия Sunrise и Sunset.</p>
+      <ul class="list-disc pl-6 space-y-1">
+        <li>Координаты вводятся числом в градусах с десятичной точкой, например <code>${'24.94'}</code> и <code>${'60.17'}</code>. Градусы-минуты-секунды нужно перевести в десятичные градусы.</li>
+        <li>Обычно восточная долгота и северная широта идут со знаком плюс, западная долгота и южная широта со знаком минус.</li>
+        <li>Если Sunrise или Sunset отличаются от справочных данных на десятки минут или на час, проверьте часовой пояс и знаки координат.</li>
+        <li><b>Day Length</b> - длина светового дня, <b>Next full moon</b> - ближайшее полнолуние. Эти поля только показывают данные и не редактируются.</li>
+        <li>Пересчёт восхода и заката происходит автоматически. Действия задаются в полях Sunrise и Sunset ниже, подробности в справке по условиям под таблицей.</li>
+      </ul>
+    </div>
+  ` : html`
+    <div class="space-y-3 text-slate-700">
+      <h2 class="text-xl font-bold text-black">Coordinates and astronomy</h2>
+      <p>The device calculates sunrise and sunset time from <b>Longitude</b>, <b>Latitude</b> and the <b>Time zone UTC</b> set at the top of the page. The Sunrise and Sunset actions depend on it.</p>
+      <ul class="list-disc pl-6 space-y-1">
+        <li>Enter coordinates as a number of degrees with a decimal point, for example <code>${'24.94'}</code> and <code>${'60.17'}</code>. Degrees-minutes-seconds must be converted to decimal degrees.</li>
+        <li>Usually east longitude and north latitude are positive, west longitude and south latitude are negative.</li>
+        <li>If Sunrise or Sunset differ from reference data by tens of minutes or by an hour, check the time zone and the signs of the coordinates.</li>
+        <li><b>Day Length</b> is the length of daylight, <b>Next full moon</b> is the nearest full moon. These fields only display data and cannot be edited.</li>
+        <li>Sunrise and sunset are recalculated automatically. Actions are set in the Sunrise and Sunset fields below, details are in the conditions help under the table.</li>
+      </ul>
+    </div>
+  `;
+}
+
 const ZigbeeSettingsBlocks = ({ settings, handleChange, errors }) => {
   const isRu = (settings.lang || 'ru') === 'ru';
+  const [helpOpen, setHelpOpen] = useState({ z2m: false, crd: false, ha: false });
+  const toggleHelp = (k) => setHelpOpen((p) => ({ ...p, [k]: !p[k] }));
   const inputCls = (k) => `w-full px-3 py-2 bg-white/50 border ${errors[k] ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-400`;
   const row = (item, index) => html`
     <${FieldRow} label=${item.label} tip=${''} index=${index}>
@@ -277,7 +321,7 @@ const ZigbeeSettingsBlocks = ({ settings, handleChange, errors }) => {
       </select>
     <//>
   `;
-  const head = (title, key, onToggle) => html`
+  const head = (title, key, onToggle, helpKey) => html`
     <thead>
       <tr class="bg-teal-600/10 border-b border-teal-600/20">
         <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">
@@ -286,7 +330,12 @@ const ZigbeeSettingsBlocks = ({ settings, handleChange, errors }) => {
             <${MyPolzunok} value=${settings[key]} onChange=${onToggle} />
           </div>
         </th>
-        <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
+        <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">
+          <div class="flex items-center justify-between gap-3">
+            <span>Value</span>
+            ${helpKey ? html`<${HelpButton} open=${helpOpen[helpKey]} onToggle=${() => toggleHelp(helpKey)} isRu=${isRu} />` : ''}
+          </div>
+        </th>
       </tr>
     </thead>
   `;
@@ -314,11 +363,13 @@ const ZigbeeSettingsBlocks = ({ settings, handleChange, errors }) => {
     <!-- ---- Zigbee2MQTT ---- -->
     <div class=${boxCls}>
       <table class="w-full table-fixed text-left border-collapse">
-        ${head('Zigbee2MQTT', 'zb_mode', (v) => { handleChange('zb_mode', v); if (v) handleChange('check_mqtt', 1); })}
+        ${head('Zigbee2MQTT', 'zb_mode', (v) => { handleChange('zb_mode', v); if (v) handleChange('check_mqtt', 1); }, 'z2m')}
         ${settings.zb_mode ? html`<tbody>${z2mRows.map(row)}</tbody>` : html`<tbody></tbody>`}
       </table>
       ${settings.zb_mode ? html`
         <${ZigbeeLinkBox} isRu=${isRu} withHa=${false} />
+      ` : ''}
+      ${helpOpen.z2m ? html`
         <div class="px-6 py-4 border-t border-teal-500/20 text-sm text-slate-600">
           ${isRu
             ? 'Связь с Z2M идёт по IEEE-адресу, переименование устройств в Z2M ничего не ломает. В Z2M должно быть включено homeassistant: enabled: true. Поле Name у слота - ваша пометка. Зелёный бейдж Z2M в Select pin: имя получено, красный: имя не пришло.'
@@ -330,7 +381,7 @@ const ZigbeeSettingsBlocks = ({ settings, handleChange, errors }) => {
     <!-- ---- Zigbee-координатор ---- -->
     <div class=${boxCls}>
       <table class="w-full table-fixed text-left border-collapse">
-        ${head(isRu ? 'Zigbee-координатор' : 'Zigbee coordinator', 'crd_en', (v) => handleChange('crd_en', v))}
+        ${head(isRu ? 'Zigbee-координатор' : 'Zigbee coordinator', 'crd_en', (v) => handleChange('crd_en', v), 'crd')}
         ${settings.crd_en ? html`
           <tbody>
             ${sel(isRu ? 'Тип подключения' : 'Connection type', 'crd_type',
@@ -351,7 +402,7 @@ const ZigbeeSettingsBlocks = ({ settings, handleChange, errors }) => {
           </tbody>
         ` : html`<tbody></tbody>`}
       </table>
-      ${settings.crd_en ? html`
+      ${helpOpen.crd ? html`
         <div class="px-6 py-4 border-t border-teal-500/20">
           <div class="text-sm text-slate-600 mb-2">
             ${isRu
@@ -370,7 +421,12 @@ const ZigbeeSettingsBlocks = ({ settings, handleChange, errors }) => {
           <thead>
             <tr class="bg-teal-600/10 border-b border-teal-600/20">
               <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">Home Assistant</th>
-              <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
+              <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">
+                <div class="flex items-center justify-between gap-3">
+                  <span>Value</span>
+                  <${HelpButton} open=${helpOpen.ha} onToggle=${() => toggleHelp('ha')} isRu=${isRu} />
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -379,11 +435,13 @@ const ZigbeeSettingsBlocks = ({ settings, handleChange, errors }) => {
           </tbody>
         </table>
         <${ZigbeeLinkBox} isRu=${isRu} withHa=${true} />
+        ${helpOpen.ha ? html`
         <div class="px-6 py-4 border-t border-teal-500/20 text-sm text-slate-600">
           ${isRu
             ? 'Токен и пароль не нужны: устройство передаёт данные в Home Assistant через MQTT discovery. Хост и порт используются только для проверки доступности.'
             : 'No token or password is needed: the device talks to Home Assistant through MQTT discovery. Host and port are only used for the reachability check.'}
         </div>
+        ` : ''}
       </div>
     ` : ''}
   `;
@@ -1193,6 +1251,8 @@ function Settings({ }) {
   const [mqttSectionOpen, setMqttSectionOpen] = useState(false);
   const mqttSectionInit = useRef(false);
   const [condHelpOpen, setCondHelpOpen] = useState(false);
+  const [haHelpOpen, setHaHelpOpen] = useState(false);
+  const [coordHelpOpen, setCoordHelpOpen] = useState(false);
   // Инициализируем глобальный tooltip один раз при монтировании
   useEffect(() => {
     initGlobalTooltip();
@@ -1991,9 +2051,12 @@ function Settings({ }) {
                   <thead>
                     <tr class="bg-teal-600/10 border-b border-teal-600/20">
                       <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3 cursor-help" colspan="2" data-tip=${gt('HA Discovery')}>
-                        <div class="flex items-center gap-3">
-                          <span>HA Discovery</span>
-                          <${MyPolzunok} value=${settings.check_ha_disc} onChange=${(v) => handleChange('check_ha_disc', v)} />
+                        <div class="flex items-center justify-between gap-3">
+                          <div class="flex items-center gap-3">
+                            <span>HA Discovery</span>
+                            <${MyPolzunok} value=${settings.check_ha_disc} onChange=${(v) => handleChange('check_ha_disc', v)} />
+                          </div>
+                          <${HelpButton} open=${haHelpOpen} onToggle=${() => setHaHelpOpen(v => !v)} isRu=${(settings.lang || 'ru') === 'ru'} />
                         </div>
                       </th>
                     </tr>
@@ -2015,7 +2078,7 @@ function Settings({ }) {
                     </tbody>
                   ` : html`<tbody></tbody>`}
                 </table>
-                ${settings.check_ha_disc ? html`
+                ${haHelpOpen ? html`
                   <div class="px-6 py-5 border-t border-teal-500/20">
                     <${HaDiscoveryHelp} isRu=${(settings.lang || 'ru') === 'ru'} />
                   </div>
@@ -2188,7 +2251,12 @@ function Settings({ }) {
                 <thead>
                   <tr class="bg-teal-600/10 border-b border-teal-600/20">
                     <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">Coordinates & Astronomy</th>
-                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">Value</th>
+                    <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">
+                      <div class="flex items-center justify-between gap-3">
+                        <span>Value</span>
+                        <${HelpButton} open=${coordHelpOpen} onToggle=${() => setCoordHelpOpen(v => !v)} isRu=${isRuSun} />
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2311,6 +2379,11 @@ function Settings({ }) {
               <//>
               </tbody>
             </table>
+            ${coordHelpOpen ? html`
+              <div class="px-6 py-5 border-t border-teal-500/20">
+                <${CoordinatesHelp} isRu=${isRuSun} />
+              </div>
+            ` : ''}
             </div>
 
             <!-- Справка по условиям Sunrise/Sunset (RU/EN): заголовок и кнопка Show Help / Hide Help -->
