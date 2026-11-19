@@ -54,6 +54,9 @@ bool z2m_handle_rx(const char *topic, const char *payload);
  * Возврат как у zbee_send_cmd_status: 200, 400, 503. */
 int z2m_send_cmd(int slot, uint16_t cluster, const char *val);
 
+int z2m_send_dp(const char *ieee, uint16_t dp, const char *val);
+const char *z2m_prop_name(uint16_t dp);
+
 /* JSON состояния связи для GET /api/zigbee/link */
 void z2m_diag_json(char *buf, size_t n);
 

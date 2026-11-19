@@ -91,6 +91,7 @@ static char *s_usr  = NULL;
 static char *s_pswd = NULL;
 static uint8_t s_cli_count = 0;
 static uint8_t s_running = 0;
+static uint8_t s_init_tried = 0;
 
 /* Счётчики за всё время работы (не сбрасываются между клиентами) — дают
  * представление "сервер вообще что-то делает?" без спама логами. */
@@ -869,7 +870,7 @@ static void mqtt_srv_cb(struct mg_connection *c, int ev, void *ev_data) {
 void mqtt_server_init(struct mg_mgr *mgr, uint16_t port) {
   size_t tbl_sz = sizeof(MqttSrvClient_t) * MQTT_SRV_MAX_CLIENTS_HARDCAP;
 
-  if (s_running) return;
+  if (s_running || s_init_tried) return;
 
   /* Порт не должен конфликтовать с веб-интерфейсом */
   if (port == 8000 || port == 8443 || port == 0) {
@@ -878,6 +879,7 @@ void mqtt_server_init(struct mg_mgr *mgr, uint16_t port) {
     return;
   }
 
+  s_init_tried = 1;   /* DTCM не освобождается: повторных попыток после сбоя не делаем */
   s_cli = (MqttSrvClient_t *) dtcm_malloc(tbl_sz);
   s_usr = (char *) dtcm_malloc(32);
   s_pswd = (char *) dtcm_malloc(32);

@@ -119,48 +119,156 @@ void vbtn_execute(int slot, int event_type) {
     }
 }
 
-/* ── PASSTHROUGH mode: universal payload matcher ── */
-static int match_payload_word(const char *payload, const char *target_word, int ep) {
-    if (!payload || !target_word || target_word[0] == '\0') return 0;
+/* Слово в конфиге могло быть усечено при сохранении: старые прошивки хранили
+ * ZBEE_PT_LEGACY_LEN символов, текущая хранит имя целиком (до ZBEE_PT_LEN-1).
+ * Только такие слова допускают сопоставление подстрокой. Полное имя любой
+ * другой длины сравнивается целиком: payload, не нажатый при обучении
+ * ("..._hold" у кнопки, обученной на "..._click"), не может совпасть с чужим
+ * словом по общему фрагменту. */
+static int vbtn_word_maybe_truncated(const char *w) {
+    size_t n = strlen(w);
+    return (ZBEE_PT_LEGACY_LEN > 0 && n == ZBEE_PT_LEGACY_LEN) ||
+           n == (ZBEE_PT_LEN - 1);
+}
+/* ── Оценка совпадения payload с сохранённым словом ──
+ * Больше — точнее. Приоритеты прежнего match_payload_word(): точное
+ * совпадение, затем алиас, затем подстрока, затем JSON data.val/EP.
+ * Число нужно, чтобы внутри одного слота выбрать лучшее событие
+ * (single/double/long), а не первое попавшееся: payload "on_double" содержит
+ * слово "on", поэтому старый порядок сначала запускал single. */
+static int vbtn_word_quality(const char *payload, const char *aliased,
+                             const char *w, int ep) {
+    if (!payload || !w || w[0] == '\0') return 0;
+    if (strcmp(payload, w) == 0) return 1000;
+    if (aliased != NULL && strcmp(aliased, w) == 0) return 900;
+    /* Подстрока: для JSON-payload как раньше, для простых имён только для
+     * слов, которые могли быть усечены. */
+    if (payload[0] == '{' || vbtn_word_maybe_truncated(w)) {
+        if (strstr(payload, w) != NULL) return (int)strlen(w);
+    }
 
-    /* 1. Прямое полное совпадение */
-    if (strcmp(payload, target_word) == 0) return 1;
-
-    /* 2b. Payload содержит полное имя алиаса (JSON-обёртка, сырой /data/-топик):
-     * нормализуем payload и сравниваем с сохранённым коротким именем */
-    const char *aliased = zbee_payload_find_alias(payload);
-    if (aliased != NULL && strcmp(aliased, target_word) == 0) return 1;
-
-    /* 2. Подстрока (слово внутри JSON/строки) */
-    if (strstr(payload, target_word) != NULL) return 1;
-
-    /* 3. Обобщенное сопоставление JSON data.val с pt_single ("1", "EP1", "EP5" и т.д.) */
     long v;
     if (json_find_val_path(payload, "data.val", &v)) {
         char numbuf[16];
         snprintf(numbuf, sizeof(numbuf), "%ld", v);
-        if (strcmp(numbuf, target_word) == 0) return 1;
+        if (strcmp(numbuf, w) == 0) return 500;
 
         char epbuf[16];
         snprintf(epbuf, sizeof(epbuf), "EP%d", ep);
-        if (strcmp(epbuf, target_word) == 0) return 1;
+        if (strcmp(epbuf, w) == 0) return 500;
     }
-
     return 0;
 }
 
-/* ── PASSTHROUGH mode: match payload to configured words ── */
-static void vbtn_execute_payload(int slot, const char *payload) {
-    int ep = ZigbeeConf[slot].ep;
-    if (match_payload_word(payload, ZigbeeConf[slot].pt_single, ep)) {
-        vbtn_execute(slot, 0);
-    } else if (ZigbeeConf[slot].pt_double[0] &&
-               match_payload_word(payload, ZigbeeConf[slot].pt_double, ep)) {
-        vbtn_execute(slot, 1);
-    } else if (ZigbeeConf[slot].pt_long[0] &&
-               match_payload_word(payload, ZigbeeConf[slot].pt_long, ep)) {
-        vbtn_execute(slot, 2);
+/* event: 0=single, 1=double, 2=long; -1 = ни одно слово не подошло.
+ * quality получает оценку лучшего события (0, если ничего не подошло). */
+static int vbtn_best_event(int slot, const char *payload,
+                           const char *aliased, int *quality) {
+    const ZigbeeVirtualPin *zb = &ZigbeeConf[slot];
+    const char *words[3] = { zb->pt_single, zb->pt_double, zb->pt_long };
+    int best_ev = -1;
+    int best_q = 0;
+
+    for (int k = 0; k < 3; k++) {
+        int q = vbtn_word_quality(payload, aliased, words[k], zb->ep);
+        if (q > best_q) {
+            best_q = q;
+            best_ev = k;
+        }
     }
+    if (quality) *quality = best_q;
+    return best_ev;
+}
+
+/* Оценка слота под payload по ВСЕМ его словам: у кнопки это
+ * single/double/long, у выключателя pt_single/on/off. 0 - слот не подходит. */
+static int vbtn_slot_score(int slot, const char *payload, const char *aliased) {
+    const ZigbeeVirtualPin *z = &ZigbeeConf[slot];
+    const char *words[3];
+    int best = 0;
+
+    words[0] = z->pt_single;
+    if (z->zbee_role == ZBEE_ROLE_SWITCH) {
+        words[1] = z->switch_payload_on;
+        words[2] = z->switch_payload_off;
+    } else {
+        words[1] = z->pt_double;
+        words[2] = z->pt_long;
+    }
+    for (int k = 0; k < 3; k++) {
+        int q = vbtn_word_quality(payload, aliased, words[k], z->ep);
+        if (q > best) best = q;
+    }
+    return best;
+}
+
+/* ── Арбитраж между слотами одного устройства (кнопки и выключатели) ──
+ * Один payload должен исполнить ровно один слот. Побеждает слот с лучшей
+ * оценкой: точное совпадение, затем алиас, затем подстрока (только для
+ * слов, которые могли быть усечены; из них побеждает более длинное слово).
+ * Слот-владелец payload блокирует остальные, даже если он выключен
+ * (Master Enable): выключенная кнопка не должна отдавать своё нажатие
+ * соседней. При полной ничьей (одинаковые слова у двух включённых слотов,
+ * обычно старый конфиг) срабатывает слот с меньшим индексом и пишется
+ * предупреждение: устройство нужно переобучить.
+ * Возвращает 1, если слот вправе выполнить payload. */
+int zbee_trigger_owns_payload(int slot, const char *payload) {
+    if (slot < 0 || slot >= NUMZBEE) return 1;
+
+    /* Структурный JSON (сырые /data/-топики, data.val, EP) разбирается
+     * прежним путём: там слоты различаются по ep/полю JSON, не по имени. */
+    if (payload == NULL || payload[0] == '\0' || payload[0] == '{') return 1;
+
+    const char *aliased = zbee_payload_find_alias(payload);
+    int mine = vbtn_slot_score(slot, payload, aliased);
+    if (mine == 0) return 1;
+
+    for (int j = 0; j < NUMZBEE; j++) {
+        if (j == slot) continue;
+        const ZigbeeVirtualPin *o = &ZigbeeConf[j];
+        if (o->zbee_role != ZBEE_ROLE_TRIGGER && o->zbee_role != ZBEE_ROLE_SWITCH) continue;
+        if (o->vbtn_mode != VBTN_MODE_PASSTHROUGH) continue;
+        if (strcmp(o->zbee_ieee, ZigbeeConf[slot].zbee_ieee) != 0) continue;
+
+        int s = vbtn_slot_score(j, payload, aliased);
+        if (s > mine) return 0;
+        if (s == mine && o->onoff != 0 && j < slot) {
+            LOG_Z2M("zbee: AMBIGUOUS payload '%s': id=%d and id=%d share one trigger word, relearn the remote\r\n",
+                    payload, ZbeeIdFromIdx(slot), ZbeeIdFromIdx(j));
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* Сопоставление payload со словами выключателя (PASSTHROUGH).
+ * Возвращает 1, если payload относится к этому слоту; *is_off = 1, если это
+ * слово выключения (switch_payload_off). Совпадение идёт тем же матчером, что
+ * у кнопок: точное имя, алиас, подстрока только для усечённых слов. */
+int zbee_switch_match(int slot, const char *payload, int *is_off) {
+    if (slot < 0 || slot >= NUMZBEE || payload == NULL) return 0;
+    const ZigbeeVirtualPin *z = &ZigbeeConf[slot];
+    const char *aliased = zbee_payload_find_alias(payload);
+
+    int q_off = vbtn_word_quality(payload, aliased, z->switch_payload_off, z->ep);
+    int q_on  = vbtn_word_quality(payload, aliased, z->switch_payload_on,  z->ep);
+    int q_pt  = vbtn_word_quality(payload, aliased, z->pt_single,          z->ep);
+    if (q_pt > q_on) q_on = q_pt;
+
+    if (q_off == 0 && q_on == 0) return 0;
+    if (is_off) *is_off = (q_off > 0 && q_off >= q_on);
+    return 1;
+}
+
+/* ── PASSTHROUGH mode: match payload to configured words ──
+ * Returns 1 if the payload belongs to this slot (an action was dispatched),
+ * 0 if the slot has nothing configured for it. */
+static int vbtn_execute_payload(int slot, const char *payload) {
+    const char *aliased = zbee_payload_find_alias(payload);
+    int ev = vbtn_best_event(slot, payload, aliased, NULL);
+    if (ev < 0) return 0;
+    vbtn_execute(slot, ev);
+    return 1;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -256,18 +364,33 @@ void zbee_vbtn_tick(void) {
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  zbee_vbtn_mqtt_event() — called when MQTT message arrives
+ *  Returns 1 if the payload belongs to this slot, 0 otherwise.
  * ═══════════════════════════════════════════════════════════════════════════ */
-void zbee_vbtn_mqtt_event(int slot, const char *payload) {
-    if (slot < 0 || slot >= NUMZBEE) return;
+int zbee_vbtn_mqtt_event(int slot, const char *payload) {
+    if (slot < 0 || slot >= NUMZBEE) return 0;
     ZigbeeVirtualPin *zb = &ZigbeeConf[slot];
 
     // Обрабатываем только Zigbee-устройства с ролью триггера (кнопки)
-    if (zb->zbee_role != ZBEE_ROLE_TRIGGER) return;
+    if (zb->zbee_role != ZBEE_ROLE_TRIGGER) return 0;
+
+    /* Миграция уже сохранённой настройки: ветка обучения "trigger_count > 3"
+     * писала каждому слоту свой payload (on/off/...) в pt_single, но затем
+     * вызывала zbee_vbtn_auto_detect() и переводила слот в RAW. В RAW один
+     * слот не может различить несколько кнопок. Настоящая RAW-ветка обучения
+     * (<= 3 триггеров) pt_single не заполняет, поэтому реальные RAW-пульты
+     * здесь не затрагиваются. */
+    if (zb->vbtn_mode == VBTN_MODE_RAW && zb->pt_single[0] != '\0') {
+        zb->vbtn_mode = VBTN_MODE_PASSTHROUGH;
+        zb->vbtn_state = VBTN_STATE_IDLE;
+        zb->vbtn_level = 0;
+        LOG_Z2M("zbee: slot=%d RAW->PASSTHROUGH (pt_single='%s')\r\n",
+                slot, zb->pt_single);
+    }
 
     if (zb->vbtn_mode == VBTN_MODE_RAW) {
         // 1. Извлекаем уровень (1-нажато, 0-отпущено) из payload [2]
         int level = click_state_from_payload(payload);
-        if (level == -1) return; // Игнорируем payload, не подходящий для RAW-режима
+        if (level == -1) return 0; // Игнорируем payload, не подходящий для RAW-режима
 
         uint8_t new_level = (uint8_t)level;
         uint8_t old_level = zb->vbtn_level;
@@ -283,6 +406,7 @@ void zbee_vbtn_mqtt_event(int slot, const char *payload) {
                 // Стартуем автомат при первом нажатии (переход из IDLE в 1)
                 if (new_level == 1) {
                     zb->vbtn_state = VBTN_STATE_PRESSED;
+                    zb->vbtn_state_tick = now;   // время входа в состояние
                 }
             }
             else if (zb->vbtn_state == VBTN_STATE_WAIT_REPEAT) {
@@ -290,13 +414,17 @@ void zbee_vbtn_mqtt_event(int slot, const char *payload) {
                 // Теперь эта ветка достижима, что позволяет детектировать DOUBLE_CLICK [1]
                 if (new_level == 1) {
                     zb->vbtn_state = VBTN_STATE_RE_PRESSED;
+                    zb->vbtn_state_tick = now;   // время входа в состояние
                 }
             }
             // Остальные переходы (отпускание, таймауты) обрабатываются в zbee_vbtn_tick()
+            return 1;
         }
+        return 0;
     } else {
         // Режим PASSTHROUGH: сопоставление строковых команд (pt_single/double/long) [4]
-        vbtn_execute_payload(slot, payload);
+        if (!zbee_trigger_owns_payload(slot, payload)) return 0;
+        return vbtn_execute_payload(slot, payload);
     }
 }
 

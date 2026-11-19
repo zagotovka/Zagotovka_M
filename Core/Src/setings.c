@@ -2800,14 +2800,17 @@ void GetCondPool() {
   fresult = f_stat("cond.ini", &finfo);
   if (fresult != FR_OK) {
     LOG_SYSTEM("[USB] cond.ini not found");
+    cond_pool_freeze(false);
     return;
   }
   if (finfo.fsize == 0) {
     LOG_SYSTEM("[USB] cond.ini is empty");
+    cond_pool_freeze(false);
     return;
   }
   if (f_open(&USBHFile, "cond.ini", FA_READ) != FR_OK) {
     LOG_SYSTEM("[USB] Cannot open cond.ini");
+    cond_pool_freeze(false);
     return;
   }
 
@@ -2815,6 +2818,7 @@ void GetCondPool() {
   if (!buf) {
     LOG_SYSTEM("[USB] Out of memory reading cond.ini");
     f_close(&USBHFile);
+    cond_pool_freeze(false);
     return;
   }
 
@@ -2823,6 +2827,7 @@ void GetCondPool() {
   f_close(&USBHFile);
   if (fresult != FR_OK || bytesRead == 0) {
     vPortFree(buf);
+    cond_pool_freeze(false);
     return;
   }
   buf[bytesRead] = '\0';
@@ -3274,13 +3279,15 @@ void GetZigbeeConfig(void) {
 
     char *pt_double = mg_json_get_str(elem, "$.pt_double");
     if (pt_double) {
-      strncpy(ZigbeeConf[idx].pt_double, pt_double, sizeof(ZigbeeConf[idx].pt_double) - 1);
+      if (ZigbeeConf[idx].zbee_role != ZBEE_ROLE_SWITCH)
+        strncpy(ZigbeeConf[idx].pt_double, pt_double, sizeof(ZigbeeConf[idx].pt_double) - 1);
       mg_free(pt_double);
     }
 
     char *pt_long = mg_json_get_str(elem, "$.pt_long");
     if (pt_long) {
-      strncpy(ZigbeeConf[idx].pt_long, pt_long, sizeof(ZigbeeConf[idx].pt_long) - 1);
+      if (ZigbeeConf[idx].zbee_role != ZBEE_ROLE_SWITCH)
+        strncpy(ZigbeeConf[idx].pt_long, pt_long, sizeof(ZigbeeConf[idx].pt_long) - 1);
       mg_free(pt_long);
     }
 
@@ -3292,15 +3299,17 @@ void GetZigbeeConfig(void) {
      * логика менялась по сравнению с состоянием сразу после обучения. */
     char *switch_payload_on = mg_json_get_str(elem, "$.switch_payload_on");
     if (switch_payload_on) {
-      strncpy(ZigbeeConf[idx].switch_payload_on, switch_payload_on,
-              sizeof(ZigbeeConf[idx].switch_payload_on) - 1);
+      if (ZigbeeConf[idx].zbee_role == ZBEE_ROLE_SWITCH)
+        strncpy(ZigbeeConf[idx].switch_payload_on, switch_payload_on,
+                sizeof(ZigbeeConf[idx].switch_payload_on) - 1);
       mg_free(switch_payload_on);
     }
 
     char *switch_payload_off = mg_json_get_str(elem, "$.switch_payload_off");
     if (switch_payload_off) {
-      strncpy(ZigbeeConf[idx].switch_payload_off, switch_payload_off,
-              sizeof(ZigbeeConf[idx].switch_payload_off) - 1);
+      if (ZigbeeConf[idx].zbee_role == ZBEE_ROLE_SWITCH)
+        strncpy(ZigbeeConf[idx].switch_payload_off, switch_payload_off,
+                sizeof(ZigbeeConf[idx].switch_payload_off) - 1);
       mg_free(switch_payload_off);
     }
 
@@ -3381,8 +3390,11 @@ void SetZigbeeConfig(void) {
         ZigbeeConf[i].zbee_role,
         zbee_action_sclick(i), zbee_action_dclick(i), zbee_action_lpress(i),
         ZigbeeConf[i].vbtn_mode,
-        ZigbeeConf[i].pt_single, ZigbeeConf[i].pt_double, ZigbeeConf[i].pt_long,
-        ZigbeeConf[i].switch_payload_on, ZigbeeConf[i].switch_payload_off,
+        ZigbeeConf[i].pt_single,
+        (ZigbeeConf[i].zbee_role == ZBEE_ROLE_SWITCH) ? "" : ZigbeeConf[i].pt_double,
+        (ZigbeeConf[i].zbee_role == ZBEE_ROLE_SWITCH) ? "" : ZigbeeConf[i].pt_long,
+        (ZigbeeConf[i].zbee_role == ZBEE_ROLE_SWITCH) ? ZigbeeConf[i].switch_payload_on : "",
+        (ZigbeeConf[i].zbee_role == ZBEE_ROLE_SWITCH) ? ZigbeeConf[i].switch_payload_off : "",
         ZigbeeConf[i].dimmer_min, ZigbeeConf[i].dimmer_max,
         ZigbeeConf[i].dimmer_cluster, ZigbeeConf[i].dimmer_attr,
         ZigbeeConf[i].device_type_override,

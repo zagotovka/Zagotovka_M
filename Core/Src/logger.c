@@ -62,7 +62,14 @@ const char* logger_get_category_name(LogCategory_t cat) {
 }
 
 void logger_init(void) {
+    static uint8_t s_logger_inited = 0;
+    if (s_logger_inited) return;          /* повторный вызов не перезаписывает указатели */
+    s_logger_inited = 1;
+
     xMessageBuffer = xMessageBufferCreate(4096);
+    if (xMessageBuffer == NULL) {
+        printf("[SYSTEM] WARN: log message buffer alloc failed - FreeRTOS log queue disabled\r\n");
+    }
     memset(g_task_bufs, 0, sizeof(g_task_bufs));
 
     /* Один раз за всё время работы, из кучи — не из .bss (там свободно

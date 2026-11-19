@@ -413,37 +413,6 @@ const ZigbeeSettingsBlocks = ({ settings, handleChange, errors }) => {
         </div>
       ` : ''}
     </div>
-
-    <!-- ---- Home Assistant (хост и порт для проверки) ---- -->
-    ${settings.check_ha_disc ? html`
-      <div class=${boxCls}>
-        <table class="w-full table-fixed text-left border-collapse">
-          <thead>
-            <tr class="bg-teal-600/10 border-b border-teal-600/20">
-              <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-1/3">Home Assistant</th>
-              <th class="px-6 py-4 text-2xl font-bold text-slate-700 tracking-wide w-2/3">
-                <div class="flex items-center justify-between gap-3">
-                  <span>Value</span>
-                  <${HelpButton} open=${helpOpen.ha} onToggle=${() => toggleHelp('ha')} isRu=${isRu} />
-                </div>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            ${row({ label: isRu ? 'IP / имя хоста' : 'IP / host', key: 'ha_host', type: 'text', maxlength: 23, placeholder: '192.168.1.50' }, 0)}
-            ${row({ label: isRu ? 'Порт' : 'Port', key: 'ha_port', type: 'number', placeholder: '8123' }, 1)}
-          </tbody>
-        </table>
-        <${ZigbeeLinkBox} isRu=${isRu} withHa=${true} />
-        ${helpOpen.ha ? html`
-        <div class="px-6 py-4 border-t border-teal-500/20 text-sm text-slate-600">
-          ${isRu
-            ? 'Токен и пароль не нужны: устройство передаёт данные в Home Assistant через MQTT discovery. Хост и порт используются только для проверки доступности.'
-            : 'No token or password is needed: the device talks to Home Assistant through MQTT discovery. Host and port are only used for the reachability check.'}
-        </div>
-        ` : ''}
-      </div>
-    ` : ''}
   `;
 };
 
@@ -2075,12 +2044,41 @@ function Settings({ }) {
                           error=${errors.ha_prefix}
                         />
                       <//>
+                      <${FieldRow} label=${(settings.lang || 'ru') === 'ru' ? 'IP / имя хоста' : 'IP / host'} tip=${''} index=${1}>
+                        <${pageSetting}
+                          value=${settings.ha_host}
+                          setfn=${(v) => handleChange('ha_host', v)}
+                          name="ha_host"
+                          type="text"
+                          maxlength=${23}
+                          placeholder="192.168.1.50"
+                          class=${`w-full px-3 py-2 bg-white/50 border ${errors.ha_host ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                          error=${errors.ha_host}
+                        />
+                      <//>
+                      <${FieldRow} label=${(settings.lang || 'ru') === 'ru' ? 'Порт' : 'Port'} tip=${''} index=${2}>
+                        <${pageSetting}
+                          value=${settings.ha_port}
+                          setfn=${(v) => handleChange('ha_port', v)}
+                          name="ha_port"
+                          type="number"
+                          placeholder="8123"
+                          class=${`w-full px-3 py-2 bg-white/50 border ${errors.ha_port ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                          error=${errors.ha_port}
+                        />
+                      <//>
                     </tbody>
                   ` : html`<tbody></tbody>`}
                 </table>
+                ${settings.check_ha_disc ? html`<${ZigbeeLinkBox} isRu=${(settings.lang || 'ru') === 'ru'} withHa=${true} />` : ''}
                 ${haHelpOpen ? html`
                   <div class="px-6 py-5 border-t border-teal-500/20">
                     <${HaDiscoveryHelp} isRu=${(settings.lang || 'ru') === 'ru'} />
+                    <p class="mt-3 text-base text-slate-700">
+                      ${(settings.lang || 'ru') === 'ru'
+                        ? 'Токен и пароль не нужны: устройство передаёт данные в Home Assistant через MQTT discovery. Хост и порт используются только для проверки доступности.'
+                        : 'No token or password is needed: the device talks to Home Assistant through MQTT discovery. Host and port are only used for the reachability check.'}
+                    </p>
                   </div>
                 ` : ''}
               </div>
@@ -2289,7 +2287,7 @@ function Settings({ }) {
                       class=${`flex-grow w-full px-3 py-2 bg-white/50 border ${sunErr_sunrise_pins ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`} />
                   </div>
                   ${sunErr_sunrise_pins ? html`<p class="mt-1 rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">${sunErr_sunrise_pins}</p>` : null}
-                  <p class="mt-1 text-base text-slate-700">${sunHint}</p>
+                  ${coordHelpOpen ? html`<p class="mt-1 text-base text-slate-700">${sunHint}</p>` : null}
                 </td>
               </tr>
 
@@ -2309,7 +2307,7 @@ function Settings({ }) {
                       class=${`flex-grow w-full px-3 py-2 bg-white/50 border ${sunErr_sunset_pins ? 'border-red-500 ring-2 ring-red-500/50' : 'border-white/50'} rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500`} />
                   </div>
                   ${sunErr_sunset_pins ? html`<p class="mt-1 rounded-xl border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">${sunErr_sunset_pins}</p>` : null}
-                  <p class="mt-1 text-base text-slate-700">${sunHint}</p>
+                  ${coordHelpOpen ? html`<p class="mt-1 text-base text-slate-700">${sunHint}</p>` : null}
                 </td>
               </tr>
 
@@ -2320,9 +2318,9 @@ function Settings({ }) {
                   data-tip=${isRuSun ? 'Общие условия. В Encoder/Switch/PID условие вводится свободно в поле Condition; эти 12 ячеек нужны для коротких ссылок C1..C12 и для действий кнопок/таймеров, где условие пишется инлайн после "?". Те же ячейки можно смотреть и править на страницах Switch, Encoder, PID' : 'Shared conditions. Encoder/Switch/PID take a free-form condition in the Condition field; these 12 cells are for short C1..C12 references and for button/timer actions, where the condition is written inline after "?". The same cells can be viewed and edited on the Switch, Encoder and PID pages'}
                 >
                   Conditions
-                  <div class="text-base font-normal text-slate-700 mt-2">${isRuSun
+                  ${coordHelpOpen ? html`<div class="text-base font-normal text-slate-700 mt-2">${isRuSun
                       ? '1..12 - общие ячейки C1..C12 (то же, что панель Conditions на страницах Switch, Encoder, PID): на них можно ссылаться из условий и действий. Своё условие можно вписать прямо в Encoder/Switch/PID - пул: ' + (settings.cond_pool ? `${settings.cond_pool.used}/${settings.cond_pool.total}` : '48')
-                      : '1..12 - shared cells C1..C12 (the same as the Conditions panel on the Switch, Encoder, PID pages): they can be referenced from conditions and actions. You can also type a condition right in Encoder/Switch/PID - pool: ' + (settings.cond_pool ? `${settings.cond_pool.used}/${settings.cond_pool.total}` : '48')}</div>
+                      : '1..12 - shared cells C1..C12 (the same as the Conditions panel on the Switch, Encoder, PID pages): they can be referenced from conditions and actions. You can also type a condition right in Encoder/Switch/PID - pool: ' + (settings.cond_pool ? `${settings.cond_pool.used}/${settings.cond_pool.total}` : '48')}</div>` : null}
                 </td>
                 <td class="w-2/3 pl-4 py-4 pr-6">
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2345,7 +2343,7 @@ function Settings({ }) {
                       </div>
                     `)}
                   </div>
-                  <div class="mt-3 text-base text-slate-700 space-y-1">
+                  ${coordHelpOpen ? html`<div class="mt-3 text-base text-slate-700 space-y-1">
                     ${(isRuSun ? [
                       'Одна ячейка - одно условие, до 46 символов. Писать без запятых и пробелов.',
                       'Нужно два условия сразу? Запишите каждое в свою ячейку (например C3 и C4), а в поле Condition на страницах Switch, Encoder, PID напишите C3|C4 (верно хотя бы одно) или C3&C4 (верны оба).',
@@ -2357,12 +2355,12 @@ function Settings({ }) {
                       'To insert a cell into the Condition field, press a C1..C12 button under the field (it adds the cell with |) or type it by hand, for example C3.',
                       'A cell can refer to another cell, but no deeper than two levels.',
                     ]).map((s) => html`<div>${s}</div>`)}
-                  </div>
-                  <p class="mt-2 text-base text-slate-700">
+                  </div>` : null}
+                  ${coordHelpOpen ? html`<p class="mt-2 text-base text-slate-700">
                     ${isRuSun
                       ? 'Синтаксис: D1 - устройство с ID 1 включено (выход на пине DEVICE, PWM с яркостью больше 0 или Zigbee-устройство; прежняя запись R1 тоже работает), !D2 - выключено, DV1>0 / DV1=100 / DV1g100 / DV1l100 - диммер (для Zigbee - состояние/яркость устройства), B1 - кнопка нажата, BU1 - не нажата, BH1 - удерживается, T5>25.5 - температура (°C), H4>50 - влажность (%), Sr - день, Ss - ночь. Операторы: ! & | ( ) = > < g l. В действиях можно ссылаться сюда: C3 = это условие №3. Мёртвый датчик даёт «неизвестно» - действие блокируется, в т.ч. под отрицанием, но явная истина через | перекрывает: T5<25|D1 сработает при мёртвом T5, если D1 вкл. ВАЖНО: прямое управление (ползунок On/Off, MQTT/API set) условие НЕ проверяет'
                       : 'Syntax: D1 - device with ID 1 is on (an output on a DEVICE pin, PWM with brightness above 0, or a Zigbee device; the old notation R1 also works), !D2 - off, DV1>0 / DV1=100 / DV1g100 / DV1l100 - dimmer (for Zigbee - device state/level), B1 - button pressed, BU1 - not pressed, BH1 - held, T5>25.5 - temperature, H4>50 - humidity, Sr - daytime, Ss - night. Operators: ! & | ( ) = > < g l. Actions can reference here: C3 = this condition #3. Dead sensor yields "unknown" - blocked even under negation, but explicit truth via | overrides: T5<25|D1 fires with dead T5 if D1 is on. NOTE: direct control (On/Off toggle, MQTT/API set) does NOT check conditions'}
-                  </p>
+                  </p>` : null}
                 </td>
               </tr>
 

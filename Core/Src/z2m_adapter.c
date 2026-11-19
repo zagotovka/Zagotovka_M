@@ -286,6 +286,154 @@ static uint32_t xy_to_rgb(double x, double y) {
           (uint32_t) (b * 255.0 + 0.5);
 }
 
+/* ---------- Универсальные свойства Z2M (любое устройство) ---------- */
+
+#define Z2M_PROP_MAX   64
+#define Z2M_PROP_NAME  28
+#define Z2M_X_MAX      12
+
+enum { Z2M_K_NUM = 0, Z2M_K_ONOFF_UP = 1, Z2M_K_ONOFF_LOW = 2, Z2M_K_BOOL = 3 };
+
+typedef struct {
+  uint16_t id;
+  uint8_t  kind;
+  char     name[Z2M_PROP_NAME];
+} z2m_prop_t;
+
+static z2m_prop_t s_props[Z2M_PROP_MAX];
+static volatile uint8_t s_prop_cnt = 0;
+
+/* Стабильный 16-битный id свойства (DP) из имени; всегда >= 0x0100 */
+static uint16_t z2m_prop_hash(const char *s) {
+  uint32_t h = 2166136261u;
+  uint16_t id;
+  while (*s) { h ^= (uint8_t) *s++; h *= 16777619u; }
+  h ^= h >> 16;
+  id = (uint16_t) (h & 0xFFFFu);
+  if (id < 0x0100) id = (uint16_t) (id + 0x0100);
+  return id;
+}
+
+/* Поля, которые уже обрабатываются отдельно или не нужны */
+static bool z2m_x_skip(const char *k) {
+  static const char *const skip[] = {
+    "state", "brightness", "color", "color_mode", "action", "occupancy",
+    "presence", "temperature", "humidity", "linkquality", "last_seen",
+    "update", "update_available", NULL
+  };
+  for (int i = 0; skip[i] != NULL; i++) {
+    if (strcmp(k, skip[i]) == 0) return true;
+  }
+  return false;
+}
+
+/* Скалярное значение -> целое + тип. Прочие строки/объекты пропускаются. */
+static bool z2m_x_value(struct mg_str v, int *out, uint8_t *kind) {
+  if (v.len == 0) return false;
+  if (v.buf[0] == '"') {
+    const char *s = v.buf + 1;
+    size_t n = v.len >= 2 ? v.len - 2 : 0;
+    if (n == 2 && memcmp(s, "ON", 2) == 0)  { *out = 1; *kind = Z2M_K_ONOFF_UP;  return true; }
+    if (n == 3 && memcmp(s, "OFF", 3) == 0) { *out = 0; *kind = Z2M_K_ONOFF_UP;  return true; }
+    if (n == 2 && memcmp(s, "on", 2) == 0)  { *out = 1; *kind = Z2M_K_ONOFF_LOW; return true; }
+    if (n == 3 && memcmp(s, "off", 3) == 0) { *out = 0; *kind = Z2M_K_ONOFF_LOW; return true; }
+    return false;
+  }
+  if (v.len == 4 && memcmp(v.buf, "true", 4) == 0)  { *out = 1; *kind = Z2M_K_BOOL; return true; }
+  if (v.len == 5 && memcmp(v.buf, "false", 5) == 0) { *out = 0; *kind = Z2M_K_BOOL; return true; }
+  if (v.buf[0] == '-' || (v.buf[0] >= '0' && v.buf[0] <= '9')) {
+    char tmp[24];
+    size_t n = v.len < sizeof(tmp) - 1 ? v.len : sizeof(tmp) - 1;
+    double d;
+    memcpy(tmp, v.buf, n);
+    tmp[n] = '\0';
+    d = strtod(tmp, NULL);
+    *out = (int) (d + (d < 0 ? -0.5 : 0.5));
+    *kind = Z2M_K_NUM;
+    return true;
+  }
+  return false;
+}
+
+/* Регистрирует имя свойства (для обратной отправки команд). 0 = не удалось. */
+static uint16_t z2m_prop_register(const char *name, uint8_t kind) {
+  uint16_t id;
+  for (int i = 0; i < s_prop_cnt; i++) {
+    if (strcmp(s_props[i].name, name) == 0) {
+      s_props[i].kind = kind;
+      return s_props[i].id;
+    }
+  }
+  if (s_prop_cnt >= Z2M_PROP_MAX) return 0;
+  id = z2m_prop_hash(name);
+  for (int i = 0; i < s_prop_cnt; i++) {
+    if (s_props[i].id == id) {
+      LOG_Z2M("z2m: prop '%s' id collision with '%s'\r\n", name, s_props[i].name);
+      return 0;
+    }
+  }
+  snprintf(s_props[s_prop_cnt].name, Z2M_PROP_NAME, "%s", name);
+  s_props[s_prop_cnt].id = id;
+  s_props[s_prop_cnt].kind = kind;
+  s_prop_cnt++;
+  return id;
+}
+
+const char *z2m_prop_name(uint16_t dp) {
+  for (int i = 0; i < s_prop_cnt; i++) {
+    if (s_props[i].id == dp) return s_props[i].name;
+  }
+  return NULL;
+}
+
+static bool z2m_slot_has_ep(const char *ieee, uint16_t dp) {
+  for (int i = 0; i < NUMZBEE; i++) {
+    if (ZigbeeConf[i].zbee_ieee[0] != '\0' && ZigbeeConf[i].ep == dp &&
+        strncasecmp(ZigbeeConf[i].zbee_ieee, ieee, 16) == 0) return true;
+  }
+  return false;
+}
+
+/* Команда по свойству: {"<имя>": значение} в прежнем типе устройства */
+int z2m_send_dp(const char *ieee, uint16_t dp, const char *val) {
+  extern osMessageQueueId_t zbeeCmdQueueHandle;
+  const z2m_prop_t *pr = NULL;
+  ZbeeCmdMsg_t cmd;
+  int v;
+
+  if (ieee == NULL || val == NULL) return 400;
+  for (int i = 0; i < s_prop_cnt; i++) {
+    if (s_props[i].id == dp) { pr = &s_props[i]; break; }
+  }
+  if (pr == NULL) {
+    LOG_Z2M("z2m: DP %04X name unknown yet (no report from device)\r\n", (unsigned) dp);
+    return 400;
+  }
+  v = atoi(val);
+  memset(&cmd, 0, sizeof(cmd));
+  snprintf(cmd.topic, sizeof(cmd.topic), "%s/0x%.16s/set", get_rxzbtop(), ieee);
+  switch (pr->kind) {
+    case Z2M_K_ONOFF_UP:
+      snprintf(cmd.payload, sizeof(cmd.payload), "{\"%s\":\"%s\"}", pr->name, v ? "ON" : "OFF");
+      break;
+    case Z2M_K_ONOFF_LOW:
+      snprintf(cmd.payload, sizeof(cmd.payload), "{\"%s\":\"%s\"}", pr->name, v ? "on" : "off");
+      break;
+    case Z2M_K_BOOL:
+      snprintf(cmd.payload, sizeof(cmd.payload), "{\"%s\":%s}", pr->name, v ? "true" : "false");
+      break;
+    default:
+      snprintf(cmd.payload, sizeof(cmd.payload), "{\"%s\":%d}", pr->name, v);
+      break;
+  }
+  if (xQueueSend(zbeeCmdQueueHandle, &cmd, 0) != pdPASS) {
+    LOG_Z2M("z2m: QUEUE FULL topic='%s'\r\n", cmd.topic);
+    return 503;
+  }
+  LOG_Z2M("z2m: QUEUED topic='%s' payload='%s'\r\n", cmd.topic, cmd.payload);
+  return 200;
+}
+
 int z2m_rx_filter(const struct mg_mqtt_message *mm, MqttRxMsg_t *out) {
   const char *base;
   size_t bl, rl;
@@ -363,7 +511,41 @@ int z2m_rx_filter(const struct mg_mqtt_message *mm, MqttRxMsg_t *out) {
     act[k] = '\0';
     if (k > 0) o += (size_t) snprintf(p + o, cap - o, "\"a\":\"%s\",", act);
   }
-
+  /* Универсально: все прочие скалярные поля -> "x":{"имя":[тип,значение],...} */
+  {
+    size_t xs = o;
+    size_t xofs = 0;
+    int xn = 0;
+    struct mg_str xk, xv;
+    if (o + 8 < cap) o += (size_t) snprintf(p + o, cap - o, "\"x\":{");
+    while ((xofs = mg_json_next(j, xofs, &xk, &xv)) > 0 && xn < Z2M_X_MAX) {
+      char key[Z2M_PROP_NAME];
+      size_t kl;
+      int val = 0;
+      uint8_t kind = 0;
+      bool ok = true;
+      if (xk.len < 3 || xk.len - 2 >= sizeof(key)) continue;
+      kl = xk.len - 2;
+      for (size_t i = 0; i < kl; i++) {
+        char ch = xk.buf[1 + i];
+        if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z') ||
+              (ch >= 'A' && ch <= 'Z') || ch == '_')) { ok = false; break; }
+        key[i] = ch;
+      }
+      if (!ok) continue;
+      key[kl] = '\0';
+      if (z2m_x_skip(key) || !z2m_x_value(xv, &val, &kind)) continue;
+      if (o + kl + 24 >= cap - 6) break;
+      o += (size_t) snprintf(p + o, cap - o, "\"%s\":[%d,%d],", key, (int) kind, val);
+      xn++;
+    }
+    if (xn > 0) {
+      o--;                                   /* убрать последнюю запятую */
+      o += (size_t) snprintf(p + o, cap - o, "},");
+    } else {
+      o = xs;
+    }
+  }
   if (o <= 1 || o >= cap - 2) return 1;   /* нечего передавать или переполнение */
   p[o - 1] = '}';                         /* заменяем последнюю запятую */
   p[o] = '\0';
@@ -390,6 +572,82 @@ static void inject(const char *base, const char *ieee, int ep,
   snprintf(t, sizeof(t), "%s/data/%.16s/%d/%04X/0000", base, ieee, ep, cluster);
   snprintf(p, sizeof(p), "{\"data\":{\"val\":%s}}", valjson);
   zbee_rx_inject(t, p);
+}
+
+static void inject_dp(const char *base, const char *ieee, int ep,
+                      uint16_t dp, int val) {
+  char t[96];
+  char p[48];
+  snprintf(t, sizeof(t), "%s/data/%.16s/%d/EF00/%04X", base, ieee, ep, (unsigned) dp);
+  snprintf(p, sizeof(p), "{\"data\":{\"val\":%d}}", val);
+  zbee_rx_inject(t, p);
+}
+
+/* ---------- Универсальные триггеры: смена значения любого поля Z2M ---------- */
+typedef struct {
+  char     ieee[17];
+  uint16_t id;      /* 0 = поле state */
+  int      val;
+} z2m_last_t;
+
+static z2m_last_t s_last[48];
+static uint8_t s_last_next = 0;
+
+/* 1 = значение изменилось; первое увиденное значение только запоминается */
+static int z2m_changed(const char *ieee, uint16_t id, int val) {
+  for (int i = 0; i < 48; i++) {
+    if (s_last[i].ieee[0] != '\0' && s_last[i].id == id &&
+        strncasecmp(s_last[i].ieee, ieee, 16) == 0) {
+      int ch = (s_last[i].val != val);
+      s_last[i].val = val;
+      return ch;
+    }
+  }
+  {
+    z2m_last_t *e = &s_last[s_last_next];
+    s_last_next = (uint8_t) ((s_last_next + 1) % 48);
+    snprintf(e->ieee, sizeof(e->ieee), "%.16s", ieee);
+    e->id = id;
+    e->val = val;
+  }
+  return 0;
+}
+
+/* У устройства есть слот-кнопка или слот-выключатель */
+static bool z2m_has_trig_slot(const char *ieee) {
+  for (int i = 0; i < NUMZBEE; i++) {
+    if (ZigbeeConf[i].zbee_ieee[0] == '\0') continue;
+    if (strncasecmp(ZigbeeConf[i].zbee_ieee, ieee, 16) != 0) continue;
+    if (ZigbeeConf[i].zbee_role == ZBEE_ROLE_TRIGGER ||
+        ZigbeeConf[i].zbee_role == ZBEE_ROLE_SWITCH) return true;
+  }
+  return false;
+}
+
+/* Какой-то слот-кнопка/выключатель этого IEEE ждёт payload cand */
+static bool z2m_trig_ref(const char *ieee, const char *cand) {
+  for (int i = 0; i < NUMZBEE; i++) {
+    const ZigbeeVirtualPin *z = &ZigbeeConf[i];
+    const char *w[5];
+    if (z->zbee_ieee[0] == '\0') continue;
+    if (strncasecmp(z->zbee_ieee, ieee, 16) != 0) continue;
+    if (z->zbee_role != ZBEE_ROLE_TRIGGER && z->zbee_role != ZBEE_ROLE_SWITCH) continue;
+    w[0] = z->pt_single; w[1] = z->pt_double; w[2] = z->pt_long;
+    w[3] = z->switch_payload_on; w[4] = z->switch_payload_off;
+    for (int k = 0; k < 5; k++) {
+      if (w[k][0] != '\0' && strstr(cand, w[k]) != NULL) return true;
+    }
+  }
+  return false;
+}
+
+/* Смена поля -> payload "<имя>" и "<имя>_<значение>" (только если на них есть слот) */
+static void z2m_emit_trig(const char *topic, const char *ieee, const char *name, int val) {
+  char cand[32];
+  snprintf(cand, sizeof(cand), "%.27s", name);
+  if (z2m_trig_ref(ieee, cand)) zbee_rx_inject(topic, cand);
+  snprintf(cand, sizeof(cand), "%.27s_%d", name, val);
+  if (z2m_trig_ref(ieee, cand)) zbee_rx_inject(topic, cand);
 }
 
 bool z2m_handle_rx(const char *topic, const char *payload) {
@@ -448,7 +706,28 @@ bool z2m_handle_rx(const char *topic, const char *payload) {
     has_a = (off >= 0 && len > 2 && len < (int) sizeof(act) + 2);
     if (has_a) { memcpy(act, payload + off + 1, (size_t) (len - 2)); act[len - 2] = '\0'; }
   }
-
+  struct { uint16_t id; int val; } xs[Z2M_X_MAX];
+  int xcnt = 0;
+  {
+    int xl = 0;
+    int xo = mg_json_get(j, "$.x", &xl);
+    if (xo >= 0) {
+      struct mg_str xj = mg_str_n(payload + xo, (size_t) xl), xk, xv;
+      size_t xofs = 0;
+      while ((xofs = mg_json_next(xj, xofs, &xk, &xv)) > 0 && xcnt < Z2M_X_MAX) {
+        char key[Z2M_PROP_NAME];
+        uint16_t id;
+        if (xk.len < 3 || xk.len - 2 >= sizeof(key)) continue;
+        memcpy(key, xk.buf + 1, xk.len - 2);
+        key[xk.len - 2] = '\0';
+        id = z2m_prop_register(key, (uint8_t) mg_json_get_long(xv, "$[0]", 0));
+        if (id == 0) continue;
+        xs[xcnt].id = id;
+        xs[xcnt].val = (int) mg_json_get_long(xv, "$[1]", 0);
+        xcnt++;
+      }
+    }
+  }
   for (int i = 0; i < NUMZBEE; i++) {
     ZigbeeVirtualPin *z = &ZigbeeConf[i];
     bool dup = false;
@@ -478,11 +757,48 @@ bool z2m_handle_rx(const char *topic, const char *payload) {
     if (has_h) { char v[12]; snprintf(v, sizeof(v), "%d", h_val); inject(base, z->zbee_ieee, ep, ZBEE_CLUSTER_HUMIDITY, v); }
     if (has_o) inject(base, z->zbee_ieee, ep, ZBEE_CLUSTER_OCCUPANCY, o_val ? "1" : "0");
 
-    /* Действия кнопок передаются только слотам-кнопкам/выключателям */
-    if (has_a && (z->zbee_role == ZBEE_ROLE_TRIGGER || z->zbee_role == ZBEE_ROLE_SWITCH)) {
+    /* Универсальные свойства: только при обучении или если слот на них настроен */
+    for (int k = 0; k < xcnt; k++) {
+      if (!zbee_learn_is_active_for(z->zbee_ieee) &&
+          !z2m_slot_has_ep(z->zbee_ieee, xs[k].id)) continue;
+      inject_dp(base, z->zbee_ieee, ep, xs[k].id, xs[k].val);
+    }
+
+    /* Действия кнопок передаются слотам-кнопкам/выключателям.
+     * Во время обучения — любому слоту этого IEEE: только что добавленный
+     * слот ещё имеет роль по умолчанию, иначе нажатия не дойдут до обучения. */
+    if (has_a && (z->zbee_role == ZBEE_ROLE_TRIGGER ||
+                  z->zbee_role == ZBEE_ROLE_SWITCH  ||
+                  zbee_learn_is_active_for(z->zbee_ieee))) {
       char t[96];
       snprintf(t, sizeof(t), "%s/trigger/%.16s", base, z->zbee_ieee);
       zbee_rx_inject(t, act);
+    }
+  }
+
+  /* Универсальные триггеры: смена любого поля, на которое настроена кнопка/выключатель.
+   * Во время обучения значения только запоминаются (чтобы первое нажатие после
+   * сохранения уже считалось сменой), события в таблицу обучения не шлются. */
+  if (has_s || xcnt > 0) {
+    const char *tg = NULL;
+    for (int i = 0; i < NUMZBEE; i++) {
+      if (slot_matches(&ZigbeeConf[i], name)) { tg = ZigbeeConf[i].zbee_ieee; break; }
+    }
+    if (tg != NULL) {
+      bool learning = zbee_learn_is_active_for(tg);
+      if (learning || z2m_has_trig_slot(tg)) {
+        char tt[96];
+        snprintf(tt, sizeof(tt), "%s/trigger/%.16s", base, tg);
+        if (has_s && z2m_changed(tg, 0, s_val) && !learning) {
+          z2m_emit_trig(tt, tg, "state", s_val);
+        }
+        for (int k = 0; k < xcnt; k++) {
+          const char *pn = z2m_prop_name(xs[k].id);
+          if (pn != NULL && z2m_changed(tg, xs[k].id, xs[k].val) && !learning) {
+            z2m_emit_trig(tt, tg, pn, xs[k].val);
+          }
+        }
+      }
     }
   }
 

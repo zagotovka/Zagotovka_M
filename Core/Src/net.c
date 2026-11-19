@@ -1619,6 +1619,14 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
                         c->is_draining = 1;
                     }
                 }
+            } else if (mg_http_get_header(hm, "Transfer-Encoding") != NULL) {
+                /* chunked без Content-Length: лимит MAX_API_BODY_SIZE не применяется */
+                MG_ERROR(("%lu Rejecting body without Content-Length, uri=%.*s",
+                          (unsigned long) c->id,
+                          (int) hm->uri.len, hm->uri.buf));
+                mg_http_reply(c, 411, "Connection: close\r\n",
+                              "{\"status\":false,\"message\":\"Length required\"}");
+                c->is_draining = 1;
             }
         }
     }
@@ -2611,8 +2619,10 @@ void timer_fn_mqtt(void *arg) {
       }
       printf("[MQTT] close stuck %lums  -  force reconnect\r\n",
              (unsigned long)(mg_millis() - s_close_since));
-      s_conn = NULL;
+      /* Keep the handle until MG_EV_CLOSE resets state and frees the connection. */
+      s_conn->is_closing = 1;
       s_close_since = 0;
+      return;
     } else {
       s_close_since = 0;
     }

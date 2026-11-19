@@ -196,6 +196,7 @@ void SendZigbeeReadProbe(const char *ieee, uint8_t ep);
 void SendZigbeeReadProbeAllEndpoints(const char *ieee);
 void zbee_probe_check_timeout(void);
 void zbee_learn_check_timeout(void);
+bool zbee_learn_is_active_for(const char *ieee);
 void handle_zigbee_learn_status(struct mg_connection *c, struct mg_http_message *hm);
 void handle_zigbee_learn_get(struct mg_connection *c, struct mg_http_message *hm);
 void handle_zigbee_learn_label(struct mg_connection *c, struct mg_http_message *hm);

@@ -1242,6 +1242,11 @@ int main(void)
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
   logger_init();
+  if (!actionMutexHandleHandle || !s_mysett_mutexHandle ||
+      !outputQueueHandle || !usbQueueHandle || !mqttQueueHandle ||
+      !mqttRxQueueHandle || !zbeeCmdQueueHandle) {
+    Error_Handler();   /* RTOS-объекты не созданы: дальше работать нельзя */
+  }
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -1302,6 +1307,10 @@ int main(void)
       web_attr.cb_size = sizeof(StaticTask_t);
     }
     WebServerTaskHandle = osThreadNew(StartWebServerTask, NULL, &web_attr);
+  }
+  if (!ConfigTaskHandle || !OutputTaskHandle ||
+      !CronTaskHandle || !InputTaskHandle) {
+    Error_Handler();   /* не создана критичная задача */
   }
   /* USER CODE END RTOS_THREADS */
 
@@ -1953,6 +1962,11 @@ void StartWebServerTask(void *argument)
 
   struct mg_mgr *mgr =
       (struct mg_mgr *)dtcm_malloc(sizeof(struct mg_mgr)); // Одноразовый при загрузке, живёт весь runtime
+  if (mgr == NULL) {
+    printf("[NET] FATAL: no DTCM for mg_mgr, web server not started\r\n");
+    vTaskDelete(NULL);
+    return;
+  }
   mg_mgr_init(mgr);                                   // Инициализируем менеджер
 
   // Настройка MQTT

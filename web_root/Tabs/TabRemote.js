@@ -325,6 +325,11 @@ const IconFs = ({ on }) => html`
     : html`<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>`}
   </svg>`;
 
+const IconDrop = ({ label }) => html`
+  <svg class="rem-drop" viewBox="0 0 24 24" role="img" aria-label=${label}>
+    <path d="M12 2.5c-3.6 4.4-6.5 7.9-6.5 11.6a6.5 6.5 0 0 0 13 0c0-3.7-2.9-7.2-6.5-11.6z" fill="#2196F3"/>
+  </svg>`;
+
 /* ── Кнопка-замок: разблокировка удержанием, блокировка одним касанием ── */
 const LockBtn = ({ locked, pulse, labels, onUnlock, onLock }) => {
   const tRef = useRef(0);
@@ -1093,7 +1098,7 @@ export function TabRemote({ }) {
       <span class="rem-card-name">${it.n || 'ID ' + it.id}${typeof it.sub === 'number' ? ' #' + (it.sub + 1) : ''}${it.t && it.t !== it.n ? ' · ' + it.t : ''}</span>
       <span class="rem-ow-val">
         ${it.ok
-      ? html`${it.v} °C${typeof it.h === 'number' ? html` · ${L.h} ${it.h}%` : ''}`
+      ? html`${it.v} °C${typeof it.h === 'number' ? html` <${IconDrop} label=${L.h} /> ${it.h}%` : ''}`
       : html`<span class="rem-note">${L.noSensor}</span>`}
       </span>
     </div>`;

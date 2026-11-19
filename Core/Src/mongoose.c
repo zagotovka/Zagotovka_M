@@ -16560,6 +16560,7 @@ __attribute__((section(".itcm"))) void mg_tls_init(struct mg_connection *c, cons
   if (mg_parse_pem(opts->key, mg_str_s("EC PRIVATE KEY"), &key) == 0) {
     if (key.len < 39) {
       MG_ERROR(("EC private key too short"));
+      mg_free((void *) key.buf);
       mg_tls_free(c);
       mg_error(c, "tls EC key");
       return;
@@ -16568,6 +16569,7 @@ __attribute__((section(".itcm"))) void mg_tls_init(struct mg_connection *c, cons
     // 30 nn 02 01 01 04 20 [key] ...
     if (key.buf[0] != 0x30 || (key.buf[1] & 0x80) != 0) {
       MG_ERROR(("EC private key: ASN.1 bad sequence"));
+      mg_free((void *) key.buf);
       mg_tls_free(c);
       mg_error(c, "tls EC key ASN.1");
       return;

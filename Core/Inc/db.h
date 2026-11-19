@@ -338,6 +338,13 @@ struct dbSettings {	// Cтруктура для setting
  * ═══════════════════════════════════════════════════════════════════════════ */
 #define NUMZBEE 200
 
+/* Длина слов payload (с завершающим нулём): имя хранится целиком.
+ * ZBEE_PT_LEGACY_LEN: длина, до которой старые прошивки усекали слова.
+ * Слова такой длины считаются возможно усечёнными. После переобучения всех
+ * пультов поставьте 0. */
+#define ZBEE_PT_LEN         32
+#define ZBEE_PT_LEGACY_LEN  11
+
 typedef struct {
     char     zbee_ieee[17];      // IEEE-адрес без "0x", 16 hex + '\0'
     uint8_t  zbee_endpoint;      // 1-240
@@ -365,9 +372,22 @@ typedef struct {
     uint8_t  action_pool_idx;     // Index into ZigbeeActionPool[] (0xFF = no actions)
 
     uint8_t  vbtn_mode;          // 0 = PASSTHROUGH, 1 = RAW (auto-detected)
-    char     pt_single[12];      // Payload for single click (PASSTHROUGH)
-    char     pt_double[12];      // Payload for double click
-    char     pt_long[12];        // Payload for long press
+    /* Слова payload. Слот либо кнопка (single/double/long), либо выключатель
+     * (single/on/off), поэтому области совмещены: память не растёт. Какой набор
+     * актуален, определяет zbee_role. Для выключателя pt_double и pt_long
+     * использовать нельзя: это те же байты, что switch_payload_on/off. */
+    union {
+        struct {
+            char pt_single[ZBEE_PT_LEN];   // Payload for single click (PASSTHROUGH)
+            char pt_double[ZBEE_PT_LEN];   // Payload for double click (только кнопка)
+            char pt_long[ZBEE_PT_LEN];     // Payload for long press (только кнопка)
+        };
+        struct {
+            char pt_single_sw_[ZBEE_PT_LEN];       // то же поле, что pt_single
+            char switch_payload_on[ZBEE_PT_LEN];   // Payload для state=1 (только выключатель)
+            char switch_payload_off[ZBEE_PT_LEN];  // Payload для state=0 (только выключатель)
+        };
+    };
 
     /* ── Runtime state for RAW mode (not saved to flash) ── */
     uint8_t  vbtn_state;         // 0=IDLE, 1=PRESSED, 2=WAIT_REPEAT, 3=RE_PRESSED, 5=LONG_HOLD
@@ -376,10 +396,6 @@ typedef struct {
     uint8_t  vbtn_auto_release;  // Auto-release flag for pulse click events
     uint32_t vbtn_last_tick;     // Last event time
     uint32_t vbtn_state_tick;    // Time of state entry
-
-    /* ── Switch payload mapping (when zbee_role == ZBEE_ROLE_SWITCH) ── */
-    char     switch_payload_on[32];    // Payload для state=1 (напр. "btn_double")
-    char     switch_payload_off[32];   // Payload для state=0 (напр. "btn_long")
 
     /* ── Dimmer range auto-detection (from Learning Mode observations) ── */
     uint16_t dimmer_min;         // Минимальное значение яркости (автоопределённое или ручное)
@@ -451,8 +467,12 @@ static inline bool zbee_is_pir(const ZigbeeVirtualPin *z) {
 
 /* ── Virtual button functions ── */
 void zbee_vbtn_tick(void);
-void zbee_vbtn_mqtt_event(int slot, const char *payload);
+int  zbee_vbtn_mqtt_event(int slot, const char *payload);
 void zbee_vbtn_auto_detect(int slot, const char *first_payload);
+/* Арбитраж: 1, если слот вправе выполнить payload (общий для кнопок и выключателей). */
+int  zbee_trigger_owns_payload(int slot, const char *payload);
+/* Сопоставление payload со словами выключателя; *is_off = 1 для слова выключения. */
+int  zbee_switch_match(int slot, const char *payload, int *is_off);
 void vbtn_execute(int slot, int event_type);
 
 /* ── Нормализация payload триггеров шлюза (таблица алиасов, zagotovka.c) ──

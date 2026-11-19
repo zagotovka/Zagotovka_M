@@ -61,6 +61,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
   const [rawRanges, setRawRanges] = useState({});  // manual override: { obsKey: { min, max } }
   const [switchValues, setSwitchValues] = useState({});  // { obsKey: '1' | '0' }
   const [clickTypes, setClickTypes] = useState({});  // { obsKey: 'single' | 'double' | 'long' }
+  const [btnVals, setBtnVals] = useState({});  // { obsKey: значение для кнопки по данным; пусто = любое }
   const [sessionTick, setSessionTick] = useState(0); // bump -> перезапуск сессии («Повторить»)
   const lastOkRef = useRef(0);         // момент последнего успешного ответа опроса
   const savedTimerRef = useRef(null);  // таймер отложенного onSaved
@@ -98,6 +99,8 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
     setNames({});
     setRawRanges({});
     setClickTypes({});
+    setBtnVals({});
+    setSwitchValues({});
     setSavedType(null);
     setError(null);
     prefillDoneRef.current.clear();
@@ -129,7 +132,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
         pre = single;
       } else {
         const epKey = o.cluster === '0xEF00' ? parseInt(o.attr, 16) : o.ep;
-        pre = map[epKey] ?? map[o.ep] ?? null;
+        pre = map[epKey] ?? map[o.ep] ?? o.prop ?? null;
       }
       if (pre) add[k] = pre;
     }
@@ -274,10 +277,30 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = {
-        ieee,
-        labels: observations.map(o => {
+      const extraLabels = [];
+      const mapped = observations.map(o => {
           const k = obsKey(o);
+          /* Строка данных (любое поле любого производителя) -> кнопка/выключатель
+             по смене значения: прошивка получит обычные trigger-метки */
+          const tn = o.source !== 'trigger' ? (o.tprop || '') : '';
+          const rl = labels[k] || 'ignore';
+          if (tn && (rl === 'switch' || rl === 'button')) {
+            const lbl = clipUtf8(names[k] || '', LABEL_MAX_BYTES);
+            const mk = s => ({ source: 'trigger', trigger_payload: s.slice(0, 31), role: rl, label: lbl });
+            if (rl === 'switch') {
+              const m = switchValues[k];
+              if (m === '2') {
+                extraLabels.push({ ...mk(tn), switch_value: 2 });
+              } else {
+                extraLabels.push({ ...mk(`${tn}_1`), switch_value: m === '3' ? 0 : 1 });
+                extraLabels.push({ ...mk(`${tn}_0`), switch_value: m === '3' ? 1 : 0 });
+              }
+            } else {
+              const bv = btnVals[k];
+              extraLabels.push({ ...mk(bv ? `${tn}_${bv}` : tn), click_type: clickTypes[k] || 'single' });
+            }
+            return { ep: 0, role: 'ignore', label: '' };
+          }
           const base = o.source === 'trigger'
             ? {
                 source: 'trigger',
@@ -307,8 +330,8 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
             base.switch_value = parseInt(switchValues[k], 10);
           }
           return base;
-        }),
-      };
+        });
+      const payload = { ieee, labels: mapped.concat(extraLabels).slice(0, 24) };
       /* На время отправки опрос ставится на паузу: один запрос в полёте */
       let res;
       pauseAll();
@@ -588,6 +611,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
                       <td class="py-2">
                         <span class="font-mono text-xs">${o.cluster}</span>
                         <span class="text-slate-400 ml-1">${o.cluster_name}${o.cluster === '0xEF00' ? ' EP' + parseInt(o.attr, 16) : ''}</span>
+                        ${o.prop && html`<span class="font-semibold ml-1">${o.prop}</span>`}
                         ${o.changed && html`
                           <span class="text-amber-500 ml-1" title="
                             ${lang === 'ru' ? 'Значение менялось' : 'Value changed'}">↻</span>
@@ -623,6 +647,28 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
                               </option>
                             `)}
                           </select>
+                          ${labels[obsKey(o)] === 'switch' && o.tprop && html`
+                            <select class="border rounded px-2 py-1 text-sm bg-white"
+                                    value=${switchValues[obsKey(o)] || ''}
+                                    onChange=${e => setSwitchValues(prev => ({
+                                      ...prev,
+                                      [obsKey(o)]: e.target.value
+                                    }))}>
+                              <option value="">—</option>
+                              <option value="1">${lang === 'ru' ? 'Значение 1 = Вкл, 0 = Выкл' : 'Value 1 = On, 0 = Off'}</option>
+                              <option value="3">${lang === 'ru' ? 'Значение 1 = Выкл, 0 = Вкл' : 'Value 1 = Off, 0 = On'}</option>
+                              <option value="2">${lang === 'ru' ? 'Каждая смена = переключение' : 'Every change = toggle'}</option>
+                            </select>
+                          `}
+                          ${labels[obsKey(o)] === 'button' && o.tprop && html`
+                            <input type="text" class="border rounded px-2 py-1 text-sm w-28"
+                                   placeholder=${lang === 'ru' ? 'значение (пусто = любое)' : 'value (empty = any)'}
+                                   value=${btnVals[obsKey(o)] || ''}
+                                   onInput=${e => setBtnVals(prev => ({
+                                     ...prev,
+                                     [obsKey(o)]: e.target.value.replace(/[^0-9-]/g, '')
+                                   }))} />
+                          `}
                           ${labels[obsKey(o)] === 'button' && html`
                             <select class="border rounded px-2 py-1 text-sm bg-white"
                                     value=${clickTypes[obsKey(o)] || 'single'}
@@ -822,7 +868,7 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
             ${(() => {
               const switchIncomplete = observations.some(o => {
                 const k = obsKey(o);
-                return labels[k] === 'switch' && !switchValues[k];
+                return labels[k] === 'switch' && !switchValues[k] && (o.source === 'trigger' || o.tprop);
               });
               return html`
                 <button class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm

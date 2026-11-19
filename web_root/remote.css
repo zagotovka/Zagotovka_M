@@ -793,6 +793,14 @@ html:has(.rem-wrap), body:has(.rem-wrap) { overscroll-behavior-x: none; }
   box-shadow: 0 0 12px var(--rem-glow);
 }
 
+.rem-drop {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  vertical-align: -0.1em;
+  margin: 0 1px 0 4px;
+}
+
 /* ═══════════════════════════ Нижняя навигация ═══════════════════════════════
  * Плавающая стеклянная капсула вместо полосы во всю ширину. */
 .rem-nav {
