@@ -1,6 +1,3 @@
-
-
-
 import { lockToggle } from '../helpLock.js';
 import { HelpBox } from '../helpCopy.js';
 import { ModalButton } from '../Modals/ModalButton.js';
@@ -241,7 +238,6 @@ const BTN_MAX_PAGES = 64;         // защита от бесконечного 
 const BTN_FETCH_TIMEOUT = 8000;   // таймаут одного GET, мс
 const BTN_POST_TIMEOUT = 10000;   // таймаут одного POST, мс
 const BTN_RETRY_MAX = 3;          // число автоповторов после неудачной загрузки
-const BTN_ZB_COLLAPSE_FROM = 10;  // если Zigbee-кнопок больше - их строки свёрнуты до раскрытия
 
 const btnPageUrl = (from) => `/api/state/button?from=${from}&limit=${BTN_PAGE_LIMIT}`;
 const BTN_POLL_URL = btnPageUrl(0);
@@ -310,7 +306,6 @@ const TabButton = () => {
   const [showHelp, setShowHelp] = useState(false);
   const [language, setLanguage] = useState('ru');
   const [loadFailed, setLoadFailed] = useState(false);
-  const [zbOpen, setZbOpen] = useState(false);
   const alive = useRef(true);            // страница смонтирована
   const lastVer = useRef(null);          // подпись последней загруженной таблицы
   const refreshing = useRef(false);      // идёт полная перезагрузка таблицы
@@ -1275,12 +1270,6 @@ ${condRulesCommon(false)}
     `;
   }
 
-  // Физические кнопки показываем сразу. Если Zigbee-кнопок много (до 200 слотов), их строки
-  // рисуются только по раскрытию: иначе браузер строит сотни строк с ползунками при каждом обновлении.
-  const physRows = varbutton.filter((d) => !d.is_zigbee);
-  const zbRows = varbutton.filter((d) => d.is_zigbee);
-  const zbCollapsible = zbRows.length > BTN_ZB_COLLAPSE_FROM;
-  const zbVisible = !zbCollapsible || zbOpen;
   const renderRow = (d, index) => html`<${ArrayButton}
     d=${d}
     index=${index}
@@ -1321,18 +1310,7 @@ ${condRulesCommon(false)}
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-white/40">
-                    ${physRows.map((d, index) => renderRow(d, index))}
-                    ${zbCollapsible && html`
-                      <tr
-                        class="bg-gradient-to-r from-cyan-100 to-cyan-50 cursor-pointer hover:from-cyan-200 hover:to-cyan-100 transition-colors"
-                        onclick=${() => setZbOpen(!zbOpen)}
-                      >
-                        <td colspan="9" class="px-6 py-3 text-sm font-bold text-slate-700">
-                          ${zbOpen ? '[-]' : '[+]'} Zigbee (${zbRows.length})
-                        </td>
-                      </tr>
-                    `}
-                    ${zbVisible && zbRows.map((d, index) => renderRow(d, physRows.length + index))}
+                    ${varbutton.map((d, index) => renderRow(d, index))}
                   </tbody>
                 </table>
               </div>

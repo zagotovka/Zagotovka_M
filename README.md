@@ -1,37 +1,77 @@
 <div align="center">
 
-# Zagotovka-M main branch
+# Zagotovka-M
+
+### Wired reliability. Wireless flexibility of Zigbee.
+### With Zagotovka-M you can build either solution alone or combine both - your smart home gets the most out of their tandem.
+
+**[Русская версия](README_Ru.md)** | **English** | **[Download firmware](https://github.com/zagotovka/Zagotovka_M/releases/latest)** | **[Video guides](#interface-video-guide)**
+
+![Release](https://img.shields.io/github/v/release/zagotovka/Zagotovka_M?color=14b8a6&label=release)
+![License](https://img.shields.io/badge/license-GPL--2.0%20or%20commercial-0ea5e9)
+![MCU](https://img.shields.io/badge/MCU-STM32F767-f59e0b)
+![Zigbee2MQTT](https://img.shields.io/badge/Zigbee2MQTT-supported-34d399)
+![Home Assistant](https://img.shields.io/badge/Home%20Assistant-auto--discovery-fb7185)
+
+<!-- GIF 1 (hero): short loop of the web interface - toggling a lamp, a Zigbee button press, a slider -->
+<!-- <img src="icons/gif_hero.gif" alt="Zagotovka-M in action" width="800"> -->
 
 </div>
 
-**[Русская версия README](README_Ru.md)** | **English README**
+> **Experimental software.** Do not use it in critical systems. Use at your own risk (full legal text at the bottom of this page).
 
-SPDX-License-Identifier: GPL-2.0-only or commercial
+## What is it?
 
-## Warning:
-This software is experimental and a work in progress. Under no circumstances should these files be used in relation to any critical system(s). Use of these files is at your own risk. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+Zagotovka-M is firmware for a **NUCLEO-F767ZI** board that works as a smart home controller. It was designed for a **classic wired home**: wall switches, lamps and outlets are connected by cable straight to the controller (**89 physical pins** for switches, buttons, relays, PWM dimmers, encoders and temperature sensors). **Zigbee is an optional add-on**: **200 virtual slots** let wireless devices join the same system. Wired and wireless devices live in one list and can control each other: a wall switch turns on a Zigbee lamp, a Zigbee button toggles a relay, a timer dims a light at sunset.
 
-## Внимание:
-Данное программное обеспечение является экспериментальным и находится в стадии разработки. Ни при каких обстоятельствах эти файлы не должны использоваться в отношении любой критически важной системы (систем). Использование этих файлов осуществляется на ваш страх и риск. ПРОГРАММНОЕ ОБЕСПЕЧЕНИЕ ПРЕДОСТАВЛЯЕТСЯ «КАК ЕСТЬ», БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ, ЯВНЫХ ИЛИ ПОДРАЗУМЕВАЕМЫХ, ВКЛЮЧАЯ, НО НЕ ОГРАНИЧИВАЯСЬ, ГАРАНТИЯМИ ТОВАРНОГО СОСТОЯНИЯ, ПРИГОДНОСТИ ДЛЯ КОНКРЕТНОЙ ЦЕЛИ И НЕНАРУШЕНИЯ ПРАВ. НИ ПРИ КАКИХ ОБСТОЯТЕЛЬСТВАХ АВТОРЫ ИЛИ ПРАВООБЛАДАТЕЛИ НЕ НЕСУТ ОТВЕТСТВЕННОСТИ ЗА ЛЮБЫЕ ПРЕТЕНЗИИ, УБЫТКИ ИЛИ ДРУГИЕ ОБЯЗАТЕЛЬСТВА, БУДЬ ТО ДОГОВОРНЫЕ, ГРАЖДАНСКО-ПРАВОВЫЕ ИЛИ ИНЫЕ, ВОЗНИКАЮЩИЕ ИЗ, ИЗ ИЛИ В СВЯЗИ С ПРОГРАММНЫМ ОБЕСПЕЧЕНИЕМ, ИСПОЛЬЗОВАНИЕМ ИЛИ ИНЫМИ ДЕЙСТВИЯМИ С ПРОГРАММНЫМ ОБЕСПЕЧЕНИЕМ
+Everything is set up in a browser. No code, no YAML, no compiling.
 
-## Information for frontend developers
-Everything you need is in the "web_root" folder. [go to web_root](https://github.com/zagotovka/Zagotovka_M/tree/main/web_root)
-To install and run the web interface with Vite (Debian):
-```bash
-sudo apt update
-sudo apt install nodejs npm
-npm init -y
-rm -rf node_modules
-npm install
-npm install preact-router
-npm install history
-npm run start
-```
+## How it works
 
-## Information for backend developers
-- STM32CubeIDE Version: 1.15.1
-- FREERTOS Version: V10.2.1 CMSIS_V2
-- Mongoose Version: 7.21
+![How Zagotovka-M fits into your smart home](icons/architecture_en.svg)
+
+The wired part works on its own, with no network services at all. For the wireless part the controller talks to the outside world through a single standard channel: **MQTT**. That is why it fits into almost any setup:
+
+- **Zigbee gateway or coordinator.** Any model that Zigbee2MQTT supports (SLZB, USB sticks, Ethernet, Wi-Fi or serial adapters). Zagotovka-M does not care which one you have.
+- **Zigbee2MQTT.** Installed on a separate machine: Orange Pi, Raspberry Pi, Docker, NAS, or next to Home Assistant. The controller learns the capabilities of every device from Zigbee2MQTT by itself.
+- **Home Assistant.** Installed anywhere on your network. The controller publishes its switches, lights, sensors and buttons through [MQTT Discovery](https://github.com/zagotovka/Zagotovka_M/commit/71c61772975126c5fee4b2aa127eb2abeac606f2), and they appear in Home Assistant without any manual setup.
+
+Zigbee2MQTT, the MQTT broker and Home Assistant can all run together on one single-board computer such as an Orange Pi 3 or a Raspberry Pi (this is how the author runs it), or on separate machines. It is up to you.
+
+**You only enter the addresses on the Global Settings page** (MQTT broker, Zigbee2MQTT, Home Assistant, coordinator). After that the controller connects to everything and starts working. Moved Home Assistant to another server? Change one address and you are done.
+
+<!-- GIF 2: Global Settings page - typing the broker address, indicators HA / Z2M turn green -->
+<!-- <img src="icons/gif_settings.gif" alt="Global Settings" width="800"> -->
+
+Prefer no Zigbee2MQTT at all? **Hub mode** lets an SLZB-06p7U gateway connect directly to the built-in MQTT broker of the controller.
+
+## Why you will like it
+
+| | |
+|---|---|
+| **Wired + Zigbee in one list** | Physical pins and Zigbee devices are shown on the same pages and linked with a simple action such as `6:2` (toggle device 6). |
+| **Three gestures per button** | Single click, double click and long press, each with its own action. Works for wired and Zigbee buttons. |
+| **Smart conditions** | Actions can have conditions, for example "do not turn on at night" (`6:1?R2&!R3`), with a shared library of 12 conditions. |
+| **Learns Zigbee devices** | Press a button or move a dimmer in learning mode and the controller works out what the device can do. |
+| **Home Assistant in one click** | MQTT Discovery publishes switches, PWM lights, DS18B20 and DHT22 sensors, button and security triggers. |
+| **Timers, PID, sensors** | Cron-like timers with sunrise and sunset, PID controller, PWM and encoders, 1-Wire sensors. |
+| **Control from anywhere** | Phone-friendly web interface, HTTPS, SMS and DTMF control through a GSM module, a Remote control page with everything on one screen. |
+| **Safe updates** | Dual-bank flash with OTA update from the browser; the bootloader checks the image and rolls back on error. |
+
+<!-- GIF 3: wall switch click -> Zigbee lamp turns on; button double click -> scenario -->
+<!-- <img src="icons/gif_scenario.gif" alt="Scenario" width="800"> -->
+
+## Quick start
+
+1. **Build or buy the board.** See [What to buy](#what-to-buy) and the wiring notes for electricians below.
+2. **Flash the firmware.** Follow [Download firmware and how to flash STM32](#download-firmware-and-how-to-flash-stm32). One program does the whole first flash for you.
+3. **Open the web interface** and go to **Global Settings**. Enter the address of your MQTT broker, Zigbee2MQTT and Home Assistant.
+4. **Add devices.** Pick a pin on the **Select pin(s)** page, choose its type (switch, button, Zigbee...) and link it to what it should control.
+5. **Watch the video guides** below for every page.
+
+Requirements for the integrations: in Zigbee2MQTT set `homeassistant: enabled: true` (the controller learns device names from it); Home Assistant 2025.10 or newer is needed for the predefined entity ids.
+
+---
 
 ### Information for electricians: <a href="https://youtu.be/dl3f8Jo28ps"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/a7eb1218174d5f78254775de943bdcde/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
 The wiring scheme using junction boxes is NOT suitable for this project!
@@ -139,7 +179,47 @@ If you start the program outside the project folder, it downloads the bootloader
 ### How to use the "Security" page <a href="https://youtu.be/N9od6Ji41jU"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/0043b0287f85fee9c82f10104955ec85/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
 ### How to set up "HTTPS" for remote management from anywhere in the world. <a href="https://youtu.be/w-ke9_BD0vk"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/9899433b2f574b507cda7e50bfcd342b/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
 ### [Download 'CertGeneration.sh'](https://github.com/zagotovka/Zagotovka_M/raw/main/scripts/CertGeneration.sh) for certificate generation (right-click and select "Save link as").
-### ⚠️ Dangerous bug that can lead to fatal consequences! <a href="https://youtu.be/F0R1ltD-ztE"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/1d4476ca90e75804371516bbc6726cdd/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a> ⚠️
+### Dangerous bug that can lead to fatal consequences! <a href="https://youtu.be/F0R1ltD-ztE"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/1d4476ca90e75804371516bbc6726cdd/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
+
+## For developers
+
+### Information for frontend developers
+Everything you need is in the "web_root" folder. [go to web_root](https://github.com/zagotovka/Zagotovka_M/tree/main/web_root)
+To install and run the web interface with Vite (Debian):
+```bash
+sudo apt update
+sudo apt install nodejs npm
+npm init -y
+rm -rf node_modules
+npm install
+npm install preact-router
+npm install history
+npm run start
+```
+
+### Information for backend developers
+- STM32CubeIDE Version: 1.15.1
+- FREERTOS Version: V10.2.1 CMSIS_V2
+- Mongoose Version: 7.21
+
+
+<details>
+<summary>Disclaimer (legal text)</summary>
+
+SPDX-License-Identifier: GPL-2.0-only or commercial
+
+## Warning:
+This software is experimental and a work in progress. Under no circumstances should these files be used in relation to any critical system(s). Use of these files is at your own risk. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## Внимание:
+Данное программное обеспечение является экспериментальным и находится в стадии разработки. Ни при каких обстоятельствах эти файлы не должны использоваться в отношении любой критически важной системы (систем). Использование этих файлов осуществляется на ваш страх и риск. ПРОГРАММНОЕ ОБЕСПЕЧЕНИЕ ПРЕДОСТАВЛЯЕТСЯ «КАК ЕСТЬ», БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ, ЯВНЫХ ИЛИ ПОДРАЗУМЕВАЕМЫХ, ВКЛЮЧАЯ, НО НЕ ОГРАНИЧИВАЯСЬ, ГАРАНТИЯМИ ТОВАРНОГО СОСТОЯНИЯ, ПРИГОДНОСТИ ДЛЯ КОНКРЕТНОЙ ЦЕЛИ И НЕНАРУШЕНИЯ ПРАВ. НИ ПРИ КАКИХ ОБСТОЯТЕЛЬСТВАХ АВТОРЫ ИЛИ ПРАВООБЛАДАТЕЛИ НЕ НЕСУТ ОТВЕТСТВЕННОСТИ ЗА ЛЮБЫЕ ПРЕТЕНЗИИ, УБЫТКИ ИЛИ ДРУГИЕ ОБЯЗАТЕЛЬСТВА, БУДЬ ТО ДОГОВОРНЫЕ, ГРАЖДАНСКО-ПРАВОВЫЕ ИЛИ ИНЫЕ, ВОЗНИКАЮЩИЕ ИЗ, ИЗ ИЛИ В СВЯЗИ С ПРОГРАММНЫМ ОБЕСПЕЧЕНИЕМ, ИСПОЛЬЗОВАНИЕМ ИЛИ ИНЫМИ ДЕЙСТВИЯМИ С ПРОГРАММНЫМ ОБЕСПЕЧЕНИЕМ
+
+</details>
+
+## Versioning and history
+
+## Versioning and history
+
 <details>
 
 <summary>Versioning system</summary>

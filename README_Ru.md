@@ -1,37 +1,77 @@
 <div align="center">
 
-# Заготовка-M ветка main
+# Заготовка-M
+
+### Проводная надёжность. Беспроводная гибкость Zigbee.
+### С Zagotovka-M можно реализовать любое одно решение или объединить оба — ваш умный дом получит максимум от их тандема.
+
+**Русская версия** | **[English](README.md)** | **[Скачать прошивку](https://github.com/zagotovka/Zagotovka_M/releases/latest)** | **[Видеогид](#видеогид-по-интерфейсу)**
+
+![Release](https://img.shields.io/github/v/release/zagotovka/Zagotovka_M?color=14b8a6&label=release)
+![License](https://img.shields.io/badge/license-GPL--2.0%20or%20commercial-0ea5e9)
+![MCU](https://img.shields.io/badge/MCU-STM32F767-f59e0b)
+![Zigbee2MQTT](https://img.shields.io/badge/Zigbee2MQTT-supported-34d399)
+![Home Assistant](https://img.shields.io/badge/Home%20Assistant-auto--discovery-fb7185)
+
+<!-- GIF 1 (главная): короткая петля веб-интерфейса - переключение лампы, нажатие Zigbee-кнопки, ползунок -->
+<!-- <img src="icons/gif_hero.gif" alt="Заготовка-M в работе" width="800"> -->
 
 </div>
 
-**Русская версия README** | **[English README](README.md)**
+> **Экспериментальное ПО.** Не используйте его в критически важных системах. Вы делаете это на свой риск (полный юридический текст в конце страницы).
 
-SPDX-License-Identifier: GPL-2.0-only or commercial
+## Что это?
 
-## Внимание:
-Данное программное обеспечение является экспериментальным и находится в стадии разработки. Ни при каких обстоятельствах эти файлы не должны использоваться в отношении любой критически важной системы (систем). Использование этих файлов осуществляется на ваш страх и риск. ПРОГРАММНОЕ ОБЕСПЕЧЕНИЕ ПРЕДОСТАВЛЯЕТСЯ «КАК ЕСТЬ», БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ, ЯВНЫХ ИЛИ ПОДРАЗУМЕВАЕМЫХ, ВКЛЮЧАЯ, НО НЕ ОГРАНИЧИВАЯСЬ, ГАРАНТИЯМИ ТОВАРНОГО СОСТОЯНИЯ, ПРИГОДНОСТИ ДЛЯ КОНКРЕТНОЙ ЦЕЛИ И НЕНАРУШЕНИЯ ПРАВ. НИ ПРИ КАКИХ ОБСТОЯТЕЛЬСТВАХ АВТОРЫ ИЛИ ПРАВООБЛАДАТЕЛИ НЕ НЕСУТ ОТВЕТСТВЕННОСТИ ЗА ЛЮБЫЕ ПРЕТЕНЗИИ, УБЫТКИ ИЛИ ДРУГИЕ ОБЯЗАТЕЛЬСТВА, БУДЬ ТО ДОГОВОРНЫЕ, ГРАЖДАНСКО-ПРАВОВЫЕ ИЛИ ИНЫЕ, ВОЗНИКАЮЩИЕ ИЗ, ИЗ ИЛИ В СВЯЗИ С ПРОГРАММНЫМ ОБЕСПЕЧЕНИЕМ, ИСПОЛЬЗОВАНИЕМ ИЛИ ИНЫМИ ДЕЙСТВИЯМИ С ПРОГРАММНЫМ ОБЕСПЕЧЕНИЕМ
+Заготовка-M - это прошивка для платы **NUCLEO-F767ZI**, которая превращает её в контроллер умного дома. Он задуман для **классического проводного дома**: настенные выключатели, лампы и розетки подключаются кабелем прямо к контроллеру (**89 физических пинов** для выключателей, кнопок, реле, PWM-диммеров, энкодеров и датчиков температуры). **Zigbee - необязательное дополнение**: **200 виртуальных слотов** позволяют беспроводным устройствам войти в ту же систему. Проводные и беспроводные устройства живут в одном списке и могут управлять друг другом: настенный выключатель включает Zigbee-лампу, Zigbee-кнопка переключает реле, таймер приглушает свет на закате.
 
-## Notice:
-This software is experimental and a work in progress. Under no circumstances should these files be used in relation to any critical system(s). Use of these files is at your own risk. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+Всё настраивается в браузере. Без кода, без YAML, без компиляции.
 
-## Информация для разработчиков фронтенда
-Все необходимое находится в папке "web_root". [перейти в web_root](https://github.com/zagotovka/Zagotovka_M/tree/main/web_root)
-Для установки и запуска веб-интерфейса с Vite (Debian):
-```bash
-sudo apt update
-sudo apt install nodejs npm
-npm init -y
-rm -rf node_modules
-npm install
-npm install preact-router
-npm install history
-npm run start
-```
+## Как это работает
 
-## Информация для разработчиков бэкенда
-- STM32CubeIDE Version: 1.15.1
-- FREERTOS Version: V10.2.1 CMSIS_V2
-- Mongoose Version: 7.21
+![Как Заготовка-M встраивается в умный дом](icons/architecture_ru.svg)
+
+Проводная часть работает сама по себе, без каких-либо сетевых сервисов. Для беспроводной части контроллер общается с внешним миром по одному стандартному каналу: **MQTT**. Поэтому он вписывается почти в любую схему:
+
+- **Zigbee-шлюз или координатор.** Любая модель, которую поддерживает Zigbee2MQTT (SLZB, USB-стики, Ethernet-, Wi-Fi- и serial-адаптеры). Заготовке-M всё равно, какой именно у вас.
+- **Zigbee2MQTT.** Установлен на отдельной машине: Orange Pi, Raspberry Pi, Docker, NAS или рядом с Home Assistant. Возможности каждого устройства контроллер узнаёт у Zigbee2MQTT сам.
+- **Home Assistant.** Установлен в любом месте вашей сети. Контроллер публикует свои переключатели, свет, датчики и кнопки через [MQTT Discovery](https://github.com/zagotovka/Zagotovka_M/commit/71c61772975126c5fee4b2aa127eb2abeac606f2), и они появляются в Home Assistant без ручной настройки.
+
+Zigbee2MQTT, MQTT-брокер и Home Assistant могут работать вместе на одной одноплатной машине вроде Orange Pi 3 или Raspberry Pi (так работает у автора) или на разных машинах. Как вам удобнее.
+
+**Адреса нужно вписать только на странице Global Settings** (MQTT-брокер, Zigbee2MQTT, Home Assistant, координатор). После этого контроллер подключается ко всему и начинает работать. Перенесли Home Assistant на другой сервер? Поменяйте один адрес - и всё.
+
+<!-- GIF 2: страница Global Settings - вводим адрес брокера, индикаторы HA / Z2M загораются зелёным -->
+<!-- <img src="icons/gif_settings.gif" alt="Global Settings" width="800"> -->
+
+Не хотите Zigbee2MQTT вообще? **Режим Hub**: шлюз SLZB-06p7U подключается прямо к встроенному MQTT-брокеру контроллера.
+
+## Чем это хорошо
+
+| | |
+|---|---|
+| **Провод + Zigbee в одном списке** | Физические пины и Zigbee-устройства показываются на одних страницах и связываются простым действием вроде `6:2` (переключить устройство 6). |
+| **Три жеста на кнопку** | Одно нажатие, двойное и долгое, у каждого своё действие. Работает и для проводных, и для Zigbee-кнопок. |
+| **Умные условия** | У действий есть условия, например "не включать ночью" (`6:1?R2&!R3`), с общей библиотекой из 12 условий. |
+| **Сам учит Zigbee-устройства** | Нажмите кнопку или покрутите диммер в режиме обучения, и контроллер сам поймёт, что умеет устройство. |
+| **Home Assistant в один клик** | MQTT Discovery публикует переключатели, PWM-свет, датчики DS18B20 и DHT22, триггеры кнопок и охраны. |
+| **Таймеры, PID, датчики** | Таймеры в стиле cron с восходом и закатом, PID-регулятор, PWM и энкодеры, датчики 1-Wire. |
+| **Управление откуда угодно** | Веб-интерфейс для телефона, HTTPS, управление по SMS и DTMF через GSM-модуль, страница Remote control со всем на одном экране. |
+| **Безопасные обновления** | Dual-bank flash и OTA-обновление из браузера; загрузчик проверяет образ и откатывается при ошибке. |
+
+<!-- GIF 3: клик настенного выключателя -> включается Zigbee-лампа; двойной клик кнопки -> сценарий -->
+<!-- <img src="icons/gif_scenario.gif" alt="Сценарий" width="800"> -->
+
+## Быстрый старт
+
+1. **Соберите или купите плату.** Смотрите [Что купить](#что-купить) и заметки для электриков ниже.
+2. **Прошейте.** Следуйте разделу [Скачать прошивку и как прошить stm32](#скачать-прошивку-и-как-прошить-stm32). Первую прошивку целиком делает одна программа.
+3. **Откройте веб-интерфейс** и зайдите в **Global Settings**. Впишите адреса MQTT-брокера, Zigbee2MQTT и Home Assistant.
+4. **Добавьте устройства.** На странице **Select pin(s)** выберите пин, его тип (выключатель, кнопка, Zigbee...) и свяжите с тем, чем он должен управлять.
+5. **Посмотрите видеогид** ниже по каждой странице.
+
+Условия для интеграций: в Zigbee2MQTT включите `homeassistant: enabled: true` (из него контроллер узнаёт имена устройств); для заранее заданных entity id нужен Home Assistant 2025.10 или новее.
+
+---
 
 ### Информация для электриков: <a href="https://youtu.be/dl3f8Jo28ps"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/a7eb1218174d5f78254775de943bdcde/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
 Для данного проекта схема, которая использует распределительные коробки, не подходит!
@@ -139,7 +179,45 @@ d. <a href="https://easyeda.com/editor#id=|125ff34d97324d308c97b01793449de7|1bc6
 ### Как пользоваться страницей "Безопасность/Security" <a href="https://youtu.be/N9od6Ji41jU"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/0043b0287f85fee9c82f10104955ec85/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
 ### Как настроить "HTTPS" для удаленного управления из любой точки мира. <a href="https://youtu.be/w-ke9_BD0vk"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/9899433b2f574b507cda7e50bfcd342b/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
 ### [Скачать 'CertGeneration.sh'](https://github.com/zagotovka/Zagotovka_M/raw/main/scripts/CertGeneration.sh) для генерации сертификатов (нажмите правой кнопкой мыши и выберите "Сохранить ссылку как").
-### ⚠️ Опасный баг, который может привести к летальному исходу! <a href="https://youtu.be/F0R1ltD-ztE"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/1d4476ca90e75804371516bbc6726cdd/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a> ⚠️
+### Опасный баг, который может привести к летальному исходу! <a href="https://youtu.be/F0R1ltD-ztE"><img src="/icons/icons8-youtube-48.png" alt="YouTube" width="24" height="24" style="vertical-align: middle"></a>&nbsp;&nbsp;<a href="https://rutube.ru/video/1d4476ca90e75804371516bbc6726cdd/"><img src="/icons/Rutube.png" alt="Rutube" width="50" height="26" style="vertical-align: middle"></a>
+
+## Для разработчиков
+
+### Информация для разработчиков фронтенда
+Все необходимое находится в папке "web_root". [перейти в web_root](https://github.com/zagotovka/Zagotovka_M/tree/main/web_root)
+Для установки и запуска веб-интерфейса с Vite (Debian):
+```bash
+sudo apt update
+sudo apt install nodejs npm
+npm init -y
+rm -rf node_modules
+npm install
+npm install preact-router
+npm install history
+npm run start
+```
+
+### Информация для разработчиков бэкенда
+- STM32CubeIDE Version: 1.15.1
+- FREERTOS Version: V10.2.1 CMSIS_V2
+- Mongoose Version: 7.21
+
+
+<details>
+<summary>Отказ от ответственности (юридический текст)</summary>
+
+SPDX-License-Identifier: GPL-2.0-only or commercial
+
+## Внимание:
+Данное программное обеспечение является экспериментальным и находится в стадии разработки. Ни при каких обстоятельствах эти файлы не должны использоваться в отношении любой критически важной системы (систем). Использование этих файлов осуществляется на ваш страх и риск. ПРОГРАММНОЕ ОБЕСПЕЧЕНИЕ ПРЕДОСТАВЛЯЕТСЯ «КАК ЕСТЬ», БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ, ЯВНЫХ ИЛИ ПОДРАЗУМЕВАЕМЫХ, ВКЛЮЧАЯ, НО НЕ ОГРАНИЧИВАЯСЬ, ГАРАНТИЯМИ ТОВАРНОГО СОСТОЯНИЯ, ПРИГОДНОСТИ ДЛЯ КОНКРЕТНОЙ ЦЕЛИ И НЕНАРУШЕНИЯ ПРАВ. НИ ПРИ КАКИХ ОБСТОЯТЕЛЬСТВАХ АВТОРЫ ИЛИ ПРАВООБЛАДАТЕЛИ НЕ НЕСУТ ОТВЕТСТВЕННОСТИ ЗА ЛЮБЫЕ ПРЕТЕНЗИИ, УБЫТКИ ИЛИ ДРУГИЕ ОБЯЗАТЕЛЬСТВА, БУДЬ ТО ДОГОВОРНЫЕ, ГРАЖДАНСКО-ПРАВОВЫЕ ИЛИ ИНЫЕ, ВОЗНИКАЮЩИЕ ИЗ, ИЗ ИЛИ В СВЯЗИ С ПРОГРАММНЫМ ОБЕСПЕЧЕНИЕМ, ИСПОЛЬЗОВАНИЕМ ИЛИ ИНЫМИ ДЕЙСТВИЯМИ С ПРОГРАММНЫМ ОБЕСПЕЧЕНИЕМ
+
+## Notice:
+This software is experimental and a work in progress. Under no circumstances should these files be used in relation to any critical system(s). Use of these files is at your own risk. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+</details>
+
+## Версии и история
+
 <details>
 
 <summary>Система версионирования</summary>
