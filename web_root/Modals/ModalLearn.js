@@ -775,9 +775,12 @@ export function ModalLearn({ ieee, language, onClose, onSaved, onGoToButtonPin, 
                   ${lang === 'ru' ? 'Определение диапазона диммера' : 'Dimmer range detection'}
                 </div>
                 <div class="text-amber-600 mb-3">
-                  ${lang === 'ru'
-                    ? 'Вращайте регулятор до minimum, затем до maximum. Система автоматически определит границы диапазона.'
-                    : 'Rotate the dimmer to minimum, then to maximum. The system will automatically detect the range boundaries.'}
+                  <span class="font-medium">${lang === 'ru'
+                    ? 'Задайте min и max, повернув диммер до упора в обе стороны.'
+                    : 'Set min and max by turning the dimmer all the way in both directions.'}</span>
+                  ${' '}${lang === 'ru'
+                    ? 'Границы диапазона определятся автоматически; от них зависит пересчёт значений в проценты.'
+                    : 'The range boundaries are detected automatically; they are used to convert values to percent.'}
                 </div>
 
                 ${hasData && html`

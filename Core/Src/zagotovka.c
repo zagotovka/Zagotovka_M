@@ -4795,6 +4795,29 @@ static int zbee_send_cmd_status(const char *zbee_ieee, uint8_t endpoint,
 static int zbee_send_ep_status(const char *zbee_ieee, uint8_t endpoint,
                                uint16_t dp, const char *val);
 
+/* ── Единая точка выбора способа управления слотом ─────────────────────────
+ * Возвращает номер свойства (DP, кластер 0xEF00) для функции flag слота
+ * (ZBEE_CL_ONOFF / ZBEE_CL_DIMMER / ZBEE_CL_COLOR) либо 0 = стандартная
+ * ZCL-команда (кластеры 6 / 8 / 768).
+ * 1) явно заданное ep_onoff / ep_brightness / ep_color (старый формат);
+ * 2) слот-свойство (multi-EP): при обучении слот создаётся с ep = DP и ролью
+ *    MFR, а ep_* остаются нулями. Такой слот управляется ИМЕННО своим DP.
+ *    Раньше это условие нигде не проверялось, и команда уходила как
+ *    {"brightness":N}, которого у вентиляторного/нестандартного диммера нет.
+ * Работает одинаково для Zigbee2MQTT и для шлюза SLZB: от производителя
+ * устройства не зависит. */
+static uint16_t zbee_slot_dp(const ZigbeeVirtualPin *z, uint8_t flag) {
+  uint16_t dp = 0;
+  if (flag == ZBEE_CL_ONOFF)       dp = z->ep_onoff;
+  else if (flag == ZBEE_CL_DIMMER) dp = z->ep_brightness;
+  else if (flag == ZBEE_CL_COLOR)  dp = z->ep_color;
+  if (dp > 0) return dp;
+  if (z->zbee_role == ZBEE_ROLE_MFR && z->ep > 0 && (z->cluster_flags & flag)) {
+    return z->ep;
+  }
+  return 0;
+}
+
 /* ═══════════════════ Пульт управления (/api/remote/cmd) ═══════════════════
  * Общие функции команд пульта. Используются и здесь (api_handler), и
  * обработчиком /api/remote/cmd в net.c — логика не дублируется. Возвращают
@@ -4907,11 +4930,11 @@ int cmd_zigbee_exec(int id, int on, int v, long color) {
       zp->state = (uint8_t)onoff_cmd;
       mark_slice_dirty(&g_ver_zigbee);
       processPins((uint16_t)ZbeeIdFromIdx(zbi), (uint8_t)onoff_cmd);
-    } else if (zp->ep_onoff > 0) {
+    } else if (zbee_slot_dp(zp, ZBEE_CL_ONOFF) > 0) {
       char valbuf[8];
       snprintf(valbuf, sizeof(valbuf), "%d", onoff_cmd);
       st = zbee_send_ep_status(zp->zbee_ieee, zp->zbee_endpoint,
-                               zp->ep_onoff, valbuf);
+                               zbee_slot_dp(zp, ZBEE_CL_ONOFF), valbuf);
     } else {
       st = zbee_send_cmd_status(zp->zbee_ieee, zp->zbee_endpoint, 6,
                                 ZBEE_ATTR_ONOFF,
@@ -4938,9 +4961,9 @@ int cmd_zigbee_exec(int id, int on, int v, long color) {
     }
     char valbuf[12];
     snprintf(valbuf, sizeof(valbuf), "%d", v);
-    if (zp->ep_brightness > 0) {
+    if (zbee_slot_dp(zp, ZBEE_CL_DIMMER) > 0) {
       st = zbee_send_ep_status(zp->zbee_ieee, zp->zbee_endpoint,
-                               zp->ep_brightness, valbuf);
+                               zbee_slot_dp(zp, ZBEE_CL_DIMMER), valbuf);
     } else {
       st = zbee_send_cmd_status(zp->zbee_ieee, zp->zbee_endpoint, 8,
                                 0x0004 /* Move to Level */, valbuf);
@@ -4956,10 +4979,10 @@ int cmd_zigbee_exec(int id, int on, int v, long color) {
                      zp->device_type_override == 4;
     if (!has_color) return 400;
     char valbuf[16];
-    if (zp->ep_color > 0) {
+    if (zbee_slot_dp(zp, ZBEE_CL_COLOR) > 0) {
       snprintf(valbuf, sizeof(valbuf), "%ld", color);
       st = zbee_send_ep_status(zp->zbee_ieee, zp->zbee_endpoint,
-                               zp->ep_color, valbuf);
+                               zbee_slot_dp(zp, ZBEE_CL_COLOR), valbuf);
     } else {
       snprintf(valbuf, sizeof(valbuf), "#%06lX",
                (unsigned long)(color & 0xFFFFFF));
@@ -6628,6 +6651,17 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                     memcpy(numbuf, raw, copylen);
                     numbuf[copylen] = '\0';
                     int val = atoi(numbuf);
+                    /* Изменение пришло от самого устройства (поворот ручки,
+                     * кнопка на корпусе): страницы Zigbee обновляются по
+                     * версии среза, пульт - по хешу состояния. */
+                    if ((ZigbeeConf[dp_slot].cluster_flags & ZBEE_CL_ONOFF) &&
+                        ZigbeeConf[dp_slot].state != ((val != 0) ? 1 : 0)) {
+                        mark_slice_dirty(&g_ver_zigbee);
+                    }
+                    if ((ZigbeeConf[dp_slot].cluster_flags & ZBEE_CL_DIMMER) &&
+                        ZigbeeConf[dp_slot].dvalue != val) {
+                        mark_slice_dirty(&g_ver_zigbee);
+                    }
 
                     if (ZigbeeConf[dp_slot].cluster_flags & ZBEE_CL_ONOFF) {
                         ZigbeeConf[dp_slot].state = (val != 0) ? 1 : 0;
@@ -13156,11 +13190,11 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
 
     if (new_brightness >= 0 && ZigbeeConf[id].zbee_ieee[0] != '\0' && ZigbeeConf[id].onoff) {
       ZigbeeConf[id].dvalue = new_brightness;
-      if (ZigbeeConf[id].ep_onoff > 0 && has_dimmer) {
+      if (has_dimmer && zbee_slot_dp(&ZigbeeConf[id], ZBEE_CL_DIMMER) > 0) {
         char valbuf[12];
         snprintf(valbuf, sizeof(valbuf), "%d", new_brightness);
         SendZigbeeEPCommand(ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint,
-                              ZigbeeConf[id].ep_onoff, valbuf);
+                              zbee_slot_dp(&ZigbeeConf[id], ZBEE_CL_DIMMER), valbuf);
       } else if (has_dimmer) {
         char valbuf[12];
         snprintf(valbuf, sizeof(valbuf), "%d", new_brightness);
@@ -13171,11 +13205,11 @@ void handle_zigbee_set(struct mg_connection *c, struct mg_http_message *hm) {
 
     if (new_color_hex >= 0 && ZigbeeConf[id].zbee_ieee[0] != '\0' && ZigbeeConf[id].onoff) {
       ZigbeeConf[id].color_hex = (uint32_t)new_color_hex;
-      if (ZigbeeConf[id].ep_onoff > 0 && has_color) {
+      if (has_color && zbee_slot_dp(&ZigbeeConf[id], ZBEE_CL_COLOR) > 0) {
         char valbuf[12];
         snprintf(valbuf, sizeof(valbuf), "%d", new_color_hex);
         SendZigbeeEPCommand(ZigbeeConf[id].zbee_ieee, ZigbeeConf[id].zbee_endpoint,
-                              ZigbeeConf[id].ep_onoff, valbuf);
+                              zbee_slot_dp(&ZigbeeConf[id], ZBEE_CL_COLOR), valbuf);
       } else if (has_color) {
         char valbuf[12];
         snprintf(valbuf, sizeof(valbuf), "#%06X", new_color_hex); // zHub format
@@ -13302,12 +13336,12 @@ void handle_zigbee_command(struct mg_connection *c, struct mg_http_message *hm) 
       /* Кнопка: выполняем sclick */
       LOG_Z2M("zbee: CMD s=%d TRIGGER sclick\r\n", zbee_idx);
       vbtn_execute(zbee_idx, 0);
-    } else if (ZigbeeConf[zbee_idx].ep_onoff > 0) {
+    } else if (zbee_slot_dp(&ZigbeeConf[zbee_idx], ZBEE_CL_ONOFF) > 0) {
       /* multi-EP команда */
       char valbuf[8];
       snprintf(valbuf, sizeof(valbuf), "%d", onoff_cmd);
       SendZigbeeEPCommand(ZigbeeConf[zbee_idx].zbee_ieee, ZigbeeConf[zbee_idx].zbee_endpoint,
-                            ZigbeeConf[zbee_idx].ep, valbuf);
+                            zbee_slot_dp(&ZigbeeConf[zbee_idx], ZBEE_CL_ONOFF), valbuf);
     } else {
       const char *cmd = onoff_cmd ? "ON" : "OFF";
       SendZigbeeCommand(ZigbeeConf[zbee_idx].zbee_ieee, ZigbeeConf[zbee_idx].zbee_endpoint,

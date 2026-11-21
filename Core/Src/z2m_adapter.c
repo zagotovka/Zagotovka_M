@@ -394,6 +394,75 @@ static bool z2m_slot_has_ep(const char *ieee, uint16_t dp) {
   return false;
 }
 
+/* ---------- Имя свойства хранится в самом слоте ----------
+ * DP свойства в Z2M-режиме - хеш имени, обратно имя из него не получить, а
+ * команде нужно именно имя ("fan_speed", "brightness_l1", ...). Раньше имя
+ * знали только после первого отчёта устройства с момента старта, поэтому
+ * сразу после перезагрузки команды из веба не уходили (HTTP 400).
+ * Теперь слот-свойство (роль MFR, ep >= 0x100) помнит "<тип>:<имя>" в pt_long:
+ * у не-кнопок это поле не используется, оно уже сохраняется в zigbee.ini и
+ * не требует ни нового поля структуры, ни новой RAM. */
+static const z2m_prop_t *z2m_prop_by_id(uint16_t id) {
+  for (int i = 0; i < s_prop_cnt; i++) {
+    if (s_props[i].id == id) return &s_props[i];
+  }
+  return NULL;
+}
+
+static bool z2m_slot_is_prop(const ZigbeeVirtualPin *z) {
+  return z->zbee_ieee[0] != '\0' && z->zbee_role == ZBEE_ROLE_MFR && z->ep >= 0x0100;
+}
+
+/* Записать имя свойства во все слоты этого IEEE с ep == id. true = что-то изменилось */
+static bool z2m_remember_prop(const char *ieee, uint16_t id) {
+  const z2m_prop_t *pr = z2m_prop_by_id(id);
+  char want[Z2M_PROP_NAME + 4];
+  bool chg = false;
+  if (pr == NULL) return false;
+  snprintf(want, sizeof(want), "%d:%s", (int) pr->kind, pr->name);
+  for (int i = 0; i < NUMZBEE; i++) {
+    ZigbeeVirtualPin *z = &ZigbeeConf[i];
+    if (!z2m_slot_is_prop(z) || z->ep != id) continue;
+    if (strncasecmp(z->zbee_ieee, ieee, 16) != 0) continue;
+    if (strcmp(z->pt_long, want) == 0) continue;
+    snprintf(z->pt_long, sizeof(z->pt_long), "%s", want);
+    chg = true;
+  }
+  return chg;
+}
+
+/* Имя свойства из сохранённого слота (после перезагрузки, до первого отчёта) */
+static const z2m_prop_t *z2m_prop_restore(const char *ieee, uint16_t dp) {
+  for (int i = 0; i < NUMZBEE; i++) {
+    const ZigbeeVirtualPin *z = &ZigbeeConf[i];
+    const char *w = z->pt_long;
+    if (!z2m_slot_is_prop(z) || z->ep != dp) continue;
+    if (strncasecmp(z->zbee_ieee, ieee, 16) != 0) continue;
+    if (w[0] < '0' || w[0] > '3' || w[1] != ':' || w[2] == '\0') continue;
+    {
+      bool ok = true;
+      for (const char *q = w + 2; *q; q++) {
+        if (!((*q >= '0' && *q <= '9') || (*q >= 'a' && *q <= 'z') ||
+              (*q >= 'A' && *q <= 'Z') || *q == '_')) { ok = false; break; }
+      }
+      if (!ok) continue;
+    }
+    if (z2m_prop_register(w + 2, (uint8_t) (w[0] - '0')) == dp) {
+      LOG_Z2M("z2m: prop '%s' restored from slot %d\r\n", w + 2, i);
+      return z2m_prop_by_id(dp);
+    }
+  }
+  return NULL;
+}
+
+/* Есть ли настроенный слот-свойство с таким DP (для диагностики) */
+static bool z2m_any_slot_ep(uint16_t dp) {
+  for (int i = 0; i < NUMZBEE; i++) {
+    if (z2m_slot_is_prop(&ZigbeeConf[i]) && ZigbeeConf[i].ep == dp) return true;
+  }
+  return false;
+}
+
 /* Команда по свойству: {"<имя>": значение} в прежнем типе устройства */
 int z2m_send_dp(const char *ieee, uint16_t dp, const char *val) {
   extern osMessageQueueId_t zbeeCmdQueueHandle;
@@ -402,11 +471,11 @@ int z2m_send_dp(const char *ieee, uint16_t dp, const char *val) {
   int v;
 
   if (ieee == NULL || val == NULL) return 400;
-  for (int i = 0; i < s_prop_cnt; i++) {
-    if (s_props[i].id == dp) { pr = &s_props[i]; break; }
-  }
+  pr = z2m_prop_by_id(dp);
+  if (pr == NULL) pr = z2m_prop_restore(ieee, dp);
   if (pr == NULL) {
-    LOG_Z2M("z2m: DP %04X name unknown yet (no report from device)\r\n", (unsigned) dp);
+    LOG_Z2M("z2m: DP %04X name unknown yet (no report from device, nothing stored in slot)\r\n",
+            (unsigned) dp);
     return 400;
   }
   v = atoi(val);
@@ -728,6 +797,7 @@ bool z2m_handle_rx(const char *topic, const char *payload) {
       }
     }
   }
+  bool matched = false;
   for (int i = 0; i < NUMZBEE; i++) {
     ZigbeeVirtualPin *z = &ZigbeeConf[i];
     bool dup = false;
@@ -735,6 +805,7 @@ bool z2m_handle_rx(const char *topic, const char *payload) {
     uint8_t add = 0;
 
     if (!slot_matches(z, name)) continue;
+    matched = true;
     /* один раз на пару IEEE + endpoint */
     for (int k = 0; k < i; k++) {
       if (slot_matches(&ZigbeeConf[k], name) &&
@@ -762,6 +833,8 @@ bool z2m_handle_rx(const char *topic, const char *payload) {
       if (!zbee_learn_is_active_for(z->zbee_ieee) &&
           !z2m_slot_has_ep(z->zbee_ieee, xs[k].id)) continue;
       inject_dp(base, z->zbee_ieee, ep, xs[k].id, xs[k].val);
+      /* имя свойства запоминаем в слоте: команды работают и после перезагрузки */
+      if (z2m_remember_prop(z->zbee_ieee, xs[k].id)) need_save = true;
     }
 
     /* Действия кнопок передаются слотам-кнопкам/выключателям.
@@ -773,6 +846,23 @@ bool z2m_handle_rx(const char *topic, const char *payload) {
       char t[96];
       snprintf(t, sizeof(t), "%s/trigger/%.16s", base, z->zbee_ieee);
       zbee_rx_inject(t, act);
+    }
+  }
+
+  /* Сообщение похоже на настроенное устройство (совпал DP слота), но топик не
+   * привязан ни к одному слоту: у слота не заполнено Name и Z2M не прислал
+   * HA Discovery (в Z2M выключена интеграция Home Assistant) либо устройство
+   * переименовано. Без привязки ни одно значение в веб не попадёт. */
+  if (!matched) {
+    static uint32_t s_unb_ms = 0;
+    uint32_t now = HAL_GetTick();
+    for (int k = 0; k < xcnt; k++) {
+      if (z2m_any_slot_ep(xs[k].id) && (now - s_unb_ms > 30000u || s_unb_ms == 0)) {
+        s_unb_ms = now;
+        LOG_Z2M("z2m: topic '%s' is not bound to any slot. Put '%s' into the slot Name "
+                "or rename the device in Z2M to 0x<IEEE>\r\n", name, name);
+        break;
+      }
     }
   }
 
