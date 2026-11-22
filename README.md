@@ -22,7 +22,13 @@
 
 ## What is it?
 
-Zagotovka-M is firmware for a **NUCLEO-F767ZI** board that works as a smart home controller. It was designed for a **classic wired home**: wall switches, lamps and outlets are connected by cable straight to the controller (**89 physical pins** for switches, buttons, relays, PWM dimmers, encoders and temperature sensors). **Zigbee is an optional add-on**: **200 virtual slots** let wireless devices join the same system. Wired and wireless devices live in one list and can control each other: a wall switch turns on a Zigbee lamp, a Zigbee button toggles a relay, a timer dims a light at sunset.
+Zagotovka-M is firmware for a **NUCLEO-F767ZI** board that turns it into a smart home controller. The project fits both **wired automation** and systems built **entirely on wireless Zigbee devices**.
+
+In the wired setup you can connect up to **89 physical pins** for wall switches, buttons, relays, PWM dimmers, encoders and temperature sensors. In the wireless scenario **200 virtual slots** are available for Zigbee devices: lamps, buttons, sensors, relays and other peripherals.
+
+Wired and wireless devices live in one system and can interact with each other: a wall switch turns on a Zigbee lamp, a Zigbee button toggles a wired relay, and an automation can dim the lights at sunset.
+
+By combining the reliability of a wired solution with the flexibility and extensibility of Zigbee, you get the most out of both approaches under one "roof" - in a single smart home control system.
 
 Everything is set up in a browser. No code, no YAML, no compiling.
 
@@ -60,6 +66,12 @@ Prefer no Zigbee2MQTT at all? **Hub mode** lets an SLZB-06p7U gateway connect di
 
 <!-- GIF 3: wall switch click -> Zigbee lamp turns on; button double click -> scenario -->
 <!-- <img src="icons/gif_scenario.gif" alt="Scenario" width="800"> -->
+
+## Why not ESP32 / ESPHome?
+
+Zagotovka-M is built so that one controller serves the whole house: in the wired setup that is 89 physical pins (24 of them with hardware PWM), and in the wireless one 200 Zigbee device slots in the same system. An ESP32 has far fewer usable GPIOs, so for the wired part you would have to split the system into several nodes or add port expanders. The controller connects over Ethernet and does not use Wi-Fi at all, because the goal is reliability. All the logic (pin links, timers, conditions, PID, encoders) is configured in the browser and takes effect immediately, with no YAML and no reflashing. In ESPHome the configuration is compiled into the firmware, so every change to a scenario means a rebuild. The wired part works on its own, without Home Assistant or any cloud. The firmware still includes an MQTT broker, HTTPS, SMS and DTMF control through a GSM module, and network updates with a dual-bank flash and rollback on error. The STM32F767, with 2 MB of flash and 512 KB of RAM, fits these tasks better. Ethernet, USB and a debugger already come on the ready-made NUCLEO-F767ZI board, so all that is left is to add simple adapter boards (Gerber files are provided below).
+
+None of this means ESP32 is worse. For standalone Wi-Fi nodes ESPHome is still an excellent choice, and such devices connect to Zagotovka-M easily through MQTT.
 
 ## Quick start
 
