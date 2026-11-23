@@ -115,6 +115,7 @@ __attribute__((section(".itcm"))) void dtcm_alloc_init(void)
         !dtcm_cache_tls_ca || !dtcm_cache_domain || !dtcm_cache_tg_token) {
         printf("[DTCM] FATAL: buffer allocation failed! used=%u free=%u\r\n",
                (unsigned)dtcm_alloc_get_used(), (unsigned)dtcm_alloc_get_free());
+        while (1) { __asm volatile("bkpt #0"); }  /* Останавливаем систему! */
     }
 
     /* Проверяем BSS → DTCM переносы */

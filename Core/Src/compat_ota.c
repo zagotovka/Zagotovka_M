@@ -247,7 +247,7 @@ bool mg_ota_commit(void) {
 bool mg_ota_bank_image_valid(uint8_t bank) {
     uint32_t addr = bank ? 0x08100000u : 0x08020000u;
     uint32_t msp  = *(volatile uint32_t *)addr;
-    if ((msp & 0xFFF00000u) != 0x20000000u) return false;
+    if (msp < 0x20000000u || msp > 0x20080000u || (msp & 3u) != 0u) return false;
 
     /* Запись в банк не завершена (или была прервана): после первого же
      * чанка MSP уже выглядит верно, но образ неполный. Такой банк не должен

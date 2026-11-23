@@ -1184,7 +1184,7 @@ static void cascade_delete_pin_id(int deleted_id) {
     if (changed_pid)      { usbnum = 6; xQueueSend(usbQueueHandle, &usbnum, 0); }
     if (changed_zigbee)   { usbnum = 7; xQueueSend(usbQueueHandle, &usbnum, 0); }
     /* Встроенный пул выражений: cond_lib_neutralize_id() мог обнулить слот */
-    if (cond_pool_take_dirty()) { usbnum = 8; xQueueSend(usbQueueHandle, &usbnum, 0); }
+    if (cond_pool_take_dirty()) { usbnum = 8; if (xQueueSend(usbQueueHandle, &usbnum, 0) != pdPASS) cond_pool_set_dirty(); }
   }
 
   // 11. Инкремент версий (dirty status для ETag)
@@ -1747,7 +1747,7 @@ void handle_switch_set(struct mg_connection *c, struct mg_http_message *hm) {
     /* Новый слот встроенного пула выражений -> сохранить cond.ini */
     if (cond_pool_take_dirty()) {
       uint8_t poolnum = 8;
-      xQueueSend(usbQueueHandle, &poolnum, 0);
+      if (xQueueSend(usbQueueHandle, &poolnum, 0) != pdPASS) cond_pool_set_dirty();
     }
     /* ETag меняем сразу, как в handle_onoff_set: Zigbee-ветка пишет конфиг
      * через SetZigbeeConfig() (usbnum=7), который g_ver_switch НЕ трогает,
@@ -2428,7 +2428,7 @@ void handle_encoder_set(struct mg_connection *c, struct mg_http_message *hm) {
     }
     if (cond_pool_take_dirty()) {
       uint8_t poolnum = 8;
-      xQueueSend(usbQueueHandle, &poolnum, 0);
+      if (xQueueSend(usbQueueHandle, &poolnum, 0) != pdPASS) cond_pool_set_dirty();
     }
     if (g_pintopin_overflow) {
       MG_INFO(("Response headers for connection %ld:", c->id));
@@ -12160,7 +12160,7 @@ void handle_pid_set(struct mg_connection *c, struct mg_http_message *hm) {
   /* Встроенный пул выражений мог измениться (новое свободное условие) */
   if (cond_pool_take_dirty()) {
     num = 8;
-    xQueueSend(usbQueueHandle, &num, 0);
+    if (xQueueSend(usbQueueHandle, &num, 0) != pdPASS) cond_pool_set_dirty();
   }
 
   mg_http_reply(c, 200, PID_POST_HDR, "{\"status\":\"ok\"}");

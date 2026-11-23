@@ -273,7 +273,7 @@ static void jump_to_app(uint32_t app_addr)
     uint32_t msp_val = *(volatile uint32_t *)app_addr;
     uint32_t reset_vector = *(volatile uint32_t *)(app_addr + 4);
 
-    if ((msp_val & 0xFFF00000) != 0x20000000) {
+    if (msp_val < 0x20000000u || msp_val > 0x20080000u || (msp_val & 3u) != 0u) {
         char buf[80];
         snprintf(buf, sizeof(buf), "[BOOT] Bad MSP 0x%08lX at 0x%08lX, halting\r\n",
                  (unsigned long)msp_val, (unsigned long)app_addr);
@@ -486,7 +486,7 @@ static bool flash_is_dual_bank(void)
 static bool app_image_valid(uint32_t app_addr)
 {
   uint32_t msp_val = *(volatile uint32_t *)app_addr;
-  return (msp_val & 0xFFF00000) == 0x20000000;
+  return msp_val >= 0x20000000u && msp_val <= 0x20080000u && (msp_val & 3u) == 0u;
 }
 
 /* USER CODE END 0 */

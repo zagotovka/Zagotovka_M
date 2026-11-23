@@ -757,6 +757,7 @@ void handle_device_reset(struct mg_connection *c, struct mg_http_message *hm) {
 #define LOGIN_BLOCK_MS    30000
 static uint32_t s_login_fail_count  = 0;
 static uint32_t s_login_block_until = 0;
+static bool     s_login_blocked     = false;  /* блокировка активна (нужен из-за wrap mg_millis) */
 
 /* Лимит тела запроса для JSON API — защита от mg_iobuf_resiz starvation.
    Firmware upload исключён явно, там body законно большой. */
@@ -1886,7 +1887,7 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			if (mg_match(hm->uri, mg_str("/api/login"), NULL)) {
 			    MG_INFO(("%lu Processing /api/login", c->id));
 			    uint32_t now = mg_millis();
-			    if (now < s_login_block_until) {
+			    if (s_login_blocked && (int32_t)(s_login_block_until - now) > 0) {
 			        mg_http_reply(c, 429, "Connection: close\r\n",
 			                      "{\"error\":\"too many requests\"}\n");
 			        c->is_draining = 1;
@@ -1894,6 +1895,8 @@ void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
 			        // Неудачная попытка: неверные credentials
 			        if (++s_login_fail_count >= LOGIN_MAX_FAILS) {
 			            s_login_block_until = mg_millis() + LOGIN_BLOCK_MS;
+			            s_login_blocked = true;
+			            s_login_fail_count = 0;  /* после разблокировки снова 5 попыток */
 			            MG_ERROR(("%lu Login blocked for %d ms after %d failures",
 			                      c->id, LOGIN_BLOCK_MS, LOGIN_MAX_FAILS));
 			        }

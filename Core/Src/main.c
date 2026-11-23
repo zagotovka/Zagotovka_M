@@ -4273,7 +4273,7 @@ void StartDgnTask(void *argument)
        * Ожидаем уведомления от других кусков кода (например HTTP/SMS)
        * с уменьшенным таймаутом 5000 мс (5 секунд), чтобы чаще проверять стеки под нагрузкой.
        */
-      ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(60000));// было 5000
+      ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5000));/* 5 с: чаще проверяем стеки и ITCM под нагрузкой */
 
       heap_diagnostic();
 

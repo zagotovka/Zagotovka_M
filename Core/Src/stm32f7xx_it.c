@@ -231,16 +231,22 @@ static void fault_report(const char *fault_name, uint32_t *stack_frame,
   /* ── Дамп стека: 16 слов после фрейма исключения ── */
   if (stack_frame != NULL) {
     fault_puts("\r\n[Stack dump]\r\n");
-    for (uint32_t i = 0; i < 16; i++) {
-      if ((i % 4) == 0) {
-        fault_puts("SP+");
-        fault_print_hex(i * 4);
-        fault_puts(": ");
+    /* Чтение по невалидному SP даёт вложенный фолт и lockup вместо дампа */
+    if ((uint32_t) stack_frame >= 0x20000000u &&
+        (uint32_t) stack_frame <= 0x20080000u - 64u) {
+      for (uint32_t i = 0; i < 16; i++) {
+        if ((i % 4) == 0) {
+          fault_puts("SP+");
+          fault_print_hex(i * 4);
+          fault_puts(": ");
+        }
+        fault_print_hex(stack_frame[i]);
+        fault_puts(" ");
+        if ((i % 4) == 3)
+          fault_puts("\r\n");
       }
-      fault_print_hex(stack_frame[i]);
-      fault_puts(" ");
-      if ((i % 4) == 3)
-        fault_puts("\r\n");
+    } else {
+      fault_puts("SP out of RAM, stack dump skipped\r\n");
     }
   }
 
@@ -409,6 +415,48 @@ static void memmanage_handler_asm(void) {
   );
 }
 
+static void busfault_handler_c(uint32_t *stack_frame, uint32_t *r4_r11,
+                               uint32_t exc_return) __attribute__((used));
+static void busfault_handler_c(uint32_t *stack_frame, uint32_t *r4_r11,
+                               uint32_t exc_return) {
+  fault_report("BusFault (invalid memory access)", stack_frame, r4_r11, exc_return);
+}
+
+static void usagefault_handler_c(uint32_t *stack_frame, uint32_t *r4_r11,
+                                 uint32_t exc_return) __attribute__((used));
+static void usagefault_handler_c(uint32_t *stack_frame, uint32_t *r4_r11,
+                                 uint32_t exc_return) {
+  fault_report("UsageFault (illegal instruction / div by zero / unaligned)", stack_frame, r4_r11, exc_return);
+}
+
+__attribute__((naked, used))
+static void busfault_handler_asm(void) {
+  __asm volatile (
+    "tst     lr, #4                  \n"
+    "ite     eq                      \n"
+    "mrseq   r0, msp                 \n"
+    "mrsne   r0, psp                 \n"
+    "push    {r4-r11}                \n"
+    "mov     r1, sp                  \n"
+    "mov     r2, lr                  \n"
+    "b       busfault_handler_c      \n"
+  );
+}
+
+__attribute__((naked, used))
+static void usagefault_handler_asm(void) {
+  __asm volatile (
+    "tst     lr, #4                  \n"
+    "ite     eq                      \n"
+    "mrseq   r0, msp                 \n"
+    "mrsne   r0, psp                 \n"
+    "push    {r4-r11}                \n"
+    "mov     r1, sp                  \n"
+    "mov     r2, lr                  \n"
+    "b       usagefault_handler_c    \n"
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════════════ */
 
 /* USER CODE END 0 */
@@ -450,79 +498,33 @@ void NMI_Handler(void)
 /**
   * @brief This function handles Hard fault interrupt.
   */
-void HardFault_Handler(void)
+__attribute__((naked)) void HardFault_Handler(void)
 {
-  /* USER CODE BEGIN HardFault_IRQn 0 */
-
-  /* USER CODE END HardFault_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_HardFault_IRQn 0 */
-    /* USER CODE END W1_HardFault_IRQn 0 */
-  }
+  __asm volatile ("b fault_handler_asm");
 }
 
 /**
   * @brief This function handles Memory management fault.
   */
-void MemManage_Handler(void)
+__attribute__((naked)) void MemManage_Handler(void)
 {
-  /* USER CODE BEGIN MemoryManagement_IRQn 0 */
-
-  /* USER CODE END MemoryManagement_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_MemoryManagement_IRQn 0 */
-    /* USER CODE END W1_MemoryManagement_IRQn 0 */
-  }
+  __asm volatile ("b memmanage_handler_asm");
 }
 
 /**
   * @brief This function handles Pre-fetch fault, memory access fault.
   */
-void BusFault_Handler(void)
+__attribute__((naked)) void BusFault_Handler(void)
 {
-  /* USER CODE BEGIN BusFault_IRQn 0 */
-  uint32_t *sp;
-  __asm volatile ("TST LR, #4 \n ITE EQ \n MRSEQ %0, MSP \n MRSNE %0, PSP" : "=r" (sp));
-  uint32_t exc_ret;
-  __asm volatile ("MOV %0, LR" : "=r" (exc_ret));
-  fault_report("BusFault (invalid memory access)", sp, NULL, exc_ret);
-  /* Мигание LD2 (синий) — паттерн BusFault */
-  while (1) {
-    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-    for(volatile uint32_t i = 0; i < 300000; i++);
-  }
-  /* USER CODE END BusFault_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_BusFault_IRQn 0 */
-    /* USER CODE END W1_BusFault_IRQn 0 */
-  }
+  __asm volatile ("b busfault_handler_asm");
 }
 
 /**
   * @brief This function handles Undefined instruction or illegal state.
   */
-void UsageFault_Handler(void)
+__attribute__((naked)) void UsageFault_Handler(void)
 {
-  /* USER CODE BEGIN UsageFault_IRQn 0 */
-  uint32_t *sp;
-  __asm volatile ("TST LR, #4 \n ITE EQ \n MRSEQ %0, MSP \n MRSNE %0, PSP" : "=r" (sp));
-  uint32_t exc_ret;
-  __asm volatile ("MOV %0, LR" : "=r" (exc_ret));
-  fault_report("UsageFault (illegal instruction / div by zero / unaligned)", sp, NULL, exc_ret);
-  /* Мигание LD1 (зелёный) — паттерн UsageFault */
-  while (1) {
-    HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
-    for(volatile uint32_t i = 0; i < 300000; i++);
-  }
-  /* USER CODE END UsageFault_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_UsageFault_IRQn 0 */
-    /* USER CODE END W1_UsageFault_IRQn 0 */
-  }
+  __asm volatile ("b usagefault_handler_asm");
 }
 
 /**

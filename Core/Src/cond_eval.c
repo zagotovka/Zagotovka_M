@@ -50,23 +50,32 @@ bool cond_pool_take_dirty(void) {
   return d;
 }
 
+void cond_pool_set_dirty(void) {
+  cond_pool_dirty = true;
+}
+
 /* ── Библиотека условий (строки живут в SetSettings.conds) ──
  * idx == 0            - условие не выбрано -> true (безусловное поведение);
- * idx вне диапазона   - true (защита от мусора);
+ * idx вне диапазона   - false (мусор в конфиге: действие блокируется);
  * ячейка ПУСТАЯ       - false! Иначе ссылка "C5" на незаполненную ячейку
  *                       сделала бы действие безусловным. */
 bool cond_eval_ref(uint8_t idx) {
   if (idx == 0) return true;
 
   if (idx <= NUMCOND) {
-    if (SetSettings.conds[idx - 1][0] == '\0') return false;
-    return cond_eval(SetSettings.conds[idx - 1]);
+    char lbuf[COND_LEN];
+    taskENTER_CRITICAL();
+    memcpy(lbuf, SetSettings.conds[idx - 1], COND_LEN);
+    taskEXIT_CRITICAL();
+    lbuf[COND_LEN - 1] = '\0';
+    if (lbuf[0] == '\0') return false; /* пустая ячейка -> действие заблокировано */
+    return cond_eval(lbuf);
   }
 
   /* Слот встроенного пула: копия под критической секцией, чтобы читатель
    * (цикл энкодера / PID) не увидел слот пополам перезаписанным. */
   int slot = (int)idx - NUMCOND - 1;
-  if (slot < 0 || slot >= COND_POOL_EXTRA) return true; /* мусор в конфиге */
+  if (slot < 0 || slot >= COND_POOL_EXTRA) return false; /* мусор в конфиге: действие блокируем (fail-safe) */
 
   char buf[COND_LEN];
   taskENTER_CRITICAL();
@@ -688,15 +697,18 @@ bool cond_eval(const char *expr) {
   if (*q == '\0') return true; /* условие не задано */
 
   /* Защита от циклов ссылок C<id> -> C<id> (и от чрезмерной вложенности):
-   * на глубине 3 вычисление блокируется (ложь). Счётчик глобальный,
-   * гонки между задачами в худшем случае дают ложь - безопасно. */
+   * не более 3 одновременных вычислений. Счётчик меняется атомарно
+   * (ldrex/strex, безопасно и из задач, и из ISR): потерянного декремента
+   * не бывает, поэтому счётчик не может "залипнуть". */
   static int s_eval_depth = 0;
-  if (s_eval_depth >= 3) return false;
+  if (__atomic_add_fetch(&s_eval_depth, 1, __ATOMIC_SEQ_CST) > 3) {
+    __atomic_sub_fetch(&s_eval_depth, 1, __ATOMIC_SEQ_CST);
+    return false;
+  }
 
   int32_t result = 0;
-  s_eval_depth++;
   bool ok = cond_run(expr, &result);
-  s_eval_depth--;
+  __atomic_sub_fetch(&s_eval_depth, 1, __ATOMIC_SEQ_CST);
 
   if (!ok) {
     cond_log_error();

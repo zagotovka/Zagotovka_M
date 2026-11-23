@@ -116,6 +116,8 @@ int cond_pool_capacity(void);
  * cond_lib_neutralize_id() переписал выражение. Возвращает флаг и сбрасывает
  * его — вызывающий должен поставить в очередь USB сохранение cond.ini. */
 bool cond_pool_take_dirty(void);
+/* Вернуть флаг "есть несохранённые изменения" (если постановка в очередь USB не удалась). */
+void cond_pool_set_dirty(void);
 
 /* Полный сброс пула (перед загрузкой конфига с USB). */
 void cond_pool_clear(void);

@@ -1858,7 +1858,10 @@ void GetPinToPin() {
     long idout = mg_json_get_long(elem, "$.idout", 0);
     PinsLinks[i].idin = (short)idin;
     PinsLinks[i].idout = (short)idout;
-    PinsLinks[i].cond = (uint8_t)mg_json_get_long(elem, "$.cond", 0);
+    {
+      long cv = mg_json_get_long(elem, "$.cond", 0);
+      PinsLinks[i].cond = (uint8_t)((cv < 0 || cv > COND_POOL_TOTAL) ? (COND_POOL_TOTAL + 1) : cv);
+    }
     char *pins = mg_json_get_str(elem, "$.pins");
     if (pins) {
       strncpy(PinsLinks[i].pins, pins, sizeof(PinsLinks[i].pins) - 1);
@@ -3015,7 +3018,10 @@ void GetPidConfig() {
     }
 
     PidConf[idx].onoff = (uint8_t)mg_json_get_long(elem, "$.onoff", 0);
-    PidConf[idx].cond = (uint8_t)mg_json_get_long(elem, "$.cond", 0);
+    {
+      long cv = mg_json_get_long(elem, "$.cond", 0);
+      PidConf[idx].cond = (uint8_t)((cv < 0 || cv > COND_POOL_TOTAL) ? (COND_POOL_TOTAL + 1) : cv);
+    }
 
     idx++;
   }

@@ -296,10 +296,16 @@ static void send_cfg(struct mg_connection *c, const char *tp, int written) {
     if (strcmp(comp, "button") == 0) icon = "mdi:gesture-tap-button";
     else if (strcmp(comp, "event") == 0) icon = (obj[0] == 's') ? "mdi:shield-alert" : "mdi:gesture-tap";
     else if (strcmp(comp, "number") == 0) icon = "mdi:tune-variant";
-    if (icon != NULL) add += snprintf(ins + add, sizeof(ins) - (size_t) add, "\"icon\":\"%s\",", icon);
+    if (icon != NULL && add < (int) sizeof(ins)) {
+      int a2 = snprintf(ins + add, sizeof(ins) - (size_t) add, "\"icon\":\"%s\",", icon);
+      if (a2 > 0) add += a2;
+    }
 #if HA_ENTITY_IDS
-    add += snprintf(ins + add, sizeof(ins) - (size_t) add,
-                    "\"default_entity_id\":\"%s.zagotovka_%s\",", comp, obj);
+    if (add < (int) sizeof(ins)) {
+      int a2 = snprintf(ins + add, sizeof(ins) - (size_t) add,
+                        "\"default_entity_id\":\"%s.zagotovka_%s\",", comp, obj);
+      if (a2 > 0) add += a2;
+    }
 #endif
     if (add > 0 && add < (int) sizeof(ins) && written + add < (int) HA_CFG_SZ) {
       memmove(HA_CFG_BUF + 1 + add, HA_CFG_BUF + 1, (size_t) written);   /* вместе с '\0' */
