@@ -2000,12 +2000,7 @@ void parse_switch_json(char *json, struct dbPinsConf *PinsConf,
     int usbnum = 1;
     xQueueSend(usbQueueHandle, &usbnum, 0);
   } else if (mg_json_get(body, "$.setrpins", NULL) >= 0) {
-    char *pins = mg_json_get_str(body, "$.pins");
-    if (pins) {
-      strncpy(PinsLinks[pin_idx].pins, pins, sizeof(PinsLinks[pin_idx].pins) - 1);
-      PinsLinks[pin_idx].pins[sizeof(PinsLinks[pin_idx].pins) - 1] = '\0';
-      mg_free(pins);
-    }
+	    /* Имя пина в связи ставится ниже из PinsInfo; PinsLinks[pin_idx] здесь не трогаем */
     int pa_ofs = mg_json_get(body, "$.pinact", NULL);
     if (pa_ofs >= 0) {
       struct mg_str pa = mg_str_n(json + pa_ofs, strlen(json) - (size_t)pa_ofs);
@@ -2291,12 +2286,7 @@ void parse_button_json(char *json, struct dbPinsConf *PinsConf,
   if (mg_json_get(body, "$.setrpins", NULL) >= 0) {
     int pa_ofs = mg_json_get(body, "$.pinact", NULL);
     if (pa_ofs >= 0) {
-      char *pins = mg_json_get_str(body, "$.pins");
-      if (pins) {
-        strncpy(PinsLinks[pin_idx].pins, pins, sizeof(PinsLinks[pin_idx].pins) - 1);
-        PinsLinks[pin_idx].pins[sizeof(PinsLinks[pin_idx].pins) - 1] = '\0';
-        mg_free(pins);
-      }
+        /* Имя пина в связи ставится ниже из PinsInfo; PinsLinks[pin_idx] здесь не трогаем */
       struct mg_str pa = mg_str_n(json + pa_ofs, strlen(json) - (size_t)pa_ofs);
       size_t pos = 0;
       struct mg_str key, val;
@@ -2728,12 +2718,7 @@ void parse_encoder_json(const char *json, struct dbPinsConf *PinsConf,
   }
 
   if (is_edit_type) {
-    char *pins = mg_json_get_str(body, "$.pins");
-    if (pins) {
-      strncpy(PinsInfo[pin_idx].pins, pins, sizeof(PinsInfo[pin_idx].pins) - 1);
-      PinsInfo[pin_idx].pins[sizeof(PinsInfo[pin_idx].pins) - 1] = '\0';
-      mg_free(pins);
-    }
+	    /* Имя пина берётся только из таблицы PinsInfo (const, Flash); из браузера не принимаем */
     PinsConf[pin_idx].topin = (uint8_t)mg_json_get_long(body, "$.topin", PinsConf[pin_idx].topin);
 
     long dvalue_json = mg_json_get_long(body, "$.dvalue", -1);
@@ -4818,6 +4803,38 @@ static uint16_t zbee_slot_dp(const ZigbeeVirtualPin *z, uint8_t flag) {
   return 0;
 }
 
+
+/* ── Единая шкала яркости слота ─────────────────────────────────────────
+ * Диапазон - данные слота (Learning Mode или ручная калибровка), а не
+ * константа под конкретное устройство. Не задан - стандарт ZCL Level
+ * Control 1..254. Остальной код НЕ считает проценты сам, а вызывает
+ * только эти функции: запись, пульт и обработчики отчётов не расходятся.
+ * Округление до ближайшего в обе стороны даёт точный круговой путь
+ * % -> raw -> % для любого диапазона шире 100 шагов. */
+int zbee_dimmer_range(const ZigbeeVirtualPin *z, int *lo, int *hi) {
+  int l = z->dimmer_min, h = z->dimmer_max;
+  if (h > l) { *lo = l; *hi = h; return 1; }
+  *lo = 1; *hi = 254;
+  return 0;
+}
+
+int zbee_dimmer_pct_to_raw(const ZigbeeVirtualPin *z, int pct) {
+  int lo, hi;
+  zbee_dimmer_range(z, &lo, &hi);
+  if (pct < 0) pct = 0;
+  if (pct > 100) pct = 100;
+  return lo + (int)((((int64_t)(hi - lo) * pct) + 50) / 100);
+}
+
+int zbee_dimmer_raw_to_pct(const ZigbeeVirtualPin *z, int raw) {
+  int lo, hi;
+  zbee_dimmer_range(z, &lo, &hi);
+  if (raw <= lo) return 0;
+  if (raw >= hi) return 100;
+  int span = hi - lo;
+  return (int)((((int64_t)(raw - lo) * 100) + span / 2) / span);
+}
+
 /* ═══════════════════ Пульт управления (/api/remote/cmd) ═══════════════════
  * Общие функции команд пульта. Используются и здесь (api_handler), и
  * обработчиком /api/remote/cmd в net.c — логика не дублируется. Возвращают
@@ -4952,13 +4969,15 @@ int cmd_zigbee_exec(int id, int on, int v, long color) {
                       zp->device_type_override == 3 ||
                       zp->device_type_override == 4;
     if (!has_dimmer) return 400;
-    int lo = zp->dimmer_min, hi = zp->dimmer_max;
-    if (hi <= lo) { lo = 1; hi = 254; }  /* не обучен или некорректен: стандарт ZCL */
-    if (hi > lo) {                     /* проценты -> шкала устройства */
-      if (v < 0) v = 0;
-      if (v > 100) v = 100;
-      v = lo + (int)(((int64_t)(hi - lo) * v) / 100);
-    }
+//    {
+//      int lo_dbg, hi_dbg;
+//      int pct_dbg = v;
+//      zbee_dimmer_range(zp, &lo_dbg, &hi_dbg);
+//      v = zbee_dimmer_pct_to_raw(zp, v);
+//      LOG_Z2M("zbee: DIM id=%d pct=%d range=%d..%d raw_sent=%d\r\n",
+//              id, pct_dbg, lo_dbg, hi_dbg, v);
+//    }
+    v = zbee_dimmer_pct_to_raw(zp, v);  /* проценты -> шкала устройства */
     char valbuf[12];
     snprintf(valbuf, sizeof(valbuf), "%d", v);
     if (zbee_slot_dp(zp, ZBEE_CL_DIMMER) > 0) {
@@ -5439,7 +5458,7 @@ static int ow_emit_row(char *buf, int cap, int off, int pin_id) {
   }
 
   char e_pin[16];
-  json_escape_str(e_pin, PinsInfo[pin_id].pins, sizeof(e_pin));
+  json_escape_str(e_pin, PinsInfo[PinIdxFromId(pin_id)].pins, sizeof(e_pin));
   OW_PUT("{\"id\":%d,\"pin\":\"%s\",\"typsensr\":0,\"numsens\":0,\"onoff\":0}",
          pin_id, e_pin);
   return off;
@@ -5604,7 +5623,7 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
       return false;
     }
     ds18b20[target_slot].id = sensr_id;
-    strncpy(ds18b20[target_slot].pin, pin_str,
+    strncpy(ds18b20[target_slot].pin, PinsInfo[sensr_id - 1].pins,
             sizeof(ds18b20[target_slot].pin) - 1);
     ds18b20[target_slot].pin[sizeof(ds18b20[target_slot].pin) - 1] = '\0';
     ds18b20[target_slot].typsensr = sensrtpe;
@@ -5645,7 +5664,7 @@ bool parse_onewire_json(const char *jstr, struct dbPinsConf *pincfg) {
       return false;
     }
     dht22[target_slot].id = sensr_id;
-    strncpy(dht22[target_slot].pin, pin_str,
+    strncpy(dht22[target_slot].pin, PinsInfo[sensr_id - 1].pins,
             sizeof(dht22[target_slot].pin) - 1);
     dht22[target_slot].pin[sizeof(dht22[target_slot].pin) - 1] = '\0';
     dht22[target_slot].typsensr = sensrtpe;
@@ -6681,15 +6700,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
 
                         if (child_on && parent_on) {
                             /* Маппинг dimmer → encoder PWM pin */
-                            int dmin = ZigbeeConf[dp_slot].dimmer_min;
-                            int dmax = ZigbeeConf[dp_slot].dimmer_max;
-                            if (dmin == 0 && dmax == 0) { dmin = 0; dmax = 100; }
-                            int mapped = 0;
-                            if (dmax > dmin) {
-                                mapped = (val - dmin) * 100 / (dmax - dmin);
-                                if (mapped < 0) mapped = 0;
-                                if (mapped > 100) mapped = 100;
-                            }
+                            int mapped = zbee_dimmer_raw_to_pct(&ZigbeeConf[dp_slot], val);
                             int zbee_id = ZbeeIdFromIdx(dp_slot);
                             bool found_encoder = false;
                             bool found_pwm = false;
@@ -6828,16 +6839,7 @@ static void mqtt_zigbee_handler(const char *topic, const char *payload) {
                 }
 
                 if (child_on && parent_on) {
-                    int raw_val = ZigbeeConf[i].dvalue;
-                    int dmin = ZigbeeConf[i].dimmer_min;
-                    int dmax = ZigbeeConf[i].dimmer_max;
-                    if (dmin == 0 && dmax == 0) { dmin = 1; dmax = 254; }
-                    int mapped = 0;
-                    if (dmax > dmin) {
-                        mapped = (raw_val - dmin) * 100 / (dmax - dmin);
-                        if (mapped < 0) mapped = 0;
-                        if (mapped > 100) mapped = 100;
-                    }
+                    int mapped = zbee_dimmer_raw_to_pct(&ZigbeeConf[i], ZigbeeConf[i].dvalue);
 
                     /* PWM без энкодера: привязка zbee_bind_id у самого PWM-пина */
                     int zbee_id = ZbeeIdFromIdx(i);

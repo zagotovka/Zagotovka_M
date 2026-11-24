@@ -340,6 +340,14 @@ int cmd_switch_exec(int id, int value);                 /* 0/1, 2 = toggle */
 int cmd_button_exec(int id, int action);                /* 0=SC, 1=DC, 2=LP */
 int cmd_pwm_exec(int id, int value);                    /* 0..100 % */
 int cmd_zigbee_exec(int id, int on, int v, long color); /* -1 = не менять */
+
+/* Единая шкала яркости Zigbee-слота (диапазон: Learning Mode / ручная
+ * калибровка, иначе стандарт ZCL 1..254). Возврат zbee_dimmer_range:
+ * 1 - диапазон задан, 0 - взят стандартный. */
+int zbee_dimmer_range(const ZigbeeVirtualPin *z, int *lo, int *hi);
+int zbee_dimmer_pct_to_raw(const ZigbeeVirtualPin *z, int pct);
+int zbee_dimmer_raw_to_pct(const ZigbeeVirtualPin *z, int raw);
+
 int cmd_pid_exec(int id, bool has_sp, double sp, bool has_on, int on);
 int cmd_security_exec(int id, int on);
 int remote_out_state(int id);        /* 1/0, -1 — id не найден */

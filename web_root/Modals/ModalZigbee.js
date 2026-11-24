@@ -94,8 +94,9 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, onTouche
 
   /* Калибровка диапазона: для ZCL Level Control (cluster 8) спека фиксирует 1-254.
      Для Tuya DP dimmer_min/dimmer_max приходят с бэкенда после Learning Mode. */
-  const dMin = (device.dimmer_min != null && device.dimmer_min !== 0) ? device.dimmer_min : 1;
-  const dMax = (device.dimmer_max != null && device.dimmer_max !== 0) ? device.dimmer_max : 254;
+  const dTrained = device.dimmer_max > device.dimmer_min;
+  const dMin = dTrained ? device.dimmer_min : 1;
+  const dMax = dTrained ? device.dimmer_max : 254;
 
   const [onoff, setOnoff] = useState(device.onoff || 0);
   const [brightness, setBrightness] = useState(device.brightness || 254);
@@ -309,8 +310,9 @@ function ModalZigbee({ device, allDevices, onClose, onUpdate, onRescan, onTouche
                       <${MyPolzunok} value=${slot.onoff || 0} onChange=${(val) => applyDpOnOff(slot.id, val)} />
                     `}
                     ${sClusters.includes(8) && (() => {
-                      const sMin = (slot.dimmer_min != null && slot.dimmer_min !== 0) ? slot.dimmer_min : 1;
-                      const sMax = (slot.dimmer_max != null && slot.dimmer_max !== 0) ? slot.dimmer_max : 254;
+                      const sTrained = slot.dimmer_max > slot.dimmer_min;
+                      const sMin = sTrained ? slot.dimmer_min : 1;
+                      const sMax = sTrained ? slot.dimmer_max : 254;
                       const sVal = slot.brightness != null ? slot.brightness : sMax;
                       const sPct = Math.round(((sVal - sMin) / (sMax - sMin)) * 100);
                       return html`

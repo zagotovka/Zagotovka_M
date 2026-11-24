@@ -37,10 +37,7 @@ static const char *zbee_remote_kind(const ZigbeeVirtualPin *z) {
 /* Яркость в процентах 0..100 из «сырого» значения устройства.
  * Если диапазон не обучен (0..0) — стандарт Zigbee Level Control 1..254. */
 static int zbee_remote_pct(const ZigbeeVirtualPin *z) {
-    int lo = z->dimmer_min, hi = z->dimmer_max;
-    if (hi <= lo) { lo = 1; hi = 254; }  /* не обучен или некорректен: стандарт ZCL 1..254 */
-    int pct = ((int)z->dvalue - lo) * 100 / (hi - lo);
-    return pct < 0 ? 0 : (pct > 100 ? 100 : pct);
+    return zbee_dimmer_raw_to_pct(z, (int)z->dvalue);
 }
 
 struct user {
