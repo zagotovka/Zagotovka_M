@@ -8,7 +8,8 @@ assignees: ''
 
 ---
 
-**Важно / Important:** Если у вас вопрос по сборке, подключению датчиков или настройке — пожалуйста, задайте его в разделе [Discussions (Q&A)](https://github.com). Раздел Issues предназначен только для ошибок в прошивке и веб-интерфейсе!
+**Важно / Important:** Если у вас вопрос по сборке, подключению датчиков или настройке — задайте его в разделе [Discussions (Q&A)](https://github.com). Раздел Issues предназначен только для ошибок в прошивке и веб-интерфейсе! / If you have a question about assembly, wiring, or setup, please ask it in [Discussions (Q&A)](https://github.com). Issues are only for firmware and web UI bugs!
+
 
 ---
 
